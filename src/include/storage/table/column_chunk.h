@@ -223,30 +223,30 @@ public:
         RUNTIME_CHECK(for (auto& chunk : data) { DASSERT(chunk->getResidencyState() == state); });
         return state;
     }
-    bool hasUpdates() const { return updateInfo && updateInfo->isSet(); }
+    bool hasUpdates() const { return updateInfo->isSet(); }
     // A scan snapshot keeps the UpdateInfo this chunk had when the scan started.
     void shareUpdateInfo(const ColumnChunk& other) { updateInfo = other.updateInfo; }
     // Moves pending updates from `other`'s chunk (see UpdateInfo::adoptUpdates).
     void adoptUpdateInfo(ColumnChunk& other) {
-        if (!other.updateInfo) {
-            updateInfo.reset();
-            return;
-        }
         // An in-flight scan holds the other reference. Share the object instead of
         // stealing the updates out from under it.
         if (other.updateInfo.use_count() > 1) {
             updateInfo = other.updateInfo;
             return;
         }
-        if (!updateInfo) {
-            updateInfo = std::make_shared<UpdateInfo>();
-        }
         updateInfo->adoptUpdates(*other.updateInfo);
     }
     bool hasUpdates(const transaction::Transaction* transaction, common::row_idx_t startRow,
         common::length_t numRows) const;
-    // Drops this chunk's reference. A scan that shared it keeps the pre-checkpoint updates.
-    void resetUpdateInfo() { updateInfo.reset(); }
+    // Clears the pending updates. If a scan shares them, drops only this chunk's reference
+    // and the scan keeps the pre-checkpoint updates.
+    void resetUpdateInfo() {
+        if (updateInfo.use_count() > 1) {
+            updateInfo = std::make_shared<UpdateInfo>();
+        } else {
+            updateInfo->reset();
+        }
+    }
 
     MergedColumnChunkStats getMergedColumnChunkStats() const;
 
@@ -356,16 +356,11 @@ private:
     // dbConfig.
     bool enableCompression;
     std::vector<std::unique_ptr<ColumnChunkData>> data;
-    // Null when the chunk has no updates. Shared with a scan snapshot so checkpoint can
-    // drop this chunk's reference without destroying updates the scan is still applying.
-    std::shared_ptr<UpdateInfo> updateInfo;
-
-    UpdateInfo& getOrCreateUpdateInfo() {
-        if (!updateInfo) {
-            updateInfo = std::make_shared<UpdateInfo>();
-        }
-        return *updateInfo;
-    }
+    // Shared with a scan across a checkpoint, so checkpoint can drop this chunk's reference
+    // without destroying updates the scan is still applying. Never null, and only replaced
+    // on a chunk no reader holds (checkpoint's own copy of a pinned group): readers load the
+    // pointer without a lock while a writer may be adding the chunk's first update.
+    std::shared_ptr<UpdateInfo> updateInfo = std::make_shared<UpdateInfo>();
 };
 
 } // namespace storage

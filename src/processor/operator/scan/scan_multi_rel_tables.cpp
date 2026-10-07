@@ -133,6 +133,7 @@ bool ScanMultiRelTable::getNextTuplesInternal(ExecutionContext* context) {
         }
         if (!children[0]->getNextTuple(context)) {
             resetState();
+            scanState->releaseScanPin();
             return false;
         }
         const auto currentIdx = boundNodeIDVector->state->getSelVector()[0];

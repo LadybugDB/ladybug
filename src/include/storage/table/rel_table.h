@@ -57,6 +57,11 @@ struct RelTableScanState : TableScanState {
 
     std::unique_ptr<LocalRelTableScanState> localTableScanState;
 
+    // Drops what the scan pinned in its current node group (see CSRNodeGroupScanPin), so a
+    // checkpoint that ran meanwhile can free the pages it replaced. Call when the scan is
+    // exhausted. The state can be scanned again: the next initScanState pins afresh.
+    void releaseScanPin();
+
     // Optional state used by Arrow-backed relationship tables. Keep it on the common scan state so
     // a single multi-rel scan state can scan native, icebug-disk-backed, and Arrow-backed tables.
     size_t arrowCurrentBatchIdx = 0;

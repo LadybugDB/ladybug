@@ -103,6 +103,12 @@ void RelTableScanState::initCachedBoundNodeIDSelVector() {
     cachedBoundNodeSelVector.setSelSize(nodeIDVector->state->getSelVector().getSelSize());
 }
 
+void RelTableScanState::releaseScanPin() {
+    if (auto* csrScanState = dynamic_cast<CSRNodeGroupScanState*>(nodeGroupScanState.get())) {
+        csrScanState->pin.release();
+    }
+}
+
 bool RelTableScanState::hasUnCommittedData() const {
     return localTableScanState && localTableScanState->localRelTable;
 }

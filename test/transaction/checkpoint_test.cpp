@@ -1693,6 +1693,86 @@ private:
     uint64_t numCalls = 0;
 };
 
+// A forward scan of the rels of node 0 that the test advances one vector at a time, in its own
+// read transaction, so the test decides what happens between two vectors and when the scan lets
+// go of what it pinned.
+class DirectRelScan {
+public:
+    // `context` is the client context of `readConn`.
+    DirectRelScan(std::unique_ptr<main::Connection> readConn_, main::ClientContext* context,
+        RelTable& relTable, bool randomLookup)
+        : readConn{std::move(readConn_)}, relTable{relTable}, srcVector{LogicalType::INTERNAL_ID()},
+          dstVector{LogicalType::INTERNAL_ID()}, wVector{LogicalType::INT64()} {
+        const auto begin = readConn->query("BEGIN TRANSACTION READ ONLY;");
+        EXPECT_TRUE(begin->isSuccess()) << begin->getErrorMessage();
+        transaction = Transaction::Get(*context);
+        const auto catalog = catalog::Catalog::Get(*context);
+        const auto relGroupEntry = catalog->getTableCatalogEntry(transaction, "K")
+                                       ->ptrCast<catalog::RelGroupCatalogEntry>();
+        nodeTableID = catalog->getTableCatalogEntry(transaction, "P")->getTableID();
+        const auto srcState = std::make_shared<DataChunkState>();
+        srcVector.setState(srcState);
+        srcState->getSelVectorUnsafe().setSelSize(1);
+        outState = std::make_shared<DataChunkState>();
+        dstVector.setState(outState);
+        wVector.setState(outState);
+        scanState = std::make_unique<RelTableScanState>(*MemoryManager::Get(*context), &srcVector,
+            std::vector<ValueVector*>{&dstVector, &wVector}, outState, randomLookup);
+        scanState->setToTable(transaction, &relTable,
+            {NBR_ID_COLUMN_ID, relGroupEntry->getColumnID("w")}, {}, RelDataDirection::FWD);
+    }
+
+    // Starts a scan of the rels of the node at `boundNodeOffset`.
+    void start(offset_t boundNodeOffset = 0) {
+        srcVector.setValue(0, nodeID_t{boundNodeOffset, nodeTableID});
+        relTable.initScanState(transaction, *scanState);
+    }
+
+    // Appends the rels of up to `maxVectors` more vectors to `ws`. Returns false once the scan
+    // is exhausted.
+    bool scan(std::vector<int64_t>& ws, std::string& error, uint64_t maxVectors = UINT64_MAX) {
+        for (auto i = 0u; i < maxVectors; i++) {
+            if (!relTable.scan(transaction, *scanState)) {
+                return false;
+            }
+            const auto& selVector = outState->getSelVector();
+            for (auto j = 0u; j < selVector.getSelSize(); j++) {
+                const auto pos = selVector[j];
+                const auto w = wVector.getValue<int64_t>(pos);
+                const auto dstOffset = dstVector.readNodeOffset(pos);
+                if (static_cast<offset_t>(std::abs(w)) != dstOffset) {
+                    error = std::format("rel with w {} points to node {}", w, dstOffset);
+                }
+                ws.push_back(w);
+            }
+        }
+        return true;
+    }
+
+    // Scans the whole list of a node from the start, sorted.
+    std::vector<int64_t> scanAll(std::string& error, offset_t boundNodeOffset = 0) {
+        std::vector<int64_t> ws;
+        start(boundNodeOffset);
+        scan(ws, error);
+        std::sort(ws.begin(), ws.end());
+        return ws;
+    }
+
+    void release() const { scanState->releaseScanPin(); }
+
+private:
+    // Declared first, destroyed last: the scan state must not outlive its transaction.
+    std::unique_ptr<main::Connection> readConn;
+    RelTable& relTable;
+    Transaction* transaction = nullptr;
+    table_id_t nodeTableID = INVALID_TABLE_ID;
+    std::shared_ptr<DataChunkState> outState;
+    ValueVector srcVector;
+    ValueVector dstVector;
+    ValueVector wVector;
+    std::unique_ptr<RelTableScanState> scanState;
+};
+
 class CheckpointRunningRelScanTest : public FlakyCheckpointerTest {
 public:
     static constexpr int64_t numDsts = 6000;
@@ -1754,7 +1834,8 @@ public:
         while (res->hasNext()) {
             auto row = res->getNext();
             const auto w = row->getValue(0)->getValue<int64_t>();
-            if (w != row->getValue(1)->getValue<int64_t>()) {
+            // A test may negate w to leave a pending update on a rel.
+            if (std::abs(w) != row->getValue(1)->getValue<int64_t>()) {
                 error = std::format("rel with w {} points to node {}", w,
                     row->getValue(1)->getValue<int64_t>());
             }
@@ -1825,6 +1906,92 @@ public:
             reader.join();
         }
         return ws;
+    }
+
+    RelTable& relTableK() const {
+        auto context = getClientContext(*conn);
+        const auto relGroupEntry = catalog::Catalog::Get(*context)
+                                       ->getTableCatalogEntry(&DUMMY_CHECKPOINT_TRANSACTION, "K")
+                                       ->ptrCast<catalog::RelGroupCatalogEntry>();
+        return StorageManager::Get(*context)
+            ->getTable(relGroupEntry->getSingleRelEntryInfo().oid)
+            ->cast<RelTable>();
+    }
+
+    // The pages of the persistent forward CSR group that holds the rels of node 0.
+    std::unordered_set<page_idx_t> fwdGroupPages() const {
+        std::unordered_set<page_idx_t> pages;
+        auto addPages = [&](const ColumnChunk& chunk) {
+            for (const auto* segment : chunk.getSegments()) {
+                const auto& metadata = segment->getMetadata();
+                for (auto i = 0u; i < metadata.getNumPages(); i++) {
+                    pages.insert(metadata.getStartPageIdx() + i);
+                }
+            }
+        };
+        const auto* nodeGroup =
+            relTableK().getDirectedTableData(RelDataDirection::FWD)->getNodeGroup(0);
+        const auto* persistentGroup =
+            nodeGroup == nullptr ? nullptr :
+                                   nodeGroup->cast<CSRNodeGroup>().getPersistentChunkedGroup();
+        if (persistentGroup == nullptr) {
+            return pages;
+        }
+        for (auto i = 0u; i < persistentGroup->getNumColumns(); i++) {
+            addPages(persistentGroup->getColumnChunk(i));
+        }
+        const auto& csrHeader = persistentGroup->cast<ChunkedCSRNodeGroup>().getCSRHeader();
+        addPages(*csrHeader.offset);
+        addPages(*csrHeader.length);
+        return pages;
+    }
+
+    // The pages the free space manager would hand out again.
+    std::unordered_set<page_idx_t> reusablePages() const {
+        std::unordered_set<page_idx_t> pages;
+        const auto* pageManager =
+            StorageManager::Get(*getClientContext(*conn))->getDataFH()->getPageManager();
+        for (const auto& range : pageManager->getFreeEntries(0, pageManager->getNumFreeEntries())) {
+            for (auto i = 0u; i < range.numPages; i++) {
+                pages.insert(range.startPageIdx + i);
+            }
+        }
+        return pages;
+    }
+
+    std::unique_ptr<DirectRelScan> startRelScan(bool randomLookup) const {
+        auto readConn = std::make_unique<main::Connection>(database.get());
+        auto* context = getClientContext(*readConn);
+        auto relScan = std::make_unique<DirectRelScan>(std::move(readConn), context, relTableK(),
+            randomLookup);
+        relScan->start();
+        return relScan;
+    }
+
+    static constexpr int64_t updatedRel = 3000;
+    static constexpr int64_t numRelsOfNode1 = 10;
+
+    // Rels 1..3999 of node 0 are persistent, as are the rels of node 1 (to nodes
+    // 1..numRelsOfNode1). Not checkpointed yet: rels 4000..numDsts-1, the deletion of every
+    // 7th rel, and an update that negates w of rel `updatedRel`. Returns the rels of node 0 a
+    // reader should see.
+    std::vector<int64_t> setUpPersistentRelsWithPendingChanges() const {
+        insertRels(1, 4000);
+        runQuery(std::format("MATCH (a:P), (b:P) WHERE a.id = 1 AND b.id >= 1 AND b.id <= {} "
+                             "CREATE (a)-[:K {{w: b.id}}]->(b);",
+            numRelsOfNode1));
+        runQuery("CHECKPOINT;");
+        insertRels(4000, numDsts);
+        runQuery("MATCH (a:P)-[r:K]->(b:P) WHERE a.id = 0 AND r.w % 7 = 0 DELETE r;");
+        runQuery(std::format(
+            "MATCH (a:P)-[r:K]->(b:P) WHERE a.id = 0 AND b.id = {} SET r.w = -r.w;", updatedRel));
+        std::unordered_set<int64_t> deleted{updatedRel};
+        for (auto i = 7; i < numDsts; i += 7) {
+            deleted.insert(i);
+        }
+        auto expected = expectedRels(1, numDsts, deleted);
+        expected.insert(expected.begin(), -updatedRel);
+        return expected;
     }
 };
 
@@ -1943,6 +2110,175 @@ TEST_F(CheckpointRunningRelScanTest, RelScanStartingInShadowWindow) {
     EXPECT_TRUE(error.empty()) << error;
     EXPECT_GT(numShadowedRelPages, 0u) << "of " << relPages.size() << " persistent rel pages";
     checkRels(ws, expectedRels(1, 4010, deleted), "scan started in the shadow page window");
+}
+
+// A random-lookup scan (the kind graph algorithms and detach delete use) re-reads the CSR header
+// entry of its bound node on every lookup. After a checkpoint moved the CSR offsets, a lookup
+// on the same scan state must read that entry from the group the scan pinned, not from the
+// group the checkpoint wrote.
+TEST_F(CheckpointRunningRelScanTest, RandomLookupRelScanStraddlesCheckpoint) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    const auto expected = setUpPersistentRelsWithPendingChanges();
+    std::string error;
+    const auto relScanPtr = startRelScan(true /*randomLookup*/);
+    auto& relScan = *relScanPtr;
+    std::vector<int64_t> ws;
+    ASSERT_TRUE(relScan.scan(ws, error, 1 /*maxVectors*/));
+    ASSERT_FALSE(ws.empty());
+    ASSERT_LT(ws.size(), expected.size());
+    runQuery("CHECKPOINT;");
+    relScan.scan(ws, error);
+    std::sort(ws.begin(), ws.end());
+    checkRels(ws, expected, "lookup resumed after the checkpoint");
+    // Another bound node of the same node group, then the first one again: each lookup needs
+    // its own header entry, read from the pinned group.
+    checkRels(relScan.scanAll(error, 1 /*boundNodeOffset*/), expectedRels(1, numRelsOfNode1 + 1),
+        "lookup of another node on the pinned group");
+    checkRels(relScan.scanAll(error), expected, "second lookup on the pinned group");
+    relScan.release();
+    checkRels(relScan.scanAll(error), expected, "lookup after releasing the pin");
+    EXPECT_TRUE(error.empty()) << error;
+}
+
+// The pages a checkpoint replaced stay allocated for as long as a scan pins the old group, and
+// become reusable once the scan lets go, without waiting for the scan state to be destroyed.
+TEST_F(CheckpointRunningRelScanTest, ReleasedScanPinLetsCheckpointReclaimPages) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    insertRels(1, 4000);
+    runQuery("CHECKPOINT;");
+    const auto oldPages = fwdGroupPages();
+    ASSERT_FALSE(oldPages.empty());
+    insertRels(4000, numDsts);
+    runQuery("MATCH (a:P)-[r:K]->(b:P) WHERE a.id = 0 AND r.w % 7 = 0 DELETE r;");
+    std::unordered_set<int64_t> deleted;
+    for (auto i = 7; i < numDsts; i += 7) {
+        deleted.insert(i);
+    }
+
+    std::string error;
+    const auto relScanPtr = startRelScan(false /*randomLookup*/);
+    auto& relScan = *relScanPtr;
+    std::vector<int64_t> ws;
+    ASSERT_TRUE(relScan.scan(ws, error, 1 /*maxVectors*/));
+    runQuery("CHECKPOINT;");
+    const auto newPages = fwdGroupPages();
+    std::vector<page_idx_t> replacedPages;
+    for (const auto page : oldPages) {
+        if (!newPages.contains(page)) {
+            replacedPages.push_back(page);
+        }
+    }
+    ASSERT_FALSE(replacedPages.empty());
+    auto numReusable = [&]() {
+        const auto reusable = reusablePages();
+        return std::count_if(replacedPages.begin(), replacedPages.end(),
+            [&](page_idx_t page) { return reusable.contains(page); });
+    };
+    // Freed pages become reusable at the end of the next checkpoint. Run one with the pin
+    // still held: it must not publish the pages the scan is reading.
+    runQuery("CREATE (:P {id: 100000});");
+    runQuery("CHECKPOINT;");
+    EXPECT_EQ(numReusable(), 0) << "of " << replacedPages.size()
+                                << " replaced pages, while the scan still pins them";
+
+    relScan.scan(ws, error);
+    std::sort(ws.begin(), ws.end());
+    EXPECT_TRUE(error.empty()) << error;
+    checkRels(ws, expectedRels(1, numDsts, deleted), "scan resumed after two checkpoints");
+
+    relScan.release();
+    runQuery("CREATE (:P {id: 100001});");
+    runQuery("CHECKPOINT;");
+    EXPECT_GT(numReusable(), 0) << "of " << replacedPages.size()
+                                << " replaced pages, after the scan released its pin";
+    // The scan state is still alive and usable.
+    checkRels(relScan.scanAll(error), expectedRels(1, numDsts, deleted), "scan after the release");
+    EXPECT_TRUE(error.empty()) << error;
+}
+
+// A scan that started before two checkpoints of its node group. The first checkpoint leaves
+// the pages it did not rewrite shared between the old group and the new one, so the second
+// checkpoint must still treat them as pinned: no in-place rewrite and no reuse.
+TEST_F(CheckpointRunningRelScanTest, PinnedRelScanSurvivesTwoCheckpoints) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    insertRels(1, 4000);
+    runQuery("CHECKPOINT;");
+    // The scan's transaction starts here, so it must see exactly these rels.
+    const auto expected = expectedRels(1, 4000);
+    std::string error;
+    const auto relScanPtr = startRelScan(false /*randomLookup*/);
+    auto& relScan = *relScanPtr;
+    std::vector<int64_t> ws;
+    ASSERT_TRUE(relScan.scan(ws, error, 1 /*maxVectors*/));
+    ASSERT_LT(ws.size(), expected.size());
+
+    // First checkpoint: only the w column changes, so the new group keeps the pages of the
+    // other columns.
+    runQuery("MATCH (a:P)-[r:K]->(b:P) WHERE a.id = 0 AND b.id = 3000 SET r.w = -r.w;");
+    runQuery("CHECKPOINT;");
+    // Second checkpoint: small enough to be written in place if nothing is pinned.
+    insertRels(4000, 4010);
+    runQuery("MATCH (a:P)-[r:K]->(b:P) WHERE a.id = 0 AND r.w % 7 = 0 DELETE r;");
+    runQuery("CHECKPOINT;");
+    // Let the pages freed so far become reusable, then make a checkpoint allocate.
+    insertRels(4010, numDsts);
+    runQuery("CHECKPOINT;");
+
+    relScan.scan(ws, error);
+    std::sort(ws.begin(), ws.end());
+    checkRels(ws, expected, "scan resumed after three checkpoints");
+    checkRels(relScan.scanAll(error), expected, "pinned scan read again after three checkpoints");
+    EXPECT_TRUE(error.empty()) << error;
+}
+
+// A checkpoint that fails while a scan pins the group restores the pre-checkpoint group. The
+// pinned scan and new scans must see the same rels after the failure, after a retry that runs
+// with the scan still pinned, and after a reopen.
+TEST_F(CheckpointRunningRelScanTest, FailedCheckpointWhileRelScanPinned) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    const auto expected = setUpPersistentRelsWithPendingChanges();
+    std::string error;
+    {
+        const auto relScanPtr = startRelScan(false /*randomLookup*/);
+        auto& relScan = *relScanPtr;
+        std::vector<int64_t> ws;
+        ASSERT_TRUE(relScan.scan(ws, error, 1 /*maxVectors*/));
+
+        auto context = getClientContext(*conn);
+        bool failed = false;
+        FlakyCheckpointer flakyCheckpointer([&failed](main::ClientContext& ctx) {
+            return std::make_unique<FlakyCheckpointerFailsDuringOutOfPlaceRewrite>(ctx, failed);
+        });
+        flakyCheckpointer.setCheckpointer(*context);
+        auto res = conn->query("CHECKPOINT;");
+        FlakyCheckpointer::resetCheckpointer(*context);
+        ASSERT_FALSE(res->isSuccess());
+        ASSERT_TRUE(failed);
+
+        relScan.scan(ws, error);
+        std::sort(ws.begin(), ws.end());
+        checkRels(ws, expected, "scan resumed after the failed checkpoint");
+        checkRels(scanRels(false /*pause*/, error), expected,
+            "new scan after the failed checkpoint");
+
+        // The retry runs with the first scan still pinned to the group it started with.
+        runQuery("CHECKPOINT;");
+        checkRels(relScan.scanAll(error), expected, "pinned scan after the retried checkpoint");
+        checkRels(scanRels(false /*pause*/, error), expected,
+            "new scan after the retried checkpoint");
+        EXPECT_TRUE(error.empty()) << error;
+    }
+    createDBAndConn();
+    checkRels(scanRels(false /*pause*/, error), expected, "scan after reopening");
+    EXPECT_TRUE(error.empty()) << error;
 }
 #endif // __SINGLE_THREADED__
 

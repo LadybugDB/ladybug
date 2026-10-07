@@ -115,12 +115,22 @@ class CSRNodeGroup;
 struct RelTableScanState;
 
 // What one rel scan started with. Checkpoint may replace the live CSR node group;
-// the scan keeps reading this copy until the scan state is destroyed.
+// the scan keeps reading these objects until it moves to another node group, releases
+// the pin, or the scan state is destroyed.
 struct CSRNodeGroupScanPin {
     std::shared_ptr<ChunkedNodeGroup> persistent;
     std::shared_ptr<CSRIndex> index;
     std::vector<std::shared_ptr<ChunkedNodeGroup>> inMemGroups;
     std::shared_ptr<PageReclaimDeferral> pages;
+
+    // Set by every capture, including one of an empty node group.
+    bool isHeld() const { return pages != nullptr; }
+    void release() {
+        persistent.reset();
+        index.reset();
+        inMemGroups.clear();
+        pages.reset();
+    }
 };
 
 struct CSRNodeGroupScanState final : NodeGroupScanState {
@@ -238,6 +248,8 @@ public:
     const CSRIndex* getCSRIndex() const { return csrIndex.get(); }
     void setPersistentChunkedGroup(std::unique_ptr<ChunkedNodeGroup> chunkedNodeGroup) {
         DASSERT(chunkedNodeGroup->getFormat() == NodeGroupDataFormat::CSR);
+        // A scan copies this pointer under the group lock when it starts (captureScanPin).
+        const auto lock = chunkedGroups.lock();
         persistentChunkGroup = std::move(chunkedNodeGroup);
     }
 
@@ -269,6 +281,7 @@ private:
         const RelTableScanState& tableState, CSRNodeGroupScanState& nodeGroupScanState) const;
 
     void captureScanPin(const common::UniqLock& lock, CSRNodeGroupScanState& scanState) const;
+    void ensureCSRIndex();
 
     void checkpointInMemOnly(const common::UniqLock& lock, NodeGroupCheckpointState& state);
     void checkpointInMemAndOnDisk(const common::UniqLock& lock, NodeGroupCheckpointState& state);
@@ -309,8 +322,8 @@ private:
 private:
     std::shared_ptr<ChunkedNodeGroup> persistentChunkGroup;
     std::shared_ptr<CSRIndex> csrIndex;
-    // Copied into a scan pin at initializeScanState. use_count > 1 means a scan still
-    // names the pages this checkpoint would reclaim or overwrite.
+    // Copied into a scan pin when a scan starts on this node group. use_count > 1 means a
+    // scan still names the pages this checkpoint would reclaim or overwrite.
     mutable std::shared_ptr<PageReclaimDeferral> scanPagePin;
 };
 

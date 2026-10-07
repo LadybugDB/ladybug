@@ -85,9 +85,7 @@ void ColumnChunk::scan(const Transaction* transaction, const ChunkState& state, 
         UNREACHABLE_CODE;
     }
     }
-    if (updateInfo) {
-        updateInfo->scan(transaction, output, offsetInChunk, length);
-    }
+    updateInfo->scan(transaction, output, offsetInChunk, length);
 }
 
 static void scanPersistentSegments(ChunkState& chunkState, ColumnChunkScanner& output,
@@ -135,9 +133,7 @@ void ColumnChunk::scanCommitted(const Transaction* transaction, ChunkState& chun
             static_assert(SCAN_RESIDENCY_STATE == ResidencyState::IN_MEMORY);
             scanInMemSegments(output, startRow, numRows);
         }
-        if (updateInfo) {
-            output.applyCommittedUpdates(*updateInfo, transaction, startRow, numRows);
-        }
+        output.applyCommittedUpdates(*updateInfo, transaction, startRow, numRows);
     }
 }
 
@@ -162,7 +158,7 @@ template void ColumnChunk::scanCommitted<ResidencyState::IN_MEMORY>(const Transa
 
 bool ColumnChunk::hasUpdates(const Transaction* transaction, row_idx_t startRow,
     length_t numRows) const {
-    return updateInfo && updateInfo->hasUpdates(transaction, startRow, numRows);
+    return updateInfo->hasUpdates(transaction, startRow, numRows);
 }
 
 void ColumnChunk::lookup(const Transaction* transaction, const ChunkState& state,
@@ -177,9 +173,7 @@ void ColumnChunk::lookup(const Transaction* transaction, const ChunkState& state
         state.column->lookupValue(state, rowInChunk, &output, posInOutputVector);
     } break;
     }
-    if (updateInfo) {
-        updateInfo->lookup(transaction, rowInChunk, output, posInOutputVector);
-    }
+    updateInfo->lookup(transaction, rowInChunk, output, posInOutputVector);
 }
 
 void ColumnChunk::update(const Transaction* transaction, offset_t offsetInChunk,
@@ -194,14 +188,14 @@ void ColumnChunk::update(const Transaction* transaction, offset_t offsetInChunk,
 
     const auto vectorIdx = offsetInChunk / DEFAULT_VECTOR_CAPACITY;
     const auto rowIdxInVector = offsetInChunk % DEFAULT_VECTOR_CAPACITY;
-    auto& info = getOrCreateUpdateInfo();
-    auto& vectorUpdateInfo = info.update(data.front()->getMemoryManager(), transaction, vectorIdx,
-        rowIdxInVector, values);
-    transaction->pushVectorUpdateInfo(info, vectorIdx, vectorUpdateInfo, transaction->getID());
+    auto& vectorUpdateInfo = updateInfo->update(data.front()->getMemoryManager(), transaction,
+        vectorIdx, rowIdxInVector, values);
+    transaction->pushVectorUpdateInfo(*updateInfo, vectorIdx, vectorUpdateInfo,
+        transaction->getID());
 }
 
 MergedColumnChunkStats ColumnChunk::getMergedColumnChunkStats() const {
-    DASSERT(!updateInfo || !updateInfo->isSet());
+    DASSERT(!updateInfo->isSet());
     auto baseStats = MergedColumnChunkStats{ColumnChunkStats{}, true, true};
     for (auto& segment : data) {
         // TODO: Replace with a function that modifies the existing stats in-place?
@@ -235,7 +229,7 @@ std::unique_ptr<ColumnChunk> ColumnChunk::deserialize(MemoryManager& mm, Deseria
 }
 
 row_idx_t ColumnChunk::getNumUpdatedRows(const Transaction* transaction) const {
-    return updateInfo ? updateInfo->getNumUpdatedRows(transaction) : 0;
+    return updateInfo->getNumUpdatedRows(transaction);
 }
 
 void ColumnChunk::reclaimStorage(PageAllocator& pageAllocator) const {

@@ -154,34 +154,17 @@ bool CSRNodeGroupScanState::tryScanCachedTuplesPacked(RelTableScanState& tableSc
 }
 
 void CSRNodeGroup::captureScanPin(const UniqLock& lock, CSRNodeGroupScanState& scanState) const {
-    CSRNodeGroupScanPin pin;
     if (!scanPagePin) {
         scanPagePin = PageReclaimDeferral::create();
     }
+    auto& pin = scanState.pin;
     pin.pages = scanPagePin;
     pin.index = csrIndex;
     const auto& groups = chunkedGroups.getAllGroups(lock);
-    pin.inMemGroups.reserve(groups.size());
-    for (const auto& group : groups) {
-        pin.inMemGroups.push_back(group);
-    }
-    if (persistentChunkGroup) {
-        // Metadata only. The move constructor used by checkpoint would leave a pin of the
-        // live group empty, and version info is not part of the rollback snapshot.
-        auto buffer = std::make_shared<BufferWriter>();
-        Serializer serializer{buffer};
-        persistentChunkGroup->cast<ChunkedCSRNodeGroup>().serializeForCheckpointRollback(
-            serializer);
-        Deserializer deserializer{
-            std::make_unique<BufferReader>(buffer->getBlobData(), buffer->getSize())};
-        auto snapshot = ChunkedCSRNodeGroup::deserializeForCheckpointRollback(mm, deserializer);
-        snapshot->setVersionInfo(persistentChunkGroup->getVersionInfo());
-        for (auto i = 0u; i < snapshot->getNumColumns(); i++) {
-            snapshot->getColumnChunk(i).shareUpdateInfo(persistentChunkGroup->getColumnChunk(i));
-        }
-        pin.persistent = std::move(snapshot);
-    }
-    scanState.pin = std::move(pin);
+    pin.inMemGroups.assign(groups.begin(), groups.end());
+    // The live group itself, not a copy. A checkpoint that finds it pinned works on its own
+    // copy and leaves this object to the scans that hold it (see CSRNodeGroup::checkpoint).
+    pin.persistent = persistentChunkGroup;
 }
 
 void CSRNodeGroup::initializeScanState(const Transaction* transaction,
@@ -189,15 +172,22 @@ void CSRNodeGroup::initializeScanState(const Transaction* transaction,
     auto& relScanState = state.cast<RelTableScanState>();
     DASSERT(relScanState.nodeGroupScanState);
     auto& nodeGroupScanState = relScanState.nodeGroupScanState->cast<CSRNodeGroupScanState>();
-    // Checkpoint holds this lock for the whole operation, so a scan cannot observe a
-    // half-rewritten group, and the page pin's use_count is stable for that checkpoint.
-    const auto lock = chunkedGroups.lock();
-    if (relScanState.nodeGroupIdx != nodeGroupIdx || relScanState.randomLookup) {
+    if (relScanState.nodeGroupIdx != nodeGroupIdx || !nodeGroupScanState.pin.isHeld()) {
         relScanState.nodeGroupIdx = nodeGroupIdx;
-        captureScanPin(lock, nodeGroupScanState);
-        if (persistentChunkGroup) {
+        {
+            // Checkpoint holds this lock for the whole operation, so the pin never names a
+            // half-rewritten group, and a checkpoint sees every pin taken before it started.
+            // Everything after the capture reads the pin, so the lock is not needed for it.
+            const auto lock = chunkedGroups.lock();
+            captureScanPin(lock, nodeGroupScanState);
+        }
+        if (nodeGroupScanState.pin.persistent) {
             initScanForCommittedPersistent(transaction, relScanState, nodeGroupScanState);
         }
+    } else if (relScanState.randomLookup && nodeGroupScanState.pin.persistent) {
+        // Same node group, new bound node: only the cached CSR header entry is stale. Read it
+        // from the group this scan already pinned.
+        initScanForCommittedPersistent(transaction, relScanState, nodeGroupScanState);
     }
     // Switch to a new Vector of bound nodes (i.e., new csr lists) in the node group.
     // Use the pin, not the live group: a checkpoint may have replaced it since this scan
@@ -219,7 +209,9 @@ void CSRNodeGroup::initScanForCommittedPersistent(const Transaction* transaction
     RelTableScanState& relScanState, CSRNodeGroupScanState& nodeGroupScanState) const {
     // Scan the csr header chunks from disk.
     ChunkState offsetState, lengthState;
-    auto& csrChunkGroup = persistentChunkGroup->cast<ChunkedCSRNodeGroup>();
+    // The pinned group, not the live one: this also runs without the group lock.
+    auto& persistent = *nodeGroupScanState.pin.persistent;
+    auto& csrChunkGroup = persistent.cast<ChunkedCSRNodeGroup>();
     const auto& csrHeader = csrChunkGroup.getCSRHeader();
     // We are switching to a new node group.
     // Initialize the scan states of a new node group for the csr header.
@@ -233,7 +225,7 @@ void CSRNodeGroup::initScanForCommittedPersistent(const Transaction* transaction
             relScanState.columnIDs[i] == ROW_IDX_COLUMN_ID) {
             continue;
         }
-        auto& chunk = persistentChunkGroup->getColumnChunk(relScanState.columnIDs[i]);
+        auto& chunk = persistent.getColumnChunk(relScanState.columnIDs[i]);
         chunk.initializeScanState(nodeGroupScanState.chunkStates[i], relScanState.columns[i]);
     }
     DASSERT(csrHeader.offset->getNumValues() == csrHeader.length->getNumValues());
@@ -483,9 +475,7 @@ void CSRNodeGroup::appendChunkedCSRGroup(const Transaction* transaction,
     }
     auto startRow = NodeGroup::append(transaction, columnIDs, chunkedGroupForProperties, 0,
         chunkedGroup.getNumRows());
-    if (!csrIndex) {
-        csrIndex = std::make_shared<CSRIndex>();
-    }
+    ensureCSRIndex();
     for (auto i = 0u; i < csrHeader.offset->getNumValues(); i++) {
         const auto length = csrHeader.length->getValue<length_t>(i);
         updateCSRIndex(i, startRow, length);
@@ -498,10 +488,16 @@ void CSRNodeGroup::append(const Transaction* transaction, const std::vector<colu
     row_idx_t numRows) {
     const auto startRow =
         NodeGroup::append(transaction, columnIDs, chunks, startRowInChunks, numRows);
+    ensureCSRIndex();
+    updateCSRIndex(boundOffsetInGroup, startRow, 1 /*length*/);
+}
+
+void CSRNodeGroup::ensureCSRIndex() {
+    // A scan copies this pointer under the group lock when it starts (captureScanPin).
+    const auto lock = chunkedGroups.lock();
     if (!csrIndex) {
         csrIndex = std::make_shared<CSRIndex>();
     }
-    updateCSRIndex(boundOffsetInGroup, startRow, 1 /*length*/);
 }
 
 void CSRNodeGroup::updateCSRIndex(offset_t boundNodeOffsetInGroup, row_idx_t startRow,
@@ -646,6 +642,21 @@ void CSRNodeGroup::checkpoint(MemoryManager&, NodeGroupCheckpointState& state) {
         persistentChunkGroup->cast<ChunkedCSRNodeGroup>().serializeForCheckpointRollback(
             serializer);
     }
+    if (persistentChunkGroup != nullptr && persistentChunkGroup.use_count() > 1) {
+        // A scan holds the group object itself. Checkpoint rewrites the group's chunks in
+        // place, so it takes its own copy (chunk metadata from the snapshot above, version
+        // info and pending updates shared) and the scans keep the object they started with.
+        common::Deserializer deserializer{std::make_unique<common::BufferReader>(
+            persistentSnapshot->getBlobData(), persistentSnapshot->getSize())};
+        std::shared_ptr<ChunkedNodeGroup> ownGroup =
+            ChunkedCSRNodeGroup::deserializeForCheckpointRollback(*state.mm, deserializer);
+        ownGroup->setVersionInfo(persistentChunkGroup->getVersionInfo());
+        DASSERT(ownGroup->getNumColumns() == persistentChunkGroup->getNumColumns());
+        for (auto i = 0u; i < ownGroup->getNumColumns(); i++) {
+            ownGroup->getColumnChunk(i).shareUpdateInfo(persistentChunkGroup->getColumnChunk(i));
+        }
+        persistentChunkGroup = std::move(ownGroup);
+    }
     auto* shadowFile = state.columns.empty() ? nullptr : state.columns[0]->getShadowFile();
     const auto shadowSavepoint =
         shadowFile == nullptr ? ShadowFile::ShadowSavepoint{0} : shadowFile->createSavepoint();
@@ -690,8 +701,8 @@ void CSRNodeGroup::checkpoint(MemoryManager&, NodeGroupCheckpointState& state) {
         throw;
     }
     if (deferredPages) {
-        deferredPages->commit();
         scanPagePin = PageReclaimDeferral::create();
+        deferredPages->commit(scanPagePin);
     }
 }
 
