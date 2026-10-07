@@ -1,3 +1,4 @@
+#include "common/exception/runtime.h"
 #include "planner/join_order/cost_model.h"
 #include "planner/operator/logical_hash_join.h"
 #include "planner/operator/logical_intersect.h"
@@ -8,6 +9,18 @@ using namespace lbug::binder;
 
 namespace lbug {
 namespace planner {
+
+// A hash join without any join condition is a cross product, which is not what the operators below
+// plan: there is no probe key to look up and no key group to place the mark in. Reaching here
+// means decorrelation failed to turn a correlated predicate into an equality key. Such a plan is
+// invalid rather than merely suboptimal, and LogicalHashJoin reads joinConditions[0] (and, for a
+// mark join, the first probe key group position) unconditionally, so reject it here instead of
+// letting it reach the planner as undefined behaviour.
+static void validateHasJoinConditions(const std::vector<join_condition_t>& joinConditions) {
+    if (joinConditions.empty()) {
+        throw RuntimeException("Unable to construct a hash join without any join condition.");
+    }
+}
 
 void Planner::appendHashJoin(const expression_vector& joinNodeIDs, JoinType joinType,
     LogicalPlan& probePlan, LogicalPlan& buildPlan, LogicalPlan& resultPlan) {
@@ -27,6 +40,7 @@ void Planner::appendHashJoin(const expression_vector& joinNodeIDs, JoinType join
 void Planner::appendHashJoin(const std::vector<expression_pair>& joinConditions, JoinType joinType,
     std::shared_ptr<Expression> mark, LogicalPlan& probePlan, LogicalPlan& buildPlan,
     LogicalPlan& resultPlan) {
+    validateHasJoinConditions(joinConditions);
     auto hashJoin = make_shared<LogicalHashJoin>(joinConditions, joinType, mark,
         probePlan.getLastOperator(), buildPlan.getLastOperator());
     // Apply flattening to probe side
@@ -87,6 +101,7 @@ void Planner::appendMarkJoin(const expression_vector& joinNodeIDs,
 void Planner::appendMarkJoin(const std::vector<expression_pair>& joinConditions,
     const std::shared_ptr<Expression>& mark, LogicalPlan& probePlan, LogicalPlan& buildPlan,
     LogicalPlan& resultPlan) {
+    validateHasJoinConditions(joinConditions);
     auto hashJoin = make_shared<LogicalHashJoin>(joinConditions, JoinType::MARK, mark,
         probePlan.getLastOperator(), buildPlan.getLastOperator());
     // Apply flattening to probe side
