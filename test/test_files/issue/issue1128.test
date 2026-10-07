@@ -1,0 +1,57 @@
+-DATASET CSV empty
+
+--
+
+-CASE Issue1128ZeroBoundNodePredicate
+# Reproduction for github issue #1128:
+# A *0..N variable-length pattern with a node predicate returned a second
+# length-0 row for sources on a cycle whose other nodes fail the predicate.
+# The empty (src, src) walk was emitted once by the table scan (via
+# writeInternal's no-parent branch, since the predicate-filtered
+# findFirstParent is null while the raw parent list is non-empty) and again
+# by the lowerBound == 0 tail. The tail now only emits when the source was
+# truly never re-reached (raw parent list empty).
+
+-STATEMENT CREATE NODE TABLE N(id INT64 PRIMARY KEY, score DOUBLE);
+---- ok
+
+-STATEMENT CREATE REL TABLE E(FROM N TO N);
+---- ok
+
+-STATEMENT CREATE (:N {id: 0, score: 9.0});
+---- ok
+
+-STATEMENT CREATE (:N {id: 1, score: 1.0});
+---- ok
+
+-STATEMENT CREATE (:N {id: 2, score: 1.0});
+---- ok
+
+-STATEMENT MATCH (x:N {id: 0}), (y:N {id: 1}) CREATE (x)-[:E]->(y);
+---- ok
+
+-STATEMENT MATCH (x:N {id: 1}), (y:N {id: 2}) CREATE (x)-[:E]->(y);
+---- ok
+
+-STATEMENT MATCH (x:N {id: 2}), (y:N {id: 0}) CREATE (x)-[:E]->(y);
+---- ok
+
+# Control: *1..3 with the node predicate on intermediate nodes.
+-STATEMENT MATCH (a:N)-[:E*1..3 (r, n | WHERE n.score > 3)]->(b:N) RETURN a.id, b.id, count(*) ORDER BY a.id, b.id;
+---- 4
+0|1|1
+1|2|1
+2|0|1
+2|1|1
+
+# *0..3 must be the *1..3 rows plus exactly one (a, a) row per node.
+# Before the fix (0, 0) and (2, 2) had count 2.
+-STATEMENT MATCH (a:N)-[:E*0..3 (r, n | WHERE n.score > 3)]->(b:N) RETURN a.id, b.id, count(*) ORDER BY a.id, b.id;
+---- 7
+0|0|1
+0|1|1
+1|1|1
+1|2|1
+2|0|1
+2|1|1
+2|2|1
