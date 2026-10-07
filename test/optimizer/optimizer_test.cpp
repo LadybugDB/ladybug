@@ -1156,6 +1156,16 @@ TEST_F(OptimizerTest, GroupedReachableCount) {
             planner::LogicalOperatorType::GROUPED_REACHABLE_COUNT))
             << reshaped;
     }
+    // A relationship predicate must also keep the original plan: the level DP has no
+    // rel-predicate filtering (rel filtering happens at scan time), so counting over
+    // the full table would silently ignore it (see #1127).
+    ASSERT_TRUE(conn->query("CREATE REL TABLE grc_ew(FROM grc_n TO grc_n, w INT64);")->isSuccess());
+    ASSERT_FALSE(hasOperatorType(
+        getRoot("MATCH (a:grc_n)-[r:grc_ew*1..2 (r2, n | WHERE r2.w > 2)]->(b:grc_n) "
+                "RETURN b.active, count(*);")
+            ->getLastOperator()
+            .get(),
+        planner::LogicalOperatorType::GROUPED_REACHABLE_COUNT));
 }
 
 // Group keys of STRING type must be distinguished by their exact bytes: the group's
