@@ -10,9 +10,17 @@
 using namespace lbug::common;
 
 TEST(VFSTests, VirtualFileSystemDeletesFrozenWALs) {
-    VirtualFileSystem vfs("/tmp/dbHome.lbdb");
-    const std::string mainFrozenWAL = "/tmp/dbHome.lbdb.wal.checkpoint";
-    const std::string graphFrozenWAL = "/tmp/dbHome.graph.lbdb.wal.checkpoint";
+    // /tmp is not a writable path on Windows, so resolve the test's home directory
+    // against the OS temp dir up front.
+    const auto dbHome =
+        (std::filesystem::temp_directory_path() / "dbHome.lbdb").lexically_normal().string();
+    VirtualFileSystem vfs(dbHome);
+    const std::string mainFrozenWAL = dbHome + ".wal.checkpoint";
+    const std::string graphFrozenWAL = dbHome + ".graph.lbdb.wal.checkpoint";
+    const std::string otherFrozenWAL =
+        (std::filesystem::temp_directory_path() / "other.lbdb.wal.checkpoint").string();
+    const std::string otherGraphFrozenWAL =
+        (std::filesystem::temp_directory_path() / "other.graph.lbdb.wal.checkpoint").string();
     std::ofstream(mainFrozenWAL).close();
     std::ofstream(graphFrozenWAL).close();
     ASSERT_TRUE(std::filesystem::exists(mainFrozenWAL));
@@ -23,8 +31,8 @@ TEST(VFSTests, VirtualFileSystemDeletesFrozenWALs) {
     EXPECT_FALSE(std::filesystem::exists(mainFrozenWAL));
     EXPECT_FALSE(std::filesystem::exists(graphFrozenWAL));
 
-    EXPECT_THROW(vfs.removeFileIfExists("/tmp/other.lbdb.wal.checkpoint"), IOException);
-    EXPECT_THROW(vfs.removeFileIfExists("/tmp/other.graph.lbdb.wal.checkpoint"), IOException);
+    EXPECT_THROW(vfs.removeFileIfExists(otherFrozenWAL), IOException);
+    EXPECT_THROW(vfs.removeFileIfExists(otherGraphFrozenWAL), IOException);
 }
 
 TEST(VFSTests, VirtualFileSystemDeleteFiles) {
@@ -341,7 +349,9 @@ TEST(VFSTests, VirtualFileSystemRejectsRenameAcrossFileSystems) {
     VirtualFileSystem vfs;
     vfs.registerFileSystem(std::move(probe));
 
-    const std::string destinationDirectory = "/tmp/lbug_vfs_cross_fs_rename";
+    // /tmp is not a writable path on Windows; resolve against the OS temp dir.
+    const auto destinationDirectory =
+        (std::filesystem::temp_directory_path() / "lbug_vfs_cross_fs_rename").string();
     const auto localDestination = destinationDirectory + "/dest.wal";
     std::filesystem::create_directories(destinationDirectory);
     std::ofstream(localDestination) << "keep";
@@ -354,10 +364,14 @@ TEST(VFSTests, VirtualFileSystemRejectsRenameAcrossFileSystems) {
     }
     EXPECT_FALSE(probePtr->wasRenameCalled());
     EXPECT_TRUE(vfs.fileOrPathExists(registeredPath));
-    std::ifstream destination{localDestination};
-    std::string content;
-    std::getline(destination, content);
-    EXPECT_EQ(content, "keep");
+    {
+        // Read the contents inside a scope so the file handle is closed before
+        // remove_all — Windows refuses to delete a file with an open handle.
+        std::ifstream destination{localDestination};
+        std::string content;
+        std::getline(destination, content);
+        EXPECT_EQ(content, "keep");
+    }
 
     std::filesystem::remove_all(destinationDirectory);
 }

@@ -131,6 +131,19 @@ public:
 #endif
         return pathStr;
     }
+
+    // Normalizes a path to a stable separator-agnostic form for substring
+    // comparisons against runtime-produced error messages. std::filesystem::path
+    // preserves the separator style of its input on Windows, so a path computed
+    // in the test (forward slashes after getTempDBPathStr) won't match a message
+    // built from a FileInfo whose path was opened in native format (backslashes).
+    static std::string normalizeForFind(const std::string& s) {
+        auto result = s;
+#ifdef _WIN32
+        std::replace(result.begin(), result.end(), '\\', '/');
+#endif
+        return result;
+    }
 };
 
 } // namespace testing
