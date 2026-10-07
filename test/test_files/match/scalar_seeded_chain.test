@@ -1,0 +1,95 @@
+-DATASET CSV empty
+--
+
+# A leg decorrelated by a correlated PK equality (t.id = <outer scalar>) builds its
+# chain in a separate plan: extends bind neighbour IDs only, and the seed lookup
+# carries the seed's own properties. Every other leg-node property is attached
+# after the chain hash-joins back onto the outer plan, so a residual predicate on
+# such a node has to be filtered AFTER that attach -- filtering before it left the
+# expression out of scope and physical mapping failed with
+# "Cannot evaluate expression with type PROPERTY.".
+#
+# Persons 1 and 3 share a key (100), so these also pin the multi-valued-key
+# contract: the chain joins back on the correlated IDs *plus* the key.
+-CASE ScalarSeededChainResidualPredicates
+-STATEMENT CREATE NODE TABLE Person(id INT64 PRIMARY KEY, name STRING, tagId INT64);
+---- ok
+-STATEMENT CREATE NODE TABLE Doc(id INT64 PRIMARY KEY, words INT64);
+---- ok
+-STATEMENT CREATE NODE TABLE Tag(id INT64 PRIMARY KEY, name STRING);
+---- ok
+-STATEMENT CREATE REL TABLE posted(FROM Person TO Doc);
+---- ok
+-STATEMENT CREATE REL TABLE tagged(FROM Doc TO Tag);
+---- ok
+-STATEMENT CREATE (:Person {id: 1, name: 'a', tagId: 100}), (:Person {id: 2, name: 'b', tagId: 101}), (:Person {id: 3, name: 'c', tagId: 100});
+---- ok
+-STATEMENT CREATE (:Doc {id: 10, words: 7}), (:Doc {id: 11, words: 100}), (:Doc {id: 12, words: 50});
+---- ok
+-STATEMENT CREATE (:Tag {id: 100, name: 'x'}), (:Tag {id: 101, name: 'y'});
+---- ok
+-STATEMENT MATCH (p:Person), (d:Doc) WHERE p.id = 1 AND d.id = 10 CREATE (p)-[:posted]->(d);
+---- ok
+-STATEMENT MATCH (p:Person), (d:Doc) WHERE p.id = 2 AND d.id = 11 CREATE (p)-[:posted]->(d);
+---- ok
+-STATEMENT MATCH (p:Person), (d:Doc) WHERE p.id = 3 AND d.id = 12 CREATE (p)-[:posted]->(d);
+---- ok
+-STATEMENT MATCH (d:Doc), (t:Tag) WHERE d.id = 10 AND t.id = 100 CREATE (d)-[:tagged]->(t);
+---- ok
+-STATEMENT MATCH (d:Doc), (t:Tag) WHERE d.id = 11 AND t.id = 101 CREATE (d)-[:tagged]->(t);
+---- ok
+-STATEMENT MATCH (d:Doc), (t:Tag) WHERE d.id = 12 AND t.id = 100 CREATE (d)-[:tagged]->(t);
+---- ok
+
+# Control: no residual, so nothing depends on the attach order.
+-STATEMENT MATCH (p:Person) WITH p, p.tagId AS kid
+       MATCH (p)-[:posted]->(d:Doc)-[:tagged]->(t:Tag{id: kid})
+       RETURN count(*) AS c;
+---- 1
+3
+
+# Residual on a non-seed leg node (d.words): attached after the join back.
+-STATEMENT MATCH (p:Person) WITH p, p.tagId AS kid
+       MATCH (p)-[:posted]->(d:Doc)-[:tagged]->(t:Tag{id: kid})
+       WHERE d.words > 10
+       RETURN count(*) AS c;
+---- 1
+2
+
+# Residual on the seed node (t.name) and on a non-seed node together: the seed's
+# properties ride along in the PK lookup, the other node's do not.
+-STATEMENT MATCH (p:Person) WITH p, p.tagId AS kid
+       MATCH (p)-[:posted]->(d:Doc)-[:tagged]->(t:Tag{id: kid})
+       WHERE t.name = 'x' AND d.words > 10
+       RETURN count(*) AS c;
+---- 1
+1
+
+# Same, row by row: the shared key (100) must match both person 1's and person 3's
+# chains, and the residual must drop person 1's short document only.
+-STATEMENT MATCH (p:Person) WITH p, p.tagId AS kid
+       MATCH (p)-[:posted]->(d:Doc)-[:tagged]->(t:Tag{id: kid})
+       WHERE d.words > 10
+       RETURN p.id AS pid, d.id AS did, t.name AS tname ORDER BY pid;
+---- 2
+2|11|y
+3|12|x
+
+# Control: a residual no row can satisfy.
+-STATEMENT MATCH (p:Person) WITH p, p.tagId AS kid
+       MATCH (p)-[:posted]->(d:Doc)-[:tagged]->(t:Tag{id: kid})
+       WHERE d.words > 1000
+       RETURN count(*) AS c;
+---- 1
+0
+
+# Bail-out control: nothing in the leg is outer-bound, so the correlated-PK chain
+# does not apply and regular planning must still produce the same rows. `q` is
+# unconstrained here, so each outer row contributes every matching chain: one for
+# each of the three outer keys.
+-STATEMENT MATCH (p:Person) WITH p, p.tagId AS kid
+       MATCH (q:Person)-[:posted]->(d:Doc)-[:tagged]->(t:Tag{id: kid})
+       WHERE d.words > 10
+       RETURN count(*) AS c;
+---- 1
+3

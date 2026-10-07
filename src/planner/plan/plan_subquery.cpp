@@ -1489,9 +1489,6 @@ bool Planner::tryPlanScalarSeededChain(const QueryGraphCollection& queryGraphCol
     // CorrelatedSubqueryUnnestSolver) and hash-join the chain back.
     appendAccumulate(expression_vector{keyOuter}, leftPlan);
     appendHashJoin(joinConditions, JoinType::INNER, nullptr, leftPlan, build, leftPlan);
-    for (auto& pred : deferred) {
-        appendFilter(pred, leftPlan);
-    }
     for (auto i = 0u; i < queryGraph->getNumQueryNodes(); ++i) {
         auto node = queryGraph->getQueryNode(i);
         expression_vector missing;
@@ -1513,6 +1510,9 @@ bool Planner::tryPlanScalarSeededChain(const QueryGraphCollection& queryGraphCol
         // masks still apply.
         leftPlan.getLastOperator()->cast<LogicalHashJoin>().getSIPInfoUnsafe().position =
             SemiMaskPosition::PROHIBIT_PROBE_TO_BUILD;
+    }
+    for (auto& pred : deferred) {
+        appendFilter(pred, leftPlan);
     }
     return true;
 }
