@@ -1,5 +1,8 @@
 #include "processor/operator/hash_join/join_hash_table.h"
 
+#include <algorithm>
+#include <cstring>
+
 #include "common/utils.h"
 #include "function/hash/vector_hash_functions.h"
 #include "processor/result/factorized_table.h"
@@ -22,8 +25,8 @@ JoinHashTable::JoinHashTable(MemoryManager& memoryManager, logical_type_vec_t ke
 }
 
 // Returns false if no tuple has all keys non-null. Only the unflat keys' state is compacted
-// (callers restore it); a flat key's state is left alone, since its producer keeps writing
-// through that selection vector.
+// (appendVectors and the probe operator restore it); a flat key's state is left alone, since its
+// producer keeps writing through that selection vector.
 static bool discardNullFromKeys(const std::vector<ValueVector*>& vectors) {
     for (auto& vector : vectors) {
         if (vector->state->isFlat()) {
@@ -38,7 +41,41 @@ static bool discardNullFromKeys(const std::vector<ValueVector*>& vectors) {
     return true;
 }
 
+static bool mayHaveNullUnflatKeys(const std::vector<ValueVector*>& keyVectors) {
+    return std::any_of(keyVectors.begin(), keyVectors.end(), [](const ValueVector* vector) {
+        return !vector->state->isFlat() && !vector->hasNoNullsGuarantee();
+    });
+}
+
+static void copySelVector(const SelectionVector& from, SelectionVector& to) {
+    if (from.isUnfiltered()) {
+        to.setToUnfiltered(from.getSelSize());
+    } else {
+        std::memcpy(to.getMutableBuffer().data(), from.getSelectedPositions().data(),
+            from.getSelSize() * sizeof(sel_t));
+        to.setToFiltered(from.getSelSize());
+    }
+}
+
 uint64_t JoinHashTable::appendVectors(const std::vector<ValueVector*>& keyVectors,
+    const std::vector<ValueVector*>& payloadVectors, DataChunkState* keyState) {
+    // Discarding null keys compacts the unflat key state's selection vector, which the child
+    // writes its next batch through. Compact a copy and give the child's back afterwards.
+    if (!mayHaveNullUnflatKeys(keyVectors)) {
+        return appendVectorsDiscardingNulls(keyVectors, payloadVectors, keyState);
+    }
+    if (nullFreeSelVector == nullptr) {
+        nullFreeSelVector = std::make_shared<SelectionVector>(DEFAULT_VECTOR_CAPACITY);
+    }
+    auto childSelVector = keyState->getSelVectorShared();
+    copySelVector(*childSelVector, *nullFreeSelVector);
+    keyState->setSelVector(nullFreeSelVector);
+    const auto numAppended = appendVectorsDiscardingNulls(keyVectors, payloadVectors, keyState);
+    keyState->setSelVector(std::move(childSelVector));
+    return numAppended;
+}
+
+uint64_t JoinHashTable::appendVectorsDiscardingNulls(const std::vector<ValueVector*>& keyVectors,
     const std::vector<ValueVector*>& payloadVectors, DataChunkState* keyState) {
     if (!discardNullFromKeys(keyVectors)) {
         return 0;

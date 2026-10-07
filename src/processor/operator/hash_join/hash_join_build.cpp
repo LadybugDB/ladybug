@@ -1,7 +1,5 @@
 #include "processor/operator/hash_join/hash_join_build.h"
 
-#include <algorithm>
-
 #include "binder/expression/expression_util.h"
 #include "processor/execution_context.h"
 #include "storage/buffer_manager/memory_manager.h"
@@ -67,28 +65,12 @@ void HashJoinBuild::finalizeInternal(ExecutionContext* /*context*/) {
     sharedState->getHashTable()->buildHashSlots();
 }
 
-static bool mayHaveNullUnflatKeys(const std::vector<ValueVector*>& keyVectors) {
-    return std::any_of(keyVectors.begin(), keyVectors.end(), [](const ValueVector* vector) {
-        return !vector->state->isFlat() && !vector->hasNoNullsGuarantee();
-    });
-}
-
 void HashJoinBuild::executeInternal(ExecutionContext* context) {
     // Append thread-local tuples
     while (children[0]->getNextTuple(context)) {
-        // Appending discards null unflat keys by compacting the key state's selection vector in
-        // place. Work on a copy then: the child may write its next batch through its own selection
-        // vector.
-        const auto copySelVector = mayHaveNullUnflatKeys(keyVectors);
-        if (copySelVector) {
-            saveSelVector(*keyState);
-        }
         uint64_t numAppended = 0u;
         for (auto i = 0u; i < resultSet->multiplicity; ++i) {
             numAppended += appendVectors();
-        }
-        if (copySelVector) {
-            restoreSelVector(*keyState);
         }
         metrics->numOutputTuple.increase(numAppended);
     }
