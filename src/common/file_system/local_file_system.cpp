@@ -156,29 +156,34 @@ std::unique_ptr<FileInfo> LocalFileSystem::openFile(const std::string& path, Fil
         int rc = fcntl(fd, F_SETLK, &fl);
         if (rc == -1) {
             int original_errno = errno;
-            close(fd);
             if (original_errno == EAGAIN || original_errno == EACCES) {
+                // Query the holder while the descriptor is still open: F_GETLK on a
+                // closed fd always fails with EBADF, making the PID hint unreachable.
                 struct flock get_fl {};
                 memset(&get_fl, 0, sizeof get_fl);
                 get_fl.l_type = flags.lockType == FileLockType::READ_LOCK ? F_RDLCK : F_WRLCK;
                 get_fl.l_whence = SEEK_SET;
                 get_fl.l_start = 0;
                 get_fl.l_len = 0;
-                if (fcntl(fd, F_GETLK, &get_fl) != -1) {
-                    if (get_fl.l_type != F_UNLCK) {
-                        throw IOException(
-                            "Could not set lock on file : " + fullPath + " (Lock is held by PID " +
-                            std::to_string(get_fl.l_pid) + ")\n" +
-                            "See the docs: https://docs.ladybugdb.com/concurrency for more "
-                            "information.");
-                    }
+                std::string holder;
+                if (fcntl(fd, F_GETLK, &get_fl) != -1 && get_fl.l_type != F_UNLCK) {
+                    holder = " (Lock is held by PID " + std::to_string(get_fl.l_pid) + ")";
                 }
+                close(fd);
+                errno = original_errno;
+                throw IOException("Could not set lock on file : " + fullPath + holder +
+                                  " (Error: " + posixErrMessage() + ")\n" +
+                                  "See the docs: https://docs.ladybugdb.com/concurrency for "
+                                  "more information.");
             }
+            // Not contention (e.g. ENOLCK, EINVAL/EOPNOTSUPP on filesystems without POSIX
+            // record locks): report the errno distinctly instead of pointing at another
+            // process holding the database.
+            close(fd);
             errno = original_errno;
-            throw IOException("Could not set lock on file : " + fullPath +
-                              " (Error: " + posixErrMessage() + ")\n" +
-                              "See the docs: https://docs.ladybugdb.com/concurrency for more "
-                              "information.");
+            throw IOException("Could not lock file : " + fullPath +
+                              " (Error: " + posixErrMessage() + "). " +
+                              "The filesystem may not support POSIX record locks.");
         }
     }
     return std::make_unique<LocalFileInfo>(fullPath, fd, this);
