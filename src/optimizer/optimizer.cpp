@@ -393,6 +393,9 @@ void Optimizer::optimize(planner::LogicalPlan* plan, main::ClientContext* contex
             }
         }
     } else {
+        auto correlatedSubqueryUnnestSolver = CorrelatedSubqueryUnnestSolver(nullptr);
+        correlatedSubqueryUnnestSolver.solve(plan->getLastOperator().get());
+
         // we still need to compute the schema for each operator even if we have optimizations
         // disabled
         auto schemaPopulator = SchemaPopulator{};

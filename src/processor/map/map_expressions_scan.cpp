@@ -14,6 +14,11 @@ namespace processor {
 std::unique_ptr<PhysicalOperator> PlanMapper::mapExpressionsScan(
     const LogicalOperator* logicalOperator) {
     auto& expressionsScan = logicalOperator->constCast<LogicalExpressionsScan>();
+    if (expressionsScan.getOuterAccumulate() == nullptr) {
+        throw common::InternalException(
+            "ExpressionsScan has no outer accumulate operator. This usually indicates an unnested "
+            "correlated subquery where outer accumulate was not resolved.");
+    }
     auto outerAccumulate = expressionsScan.getOuterAccumulate()->ptrCast<LogicalAccumulate>();
     expression_map<ft_col_idx_t> materializedExpressionToColIdx;
     auto materializedExpressions = outerAccumulate->getPayloads();

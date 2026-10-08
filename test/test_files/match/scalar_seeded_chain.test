@@ -93,3 +93,26 @@
        RETURN count(*) AS c;
 ---- 1
 3
+
+# Regression for #1142: queries with correlated-PK and seeded chain must not segfault
+# when plan optimizer is disabled, and must return the same results.
+-STATEMENT CALL enable_plan_optimizer=false;
+---- ok
+-STATEMENT MATCH (p:Person) WITH p, p.tagId AS kid
+       MATCH (p)-[:posted]->(d:Doc)-[:tagged]->(t:Tag{id: kid})
+       RETURN count(*) AS c;
+---- 1
+3
+-STATEMENT MATCH (p:Person) WITH p, p.tagId AS kid
+       MATCH (p)-[:posted]->(d:Doc)-[:tagged]->(t:Tag{id: kid})
+       WHERE d.words > 10
+       RETURN count(*) AS c;
+---- 1
+2
+-STATEMENT MATCH (p:Person) WITH p, p.tagId AS kid
+       OPTIONAL MATCH (t:Tag {id: kid})
+       RETURN count(*);
+---- 1
+3
+-STATEMENT CALL enable_plan_optimizer=true;
+---- ok
