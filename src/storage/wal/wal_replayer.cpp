@@ -636,9 +636,11 @@ void WALReplayer::replayFrozenWAL(Checkpointer& checkpointer, bool throwOnWalRep
                 auto walRecord = WALRecord::deserialize(deserializer, clientContext);
                 replayWALRecord(*walRecord);
             }
-            if (replayPendingGraphWALs(clientContext)) {
-                cachedOwnerCatalog = nullptr;
-            }
+            replayPendingGraphWALs(clientContext);
+            // Graph checkpoint recovery replays loaded graphs' WALs inline through their own
+            // replayers, whose records can change graph registry membership, so the cached
+            // owner must be dropped here even when no drain ran above.
+            cachedOwnerCatalog = nullptr;
             recoverGraphCheckpoints(clientContext, false, false);
             if (offsetDeserialized == 0) {
                 // Nothing was committed, so the frozen WAL holds nothing to keep.
@@ -718,9 +720,11 @@ void WALReplayer::replayActiveWAL(Checkpointer& checkpointer, bool throwOnWalRep
                 auto walRecord = WALRecord::deserialize(deserializer, clientContext);
                 replayWALRecord(*walRecord);
             }
-            if (replayPendingGraphWALs(clientContext)) {
-                cachedOwnerCatalog = nullptr;
-            }
+            replayPendingGraphWALs(clientContext);
+            // Graph checkpoint recovery replays loaded graphs' WALs inline through their own
+            // replayers, whose records can change graph registry membership, so the cached
+            // owner must be dropped here even when no drain ran above.
+            cachedOwnerCatalog = nullptr;
             recoverGraphCheckpoints(clientContext, false, false);
             truncateWALFile(*fileInfo, offsetDeserialized);
         }
