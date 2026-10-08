@@ -127,6 +127,9 @@ bool Planner::findCorrelatedPrimaryKeyLookupKey(const QueryGraphCollection& quer
 bool Planner::tryPlanCorrelatedPrimaryKeyLookup(const QueryGraphCollection& queryGraphCollection,
     const expression_vector& predicates, const expression_vector& corrExprs,
     const Schema& outerSchema, cardinality_t corrExprsCard, LogicalPlan& rightPlan) {
+    if (!clientContext->getClientConfig()->enablePlanOptimizer) {
+        return false;
+    }
     std::shared_ptr<Expression> key;
     expression_vector residualPredicates;
     if (!findCorrelatedPrimaryKeyLookupKey(queryGraphCollection, predicates, corrExprs, outerSchema,
@@ -1250,6 +1253,9 @@ bool Planner::tryPlanPropertySeededChain(const QueryGraphCollection& queryGraphC
 // SIP flag on the main join (ACCUMULATE-probe joins skip SIP in HashJoinSIPOptimizer).
 bool Planner::tryPlanScalarSeededChain(const QueryGraphCollection& queryGraphCollection,
     const expression_vector& predicates, LogicalPlan& leftPlan) {
+    if (!clientContext->getClientConfig()->enablePlanOptimizer) {
+        return false;
+    }
     if (leftPlan.isEmpty() || leftPlan.hasUpdate() ||
         queryGraphCollection.getNumQueryGraphs() != 1) {
         return false;
