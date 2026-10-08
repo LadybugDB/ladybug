@@ -82,3 +82,32 @@ Dan
 4|X|42
 6|X|42
 
+-CASE SetNullReadMultipleRows
+-STATEMENT MATCH (a:person) WHERE a.ID < 6 SET a.age = NULL RETURN a.ID, a.age;
+---- 4
+0|
+2|
+3|
+5|
+-STATEMENT MATCH (a:person) WHERE a.ID < 6 SET a.fName = NULL RETURN a.ID, a.fName;
+---- 4
+0|
+2|
+3|
+5|
+-STATEMENT MATCH (a:person) WHERE a.ID < 6 RETURN a.ID, a.age, a.fName;
+---- 4
+0||
+2||
+3||
+5||
+-STATEMENT CREATE NODE TABLE play(ID INT64, name STRING, PRIMARY KEY(ID));
+---- ok
+-STATEMENT CREATE (a:play {ID: 0, name: 'AA'});
+---- ok
+-STATEMENT MATCH (a:organisation:play) SET a.name = NULL RETURN a.ID, a.name;
+---- 4
+0|
+1|
+4|
+6|

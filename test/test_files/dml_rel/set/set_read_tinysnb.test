@@ -28,6 +28,18 @@
 1999-01-02|Elizabeth|1905-12-12|Farooq
 1999-01-02|Elizabeth|1905-12-12|Greg
 
+-CASE SetNullReadMultipleRows
+-STATEMENT MATCH (a:person)-[e:knows]->(b:person) WHERE a.ID = 0 SET e.date = NULL RETURN b.ID, e.date;
+---- 3
+2|
+3|
+5|
+-STATEMENT MATCH (a:person)-[e:knows]->(b:person) WHERE a.ID = 0 RETURN b.ID, e.date;
+---- 3
+2|
+3|
+5|
+
 -CASE SetReadTest2
 -STATEMENT CREATE REL TABLE play(FROM person TO person, date DATE, year INT64);
 ---- ok
