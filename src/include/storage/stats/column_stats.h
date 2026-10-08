@@ -6,6 +6,7 @@
 #include "common/serializer/serializer.h"
 #include "common/vector/value_vector.h"
 #include "storage/stats/hyperloglog.h"
+#include "storage/storage_version_info.h"
 
 namespace lbug {
 namespace storage {
@@ -68,17 +69,22 @@ public:
             deserializer.validateDebuggingInfo(info, "hll");
             columnStats.hll = HyperLogLog::deserialize(deserializer);
         }
-        deserializer.validateDebuggingInfo(info, "has_min_max");
-        bool hasMinMax = false;
-        deserializer.deserializeValue(hasMinMax);
-        if (hasMinMax) {
-            deserializer.validateDebuggingInfo(info, "min_max");
-            double min = 0;
-            double max = 0;
-            deserializer.deserializeValue(min);
-            deserializer.deserializeValue(max);
-            columnStats.minValue = min;
-            columnStats.maxValue = max;
+        // Min/max was added in STORAGE_VERSION_48. Older files have no min/max bytes;
+        // leave min/max unset so range selectivity falls back to the default estimate.
+        // Writers always emit the current format.
+        if (deserializer.getStorageVersion() >= StorageVersionInfo::STORAGE_VERSION_48) {
+            deserializer.validateDebuggingInfo(info, "has_min_max");
+            bool hasMinMax = false;
+            deserializer.deserializeValue(hasMinMax);
+            if (hasMinMax) {
+                deserializer.validateDebuggingInfo(info, "min_max");
+                double min = 0;
+                double max = 0;
+                deserializer.deserializeValue(min);
+                deserializer.deserializeValue(max);
+                columnStats.minValue = min;
+                columnStats.maxValue = max;
+            }
         }
         return columnStats;
     }
