@@ -5621,6 +5621,328 @@ TEST_F(ReviewFixesTest, TaggedRecordAfterDropGraphRecordStillSkips) {
     EXPECT_EQ(countResult->getNext()->getValue(0)->getValue<int64_t>(), 1);
 }
 
+// Regression test for the last-owner cache on the graph-checkpoint recovery path: an
+// extension initializer replayed from a graph WAL can drop the cached owner's graph, so
+// the cache must be invalidated at the end of a replay pass. The frozen pass populates
+// the cache with the sequence graph's tagged UPDATE_SEQUENCE, then a record in the
+// extension_load_graph WAL (produced by a standalone session, the only writer of graph
+// WALs) runs an initializer that drops the cached owner, and the crafted committed
+// record in the active WAL arrives after the retired catalog's destruction. Without the
+// pass-end invalidation it resolves through the destroyed catalog; with it, the record's
+// owner miss skips it.
+TEST_F(ReviewFixesTest, ExtensionDropDuringGraphReplayInvalidatesOwnerCache) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0 || systemConfig->enableChecksums) {
+        GTEST_SKIP();
+    }
+#if !defined(LBUG_TEST_REGISTRY_MUTATING_EXTENSION_PATH)
+    GTEST_SKIP();
+#else
+    if (!std::filesystem::exists(LBUG_TEST_REGISTRY_MUTATING_EXTENSION_PATH)) {
+        GTEST_SKIP();
+    }
+
+    conn->query("CALL auto_checkpoint=false;");
+    conn->query("CALL force_checkpoint_on_close=false;");
+    ASSERT_TRUE(conn->query("CREATE GRAPH extension_drop_target;")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH extension_drop_target;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE SEQUENCE s;")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH main;")->isSuccess());
+    ASSERT_TRUE(conn->query("CHECKPOINT;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE GRAPH extension_load_graph;")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH extension_drop_target;")->isSuccess());
+    auto nextvalResult = conn->query("RETURN nextval('s');");
+    ASSERT_TRUE(nextvalResult->isSuccess()) << nextvalResult->getErrorMessage();
+    ASSERT_EQ(nextvalResult->getNext()->getValue(0)->getValue<int64_t>(), 1);
+
+    const auto mainWALPath = StorageUtils::getWALFilePath(databasePath);
+    const auto mainCheckpointWALPath = StorageUtils::getCheckpointWALFilePath(databasePath);
+    const auto graphPath = StorageUtils::getGraphPath(databasePath, "extension_load_graph");
+    const auto graphWALPath = StorageUtils::getWALFilePath(graphPath);
+
+    BinaryData craftedWAL;
+    {
+        auto& context = *conn->getClientContext();
+        auto* memoryManager = MemoryManager::Get(context);
+        auto inMemWriter = std::make_shared<InMemFileWriter>(*memoryManager);
+        std::shared_ptr<Writer> writer = inMemWriter;
+        Serializer serializer{writer};
+        const auto appendRecord = [&serializer, &writer](const WALRecord& record) {
+            writer->onObjectBegin();
+            WALRecord::serializeWithLength(serializer, record);
+            writer->onObjectEnd();
+        };
+        appendRecord(BeginTransactionRecord{});
+        UpdateSequenceRecord sentinelRecord{999999, 7};
+        sentinelRecord.ownerCatalogName = "extension_drop_target";
+        appendRecord(sentinelRecord);
+        appendRecord(CommitRecord{});
+        auto bufferWriter = std::make_shared<BufferWriter>();
+        inMemWriter->flush(*bufferWriter);
+        craftedWAL = bufferWriter->getData();
+    }
+
+    conn.reset();
+    database.reset();
+
+    // The initializer no-ops in the standalone session (extension_drop_target is not
+    // loaded there) so the live load succeeds and logs the record this test relies on.
+    auto graphConfig = *systemConfig;
+    graphConfig.autoCheckpoint = false;
+    graphConfig.forceCheckpointOnClose = false;
+    graphConfig.enableChecksums = false;
+    auto graphDatabase = std::make_unique<main::Database>(graphPath, graphConfig);
+    auto graphConnection = std::make_unique<main::Connection>(graphDatabase.get());
+    auto loadResult = graphConnection->query(
+        std::format("LOAD EXTENSION '{}';", LBUG_TEST_REGISTRY_MUTATING_EXTENSION_PATH));
+    ASSERT_TRUE(loadResult->isSuccess()) << loadResult->getErrorMessage();
+    graphConnection.reset();
+    graphDatabase.reset();
+    ASSERT_TRUE(std::filesystem::exists(graphWALPath));
+    ASSERT_GT(std::filesystem::file_size(graphWALPath), sizeof(common::uuid) + sizeof(uint8_t));
+
+    // Simulate the crash between rotating the WAL and checkpointing: the pre-rotation
+    // commits become the frozen WAL, and the active WAL is the crafted transaction that
+    // arrives after the initializer's drop took effect. The active WAL header must carry
+    // the main database's uuid, so it is copied from the frozen WAL with the frames
+    // behind it.
+    ASSERT_TRUE(std::filesystem::exists(mainWALPath));
+    std::filesystem::rename(mainWALPath, mainCheckpointWALPath);
+    {
+        std::ifstream walInput{mainCheckpointWALPath, std::ios::binary};
+        ASSERT_TRUE(walInput.is_open());
+        std::vector<uint8_t> walBytes{std::istreambuf_iterator<char>{walInput}, {}};
+        const size_t headerSize = sizeof(common::uuid) + sizeof(uint8_t);
+        ASSERT_GT(walBytes.size(), headerSize);
+        std::vector<uint8_t> activeWALBytes{walBytes.begin(),
+            walBytes.begin() + static_cast<std::ptrdiff_t>(headerSize)};
+        activeWALBytes.insert(activeWALBytes.end(), craftedWAL.data.get(),
+            craftedWAL.data.get() + craftedWAL.size);
+        std::ofstream walOutput{mainWALPath, std::ios::binary | std::ios::trunc};
+        ASSERT_TRUE(walOutput.is_open());
+        walOutput.write(reinterpret_cast<const char*>(activeWALBytes.data()),
+            static_cast<std::streamsize>(activeWALBytes.size()));
+        walOutput.close();
+        ASSERT_TRUE(walOutput.good());
+    }
+
+    createDBAndConn();
+    auto openResult = conn->query("RETURN 1;");
+    ASSERT_TRUE(openResult->isSuccess()) << openResult->getErrorMessage();
+    auto useResult = conn->query("USE GRAPH extension_load_graph;");
+    EXPECT_TRUE(useResult->isSuccess()) << useResult->getErrorMessage();
+    auto graphs = conn->query("CALL show_graphs() RETURN name ORDER BY name;");
+    ASSERT_TRUE(graphs->isSuccess()) << graphs->getErrorMessage();
+    while (graphs->hasNext()) {
+        const auto name = graphs->getNext()->getValue(0)->getValue<std::string>();
+        EXPECT_NE(name, "extension_drop_target")
+            << "the initializer's drop did not survive recovery";
+    }
+#endif
+}
+
+// The same hazard with the drain at a replayed COMMIT instead of a pass end: the pending
+// graph WAL replays while the parent replayer still holds a cached owner, and the
+// extension initializer mutates graph registry membership behind it. The queued graph's
+// WAL is deferred to the transaction-free point of the transaction that materialized it,
+// so the draining commit is the one holding a B-tagged sequence create followed by an
+// A-tagged sequence use (the last record sets the cached owner). The crafted committed
+// record then arrives in the same frozen pass, before any pass-end invalidation can run,
+// so it pins the commit-drain clear alone: without it the record routes through the
+// retired owner catalog, and with it the owner miss skips the record.
+TEST_F(ReviewFixesTest, ExtensionDropDuringGraphWALDrainInvalidatesOwnerCache) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0 || systemConfig->enableChecksums) {
+        GTEST_SKIP();
+    }
+#if !defined(LBUG_TEST_REGISTRY_MUTATING_EXTENSION_PATH)
+    GTEST_SKIP();
+#else
+    if (!std::filesystem::exists(LBUG_TEST_REGISTRY_MUTATING_EXTENSION_PATH)) {
+        GTEST_SKIP();
+    }
+
+    conn->query("CALL auto_checkpoint=false;");
+    conn->query("CALL force_checkpoint_on_close=false;");
+    ASSERT_TRUE(conn->query("CREATE GRAPH extension_drop_target;")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH extension_drop_target;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE SEQUENCE s;")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH main;")->isSuccess());
+    ASSERT_TRUE(conn->query("CHECKPOINT;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE GRAPH extension_load_graph;")->isSuccess());
+    ASSERT_TRUE(conn->query("BEGIN TRANSACTION;")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH extension_load_graph;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE SEQUENCE bs;")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH extension_drop_target;")->isSuccess());
+    auto nextvalResult = conn->query("RETURN nextval('s');");
+    ASSERT_TRUE(nextvalResult->isSuccess()) << nextvalResult->getErrorMessage();
+    ASSERT_EQ(nextvalResult->getNext()->getValue(0)->getValue<int64_t>(), 1);
+    ASSERT_TRUE(conn->query("COMMIT;")->isSuccess());
+
+    const auto mainWALPath = StorageUtils::getWALFilePath(databasePath);
+    const auto mainCheckpointWALPath = StorageUtils::getCheckpointWALFilePath(databasePath);
+    const auto graphPath = StorageUtils::getGraphPath(databasePath, "extension_load_graph");
+    const auto graphWALPath = StorageUtils::getWALFilePath(graphPath);
+
+    BinaryData craftedWAL;
+    {
+        auto& context = *conn->getClientContext();
+        auto* memoryManager = MemoryManager::Get(context);
+        auto inMemWriter = std::make_shared<InMemFileWriter>(*memoryManager);
+        std::shared_ptr<Writer> writer = inMemWriter;
+        Serializer serializer{writer};
+        const auto appendRecord = [&serializer, &writer](const WALRecord& record) {
+            writer->onObjectBegin();
+            WALRecord::serializeWithLength(serializer, record);
+            writer->onObjectEnd();
+        };
+        appendRecord(BeginTransactionRecord{});
+        UpdateSequenceRecord sentinelRecord{999999, 7};
+        sentinelRecord.ownerCatalogName = "extension_drop_target";
+        appendRecord(sentinelRecord);
+        appendRecord(CommitRecord{});
+        auto bufferWriter = std::make_shared<BufferWriter>();
+        inMemWriter->flush(*bufferWriter);
+        craftedWAL = bufferWriter->getData();
+    }
+
+    conn.reset();
+    database.reset();
+
+    // The initializer no-ops in the standalone session (extension_drop_target is not
+    // loaded there) so the live load succeeds and logs the record this test relies on.
+    auto graphConfig = *systemConfig;
+    graphConfig.autoCheckpoint = false;
+    graphConfig.forceCheckpointOnClose = false;
+    graphConfig.enableChecksums = false;
+    auto graphDatabase = std::make_unique<main::Database>(graphPath, graphConfig);
+    auto graphConnection = std::make_unique<main::Connection>(graphDatabase.get());
+    auto loadResult = graphConnection->query(
+        std::format("LOAD EXTENSION '{}';", LBUG_TEST_REGISTRY_MUTATING_EXTENSION_PATH));
+    ASSERT_TRUE(loadResult->isSuccess()) << loadResult->getErrorMessage();
+    graphConnection.reset();
+    graphDatabase.reset();
+    ASSERT_TRUE(std::filesystem::exists(graphWALPath));
+    ASSERT_GT(std::filesystem::file_size(graphWALPath), sizeof(common::uuid) + sizeof(uint8_t));
+
+    // Simulate the crash between rotating the WAL and checkpointing, with the crafted
+    // transaction committed to the WAL before the rotation: it replays in the frozen
+    // pass, after the draining commit and before any pass-end invalidation. The end of
+    // a WAL is a frame boundary, so the crafted frames can be appended in place.
+    {
+        std::ofstream walOutput{mainWALPath, std::ios::binary | std::ios::app};
+        ASSERT_TRUE(walOutput.is_open());
+        walOutput.write(reinterpret_cast<const char*>(craftedWAL.data.get()),
+            static_cast<std::streamsize>(craftedWAL.size));
+        walOutput.close();
+        ASSERT_TRUE(walOutput.good());
+    }
+    std::filesystem::rename(mainWALPath, mainCheckpointWALPath);
+
+    createDBAndConn();
+    auto openResult = conn->query("RETURN 1;");
+    ASSERT_TRUE(openResult->isSuccess()) << openResult->getErrorMessage();
+    auto useResult = conn->query("USE GRAPH extension_load_graph;");
+    EXPECT_TRUE(useResult->isSuccess()) << useResult->getErrorMessage();
+    auto graphs = conn->query("CALL show_graphs() RETURN name ORDER BY name;");
+    ASSERT_TRUE(graphs->isSuccess()) << graphs->getErrorMessage();
+    while (graphs->hasNext()) {
+        const auto name = graphs->getNext()->getValue(0)->getValue<std::string>();
+        EXPECT_NE(name, "extension_drop_target")
+            << "the initializer's drop did not survive recovery";
+    }
+#endif
+}
+
+// The same hazard with the extension load replayed by the main pass itself, where no
+// graph-WAL drain or pass-end invalidation can intervene: an A-tagged record caches the
+// owner, an untagged LOAD_EXTENSION record's initializer drops the owner, and a later
+// A-tagged record in the same pass must skip instead of routing through the retired
+// catalog. Only the LOAD_EXTENSION record's own invalidation covers this window. The
+// extension load is crafted rather than executed live because a live load would also drop
+// the target and delete its files before recovery, so the primer record could never
+// materialize the owner it is supposed to cache.
+TEST_F(ReviewFixesTest, MainPassExtensionLoadInvalidatesOwnerCache) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0 || systemConfig->enableChecksums) {
+        GTEST_SKIP();
+    }
+#if !defined(LBUG_TEST_REGISTRY_MUTATING_EXTENSION_PATH)
+    GTEST_SKIP();
+#else
+    if (!std::filesystem::exists(LBUG_TEST_REGISTRY_MUTATING_EXTENSION_PATH)) {
+        GTEST_SKIP();
+    }
+
+    conn->query("CALL auto_checkpoint=false;");
+    conn->query("CALL force_checkpoint_on_close=false;");
+    ASSERT_TRUE(conn->query("CREATE GRAPH extension_drop_target;")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH extension_drop_target;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE SEQUENCE s;")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH main;")->isSuccess());
+    ASSERT_TRUE(conn->query("CHECKPOINT;")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH extension_drop_target;")->isSuccess());
+    auto nextvalResult = conn->query("RETURN nextval('s');");
+    ASSERT_TRUE(nextvalResult->isSuccess()) << nextvalResult->getErrorMessage();
+    ASSERT_EQ(nextvalResult->getNext()->getValue(0)->getValue<int64_t>(), 1);
+
+    const auto mainWALPath = StorageUtils::getWALFilePath(databasePath);
+    const auto mainCheckpointWALPath = StorageUtils::getCheckpointWALFilePath(databasePath);
+
+    BinaryData craftedWAL;
+    {
+        auto& context = *conn->getClientContext();
+        auto* memoryManager = MemoryManager::Get(context);
+        auto inMemWriter = std::make_shared<InMemFileWriter>(*memoryManager);
+        std::shared_ptr<Writer> writer = inMemWriter;
+        Serializer serializer{writer};
+        const auto appendRecord = [&serializer, &writer](const WALRecord& record) {
+            writer->onObjectBegin();
+            WALRecord::serializeWithLength(serializer, record);
+            writer->onObjectEnd();
+        };
+        appendRecord(BeginTransactionRecord{});
+        LoadExtensionRecord loadExtensionRecord{
+            std::string{LBUG_TEST_REGISTRY_MUTATING_EXTENSION_PATH}};
+        appendRecord(loadExtensionRecord);
+        appendRecord(CommitRecord{});
+        appendRecord(BeginTransactionRecord{});
+        UpdateSequenceRecord sentinelRecord{999999, 7};
+        sentinelRecord.ownerCatalogName = "extension_drop_target";
+        appendRecord(sentinelRecord);
+        appendRecord(CommitRecord{});
+        auto bufferWriter = std::make_shared<BufferWriter>();
+        inMemWriter->flush(*bufferWriter);
+        craftedWAL = bufferWriter->getData();
+    }
+
+    conn.reset();
+    database.reset();
+
+    // Simulate the crash between rotating the WAL and checkpointing, with both crafted
+    // transactions committed to the WAL before the rotation so they replay in the frozen
+    // pass. The end of a WAL is a frame boundary, so the crafted frames can be appended
+    // in place.
+    {
+        std::ofstream walOutput{mainWALPath, std::ios::binary | std::ios::app};
+        ASSERT_TRUE(walOutput.is_open());
+        walOutput.write(reinterpret_cast<const char*>(craftedWAL.data.get()),
+            static_cast<std::streamsize>(craftedWAL.size));
+        walOutput.close();
+        ASSERT_TRUE(walOutput.good());
+    }
+    std::filesystem::rename(mainWALPath, mainCheckpointWALPath);
+
+    createDBAndConn();
+    auto openResult = conn->query("RETURN 1;");
+    ASSERT_TRUE(openResult->isSuccess()) << openResult->getErrorMessage();
+    auto graphs = conn->query("CALL show_graphs() RETURN name ORDER BY name;");
+    ASSERT_TRUE(graphs->isSuccess()) << graphs->getErrorMessage();
+    while (graphs->hasNext()) {
+        const auto name = graphs->getNext()->getValue(0)->getValue<std::string>();
+        EXPECT_NE(name, "extension_drop_target")
+            << "the initializer's drop did not survive recovery";
+    }
+#endif
+}
+
 // A DROP TABLE logs a GRAPH_ENTRY drop for the table's implicit subgraph. The subgraph's
 // create is never WAL-logged, so replay cannot translate its recorded ID, and replay
 // assigns that ID range fresh: the record can collide with another replay-created graph's
