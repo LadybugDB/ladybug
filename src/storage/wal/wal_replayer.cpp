@@ -860,8 +860,8 @@ void WALReplayer::replayWALRecord(WALRecord& walRecord) const {
                     // DDL clears that memory (see the catalog-entry cases). The graph's own
                     // WAL replay is deferred by the loader to the next transaction-free point,
                     // because its standalone-session transactions cannot nest inside this one.
-                    dbManager->loadGraphFromCatalog(MemoryManager::Get(clientContext), &clientContext,
-                        walRecord.ownerCatalogName);
+                    dbManager->loadGraphFromCatalog(MemoryManager::Get(clientContext),
+                        &clientContext, walRecord.ownerCatalogName);
                     if (!dbManager->hasGraph(walRecord.ownerCatalogName)) {
                         failedOwnerNames.insert(upperOwnerName);
                     }

@@ -5519,8 +5519,7 @@ TEST_F(ReviewFixesTest, DroppedGraphRecreatedInSameWALTailReplaysCleanly) {
 // ID resolves against nothing, aborting every reopen until the drop invalidates the
 // cache.
 TEST_F(ReviewFixesTest, TaggedRecordAfterDropGraphRecordStillSkips) {
-    if (inMemMode || systemConfig->checkpointThreshold == 0 ||
-        systemConfig->enableChecksums) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0 || systemConfig->enableChecksums) {
         GTEST_SKIP();
     }
 
@@ -5536,8 +5535,7 @@ TEST_F(ReviewFixesTest, TaggedRecordAfterDropGraphRecordStillSkips) {
     ASSERT_TRUE(conn->query("DROP GRAPH cache_owner_graph;")->isSuccess());
     ASSERT_TRUE(conn->query("CREATE GRAPH cache_owner_graph;")->isSuccess());
     ASSERT_TRUE(conn->query("USE GRAPH cache_owner_graph;")->isSuccess());
-    ASSERT_TRUE(
-        conn->query("CREATE NODE TABLE T2(id INT64, PRIMARY KEY(id));")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE T2(id INT64, PRIMARY KEY(id));")->isSuccess());
     ASSERT_TRUE(conn->query("CREATE (n:T2 {id: 1});")->isSuccess());
 
     BinaryData craftedWAL;
