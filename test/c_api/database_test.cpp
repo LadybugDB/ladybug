@@ -106,6 +106,35 @@ TEST_F(CApiDatabaseTest, CreationWithEnableMultiWrites) {
     lbug_database_destroy(&database);
 }
 
+TEST_F(CApiDatabaseTest, CreationInUnicodeDirectory) {
+    // Database paths cross the C API as UTF-8. The file system must resolve them as
+    // Unicode on Windows rather than via the process ANSI code page.
+    const auto unicodeDir = std::filesystem::path(databasePath).parent_path() /
+                            std::filesystem::path(std::u8string(u8"lbug_Øresund_世界"));
+    std::error_code ec;
+    std::filesystem::create_directories(unicodeDir, ec);
+    ASSERT_FALSE(ec) << ec.message();
+    const auto dbUTF8 = (unicodeDir / "test.db").u8string();
+    const std::string dbPath(dbUTF8.begin(), dbUTF8.end());
+    lbug_database database;
+    auto state = lbug_database_init(dbPath.c_str(), defaultSystemConfig, &database);
+    ASSERT_EQ(state, LbugSuccess);
+    ASSERT_NE(database._database, nullptr);
+    lbug_connection connection;
+    state = lbug_connection_init(&database, &connection);
+    ASSERT_EQ(state, LbugSuccess);
+    lbug_query_result queryResult;
+    state = lbug_connection_query(&connection,
+        "CREATE NODE TABLE Person(name STRING, PRIMARY KEY(name));", &queryResult);
+    ASSERT_EQ(state, LbugSuccess);
+    ASSERT_TRUE(lbug_query_result_is_success(&queryResult));
+    lbug_query_result_destroy(&queryResult);
+    lbug_connection_destroy(&connection);
+    lbug_database_destroy(&database);
+    std::filesystem::remove_all(unicodeDir, ec);
+    ASSERT_FALSE(ec) << ec.message();
+}
+
 #ifndef __WASM__ // home directory is not available in WASM
 TEST_F(CApiDatabaseTest, CreationHomeDir) {
     lbug_database database;

@@ -30,6 +30,17 @@
 namespace lbug {
 namespace common {
 
+// File and database paths arrive as UTF-8. std::filesystem::path built from a narrow
+// string decodes per process code page, so convert explicitly on Windows to keep
+// non-ASCII paths working regardless of the process code page.
+static std::filesystem::path toNativePath(const std::string& utf8Path) {
+#if defined(_WIN32)
+    return std::filesystem::path(std::u8string(utf8Path.begin(), utf8Path.end()));
+#else
+    return std::filesystem::path(utf8Path);
+#endif
+}
+
 LocalFileInfo::~LocalFileInfo() {
 #ifdef _WIN32
     if (handle != nullptr) {
@@ -108,7 +119,10 @@ std::unique_ptr<FileInfo> LocalFileSystem::openFile(const std::string& path, Fil
         dwDesiredAccess |= _O_BINARY;
     }
 
-    HANDLE handle = CreateFileA(fullPath.c_str(), dwDesiredAccess, dwShareMode, nullptr,
+    // CreateFileA resolves narrow paths per process code page. Convert from UTF-8
+    // explicitly, mirroring fileExists below, so non-ASCII paths open correctly.
+    const auto widePath = WindowsUtils::utf8ToUnicode(fullPath.c_str());
+    HANDLE handle = CreateFileW(widePath.c_str(), dwDesiredAccess, dwShareMode, nullptr,
         dwCreationDisposition, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (handle == INVALID_HANDLE_VALUE) {
         throw IOException(std::format("Cannot open file. path: {} - Error {}: {}", fullPath,
@@ -233,7 +247,7 @@ std::vector<std::string> LocalFileSystem::glob(main::ClientContext* context,
 
 void LocalFileSystem::renameFile(const std::string& from, const std::string& to) {
     std::error_code ec;
-    std::filesystem::rename(from, to, ec);
+    std::filesystem::rename(toNativePath(from), toNativePath(to), ec);
     if (ec) {
         throw IOException(
             std::format("Error renaming file {} to {}. ErrorMessage: {}", from, to, ec.message()));
@@ -245,8 +259,8 @@ void LocalFileSystem::overwriteFile(const std::string& from, const std::string& 
         return;
     }
     std::error_code errorCode;
-    if (!std::filesystem::copy_file(from, to, std::filesystem::copy_options::overwrite_existing,
-            errorCode)) {
+    if (!std::filesystem::copy_file(toNativePath(from), toNativePath(to),
+            std::filesystem::copy_options::overwrite_existing, errorCode)) {
         // LCOV_EXCL_START
         throw IOException(std::format("Error copying file {} to {}.  ErrorMessage: {}", from, to,
             errorCode.message()));
@@ -259,7 +273,8 @@ void LocalFileSystem::copyFile(const std::string& from, const std::string& to) {
         return;
     }
     std::error_code errorCode;
-    if (!std::filesystem::copy_file(from, to, std::filesystem::copy_options::none, errorCode)) {
+    if (!std::filesystem::copy_file(toNativePath(from), toNativePath(to),
+            std::filesystem::copy_options::none, errorCode)) {
         // LCOV_EXCL_START
         throw IOException(std::format("Error copying file {} to {}.  ErrorMessage: {}", from, to,
             errorCode.message()));
@@ -281,7 +296,7 @@ void LocalFileSystem::createDir(const std::string& dir) const {
             directoryToCreate = directoryToCreate.substr(0, directoryToCreate.size() - 1);
         }
         std::error_code errCode;
-        std::filesystem::create_directories(directoryToCreate, errCode);
+        std::filesystem::create_directories(toNativePath(directoryToCreate), errCode);
         if (errCode) {
             // LCOV_EXCL_START
             throw IOException(std::format("Failed to create directory: {}, error message: {}.", dir,
@@ -296,8 +311,8 @@ void LocalFileSystem::createDir(const std::string& dir) const {
 }
 
 static bool isAllowedDeletionPath(const std::string& path, const std::string& dbPath) {
-    const auto p = std::filesystem::path(path);
-    const auto dbPathP = std::filesystem::path(dbPath);
+    const auto p = toNativePath(path);
+    const auto dbPathP = toNativePath(dbPath);
     const auto dbDir = dbPathP.parent_path();
     // For absolute paths, only allow deletion in the same directory as the database file.
     if (p.is_absolute() && dbPathP.is_absolute() && p.parent_path() != dbDir) {
@@ -343,7 +358,8 @@ static bool isExtensionFile(const main::ClientContext* context, const std::strin
         return false;
     }
     auto extensionDir = context->getExtensionDir();
-    std::filesystem::path rel = std::filesystem::relative(path, extensionDir);
+    std::filesystem::path rel =
+        std::filesystem::relative(toNativePath(path), toNativePath(extensionDir));
     for (const auto& part : rel) {
         if (part == "..") {
             return false;
@@ -363,10 +379,10 @@ void LocalFileSystem::removeFileIfExists(const std::string& path,
     }
     std::error_code errCode;
     bool success = false;
-    if (std::filesystem::is_directory(path)) {
-        success = std::filesystem::remove_all(path, errCode);
+    if (std::filesystem::is_directory(toNativePath(path))) {
+        success = std::filesystem::remove_all(toNativePath(path), errCode);
     } else {
-        success = std::filesystem::remove(path, errCode);
+        success = std::filesystem::remove(toNativePath(path), errCode);
     }
     if (!success) {
         // LCOV_EXCL_START
@@ -377,7 +393,7 @@ void LocalFileSystem::removeFileIfExists(const std::string& path,
 }
 
 bool LocalFileSystem::fileOrPathExists(const std::string& path, main::ClientContext* /*context*/) {
-    return std::filesystem::exists(path);
+    return std::filesystem::exists(toNativePath(path));
 }
 
 #ifndef _WIN32
