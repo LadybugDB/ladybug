@@ -35,7 +35,7 @@ static void writeColumnUpdateResult(ValueVector* idVector, ValueVector* columnVe
     }
     DASSERT(dataSelVector.getSelSize() == 1);
     if (dataVector->isNull(dataSelVector[0])) { // Update to NULL
-        columnVector->setNull(dataSelVector[0], true);
+        columnVector->setNull(columnSelVector[0], true);
         return;
     }
     columnVector->setNull(columnSelVector[0], false);
@@ -46,7 +46,7 @@ void SingleLabelNodeSetExecutor::set(ExecutionContext* context) {
     if (tableInfo.columnID == INVALID_COLUMN_ID) {
         // Not a valid column. Set projected column to null.
         if (info.columnVectorPos.isValid()) {
-            info.columnVector->setNull(info.columnDataVector->state->getSelVector()[0], true);
+            info.columnVector->setNull(info.columnVector->state->getSelVector()[0], true);
         }
         return;
     }
@@ -68,7 +68,7 @@ void MultiLabelNodeSetExecutor::set(ExecutionContext* context) {
     auto& nodeID = info.nodeIDVector->getValue<internalID_t>(nodeIDPos);
     if (!tableInfos.contains(nodeID.tableID)) {
         if (info.columnVectorPos.isValid()) {
-            info.columnVector->setNull(info.columnDataVector->state->getSelVector()[0], true);
+            info.columnVector->setNull(info.columnVector->state->getSelVector()[0], true);
         }
         return;
     }
@@ -104,7 +104,7 @@ void RelSetExecutor::setRelID(nodeID_t relID) const {
 void SingleLabelRelSetExecutor::set(ExecutionContext* context) {
     if (tableInfo.columnID == INVALID_COLUMN_ID) {
         if (info.columnVectorPos.isValid()) {
-            info.columnVector->setNull(info.columnDataVector->state->getSelVector()[0], true);
+            info.columnVector->setNull(info.columnVector->state->getSelVector()[0], true);
         }
         return;
     }
@@ -124,7 +124,7 @@ void MultiLabelRelSetExecutor::set(ExecutionContext* context) {
     auto relID = info.relIDVector->getValue<internalID_t>(idSelVector[0]);
     if (!tableInfos.contains(relID.tableID)) {
         if (info.columnVectorPos.isValid()) {
-            info.columnVector->setNull(info.columnDataVector->state->getSelVector()[0], true);
+            info.columnVector->setNull(info.columnVector->state->getSelVector()[0], true);
         }
         return;
     }
