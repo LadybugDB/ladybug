@@ -5510,6 +5510,119 @@ TEST_F(ReviewFixesTest, DroppedGraphRecreatedInSameWALTailReplaysCleanly) {
     EXPECT_FALSE(gen1->isSuccess());
 }
 
+// Regression test for the last-owner cache on the recovery path: a record tagged with
+// a graph whose DROP GRAPH record already replayed must skip, exactly as it did before
+// the cache existed. The drop's replay unloads the materialized catalog (the recreate
+// below keeps the graph's file on disk, which is what lets the pre-drop records
+// materialize it) and erases its entry-ID map with it. A stale cached owner would route
+// the crafted committed UPDATE_SEQUENCE through the retired catalog, whose raw sequence
+// ID resolves against nothing, aborting every reopen until the drop invalidates the
+// cache.
+TEST_F(ReviewFixesTest, TaggedRecordAfterDropGraphRecordStillSkips) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0 ||
+        systemConfig->enableChecksums) {
+        GTEST_SKIP();
+    }
+
+    conn->query("CALL auto_checkpoint=false;");
+    conn->query("CALL force_checkpoint_on_close=false;");
+    ASSERT_TRUE(conn->query("CREATE GRAPH cache_owner_graph;")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH cache_owner_graph;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE SEQUENCE s;")->isSuccess());
+    auto nextvalResult = conn->query("RETURN nextval('s');");
+    ASSERT_TRUE(nextvalResult->isSuccess()) << nextvalResult->getErrorMessage();
+    ASSERT_EQ(nextvalResult->getNext()->getValue(0)->getValue<int64_t>(), 1);
+    ASSERT_TRUE(conn->query("USE GRAPH main;")->isSuccess());
+    ASSERT_TRUE(conn->query("DROP GRAPH cache_owner_graph;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE GRAPH cache_owner_graph;")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH cache_owner_graph;")->isSuccess());
+    ASSERT_TRUE(
+        conn->query("CREATE NODE TABLE T2(id INT64, PRIMARY KEY(id));")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (n:T2 {id: 1});")->isSuccess());
+
+    BinaryData craftedWAL;
+    {
+        auto& context = *conn->getClientContext();
+        auto* memoryManager = MemoryManager::Get(context);
+        auto inMemWriter = std::make_shared<InMemFileWriter>(*memoryManager);
+        std::shared_ptr<Writer> writer = inMemWriter;
+        Serializer serializer{writer};
+        const auto appendRecord = [&serializer, &writer](const WALRecord& record) {
+            writer->onObjectBegin();
+            WALRecord::serializeWithLength(serializer, record);
+            writer->onObjectEnd();
+        };
+        appendRecord(BeginTransactionRecord{});
+        UpdateSequenceRecord sentinelRecord{999999, 7};
+        sentinelRecord.ownerCatalogName = "cache_owner_graph";
+        appendRecord(sentinelRecord);
+        appendRecord(CommitRecord{});
+        auto bufferWriter = std::make_shared<BufferWriter>();
+        inMemWriter->flush(*bufferWriter);
+        craftedWAL = bufferWriter->getData();
+    }
+
+    conn.reset();
+    database.reset();
+    // Splice the crafted transaction between the DROP GRAPH transaction and the
+    // recreate that follows it, so the record replays exactly in the window where the
+    // dropped name must no longer resolve. WAL frames are [uint64 length][record bytes]
+    // behind a fixed header, so the splice is a byte insertion at a frame boundary.
+    {
+        const auto walPath = StorageUtils::getWALFilePath(databasePath);
+        std::ifstream walInput{walPath, std::ios::binary};
+        ASSERT_TRUE(walInput.is_open());
+        std::vector<uint8_t> walBytes{std::istreambuf_iterator<char>{walInput}, {}};
+        const size_t headerSize = sizeof(common::uuid) + sizeof(uint8_t);
+        ASSERT_GT(walBytes.size(), headerSize);
+        size_t offset = headerSize;
+        size_t spliceOffset = walBytes.size();
+        bool sawDropRecord = false;
+        while (offset + sizeof(uint64_t) <= walBytes.size()) {
+            uint64_t frameLength = 0;
+            std::memcpy(&frameLength, walBytes.data() + offset, sizeof(frameLength));
+            const size_t frameStart = offset;
+            const size_t payloadStart = frameStart + sizeof(uint64_t);
+            offset = payloadStart + frameLength;
+            ASSERT_LE(offset, walBytes.size());
+            WALRecordType recordType = WALRecordType::INVALID_RECORD;
+            {
+                std::string typeKey;
+                Deserializer payloadDeserializer{std::make_unique<BufferReader>(
+                    walBytes.data() + payloadStart, static_cast<size_t>(frameLength))};
+                payloadDeserializer.getReader()->onObjectBegin();
+                payloadDeserializer.validateDebuggingInfo(typeKey, "type");
+                payloadDeserializer.deserializeValue(recordType);
+            }
+            if (recordType == WALRecordType::DROP_CATALOG_ENTRY_RECORD) {
+                sawDropRecord = true;
+            } else if (sawDropRecord && recordType == WALRecordType::BEGIN_TRANSACTION_RECORD) {
+                spliceOffset = frameStart;
+                break;
+            }
+        }
+        ASSERT_LT(spliceOffset, walBytes.size());
+        walBytes.insert(walBytes.begin() + static_cast<std::ptrdiff_t>(spliceOffset),
+            craftedWAL.data.get(), craftedWAL.data.get() + craftedWAL.size);
+        std::ofstream walOutput{walPath, std::ios::binary | std::ios::trunc};
+        ASSERT_TRUE(walOutput.is_open());
+        walOutput.write(reinterpret_cast<const char*>(walBytes.data()),
+            static_cast<std::streamsize>(walBytes.size()));
+        walOutput.close();
+        ASSERT_TRUE(walOutput.good());
+    }
+
+    createDBAndConn();
+    auto openResult = conn->query("RETURN 1;");
+    ASSERT_TRUE(openResult->isSuccess()) << openResult->getErrorMessage();
+    auto useResult = conn->query("USE GRAPH cache_owner_graph;");
+    EXPECT_TRUE(useResult->isSuccess()) << useResult->getErrorMessage();
+    auto countResult = conn->query("MATCH (n:T2) RETURN COUNT(n);");
+    ASSERT_TRUE(countResult->isSuccess()) << countResult->getErrorMessage();
+    ASSERT_TRUE(countResult->hasNext());
+    EXPECT_EQ(countResult->getNext()->getValue(0)->getValue<int64_t>(), 1);
+}
+
 // A DROP TABLE logs a GRAPH_ENTRY drop for the table's implicit subgraph. The subgraph's
 // create is never WAL-logged, so replay cannot translate its recorded ID, and replay
 // assigns that ID range fresh: the record can collide with another replay-created graph's

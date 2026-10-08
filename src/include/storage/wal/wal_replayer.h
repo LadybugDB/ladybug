@@ -120,6 +120,13 @@ private:
     // their remaining records skip the graph-recovery pass instead of repeating it.
     // Cleared whenever replayed graph DDL can change which owners are loadable.
     mutable std::unordered_set<std::string> failedOwnerNames;
+    // Last owner resolved by replayWALRecord, keyed by its upper name, so a run of
+    // records tagged with one graph skips the per-record registry scans. A cached
+    // catalog is valid only while registry membership cannot change: every record
+    // case that can change it (graph create/drop, load-extension replay) and every
+    // pass start null it first, so a hit needs no liveness check.
+    mutable std::string cachedOwnerName;
+    mutable catalog::Catalog* cachedOwnerCatalog = nullptr;
     // Entry IDs recorded in a graph's WAL come from the recording session's view of its
     // catalog, which can differ from the replaying catalog: a standalone session's plain
     // catalog lacks the ANY-graph infrastructure entries the graph materializes with,
