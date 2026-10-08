@@ -503,9 +503,9 @@ bool DatabaseManager::loadGraphFromCatalog(storage::MemoryManager* memoryManager
         false /* checkpointBundle */, std::nullopt);
 }
 
-void DatabaseManager::replayPendingGraphWALs(main::ClientContext* clientContext) {
+bool DatabaseManager::replayPendingGraphWALs(main::ClientContext* clientContext) {
     if (pendingGraphWALReplays.empty()) {
-        return;
+        return false;
     }
     auto pendingReplays = std::move(pendingGraphWALReplays);
     pendingGraphWALReplays.clear();
@@ -527,6 +527,7 @@ void DatabaseManager::replayPendingGraphWALs(main::ClientContext* clientContext)
         // which always runs with mainCheckpointCommitted=false.
         walReplayer.removeGraphCheckpointShadow(*replayRequest->storageManager);
     }
+    return true;
 }
 
 bool DatabaseManager::hasGraph(const std::string& graphName) {

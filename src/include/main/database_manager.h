@@ -57,8 +57,9 @@ public:
         main::ClientContext* clientContext, const std::string& graphName);
     // Replays graph WALs queued by loadGraphFromCatalog. Deferred while a recovery
     // transaction is active and run at the next transaction-free point (a replayed commit
-    // or the end of a replay pass).
-    void replayPendingGraphWALs(main::ClientContext* clientContext);
+    // or the end of a replay pass). Returns true when any deferred replay ran, so a
+    // caller holding per-pass state keyed to the graph registry can invalidate it.
+    bool replayPendingGraphWALs(main::ClientContext* clientContext);
     void setDefaultGraph(const std::string& graphName);
     void clearDefaultGraph();
     bool hasGraph(const std::string& graphName);

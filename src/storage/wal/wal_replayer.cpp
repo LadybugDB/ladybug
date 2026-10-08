@@ -108,11 +108,12 @@ static void recoverGraphCheckpoints(main::ClientContext& clientContext,
     }
 }
 
-static void replayPendingGraphWALs(main::ClientContext& clientContext) {
+static bool replayPendingGraphWALs(main::ClientContext& clientContext) {
     auto* databaseManager = main::DatabaseManager::Get(clientContext);
     if (databaseManager != nullptr) {
-        databaseManager->replayPendingGraphWALs(&clientContext);
+        return databaseManager->replayPendingGraphWALs(&clientContext);
     }
+    return false;
 }
 
 static void removeGraphCheckpointShadows(main::ClientContext& clientContext) {
@@ -311,6 +312,7 @@ static void throwIfReadOnlyCheckpointState(main::ClientContext& clientContext, b
 }
 
 void WALReplayer::replay(bool throwOnWalReplayFailure, bool enableChecksums) const {
+    cachedOwnerCatalog = nullptr;
     auto vfs = VirtualFileSystem::GetUnsafe(clientContext);
     auto* mainStorageManager = clientContext.getDatabase()->getStorageManager();
     if (!mainStorageManager->isReadOnly() &&
@@ -499,6 +501,7 @@ WALReplayer::GraphRecoveryState WALReplayer::prepareGraphCheckpoint(StorageManag
 void WALReplayer::replayGraphWAL(StorageManager& storageManager,
     const GraphRecoveryState& recoveryState) const {
     replayedEntryIDs.clear();
+    cachedOwnerCatalog = nullptr;
     // A graph's own WAL pass may run after the main pass has already inserted
     // entries into its catalog, so the floor cannot be captured lazily here:
     // it must be the persisted ID counter captured when the catalog loaded.
@@ -633,7 +636,9 @@ void WALReplayer::replayFrozenWAL(Checkpointer& checkpointer, bool throwOnWalRep
                 auto walRecord = WALRecord::deserialize(deserializer, clientContext);
                 replayWALRecord(*walRecord);
             }
-            replayPendingGraphWALs(clientContext);
+            if (replayPendingGraphWALs(clientContext)) {
+                cachedOwnerCatalog = nullptr;
+            }
             recoverGraphCheckpoints(clientContext, false, false);
             if (offsetDeserialized == 0) {
                 // Nothing was committed, so the frozen WAL holds nothing to keep.
@@ -713,7 +718,9 @@ void WALReplayer::replayActiveWAL(Checkpointer& checkpointer, bool throwOnWalRep
                 auto walRecord = WALRecord::deserialize(deserializer, clientContext);
                 replayWALRecord(*walRecord);
             }
-            replayPendingGraphWALs(clientContext);
+            if (replayPendingGraphWALs(clientContext)) {
+                cachedOwnerCatalog = nullptr;
+            }
             recoverGraphCheckpoints(clientContext, false, false);
             truncateWALFile(*fileInfo, offsetDeserialized);
         }
@@ -838,36 +845,42 @@ void WALReplayer::replayWALRecord(WALRecord& walRecord) const {
     std::optional<ReplayOwnerScope> replayOwnerScope;
     if (!walRecord.ownerCatalogName.empty()) {
         auto dbManager = main::DatabaseManager::Get(clientContext);
-        const auto upperOwnerName = StringUtils::getUpper(walRecord.ownerCatalogName);
-        if (dbManager == nullptr || !dbManager->hasGraph(walRecord.ownerCatalogName)) {
-            if (dbManager != nullptr && !failedOwnerNames.contains(upperOwnerName)) {
-                // A graph created earlier in this same WAL is not registered yet: its
-                // create-graph record only adds the catalog entry. Materialize that one
-                // graph (not the full graph-recovery pass) before routing this record into
-                // its catalog. A name whose materialization failed is remembered so its
-                // remaining records skip this load instead of repeating it; replayed graph
-                // DDL clears that memory (see the catalog-entry cases). The graph's own
-                // WAL replay is deferred by the loader to the next transaction-free point,
-                // because its standalone-session transactions cannot nest inside this one.
-                dbManager->loadGraphFromCatalog(MemoryManager::Get(clientContext), &clientContext,
-                    walRecord.ownerCatalogName);
-                if (!dbManager->hasGraph(walRecord.ownerCatalogName)) {
-                    failedOwnerNames.insert(upperOwnerName);
-                }
-            }
-        }
-        if (dbManager == nullptr || !dbManager->hasGraph(walRecord.ownerCatalogName)) {
-            // DROP GRAPH reclaims the graph's files immediately, while records its
-            // earlier committed transactions logged stay in the main WAL until the
-            // next checkpoint. Such an owner cannot be materialized (no files to load)
-            // and no catalog remains to apply the record to. Skip it, exactly as
-            // loadGraphsFromCatalog skips graphs whose files are gone; throwing here
-            // would wedge recovery permanently, because the committed prefix can
-            // never replay past this record and the WAL can never be retired.
+        if (dbManager == nullptr) {
             return;
         }
-        replayOwnerScope.emplace(*dbManager,
-            dbManager->getGraphCatalog(walRecord.ownerCatalogName));
+        const auto upperOwnerName = StringUtils::getUpper(walRecord.ownerCatalogName);
+        if (cachedOwnerCatalog == nullptr || upperOwnerName != cachedOwnerName) {
+            if (!dbManager->hasGraph(walRecord.ownerCatalogName)) {
+                if (!failedOwnerNames.contains(upperOwnerName)) {
+                    // A graph created earlier in this same WAL is not registered yet: its
+                    // create-graph record only adds the catalog entry. Materialize that one
+                    // graph (not the full graph-recovery pass) before routing this record into
+                    // its catalog. A name whose materialization failed is remembered so its
+                    // remaining records skip this load instead of repeating it; replayed graph
+                    // DDL clears that memory (see the catalog-entry cases). The graph's own
+                    // WAL replay is deferred by the loader to the next transaction-free point,
+                    // because its standalone-session transactions cannot nest inside this one.
+                    dbManager->loadGraphFromCatalog(MemoryManager::Get(clientContext), &clientContext,
+                        walRecord.ownerCatalogName);
+                    if (!dbManager->hasGraph(walRecord.ownerCatalogName)) {
+                        failedOwnerNames.insert(upperOwnerName);
+                    }
+                }
+            }
+            if (!dbManager->hasGraph(walRecord.ownerCatalogName)) {
+                // DROP GRAPH reclaims the graph's files immediately, while records its
+                // earlier committed transactions logged stay in the main WAL until the
+                // next checkpoint. Such an owner cannot be materialized (no files to load)
+                // and no catalog remains to apply the record to. Skip it, exactly as
+                // loadGraphsFromCatalog skips graphs whose files are gone; throwing here
+                // would wedge recovery permanently, because the committed prefix can
+                // never replay past this record and the WAL can never be retired.
+                return;
+            }
+            cachedOwnerName = upperOwnerName;
+            cachedOwnerCatalog = dbManager->getGraphCatalog(walRecord.ownerCatalogName);
+        }
+        replayOwnerScope.emplace(*dbManager, cachedOwnerCatalog);
     }
     switch (walRecord.type) {
     case WALRecordType::BEGIN_TRANSACTION_RECORD: {
@@ -877,10 +890,15 @@ void WALReplayer::replayWALRecord(WALRecord& walRecord) const {
         TransactionContext::Get(clientContext)->commit();
         // The enclosing recovery transaction just completed, so graph WALs queued by lazy
         // materialization inside it can now replay without nesting their transactions.
-        replayPendingGraphWALs(clientContext);
+        // A drained pass runs its own replayer, whose records (e.g. extension init) can
+        // change graph registry membership, so the cached owner cannot survive it.
+        if (replayPendingGraphWALs(clientContext)) {
+            cachedOwnerCatalog = nullptr;
+        }
     } break;
     case WALRecordType::CREATE_CATALOG_ENTRY_RECORD: {
         failedOwnerNames.clear();
+        cachedOwnerCatalog = nullptr;
         replayCreateCatalogEntryRecord(walRecord);
     } break;
     case WALRecordType::CREATE_INDEX_RECORD: {
@@ -888,6 +906,7 @@ void WALReplayer::replayWALRecord(WALRecord& walRecord) const {
     } break;
     case WALRecordType::DROP_CATALOG_ENTRY_RECORD: {
         failedOwnerNames.clear();
+        cachedOwnerCatalog = nullptr;
         replayDropCatalogEntryRecord(walRecord);
     } break;
     case WALRecordType::ALTER_TABLE_ENTRY_RECORD: {
@@ -921,6 +940,9 @@ void WALReplayer::replayWALRecord(WALRecord& walRecord) const {
         replayUpdateSequenceNamedRecord(walRecord);
     } break;
     case WALRecordType::LOAD_EXTENSION_RECORD: {
+        // Extension init runs arbitrary code against the database, so the cached
+        // owner cannot be assumed to stay registered across this record.
+        cachedOwnerCatalog = nullptr;
         replayLoadExtensionRecord(walRecord);
     } break;
     case WALRecordType::CHECKPOINT_RECORD: {
