@@ -101,6 +101,8 @@ Dan
 2||
 3||
 5||
+-STATEMENT MATCH (a:person) WHERE a.ID < 6 SET a.age = 35, a.fName = 'same';
+---- ok
 -STATEMENT MATCH (a:person) WHERE a.ID < 6 SET a.age = nullif(a.ID, a.ID) RETURN a.ID, a.age;
 ---- 4
 0|
@@ -119,6 +121,8 @@ Dan
 2||
 3||
 5||
+-STATEMENT MATCH (a:person) WHERE a.ID < 4 SET a.age = 35;
+---- ok
 -STATEMENT MATCH (a:person:organisation) WHERE a.ID < 4 SET a.age = NULL RETURN a.ID, a.age;
 ---- 4
 0|
@@ -131,6 +135,8 @@ Dan
 1|
 2|
 3|
+-STATEMENT MATCH (a:person) WHERE a.ID < 4 SET a.age = 35;
+---- ok
 -STATEMENT MATCH (a:person:organisation) WHERE a.ID < 4 SET a.age = nullif(a.ID, a.ID) RETURN a.ID, a.age;
 ---- 4
 0|
