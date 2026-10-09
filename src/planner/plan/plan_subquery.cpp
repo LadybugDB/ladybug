@@ -13,6 +13,7 @@
 #include "common/exception/runtime.h"
 #include "function/aggregate/count.h"
 #include "function/list/vector_list_functions.h"
+#include "main/client_context.h"
 #include "planner/operator/factorization/flatten_resolver.h"
 #include "planner/operator/logical_accumulate.h"
 #include "planner/operator/logical_aggregate.h"

@@ -25,7 +25,6 @@
 #include "optimizer/remove_unnecessary_distinct_optimizer.h"
 #include "optimizer/remove_unnecessary_join_optimizer.h"
 #include "optimizer/remove_unnecessary_order_by_optimizer.h"
-#include "optimizer/schema_populator.h"
 #include "optimizer/top_k_optimizer.h"
 #include "optimizer/unwind_dedup_optimizer.h"
 #include "planner/operator/extend/logical_extend.h"
@@ -393,13 +392,14 @@ void Optimizer::optimize(planner::LogicalPlan* plan, main::ClientContext* contex
             }
         }
     } else {
+        auto removeFactorizationRewriter = RemoveFactorizationRewriter();
+        removeFactorizationRewriter.rewrite(plan);
+
         auto correlatedSubqueryUnnestSolver = CorrelatedSubqueryUnnestSolver(nullptr);
         correlatedSubqueryUnnestSolver.solve(plan->getLastOperator().get());
 
-        // we still need to compute the schema for each operator even if we have optimizations
-        // disabled
-        auto schemaPopulator = SchemaPopulator{};
-        schemaPopulator.rewrite(plan);
+        auto factorizationRewriter = FactorizationRewriter();
+        factorizationRewriter.rewrite(plan);
     }
     if (dumpLogicalEnabled) {
         dumpLogicalPlan(plan, "after optimization", catalog::Catalog::Get(*context),
