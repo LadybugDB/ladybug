@@ -1,6 +1,7 @@
 #include "catalog/property_definition_collection.h"
 
 #include <map>
+#include <mutex>
 #include <sstream>
 
 #include "common/serializer/deserializer.h"
@@ -39,11 +40,32 @@ column_id_t PropertyDefinitionCollection::getColumnID(const std::string& name) c
 }
 
 column_id_t PropertyDefinitionCollection::getColumnID(property_id_t propertyID) const {
+    std::shared_lock lck{*columnIDsMtx};
     DASSERT(columnIDs.contains(propertyID));
     return columnIDs.at(propertyID);
 }
 
 void PropertyDefinitionCollection::vacuumColumnIDs(column_id_t nextColumnID) {
+    std::unique_lock lck{*columnIDsMtx};
+    // Checkpoint calls vacuum unconditionally, even when no columns were dropped.
+    // Avoid mutating columnIDs when already compact so concurrent planning reads
+    // (getColumnID) don't race with clear()/emplace() (see #1160).
+    {
+        column_id_t expected = nextColumnID;
+        bool alreadyCompact = (columnIDs.size() == definitions.size());
+        if (alreadyCompact) {
+            for (auto& [propertyID, definition] : definitions) {
+                auto it = columnIDs.find(propertyID);
+                if (it == columnIDs.end() || it->second != expected++) {
+                    alreadyCompact = false;
+                    break;
+                }
+            }
+            if (alreadyCompact && this->nextColumnID == expected) {
+                return;
+            }
+        }
+    }
     this->nextColumnID = nextColumnID;
     columnIDs.clear();
     for (auto& [propertyID, definition] : definitions) {
@@ -52,8 +74,13 @@ void PropertyDefinitionCollection::vacuumColumnIDs(column_id_t nextColumnID) {
 }
 
 void PropertyDefinitionCollection::add(const PropertyDefinition& definition) {
+    // NB: definitions/name map remain lock-free (pre-existing DDL-vs-read race);
+    // the lock here only serializes columnIDs vs concurrent getColumnID/vacuum.
+    std::unique_lock lck{*columnIDsMtx};
     auto propertyID = nextPropertyID++;
     columnIDs.emplace(propertyID, nextColumnID++);
+    // Release before touching unguarded maps to keep the critical section minimal.
+    lck.unlock();
     definitions.emplace(propertyID, definition.copy());
     nameToPropertyIDMap.emplace(definition.getName(), propertyID);
 }
@@ -62,7 +89,10 @@ void PropertyDefinitionCollection::drop(const std::string& name) {
     DASSERT(contains(name));
     auto propertyID = nameToPropertyIDMap.at(name);
     definitions.erase(propertyID);
-    columnIDs.erase(propertyID);
+    {
+        std::unique_lock lck{*columnIDsMtx};
+        columnIDs.erase(propertyID);
+    }
     nameToPropertyIDMap.erase(name);
 }
 
@@ -75,6 +105,7 @@ void PropertyDefinitionCollection::rename(const std::string& name, const std::st
 }
 
 column_id_t PropertyDefinitionCollection::getMaxColumnID() const {
+    std::shared_lock lck{*columnIDsMtx};
     column_id_t maxID = 0;
     for (auto [_, id] : columnIDs) {
         if (id > maxID) {
@@ -108,6 +139,8 @@ std::string PropertyDefinitionCollection::toCypher() const {
 }
 
 void PropertyDefinitionCollection::serialize(Serializer& serializer) const {
+    // Vacuum only mutates nextColumnID/columnIDs; hold shared lock for those.
+    std::shared_lock lck{*columnIDsMtx};
     serializer.writeDebuggingInfo("nextColumnID");
     serializer.serializeValue(nextColumnID);
     serializer.writeDebuggingInfo("nextPropertyID");
