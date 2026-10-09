@@ -118,13 +118,15 @@ private:
     std::string shadowFilePath;
     // Owner names whose materialization already failed during this replay pass, so
     // their remaining records skip the graph-recovery pass instead of repeating it.
-    // Cleared whenever replayed graph DDL can change which owners are loadable.
+    // Cleared per graph-WAL pass and whenever replay can change which owners are
+    // loadable: graph DDL, a graph-WAL drain, or extension init.
     mutable std::unordered_set<std::string> failedOwnerNames;
     // Last owner resolved by replayWALRecord, keyed by its upper name, so a run of
     // records tagged with one graph skips the per-record registry scans. A cached
     // catalog is valid only while registry membership cannot change: every record
-    // case that can change it (graph create/drop, load-extension replay) and every
-    // pass start null it first, so a hit needs no liveness check.
+    // case that can change it (graph create/drop, load-extension replay), every
+    // pass boundary, and every graph-WAL drain null it first, so a hit needs no
+    // liveness check.
     mutable std::string cachedOwnerName;
     mutable catalog::Catalog* cachedOwnerCatalog = nullptr;
     // Entry IDs recorded in a graph's WAL come from the recording session's view of its
