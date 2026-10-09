@@ -212,5 +212,11 @@ struct ListHasAllFunction {
     static function_set getFunctionSet();
 };
 
+struct ListHasAnyFunction {
+    static constexpr const char* name = "LIST_HAS_ANY";
+
+    static function_set getFunctionSet();
+};
+
 } // namespace function
 } // namespace lbug

@@ -1,0 +1,102 @@
+-DATASET CSV empty
+
+--
+
+-CASE ListHasAnyTest
+-STATEMENT RETURN list_has_any([4, 5, 6], [4, 6])
+---- 1
+True
+-STATEMENT RETURN list_has_any([4, 5, 6], [6, 4])
+---- 1
+True
+-STATEMENT RETURN list_has_any([4, 5, 6], [4])
+---- 1
+True
+-STATEMENT RETURN list_has_any([4, 5, 6], [7])
+---- 1
+False
+-STATEMENT RETURN list_has_any([4, 5, 6], [7, 8, 4])
+---- 1
+True
+-STATEMENT RETURN list_has_any([TRUE, FALSE, FALSE], [FALSE, TRUE])
+---- 1
+True
+-STATEMENT RETURN list_has_any([[2,3], [1,2], [5,4]], [[5,4]])
+---- 1
+True
+-STATEMENT RETURN list_has_any([[2,3], [1,2], [5,4]], [[1,3]])
+---- 1
+False
+-STATEMENT RETURN list_has_any([{a: 5, b:3}, {c: 2, d: 4}], [{c:2, d:4}])
+---- 1
+True
+-STATEMENT RETURN list_has_any([{a: 5, b:3}, {c: 2, d: 4}], [{c:2, e:4}])
+---- 1
+False
+-STATEMENT RETURN list_has_any([to_uint128(319014718988379809496913694467282698240),
+to_uint128(5)], [to_uint128(319014718988379809496913694467282698240)]);
+---- 1
+True
+-STATEMENT RETURN list_has_any([to_uint128(319014718988379809496913694467282698240),
+to_uint128(5)], [to_uint128(17)]);
+---- 1
+False
+-STATEMENT RETURN list_has_any([5,6,12], [null])
+---- 1
+False
+-STATEMENT RETURN list_has_any([null], [null])
+---- 1
+False
+-STATEMENT RETURN list_has_any([], [null])
+---- 1
+False
+-STATEMENT RETURN list_has_any([], [])
+---- 1
+False
+-STATEMENT RETURN list_has_any([null], [])
+---- 1
+False
+-STATEMENT RETURN list_has_any([1,2,3], [])
+---- 1
+False
+-STATEMENT RETURN list_has_any(null, [1,3,2])
+---- 1
+
+-STATEMENT RETURN list_has_any([1,2], null)
+---- 1
+
+-STATEMENT RETURN list_has_any(null, null)
+---- 1
+
+-STATEMENT RETURN list_has_any(['Aida', 'Bobby'], ['Carol'])
+---- 1
+False
+-STATEMENT RETURN list_has_any(['Aida', 'Bobby'], ['Bobby', 'Dan'])
+---- 1
+True
+-STATEMENT CREATE NODE TABLE Member(name STRING, aliases STRING[], scores INT64[], PRIMARY KEY(name));
+---- ok
+-STATEMENT CREATE (:Member {name: 'Alice', aliases: ['Aida'], scores: [96,54,86,92]});
+---- ok
+-STATEMENT CREATE (:Member {name: 'Bob', aliases: ['Bobby'], scores: [98,42,93,88]});
+---- ok
+-STATEMENT CREATE (:Member {name: 'Carol', aliases: ['Carmen', 'Fred'], scores: [91,75,21,95]});
+---- ok
+-STATEMENT MATCH (p:Member) WHERE p.name = 'Alice' RETURN list_has_any(p.aliases, ['Aida'])
+---- 1
+True
+-STATEMENT MATCH (p:Member) WHERE p.name = 'Alice' RETURN list_has_any(p.aliases, ['Bobby'])
+---- 1
+False
+-STATEMENT MATCH (p:Member) WHERE p.name = 'Alice' RETURN list_has_any(p.aliases, ['Aida', 'Bobby'])
+---- 1
+True
+-STATEMENT MATCH (p:Member) WHERE p.name = 'Bob' RETURN list_has_any(p.aliases, ['Aida', 'Bobby'])
+---- 1
+True
+-STATEMENT MATCH (p:Member) WHERE p.name = 'Carol' RETURN list_has_any(p.aliases, ['Aida', 'Bobby'])
+---- 1
+False
+-STATEMENT RETURN list_has_any([1, 2], ['a'])
+---- error
+Binder exception: Cannot bind LIST_HAS_ANY with parameter type INT64[] and STRING[].
