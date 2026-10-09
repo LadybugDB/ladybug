@@ -27,6 +27,7 @@ public:
 
     void handleError(CopyFromFileError error);
     void throwCachedErrorsIfNeeded();
+    void reset();
 
     void setHeaderNumRows(uint64_t numRows);
 
