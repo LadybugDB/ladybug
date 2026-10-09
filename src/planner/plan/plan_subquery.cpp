@@ -645,6 +645,9 @@ static std::unordered_set<std::string> collectGraphVarNames(
 
 bool Planner::tryUnnestCollectMembership(const QueryGraphCollection& queryGraphCollection,
     expression_vector& predicates, LogicalPlan& leftPlan) {
+    if (!clientContext->getClientConfig()->enablePlanOptimizer) {
+        return false;
+    }
     // Fast path: no list-membership predicate, nothing to do.
     bool anyContains = false;
     for (auto& pred : predicates) {
@@ -880,6 +883,9 @@ static bool isVarFree(const std::shared_ptr<Expression>& expr) {
 
 bool Planner::tryPlanPropertySeededChain(const QueryGraphCollection& queryGraphCollection,
     const expression_vector& predicates, LogicalPlan& leftPlan) {
+    if (!clientContext->getClientConfig()->enablePlanOptimizer) {
+        return false;
+    }
     if (leftPlan.isEmpty() || leftPlan.hasUpdate() ||
         queryGraphCollection.getNumQueryGraphs() != 1) {
         return false;
