@@ -50,6 +50,23 @@ using namespace lbug::transaction;
 namespace lbug {
 namespace main {
 
+namespace {
+// Resets useInternalCatalogEntry on scope exit, including when binding throws.
+// The flag is set while binding internal statements (e.g. extension rewrite funcs)
+// and is consumed by later binds within the same top-level call; it must never
+// leak into the next statement, or later user DDL would be misfiled into the
+// internal catalog set (see https://github.com/LadybugDB/ladybug/issues/1162).
+struct InternalCatalogFlagGuard {
+    explicit InternalCatalogFlagGuard(ClientContext& context) : context{context} {}
+    ~InternalCatalogFlagGuard() { context.setUseInternalCatalogEntry(false); }
+    InternalCatalogFlagGuard(const InternalCatalogFlagGuard&) = delete;
+    InternalCatalogFlagGuard& operator=(const InternalCatalogFlagGuard&) = delete;
+
+private:
+    ClientContext& context;
+};
+} // namespace
+
 ActiveQuery::ActiveQuery() : interrupted{false} {}
 
 void ActiveQuery::reset() {
@@ -328,6 +345,7 @@ void ClientContext::waitForNoActiveQuery() {
 std::unique_ptr<PreparedStatement> ClientContext::prepareWithParams(std::string_view query,
     std::unordered_map<std::string, std::unique_ptr<Value>> inputParams) {
     std::unique_lock lck{mtx};
+    InternalCatalogFlagGuard flagGuard{*this};
     auto parsedStatements = std::vector<std::shared_ptr<Statement>>();
     try {
         parsedStatements = parseQuery(query);
@@ -375,6 +393,7 @@ std::unique_ptr<QueryResult> ClientContext::executeWithParams(PreparedStatement*
     std::optional<uint64_t> queryID) { // NOLINT(performance-unnecessary-value-param): It doesn't
     // make sense to pass the map as a const reference.
     lock_t lck{mtx};
+    InternalCatalogFlagGuard flagGuard{*this};
     if (!preparedStatement->isSuccess()) {
         return QueryResult::getQueryResultWithError(preparedStatement->errMsg);
     }
@@ -415,6 +434,7 @@ std::unique_ptr<QueryResult> ClientContext::query(std::string_view query,
 
 std::unique_ptr<QueryResult> ClientContext::queryNoLock(std::string_view query,
     std::optional<uint64_t> queryID, QueryConfig config) {
+    InternalCatalogFlagGuard flagGuard{*this};
     auto parsedStatements = std::vector<std::shared_ptr<Statement>>();
     try {
         parsedStatements = parseQuery(query);
