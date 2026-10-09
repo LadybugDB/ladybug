@@ -58,6 +58,13 @@ void SharedFileErrorHandler::throwCachedErrorsIfNeeded() {
     tryThrowFirstCachedError();
 }
 
+void SharedFileErrorHandler::reset() {
+    auto lockGuard = lock();
+    cachedErrors.clear();
+    linesPerBlock.clear();
+    headerNumRows = 0;
+}
+
 void SharedFileErrorHandler::tryThrowFirstCachedError() {
     if (cachedErrors.empty()) {
         return;

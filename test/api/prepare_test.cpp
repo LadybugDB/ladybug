@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <fstream>
 #include <memory>
 #include <vector>
 
@@ -1137,4 +1138,34 @@ TEST_F(ApiTest, GDSSharedStateResetForReuse) {
     runExecution(2);
     ASSERT_EQ(1u, globalTable->getNumTuples())
         << "second execution must see only its own rows, not the first execution's";
+}
+
+TEST_F(ApiTest, RepeatedFileScanCachedPlanExecution1161) {
+    // Regression test for https://github.com/LadybugDB/ladybug/issues/1161:
+    // re-executing a prepared LOAD FROM returned no rows because ScanFileSharedState
+    // (and its CSV/parquet/npy subclasses) inherited the no-op TableFuncSharedState::resetState,
+    // so fileIdx/blockIdx stayed at end-of-file on the cached-plan fast path.
+    const auto csvPath = TestHelper::getTempDir("scan1161") + "/scan1161.csv";
+    {
+        std::ofstream out(csvPath);
+        out << "id\n1\n2\n3\n";
+    }
+    auto query = "LOAD FROM \"" + csvPath + "\" (header=true) RETURN count(*) + $v";
+    auto makeVParams = [](int64_t v) {
+        std::unordered_map<std::string, std::unique_ptr<Value>> p;
+        p["v"] = std::make_unique<Value>(v);
+        return p;
+    };
+    auto stmt = conn->prepareWithParams(query, makeVParams(0));
+    ASSERT_TRUE(stmt->isSuccess()) << stmt->getErrorMessage();
+    auto runWithV = [&](int64_t v) {
+        auto result = conn->executeWithParams(stmt.get(), makeVParams(v));
+        EXPECT_TRUE(result->isSuccess()) << result->getErrorMessage();
+        EXPECT_TRUE(result->hasNext());
+        auto tuple = result->getNext();
+        return tuple->getValue(0)->getValue<int64_t>();
+    };
+    ASSERT_EQ(3, runWithV(0));
+    ASSERT_EQ(103, runWithV(100));
+    ASSERT_EQ(3, runWithV(0));
 }

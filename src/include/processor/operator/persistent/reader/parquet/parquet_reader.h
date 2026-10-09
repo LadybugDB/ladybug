@@ -98,6 +98,12 @@ struct ParquetScanSharedState final : function::ScanFileWithProgressSharedState 
     explicit ParquetScanSharedState(common::FileScanInfo fileScanInfo, uint64_t numRows,
         main::ClientContext* context, std::vector<bool> columnSkips);
 
+    void resetState() override {
+        fileIdx.store(0);
+        blockIdx.store(0);
+        numBlocksReadByFiles.store(0);
+    }
+
     std::vector<std::unique_ptr<ParquetReader>> readers;
     std::vector<bool> columnSkips;
     uint64_t totalRowsGroups;
