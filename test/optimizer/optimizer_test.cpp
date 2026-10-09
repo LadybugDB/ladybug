@@ -287,6 +287,23 @@ TEST_F(OptimizerTest, IndexScanTest) {
     ASSERT_STREQ(getEncodedPlan(q1).c_str(), "Filter()IndexScan(a)");
 }
 
+TEST_F(OptimizerTest, ArithmeticIdentityEnablesIndexScan) {
+    // x + 0, x * 1 etc. are simplified back to the property, so the PK lookup applies.
+    auto q1 = "MATCH (a:person) WHERE a.ID + 0 = 0 RETURN a.fName;";
+    ASSERT_STREQ(getEncodedPlan(q1).c_str(), "IndexScan(a)");
+    auto q2 = "MATCH (a:person) WHERE a.ID * 1 = 0 RETURN a.fName;";
+    ASSERT_STREQ(getEncodedPlan(q2).c_str(), "IndexScan(a)");
+    auto q3 = "MATCH (a:person) WHERE 0 + a.ID = 0 RETURN a.fName;";
+    ASSERT_STREQ(getEncodedPlan(q3).c_str(), "IndexScan(a)");
+    auto q4 = "MATCH (a:person) WHERE a.ID - 0 = 0 RETURN a.fName;";
+    ASSERT_STREQ(getEncodedPlan(q4).c_str(), "IndexScan(a)");
+    auto q5 = "MATCH (a:person) WHERE a.ID / 1 = 0 RETURN a.fName;";
+    ASSERT_STREQ(getEncodedPlan(q5).c_str(), "IndexScan(a)");
+    // Non-identity arithmetic must keep the filter on top of a full scan.
+    auto q6 = "MATCH (a:person) WHERE a.ID + 1 = 1 RETURN a.fName;";
+    ASSERT_STREQ(getEncodedPlan(q6).c_str(), "Filter()S(a)");
+}
+
 TEST_F(OptimizerTest, RemoveUnnecessaryJoinTest) {
     auto q1 = "MATCH (a:person)-[e:knows]->(b:person) "
               "HINT (a JOIN e) JOIN b "

@@ -1,0 +1,43 @@
+-DATASET CSV empty
+
+--
+
+-CASE ArithmeticIdentity
+-STATEMENT CREATE NODE TABLE T(id INT64 PRIMARY KEY, age INT64, score DOUBLE)
+---- ok
+-STATEMENT CREATE (t:T {id: 1, age: 30, score: 1.5})
+---- ok
+-STATEMENT CREATE (t:T {id: 2})
+---- ok
+-STATEMENT MATCH (t:T) WHERE t.id + 0 = 1 RETURN t.age
+---- 1
+30
+-STATEMENT MATCH (t:T) WHERE 0 + t.id = 1 RETURN t.age
+---- 1
+30
+-STATEMENT MATCH (t:T) WHERE t.id - 0 = 1 RETURN t.age
+---- 1
+30
+-STATEMENT MATCH (t:T) WHERE t.id * 1 = 1 RETURN t.age
+---- 1
+30
+-STATEMENT MATCH (t:T) WHERE 1 * t.id = 1 RETURN t.age
+---- 1
+30
+-STATEMENT MATCH (t:T) WHERE t.id / 1 = 1 RETURN t.age
+---- 1
+30
+-STATEMENT MATCH (t:T) WHERE t.score * 1.0 = 1.5 RETURN t.id
+---- 1
+1
+-STATEMENT MATCH (t:T) WHERE t.id + 1 = 2 RETURN t.age
+---- 1
+30
+-STATEMENT MATCH (t:T) RETURN t.age + 0, t.age - 0, t.age * 1, t.age / 1 ORDER BY t.id
+---- 2
+30|30|30|30
+|||
+-STATEMENT MATCH (t:T) RETURN t.age * 0 ORDER BY t.id
+---- 2
+0
+
