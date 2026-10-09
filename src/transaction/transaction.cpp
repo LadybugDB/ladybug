@@ -158,6 +158,22 @@ bool Transaction::isUnCommitted(common::table_id_t tableID, common::offset_t nod
            nodeOffset >= getMinUncommittedNodeOffset(tableID);
 }
 
+std::optional<common::row_idx_t> Transaction::tryGetLocalRowIdx(const storage::Table& table,
+    common::offset_t nodeOffset) const {
+    if (!localStorage) {
+        return std::nullopt;
+    }
+    auto* localTable = localStorage->getLocalTable(table);
+    if (!localTable) {
+        return std::nullopt;
+    }
+    const auto startOffset = localTable->cast<storage::LocalNodeTable>().getStartOffset();
+    if (nodeOffset < startOffset) {
+        return std::nullopt;
+    }
+    return nodeOffset - startOffset;
+}
+
 void Transaction::pushCreateDropCatalogEntry(CatalogSet& catalogSet, CatalogEntry& catalogEntry,
     bool isInternal, bool skipLoggingToWAL) {
     undoBuffer->createCatalogEntry(catalogSet, catalogEntry);
