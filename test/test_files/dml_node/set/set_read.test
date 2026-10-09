@@ -101,13 +101,51 @@ Dan
 2||
 3||
 5||
--STATEMENT CREATE NODE TABLE play(ID INT64, name STRING, PRIMARY KEY(ID));
----- ok
--STATEMENT CREATE (a:play {ID: 0, name: 'AA'});
----- ok
--STATEMENT MATCH (a:organisation:play) SET a.name = NULL RETURN a.ID, a.name;
+-STATEMENT MATCH (a:person) WHERE a.ID < 6 SET a.age = nullif(a.ID, a.ID) RETURN a.ID, a.age;
+---- 4
+0|
+2|
+3|
+5|
+-STATEMENT MATCH (a:person) WHERE a.ID < 6 SET a.fName = nullif('same', 'same') RETURN a.ID, a.fName;
+---- 4
+0|
+2|
+3|
+5|
+-STATEMENT MATCH (a:person) WHERE a.ID < 6 RETURN a.ID, a.age, a.fName;
+---- 4
+0||
+2||
+3||
+5||
+-STATEMENT MATCH (a:person:organisation) WHERE a.ID < 4 SET a.age = NULL RETURN a.ID, a.age;
 ---- 4
 0|
 1|
-4|
-6|
+2|
+3|
+-STATEMENT MATCH (a:person:organisation) WHERE a.ID < 4 RETURN a.ID, a.age;
+---- 4
+0|
+1|
+2|
+3|
+-STATEMENT MATCH (a:person:organisation) WHERE a.ID < 4 SET a.age = nullif(a.ID, a.ID) RETURN a.ID, a.age;
+---- 4
+0|
+1|
+2|
+3|
+-STATEMENT MATCH (a:person:organisation) WHERE a.ID < 4 SET a.score = nullif(a.ID, a.ID) RETURN a.ID, a.score;
+---- 4
+0|
+1|
+2|
+3|
+-STATEMENT MATCH (a:person:organisation) WHERE a.ID < 4 RETURN a.ID, a.score;
+---- 4
+0|
+1|
+2|
+3|
