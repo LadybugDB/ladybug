@@ -1,5 +1,8 @@
 #pragma once
 
+#include <memory>
+#include <shared_mutex>
+
 #include "binder/ddl/property_definition.h"
 #include "common/case_insensitive_map.h"
 
@@ -42,6 +45,13 @@ private:
           nameToPropertyIDMap{other.nameToPropertyIDMap} {}
 
 private:
+    // Guards columnIDs (and nextColumnID updates in vacuum/add) against concurrent
+    // checkpoint vacuum vs planning reads (see #1160). Vacuum only rewrites columnIDs,
+    // so definitions/name map reads remain lock-free. Shared via shared_ptr so the
+    // explicit-copy helper keeps working (copies share the lock, which is safe if
+    // slightly conservative).
+    mutable std::shared_ptr<std::shared_mutex> columnIDsMtx =
+        std::make_shared<std::shared_mutex>();
     common::column_id_t nextColumnID;
     common::property_id_t nextPropertyID;
     std::map<common::property_id_t, binder::PropertyDefinition> definitions;
