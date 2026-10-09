@@ -79,6 +79,15 @@ struct ParallelCSVScanSharedState final : public function::ScanFileWithProgressS
         main::ClientContext* context, common::CSVOption csvOption, CSVColumnInfo columnInfo,
         std::vector<FileScanPlan> filePlans);
 
+    void resetState() override {
+        fileIdx.store(0);
+        blockIdx.store(0);
+        completedBytes.store(0);
+        for (auto& handler : errorHandlers) {
+            handler.reset();
+        }
+    }
+
     ParseTask getNextTask();
     populate_func_t constructPopulateFunc();
 };

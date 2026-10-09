@@ -29,6 +29,11 @@ struct ScanFileSharedState : public TableFuncSharedState {
         return fileIdx >= fileScanInfo.getNumFiles() ? std::make_pair(UINT64_MAX, UINT64_MAX) :
                                                        std::make_pair(fileIdx.load(), blockIdx++);
     }
+
+    void resetState() override {
+        fileIdx.store(0);
+        blockIdx.store(0);
+    }
 };
 
 struct ScanFileWithProgressSharedState : ScanFileSharedState {

@@ -51,6 +51,13 @@ struct SerialCSVScanSharedState final : public function::ScanFileWithProgressSha
     void initReader(main::ClientContext* context);
     void finalizeReader(main::ClientContext* context) const;
 
+    void resetState() override {
+        fileIdx.store(0);
+        blockIdx.store(0);
+        totalReadSizeByFile = 0;
+        initReader(context);
+    }
+
     populate_func_t constructPopulateFunc() const;
 };
 
