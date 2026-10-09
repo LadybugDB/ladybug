@@ -90,6 +90,11 @@ private:
     InnerIterator* currentIter = nullptr;
 };
 
+// Moves the rows selected by selVector to the front of vector, in place, so that row i of the
+// result is row selVector[i]. Selected positions must be increasing; deleted rows leave such gaps.
+LBUG_API void compactToSelection(common::ValueVector& vector,
+    const common::SelectionVector& selVector);
+
 class OnDiskGraphVertexScanState final : public VertexScanState {
 public:
     OnDiskGraphVertexScanState(main::ClientContext& context,
@@ -99,6 +104,7 @@ public:
     void startScan(common::offset_t beginOffset, common::offset_t endOffsetExclusive);
 
     bool next() override;
+    // Chunk exposes the first selSize rows, so next() moves the selected rows there.
     Chunk getChunk() override {
         return createChunk(std::span(&nodeIDVector->getValue<common::nodeID_t>(0),
                                nodeIDVector->getSelVectorPtr()->getSelSize()),
@@ -106,6 +112,8 @@ public:
     }
 
 private:
+    void compactSelectedRows();
+
     const main::ClientContext& context;
     const storage::NodeTable& nodeTable;
 
