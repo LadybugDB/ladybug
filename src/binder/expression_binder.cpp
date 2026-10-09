@@ -5,10 +5,12 @@
 #include "binder/expression/expression_util.h"
 #include "binder/expression/literal_expression.h"
 #include "binder/expression/parameter_expression.h"
+#include "binder/expression/scalar_function_expression.h"
 #include "binder/expression_visitor.h"
 #include "common/exception/binder.h"
 #include "common/exception/not_implemented.h"
 #include "expression_evaluator/expression_evaluator_utils.h"
+#include "function/arithmetic/vector_arithmetic_functions.h"
 #include "function/cast/vector_cast_functions.h"
 #include "parser/expression/parsed_expression_visitor.h"
 #include "parser/expression/parsed_parameter_expression.h"
@@ -28,6 +30,99 @@ static bool isBoolLiteral(const Expression& expression, bool value) {
     }
     auto literalValue = expression.constCast<LiteralExpression>().getValue();
     return !literalValue.isNull() && literalValue.getValue<bool>() == value;
+}
+
+// Checks whether the expression is a non-null integral literal with value 0.
+// Restricted to integral types: for floating point, x + 0.0 can flip the sign of a
+// signed zero (e.g. -0.0 + 0.0 == +0.0), so the rewrite would not be bit-preserving.
+// Adding/subtracting integral zero can neither overflow nor change NULL semantics
+// (NULL + 0 == NULL == x), so the identity is safe.
+static bool isIntegralZeroLiteral(const Expression& expression) {
+    if (expression.expressionType != ExpressionType::LITERAL) {
+        return false;
+    }
+    auto& literal = expression.constCast<LiteralExpression>();
+    if (literal.isNull()) {
+        return false;
+    }
+    auto value = literal.getValue();
+    switch (expression.dataType.getLogicalTypeID()) {
+    case LogicalTypeID::INT8:
+        return value.getValue<int8_t>() == 0;
+    case LogicalTypeID::INT16:
+        return value.getValue<int16_t>() == 0;
+    case LogicalTypeID::INT32:
+        return value.getValue<int32_t>() == 0;
+    case LogicalTypeID::INT64:
+    case LogicalTypeID::SERIAL:
+        return value.getValue<int64_t>() == 0;
+    case LogicalTypeID::UINT8:
+        return value.getValue<uint8_t>() == 0;
+    case LogicalTypeID::UINT16:
+        return value.getValue<uint16_t>() == 0;
+    case LogicalTypeID::UINT32:
+        return value.getValue<uint32_t>() == 0;
+    case LogicalTypeID::UINT64:
+        return value.getValue<uint64_t>() == 0;
+    case LogicalTypeID::INT128: {
+        auto v = value.getValue<int128_t>();
+        return v.low == 0 && v.high == 0;
+    }
+    case LogicalTypeID::UINT128: {
+        auto v = value.getValue<uint128_t>();
+        return v.low == 0 && v.high == 0;
+    }
+    default:
+        return false;
+    }
+}
+
+// Checks whether the expression is a non-null numeric literal with value 1.
+// Multiplying/dividing by one preserves signed zeros, NaN and infinities, and cannot
+// overflow, so the identity is safe for integral and floating point types alike.
+// DECIMAL is excluded: its scaled representation makes the one-check scale-dependent.
+static bool isNumericOneLiteral(const Expression& expression) {
+    if (expression.expressionType != ExpressionType::LITERAL) {
+        return false;
+    }
+    auto& literal = expression.constCast<LiteralExpression>();
+    if (literal.isNull()) {
+        return false;
+    }
+    auto value = literal.getValue();
+    switch (expression.dataType.getLogicalTypeID()) {
+    case LogicalTypeID::INT8:
+        return value.getValue<int8_t>() == 1;
+    case LogicalTypeID::INT16:
+        return value.getValue<int16_t>() == 1;
+    case LogicalTypeID::INT32:
+        return value.getValue<int32_t>() == 1;
+    case LogicalTypeID::INT64:
+    case LogicalTypeID::SERIAL:
+        return value.getValue<int64_t>() == 1;
+    case LogicalTypeID::UINT8:
+        return value.getValue<uint8_t>() == 1;
+    case LogicalTypeID::UINT16:
+        return value.getValue<uint16_t>() == 1;
+    case LogicalTypeID::UINT32:
+        return value.getValue<uint32_t>() == 1;
+    case LogicalTypeID::UINT64:
+        return value.getValue<uint64_t>() == 1;
+    case LogicalTypeID::INT128: {
+        auto v = value.getValue<int128_t>();
+        return v.low == 1 && v.high == 0;
+    }
+    case LogicalTypeID::UINT128: {
+        auto v = value.getValue<uint128_t>();
+        return v.low == 1 && v.high == 0;
+    }
+    case LogicalTypeID::FLOAT:
+        return value.getValue<float>() == 1.0f;
+    case LogicalTypeID::DOUBLE:
+        return value.getValue<double>() == 1.0;
+    default:
+        return false;
+    }
 }
 
 std::shared_ptr<Expression> ExpressionBinder::bindExpression(
@@ -104,9 +199,74 @@ std::shared_ptr<Expression> ExpressionBinder::simplifyExpression(
         return simplifyBooleanExpression(expression);
     case ExpressionType::CASE_ELSE:
         return simplifyCaseExpression(expression);
+    case ExpressionType::FUNCTION:
+        return simplifyArithmeticExpression(expression);
     default:
         return expression;
     }
+}
+
+std::shared_ptr<Expression> ExpressionBinder::simplifyArithmeticExpression(
+    const std::shared_ptr<Expression>& expression) {
+    if (expression->getNumChildren() != 2) {
+        return expression;
+    }
+    auto& funcExpr = expression->constCast<ScalarFunctionExpression>();
+    const auto& name = funcExpr.getFunction().name;
+    const bool isAdd = name == AddFunction::name;
+    const bool isSubtract = name == SubtractFunction::name;
+    const bool isMultiply = name == MultiplyFunction::name;
+    const bool isDivide = name == DivideFunction::name;
+    if (!isAdd && !isSubtract && !isMultiply && !isDivide) {
+        return expression;
+    }
+    auto left = expression->getChild(0);
+    auto right = expression->getChild(1);
+    std::shared_ptr<Expression> survivor = nullptr;
+    if (isAdd) {
+        // x + 0 -> x, 0 + x -> x
+        if (isIntegralZeroLiteral(*right)) {
+            survivor = left;
+        } else if (isIntegralZeroLiteral(*left)) {
+            survivor = right;
+        }
+    } else if (isSubtract) {
+        // x - 0 -> x (0 - x is negation, not an identity)
+        if (isIntegralZeroLiteral(*right)) {
+            survivor = left;
+        }
+    } else if (isMultiply) {
+        // x * 1 -> x, 1 * x -> x (x * 0 -> 0 is NOT applied: NULL * 0 is NULL, not 0)
+        if (isNumericOneLiteral(*right)) {
+            survivor = left;
+        } else if (isNumericOneLiteral(*left)) {
+            survivor = right;
+        }
+    } else { // isDivide
+        // x / 1 -> x (1 / x is a reciprocal, not an identity)
+        if (isNumericOneLiteral(*right)) {
+            survivor = left;
+        }
+    }
+    if (survivor == nullptr) {
+        return expression;
+    }
+    // The binder inserts implicit casts (e.g. INT col + DOUBLE 0.0 promotes to DOUBLE).
+    // Only rewrite when the surviving operand already has the result type, so the
+    // rewrite cannot change the expression's data type.
+    if (expression->dataType != survivor->dataType) {
+        return expression;
+    }
+    // Preserve the original expression name, mirroring foldExpression: without this,
+    // e.g. RETURN t.age, t.age + 0 would produce two identically-named columns.
+    if (expression->hasAlias()) {
+        if (!survivor->hasAlias()) {
+            survivor->setAlias(expression->getAlias());
+        }
+    } else if (!survivor->hasAlias()) {
+        survivor->setAlias(expression->toString());
+    }
+    return survivor;
 }
 
 std::shared_ptr<Expression> ExpressionBinder::simplifyBooleanExpression(

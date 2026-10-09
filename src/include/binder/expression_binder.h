@@ -157,6 +157,8 @@ private:
         const std::shared_ptr<Expression>& expression);
     std::shared_ptr<Expression> simplifyCaseExpression(
         const std::shared_ptr<Expression>& expression);
+    std::shared_ptr<Expression> simplifyArithmeticExpression(
+        const std::shared_ptr<Expression>& expression);
 
 private:
     Binder* binder;
