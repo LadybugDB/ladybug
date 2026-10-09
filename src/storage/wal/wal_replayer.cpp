@@ -312,6 +312,7 @@ static void throwIfReadOnlyCheckpointState(main::ClientContext& clientContext, b
 }
 
 void WALReplayer::replay(bool throwOnWalReplayFailure, bool enableChecksums) const {
+    cachedOwnerName.clear();
     cachedOwnerCatalog = nullptr;
     auto vfs = VirtualFileSystem::GetUnsafe(clientContext);
     auto* mainStorageManager = clientContext.getDatabase()->getStorageManager();
@@ -500,7 +501,11 @@ WALReplayer::GraphRecoveryState WALReplayer::prepareGraphCheckpoint(StorageManag
 
 void WALReplayer::replayGraphWAL(StorageManager& storageManager,
     const GraphRecoveryState& recoveryState) const {
+    // One replayer may drain several pending graph WALs in turn, so no pass may
+    // carry replay state into the next.
     replayedEntryIDs.clear();
+    failedOwnerNames.clear();
+    cachedOwnerName.clear();
     cachedOwnerCatalog = nullptr;
     // A graph's own WAL pass may run after the main pass has already inserted
     // entries into its catalog, so the floor cannot be captured lazily here:
@@ -639,7 +644,9 @@ void WALReplayer::replayFrozenWAL(Checkpointer& checkpointer, bool throwOnWalRep
             replayPendingGraphWALs(clientContext);
             // Graph checkpoint recovery replays loaded graphs' WALs inline through their own
             // replayers, whose records can change graph registry membership, so the cached
-            // owner must be dropped here even when no drain ran above.
+            // owner and the failed-owner set must be dropped here even when no drain ran above.
+            failedOwnerNames.clear();
+            cachedOwnerName.clear();
             cachedOwnerCatalog = nullptr;
             recoverGraphCheckpoints(clientContext, false, false);
             if (offsetDeserialized == 0) {
@@ -723,7 +730,9 @@ void WALReplayer::replayActiveWAL(Checkpointer& checkpointer, bool throwOnWalRep
             replayPendingGraphWALs(clientContext);
             // Graph checkpoint recovery replays loaded graphs' WALs inline through their own
             // replayers, whose records can change graph registry membership, so the cached
-            // owner must be dropped here even when no drain ran above.
+            // owner and the failed-owner set must be dropped here even when no drain ran above.
+            failedOwnerNames.clear();
+            cachedOwnerName.clear();
             cachedOwnerCatalog = nullptr;
             recoverGraphCheckpoints(clientContext, false, false);
             truncateWALFile(*fileInfo, offsetDeserialized);
@@ -895,13 +904,17 @@ void WALReplayer::replayWALRecord(WALRecord& walRecord) const {
         // The enclosing recovery transaction just completed, so graph WALs queued by lazy
         // materialization inside it can now replay without nesting their transactions.
         // A drained pass runs its own replayer, whose records (e.g. extension init) can
-        // change graph registry membership, so the cached owner cannot survive it.
+        // change graph registry membership, so the cached owner and the failed-owner set
+        // cannot survive it.
         if (replayPendingGraphWALs(clientContext)) {
+            failedOwnerNames.clear();
+            cachedOwnerName.clear();
             cachedOwnerCatalog = nullptr;
         }
     } break;
     case WALRecordType::CREATE_CATALOG_ENTRY_RECORD: {
         failedOwnerNames.clear();
+        cachedOwnerName.clear();
         cachedOwnerCatalog = nullptr;
         replayCreateCatalogEntryRecord(walRecord);
     } break;
@@ -910,6 +923,7 @@ void WALReplayer::replayWALRecord(WALRecord& walRecord) const {
     } break;
     case WALRecordType::DROP_CATALOG_ENTRY_RECORD: {
         failedOwnerNames.clear();
+        cachedOwnerName.clear();
         cachedOwnerCatalog = nullptr;
         replayDropCatalogEntryRecord(walRecord);
     } break;
@@ -945,7 +959,9 @@ void WALReplayer::replayWALRecord(WALRecord& walRecord) const {
     } break;
     case WALRecordType::LOAD_EXTENSION_RECORD: {
         // Extension init runs arbitrary code against the database, so the cached
-        // owner cannot be assumed to stay registered across this record.
+        // owner and the failed-owner set cannot be assumed to stay valid across this record.
+        failedOwnerNames.clear();
+        cachedOwnerName.clear();
         cachedOwnerCatalog = nullptr;
         replayLoadExtensionRecord(walRecord);
     } break;
