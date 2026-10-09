@@ -1,5 +1,7 @@
 #include "graph/on_disk_graph.h"
 
+#include <cstring>
+
 #include "binder/expression/expression_util.h"
 #include "binder/expression/property_expression.h"
 #include "binder/expression_visitor.h"
@@ -366,7 +368,68 @@ bool OnDiskGraphVertexScanState::next() {
     numNodesToScan = std::min(endOffset - currentOffset, DEFAULT_VECTOR_CAPACITY);
     auto result = tableScanState->scanNext(transaction, currentOffset, numNodesToScan);
     currentOffset += result.numRows;
+    compactSelectedRows();
     return result != NODE_GROUP_SCAN_EMPTY_RESULT;
+}
+
+template<size_t NUM_BYTES>
+static void compactSlots(uint8_t* data, const SelectionVector& selVector, sel_t start) {
+    for (auto i = start; i < selVector.getSelSize(); i++) {
+        memcpy(data + i * NUM_BYTES, data + selVector[i] * NUM_BYTES, NUM_BYTES);
+    }
+}
+
+// Copies the slot only: string and list payloads stay where they are and remain valid.
+static void compactFrom(ValueVector& vector, const SelectionVector& selVector, sel_t start) {
+    if (vector.dataType.getPhysicalType() == PhysicalTypeID::STRUCT) {
+        // A struct slot stores its own position, so only the field values move. They move before
+        // the struct's null bits, because nulling a struct also nulls its fields.
+        for (auto& field : StructVector::getFieldVectors(&vector)) {
+            compactFrom(*field, selVector, start);
+        }
+    } else {
+        const auto data = vector.getData();
+        switch (const auto numBytes = vector.getNumBytesPerValue()) {
+        case 8:
+            compactSlots<8>(data, selVector, start);
+            break;
+        case 16:
+            compactSlots<16>(data, selVector, start);
+            break;
+        default:
+            for (auto i = start; i < selVector.getSelSize(); i++) {
+                memcpy(data + i * numBytes, data + selVector[i] * numBytes, numBytes);
+            }
+        }
+    }
+    if (!vector.hasNoNullsGuarantee()) {
+        for (auto i = start; i < selVector.getSelSize(); i++) {
+            vector.setNull(i, vector.isNull(selVector[i]));
+        }
+    }
+}
+
+void compactToSelection(ValueVector& vector, const SelectionVector& selVector) {
+    sel_t start = 0;
+    while (start < selVector.getSelSize() && selVector[start] == start) {
+        start++;
+    }
+    for (auto i = start + 1; i < selVector.getSelSize(); i++) {
+        DASSERT(selVector[i - 1] < selVector[i]);
+    }
+    compactFrom(vector, selVector, start);
+}
+
+void OnDiskGraphVertexScanState::compactSelectedRows() {
+    auto& selVector = propertyVectors.state->getSelVectorUnsafe();
+    if (selVector.isUnfiltered()) {
+        return;
+    }
+    compactToSelection(*nodeIDVector, selVector);
+    for (auto& vector : propertyVectors.valueVectors) {
+        compactToSelection(*vector, selVector);
+    }
+    selVector.setToUnfiltered(selVector.getSelSize());
 }
 
 } // namespace graph

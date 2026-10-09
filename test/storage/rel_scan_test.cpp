@@ -1,3 +1,6 @@
+#include <algorithm>
+#include <functional>
+#include <numeric>
 #include <vector>
 
 #include "api_test/private_api_test.h"
@@ -9,6 +12,7 @@
 #include "graph/graph_entry.h"
 #include "graph/on_disk_graph.h"
 #include "main/client_context.h"
+#include "storage/buffer_manager/memory_manager.h"
 
 namespace lbug {
 
@@ -293,6 +297,156 @@ TEST_F(EmptyVertexScanTest, ScanVertexPropertiesAfterDeletionReInsert) {
         }
     }
     ASSERT_EQ(idx, 20000);
+}
+
+TEST_F(EmptyVertexScanTest, ScanVertexPropertiesAfterInterleavedDeletion) {
+    auto res = conn->query("CREATE NODE TABLE account(id INT64 PRIMARY KEY, name STRING);");
+    ASSERT_TRUE(res->isSuccess());
+    // Every third name is NULL, so the null mask moves along with the values.
+    res = conn->query("UNWIND range(0, 4999) AS i CREATE (a:account {id: i, name: CASE WHEN "
+                      "i % 3 = 0 THEN NULL ELSE 'name' + string(i) + ' long enough to not be "
+                      "inlined' END});");
+    ASSERT_TRUE(res->isSuccess());
+    res = conn->query("MATCH (a:account) WHERE a.id % 2 = 0 OR a.id < 10 DELETE a;");
+    ASSERT_TRUE(res->isSuccess());
+
+    const auto checkScan = [&](const std::function<bool(int64_t)>& isLive) {
+        context = getClientContext(*conn);
+        catalog = catalog::Catalog::Get(*context);
+        auto transaction = transaction::Transaction::Get(*context);
+        auto tableEntry = catalog->getTableCatalogEntry(transaction, "account");
+        graph = std::make_unique<graph::OnDiskGraph>(context,
+            graph::NativeGraphEntry({tableEntry}, {}));
+        auto scanState = graph->prepareVertexScan(tableEntry, {"id", "name"});
+        for (auto [start, end] : {std::pair<offset_t, offset_t>{0, 5000}, {1000, 4500}}) {
+            std::vector<int64_t> expected;
+            for (auto id = (int64_t)start; id < (int64_t)end; id++) {
+                if (isLive(id)) {
+                    expected.push_back(id);
+                }
+            }
+            std::vector<int64_t> actual;
+            for (auto chunk : graph->scanVertices(start, end, *scanState)) {
+                for (auto i = 0u; i < chunk.size(); i++) {
+                    auto id = chunk.getProperties<int64_t>(0)[i];
+                    ASSERT_EQ(chunk.getNodeIDs()[i].offset, (offset_t)id);
+                    if (id % 3 != 0) {
+                        ASSERT_EQ(chunk.getProperties<common::string_t>(1)[i].getAsString(),
+                            "name" + std::to_string(id) + " long enough to not be inlined");
+                    }
+                    actual.push_back(id);
+                }
+            }
+            ASSERT_EQ(actual, expected);
+        }
+    };
+
+    conn->query("BEGIN TRANSACTION");
+    checkScan([](int64_t id) { return id % 2 == 1 && id >= 10; });
+    conn->query("COMMIT");
+    if (!inMemMode) {
+        res = conn->query("CHECKPOINT");
+        ASSERT_TRUE(res->isSuccess());
+        conn->query("BEGIN TRANSACTION");
+        checkScan([](int64_t id) { return id % 2 == 1 && id >= 10; });
+        conn->query("COMMIT");
+    }
+    conn->query("BEGIN TRANSACTION");
+    res = conn->query("MATCH (a:account) WHERE a.id % 3 = 0 DELETE a;");
+    ASSERT_TRUE(res->isSuccess());
+    checkScan([](int64_t id) { return id % 2 == 1 && id >= 10 && id % 3 != 0; });
+    conn->query("ROLLBACK");
+}
+
+TEST_F(EmptyVertexScanTest, CompactToSelectionKeepsValuesAndNulls) {
+    auto mm = storage::MemoryManager::Get(*getClientContext(*conn));
+    auto state = std::make_shared<common::DataChunkState>(common::DEFAULT_VECTOR_CAPACITY);
+    std::vector<common::StructField> fields;
+    fields.emplace_back("a", common::LogicalType::INT64());
+    fields.emplace_back("b", common::LogicalType::STRING());
+    common::ValueVector ints(common::LogicalType::INT64(), mm, state);
+    common::ValueVector smallInts(common::LogicalType::INT32(), mm, state);
+    common::ValueVector flags(common::LogicalType::BOOL(), mm, state);
+    common::ValueVector strings(common::LogicalType::STRING(), mm, state);
+    common::ValueVector lists(common::LogicalType::LIST(common::LogicalType::INT64()), mm, state);
+    common::ValueVector structs(common::LogicalType::STRUCT(std::move(fields)), mm, state);
+    auto a = common::StructVector::getFieldVector(&structs, 0);
+    auto b = common::StructVector::getFieldVector(&structs, 1);
+    auto listValues = common::ListVector::getDataVector(&lists);
+    const auto text = [](int64_t row) {
+        return "row " + std::to_string(row) + " long enough to not be inlined";
+    };
+    for (auto row = 0; row < 6; row++) {
+        ints.setValue<int64_t>(row, row);
+        smallInts.setValue<int32_t>(row, row);
+        flags.setValue<bool>(row, row % 2 == 0);
+        common::StringVector::addString(&strings, row, text(row));
+        auto entry = common::ListVector::addList(&lists, row + 1);
+        lists.setValue(row, entry);
+        for (auto k = 0u; k < entry.size; k++) {
+            listValues->setValue<int64_t>(entry.offset + k, row * 10 + k);
+        }
+        a->setValue<int64_t>(row, row);
+        common::StringVector::addString(b.get(), row, text(row));
+    }
+    ints.setNull(3, true);
+    smallInts.setNull(5, true);
+    strings.setNull(2, true);
+    lists.setNull(0, true);
+    structs.setNull(3, true); // Also nulls the fields of row 3.
+    a->setNull(5, true);
+    auto& selVector = state->getSelVectorUnsafe();
+    // A filtered selection without gaps moves nothing.
+    selVector.setToFiltered(3);
+    std::iota(selVector.getMutableBuffer().begin(), selVector.getMutableBuffer().begin() + 3, 0);
+    graph::compactToSelection(ints, selVector);
+    for (auto row = 0; row < 3; row++) {
+        ASSERT_EQ(ints.getValue<int64_t>(row), row);
+    }
+    // Rows 1 and 4 were deleted.
+    const std::vector<common::sel_t> rows{0, 2, 3, 5};
+    selVector.setToFiltered(rows.size());
+    std::copy(rows.begin(), rows.end(), selVector.getMutableBuffer().begin());
+
+    for (auto vector : {&ints, &smallInts, &flags, &strings, &lists, &structs}) {
+        graph::compactToSelection(*vector, selVector);
+    }
+    for (auto i = 0u; i < rows.size(); i++) {
+        const auto row = rows[i];
+        // A struct slot keeps pointing at its own position; only the fields moved.
+        ASSERT_EQ(structs.getValue<common::struct_entry_t>(i).pos, i);
+        ASSERT_EQ(smallInts.isNull(i), row == 5);
+        if (!smallInts.isNull(i)) {
+            ASSERT_EQ(smallInts.getValue<int32_t>(i), (int32_t)row);
+        }
+        ASSERT_FALSE(flags.isNull(i));
+        ASSERT_EQ(flags.getValue<bool>(i), row % 2 == 0);
+        ASSERT_EQ(lists.isNull(i), row == 0);
+        if (!lists.isNull(i)) {
+            auto entry = lists.getValue<common::list_entry_t>(i);
+            ASSERT_EQ(entry.size, row + 1);
+            for (auto k = 0u; k < entry.size; k++) {
+                ASSERT_EQ(listValues->getValue<int64_t>(entry.offset + k), (int64_t)(row * 10 + k));
+            }
+        }
+        ASSERT_EQ(ints.isNull(i), row == 3);
+        ASSERT_EQ(strings.isNull(i), row == 2);
+        ASSERT_EQ(structs.isNull(i), row == 3);
+        ASSERT_EQ(a->isNull(i), row == 3 || row == 5);
+        ASSERT_EQ(b->isNull(i), row == 3);
+        if (!ints.isNull(i)) {
+            ASSERT_EQ(ints.getValue<int64_t>(i), row);
+        }
+        if (!strings.isNull(i)) {
+            ASSERT_EQ(strings.getValue<common::string_t>(i).getAsString(), text(row));
+        }
+        if (!a->isNull(i)) {
+            ASSERT_EQ(a->getValue<int64_t>(i), row);
+        }
+        if (!b->isNull(i)) {
+            ASSERT_EQ(b->getValue<common::string_t>(i).getAsString(), text(row));
+        }
+    }
 }
 
 TEST_F(EmptyVertexScanTest, ScanVertexPropertiesDuringTransaction) {
