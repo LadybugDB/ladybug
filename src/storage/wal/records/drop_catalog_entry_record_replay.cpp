@@ -1,9 +1,11 @@
 #include "catalog/catalog.h"
 #include "catalog/catalog_entry/catalog_entry.h"
+#include "catalog/catalog_entry/index_catalog_entry.h"
 #include "main/client_context.h"
 #include "main/database.h"
 #include "main/database_manager.h"
 #include "storage/storage_manager.h"
+#include "storage/table/node_table.h"
 #include "storage/wal/wal_replayer.h"
 
 using namespace lbug::catalog;
@@ -28,7 +30,30 @@ void WALReplayer::replayDropCatalogEntryRecord(const WALRecord& walRecord) const
         catalog->dropSequence(transaction, entryID);
     } break;
     case CatalogEntryType::INDEX_ENTRY: {
+        // Mirror the live DROP path, which removes the storage-side holder in
+        // addition to the catalog entry. Without this, a crash-interrupted DROP
+        // leaves a loaded holder behind and the next same-name CREATE fails in
+        // addIndex even though the catalog is clean (see #1152).
+        const IndexCatalogEntry* droppedIndexEntry = nullptr;
+        for (auto* indexEntry : catalog->getIndexEntries(transaction)) {
+            if (indexEntry->getOID() == entryID) {
+                droppedIndexEntry = indexEntry;
+                break;
+            }
+        }
+        // Preserve existing behavior when the entry is already gone.
         catalog->dropIndex(transaction, entryID);
+        if (droppedIndexEntry != nullptr) {
+            auto storageManager = StorageManager::Get(clientContext);
+            const auto tableID = droppedIndexEntry->getTableID();
+            if (storageManager->containsTable(tableID) &&
+                storageManager->getTable(tableID)->getTableType() == common::TableType::NODE) {
+                auto* nodeTable = storageManager->getTable(tableID)->ptrCast<storage::NodeTable>();
+                if (nodeTable->getIndexHolder(droppedIndexEntry->getIndexName()).has_value()) {
+                    nodeTable->dropIndex(droppedIndexEntry->getIndexName());
+                }
+            }
+        }
     } break;
     case CatalogEntryType::SCALAR_MACRO_ENTRY: {
         catalog->dropMacroEntry(transaction, entryID);
