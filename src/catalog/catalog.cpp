@@ -606,7 +606,9 @@ void Catalog::addScalarMacroFunction(Transaction* transaction, std::string name,
 
 ScalarMacroCatalogEntry* Catalog::getScalarMacroCatalogEntry(const Transaction* transaction,
     lbug::common::oid_t macroID) const {
-    auto result = functions->getEntryOfOID(transaction, macroID);
+    // Macros live in the macros set (see addScalarMacroFunction), not functions.
+    // The wrong set made every WAL replay of a macro drop fail (see #1163).
+    auto result = macros->getEntryOfOID(transaction, macroID);
     if (result == nullptr) {
         throw RuntimeException(
             std::format("Cannot find macro catalog entry with id {}.", std::to_string(macroID)));
