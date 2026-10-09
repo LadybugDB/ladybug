@@ -114,5 +114,10 @@
        RETURN count(*);
 ---- 1
 3
+-STATEMENT MATCH (p:Person) WITH p, p.tagId + 1000 AS kid
+       OPTIONAL MATCH (t:Tag {id: kid})
+       RETURN count(*), count(t);
+---- 1
+3|0
 -STATEMENT CALL enable_plan_optimizer=true;
 ---- ok
