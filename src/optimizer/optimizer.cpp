@@ -392,6 +392,12 @@ void Optimizer::optimize(planner::LogicalPlan* plan, main::ClientContext* contex
             }
         }
     } else {
+        // Optimizer disabled: keep only the rewrites required for a runnable plan (fixes #1142).
+        // Correlated PK/scalar-seeded planning now bails without the optimizer, so no
+        // unresolvable ExpressionsScan is emitted; generic correlated subqueries still need
+        // CorrelatedSubqueryUnnestSolver here. The solver only recognizes ACC-hash-joins in
+        // unfactorized form, so strip factorization first and rebuild it after — the final
+        // FactorizationRewriter also populates schemas (subsumes the old SchemaPopulator pass).
         auto removeFactorizationRewriter = RemoveFactorizationRewriter();
         removeFactorizationRewriter.rewrite(plan);
 
