@@ -3,6 +3,7 @@
 #include <atomic>
 #include <functional>
 #include <mutex>
+#include <optional>
 #include <unordered_set>
 #include <vector>
 
@@ -139,6 +140,8 @@ public:
         common::offset_t nodeOffset) const {
         return nodeOffset - getMinUncommittedNodeOffset(tableID);
     }
+    std::optional<common::row_idx_t> tryGetLocalRowIdx(const storage::Table& table,
+        common::offset_t nodeOffset) const;
     common::offset_t getUncommittedOffset(const storage::Table& table,
         common::row_idx_t localRowIdx) const {
         return getMinUncommittedNodeOffset(table) + localRowIdx;

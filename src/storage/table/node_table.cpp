@@ -343,10 +343,9 @@ void NodeTable::initScanState(Transaction* transaction, TableScanState& scanStat
 
 void NodeTable::initScanState(Transaction* transaction, TableScanState& scanState,
     [[maybe_unused]] table_id_t tableID, offset_t startOffset) const {
-    if (transaction->isUnCommitted(*this, startOffset)) {
+    if (const auto localRowIdx = transaction->tryGetLocalRowIdx(*this, startOffset)) {
         scanState.source = TableScanSource::UNCOMMITTED;
-        scanState.nodeGroupIdx =
-            StorageUtils::getNodeGroupIdx(transaction->getLocalRowIdx(*this, startOffset));
+        scanState.nodeGroupIdx = StorageUtils::getNodeGroupIdx(*localRowIdx);
     } else {
         scanState.source = TableScanSource::COMMITTED;
         scanState.nodeGroupIdx = StorageUtils::getNodeGroupIdx(startOffset);
@@ -368,10 +367,8 @@ bool NodeTable::lookup(const Transaction* transaction, const TableScanState& sca
     }
     const auto nodeOffset = scanState.nodeIDVector->readNodeOffset(nodeIDPos);
     const offset_t rowIdxInGroup =
-        transaction->isUnCommitted(*this, nodeOffset) ?
-            transaction->getLocalRowIdx(*this, nodeOffset) -
-                StorageUtils::getStartOffsetOfNodeGroup(scanState.nodeGroupIdx) :
-            nodeOffset - StorageUtils::getStartOffsetOfNodeGroup(scanState.nodeGroupIdx);
+        transaction->tryGetLocalRowIdx(*this, nodeOffset).value_or(nodeOffset) -
+        StorageUtils::getStartOffsetOfNodeGroup(scanState.nodeGroupIdx);
     scanState.rowIdxVector->setValue<row_idx_t>(nodeIDPos, rowIdxInGroup);
     if constexpr (lock) {
         return scanState.nodeGroup->lookup(transaction, scanState);
@@ -395,17 +392,12 @@ bool NodeTable::lookupMultiple(Transaction* transaction, TableScanState& scanSta
             continue;
         }
         const auto nodeOffset = scanState.nodeIDVector->readNodeOffset(nodeIDPos);
-        const auto isUnCommitted = transaction->isUnCommitted(*this, nodeOffset);
-        const auto source =
-            isUnCommitted ? TableScanSource::UNCOMMITTED : TableScanSource::COMMITTED;
-        const auto nodeGroupIdx =
-            isUnCommitted ?
-                StorageUtils::getNodeGroupIdx(transaction->getLocalRowIdx(*this, nodeOffset)) :
-                StorageUtils::getNodeGroupIdx(nodeOffset);
+        const auto localRowIdx = transaction->tryGetLocalRowIdx(*this, nodeOffset);
+        const auto source = localRowIdx ? TableScanSource::UNCOMMITTED : TableScanSource::COMMITTED;
+        const auto rowIdx = localRowIdx.value_or(nodeOffset);
+        const auto nodeGroupIdx = StorageUtils::getNodeGroupIdx(rowIdx);
         const offset_t rowIdxInGroup =
-            isUnCommitted ? transaction->getLocalRowIdx(*this, nodeOffset) -
-                                StorageUtils::getStartOffsetOfNodeGroup(nodeGroupIdx) :
-                            nodeOffset - StorageUtils::getStartOffsetOfNodeGroup(nodeGroupIdx);
+            rowIdx - StorageUtils::getStartOffsetOfNodeGroup(nodeGroupIdx);
         if (scanState.source == source && scanState.nodeGroupIdx == nodeGroupIdx) {
             // If the scan state is already initialized for the same source and node group, we can
             // skip re-initialization.
