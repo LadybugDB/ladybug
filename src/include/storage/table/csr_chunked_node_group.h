@@ -17,8 +17,8 @@ struct CSRRegion {
     common::offset_t leftNodeOffset = common::INVALID_OFFSET;
     common::offset_t rightNodeOffset = common::INVALID_OFFSET;
     int64_t sizeChange = 0;
-    // Track if there is any updates to persistent data in this region per column in table.
-    // Note: should be accessed with columnID.
+    // Track if there is any updates to persistent data in this region per checkpointed column.
+    // Note: indexed by position in the checkpoint state's columnIDs, not by column ID.
     std::vector<bool> hasUpdates;
     // Note: `sizeChange` equal to 0 is not enough to indicate the region has no insert or
     // delete. It might just be num of insertions are equal to num of deletions.
@@ -33,9 +33,9 @@ struct CSRRegion {
                std::any_of(hasUpdates.begin(), hasUpdates.end(),
                    [](bool hasUpdate) { return hasUpdate; });
     }
-    bool needCheckpointColumn(common::column_id_t columnID) const {
-        DASSERT(columnID < hasUpdates.size());
-        return hasInsertions || hasPersistentDeletions || hasUpdates[columnID];
+    bool needCheckpointColumn(common::idx_t columnIdx) const {
+        DASSERT(columnIdx < hasUpdates.size());
+        return hasInsertions || hasPersistentDeletions || hasUpdates[columnIdx];
     }
     bool hasDeletionsOrInsertions() const { return hasInsertions || hasPersistentDeletions; }
     common::idx_t getLeftLeafRegionIdx() const { return regionIdx << level; }

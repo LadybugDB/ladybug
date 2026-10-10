@@ -481,8 +481,12 @@ void NodeGroup::checkpoint(MemoryManager& memoryManager, NodeGroupCheckpointStat
     if (checkpointedVersionInfo->getNumDeletions(txn, 0, numRows) ==
         numRows - firstGroup->getStartRowIdx()) {
         reclaimStorage(state.pageAllocator, lock);
+        std::vector<LogicalType> checkpointedTypes;
+        for (const auto columnID : state.columnIDs) {
+            checkpointedTypes.push_back(dataTypes[columnID].copy());
+        }
         checkpointedChunkedGroup =
-            ChunkedNodeGroup::flushEmpty(memoryManager, dataTypes, enableCompression,
+            ChunkedNodeGroup::flushEmpty(memoryManager, checkpointedTypes, enableCompression,
                 StorageConfig::CHUNKED_NODE_GROUP_CAPACITY, numRows, state.pageAllocator);
     } else {
         if (hasPersistentData) {
@@ -545,6 +549,8 @@ std::unique_ptr<ChunkedNodeGroup> NodeGroup::checkpointInMemAndOnDisk(MemoryMana
     const auto insertChunkedGroup = scanAllInsertedAndVersions<ResidencyState::IN_MEMORY>(
         memoryManager, lock, state.columnIDs, columnPtrs, txn);
     const auto numInsertedRows = insertChunkedGroup->getNumRows();
+    // state.columns and the insert group are positional; the persistent group is indexed by
+    // column ID.
     for (auto i = 0u; i < state.columnIDs.size(); i++) {
         const auto columnID = state.columnIDs[i];
         // Scan updates from the persistent chunked group when persistent data exists.
@@ -557,10 +563,10 @@ std::unique_ptr<ChunkedNodeGroup> NodeGroup::checkpointInMemAndOnDisk(MemoryMana
         std::vector<ChunkCheckpointState> chunkCheckpointStates;
         if (columnHasUpdates) {
             scanCommittedUpdatesForColumn(chunkCheckpointStates, memoryManager, lock, columnID,
-                state.columns[columnID], txn);
+                state.columns[i], txn);
         }
         if (numInsertedRows > 0) {
-            chunkCheckpointStates.emplace_back(insertChunkedGroup->moveColumnChunk(columnID),
+            chunkCheckpointStates.emplace_back(insertChunkedGroup->moveColumnChunk(i),
                 numPersistentRows, numInsertedRows);
         }
         firstGroup->getColumnChunk(columnID).checkpoint(*state.columns[i],

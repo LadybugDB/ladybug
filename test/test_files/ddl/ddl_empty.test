@@ -425,6 +425,116 @@ Adam|2020|Zhang
 Karissa|2021|Zhang
 Zhang|2022|Noura
 
+-CASE CheckpointInsertAfterDropMiddleCol
+-STATEMENT CREATE NODE TABLE P(id INT64 PRIMARY KEY, a INT64, b INT64, c STRING);
+---- ok
+-STATEMENT CREATE (:P {id: 1, a: 1, b: 1, c: 'one'});
+---- ok
+-STATEMENT CHECKPOINT;
+---- ok
+-STATEMENT ALTER TABLE P DROP a;
+---- ok
+-STATEMENT CREATE (:P {id: 2, b: 2, c: 'two'});
+---- ok
+-STATEMENT CHECKPOINT;
+---- ok
+-STATEMENT MATCH (p:P) RETURN p.id, p.b, p.c ORDER BY p.id;
+---- 2
+1|1|one
+2|2|two
+-RELOADDB
+-STATEMENT MATCH (p:P) RETURN p.id, p.b, p.c ORDER BY p.id;
+---- 2
+1|1|one
+2|2|two
+
+-CASE CheckpointUpdateAfterDropMiddleCol
+-STATEMENT CREATE NODE TABLE P(id INT64 PRIMARY KEY, a INT64, b INT64, c STRING);
+---- ok
+-STATEMENT CREATE (:P {id: 1, a: 1, b: 1, c: 'one'});
+---- ok
+-STATEMENT CHECKPOINT;
+---- ok
+-STATEMENT ALTER TABLE P DROP a;
+---- ok
+-STATEMENT MATCH (p:P {id: 1}) SET p.b = 10, p.c = 'ten';
+---- ok
+-STATEMENT CHECKPOINT;
+---- ok
+-RELOADDB
+-STATEMENT MATCH (p:P) RETURN p.id, p.b, p.c;
+---- 1
+1|10|ten
+
+-CASE CheckpointRelAfterDropMiddleProperty
+-STATEMENT CREATE NODE TABLE P(id INT64 PRIMARY KEY);
+---- ok
+-STATEMENT CREATE REL TABLE K(FROM P TO P, a INT64, b INT64, c STRING);
+---- ok
+-STATEMENT UNWIND range(1, 3) AS i CREATE (:P {id: i});
+---- ok
+-STATEMENT MATCH (x:P {id: 1}), (y:P {id: 2}) CREATE (x)-[:K {a: 1, b: 1, c: 'one'}]->(y);
+---- ok
+-STATEMENT CHECKPOINT;
+---- ok
+-STATEMENT ALTER TABLE K DROP a;
+---- ok
+-STATEMENT MATCH (x:P {id: 2}), (y:P {id: 3}) CREATE (x)-[:K {b: 2, c: 'two'}]->(y);
+---- ok
+-STATEMENT MATCH ()-[k:K]->() WHERE k.b = 1 SET k.c = 'uno';
+---- ok
+-STATEMENT CHECKPOINT;
+---- ok
+-RELOADDB
+-STATEMENT MATCH (x:P)-[k:K]->(y:P) RETURN x.id, y.id, k.b, k.c ORDER BY x.id;
+---- 2
+1|2|1|uno
+2|3|2|two
+
+-CASE CheckpointRelUpdateAfterDropMiddleProperty
+-STATEMENT CREATE NODE TABLE P(id INT64 PRIMARY KEY);
+---- ok
+-STATEMENT CREATE REL TABLE K(FROM P TO P, a INT64, b INT64, c STRING);
+---- ok
+-STATEMENT UNWIND range(1, 2) AS i CREATE (:P {id: i});
+---- ok
+-STATEMENT MATCH (x:P {id: 1}), (y:P {id: 2}) CREATE (x)-[:K {a: 1, b: 1, c: 'one'}]->(y);
+---- ok
+-STATEMENT CHECKPOINT;
+---- ok
+-STATEMENT ALTER TABLE K DROP a;
+---- ok
+-STATEMENT MATCH ()-[k:K]->() SET k.b = 10;
+---- ok
+-STATEMENT CHECKPOINT;
+---- ok
+-RELOADDB
+-STATEMENT MATCH (x:P)-[k:K]->(y:P) RETURN x.id, y.id, k.b, k.c;
+---- 1
+1|2|10|one
+
+-CASE CheckpointDeleteAllAfterDropMiddleCol
+-STATEMENT CREATE NODE TABLE P(id INT64 PRIMARY KEY, a INT64, b INT64, c STRING);
+---- ok
+-STATEMENT CREATE (:P {id: 1, a: 1, b: 1, c: 'one'});
+---- ok
+-STATEMENT CHECKPOINT;
+---- ok
+-STATEMENT ALTER TABLE P DROP a;
+---- ok
+-STATEMENT MATCH (p:P) DELETE p;
+---- ok
+-STATEMENT CHECKPOINT;
+---- ok
+-STATEMENT CREATE (:P {id: 2, b: 2, c: 'two'});
+---- ok
+-STATEMENT CHECKPOINT;
+---- ok
+-RELOADDB
+-STATEMENT MATCH (p:P) RETURN p.id, p.b, p.c;
+---- 1
+2|2|two
+
 -CASE EscapedIdentifierCollapsesDoubledBacktick
 -STATEMENT CREATE NODE TABLE `a``b` (id INT64, `c``d` INT64, PRIMARY KEY(id));
 ---- 1

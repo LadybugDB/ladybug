@@ -51,11 +51,11 @@ CSRRegion CSRRegion::upgradeLevel(const std::vector<CSRRegion>& leafRegions,
         newRegion.sizeChange += leafRegions[leafRegionIdx].sizeChange;
         newRegion.hasPersistentDeletions |= leafRegions[leafRegionIdx].hasPersistentDeletions;
         newRegion.hasInsertions |= leafRegions[leafRegionIdx].hasInsertions;
-        for (auto columnID = 0u; columnID < leafRegions[leafRegionIdx].hasUpdates.size();
-             columnID++) {
-            newRegion.hasUpdates[columnID] =
-                static_cast<bool>(newRegion.hasUpdates[columnID]) ||
-                static_cast<bool>(leafRegions[leafRegionIdx].hasUpdates[columnID]);
+        for (auto columnIdx = 0u; columnIdx < leafRegions[leafRegionIdx].hasUpdates.size();
+             columnIdx++) {
+            newRegion.hasUpdates[columnIdx] =
+                static_cast<bool>(newRegion.hasUpdates[columnIdx]) ||
+                static_cast<bool>(leafRegions[leafRegionIdx].hasUpdates[columnIdx]);
         }
     }
     return newRegion;

@@ -780,8 +780,8 @@ void CSRNodeGroup::checkpointInMemAndOnDisk(const UniqLock& lock, NodeGroupCheck
         persistentChunkGroup = nullptr;
     } else {
         DASSERT(csrState.newHeader->sanityCheck());
-        for (const auto columnID : csrState.columnIDs) {
-            checkpointColumn(lock, columnID, csrState, regionsToCheckpoint);
+        for (auto i = 0u; i < csrState.columnIDs.size(); i++) {
+            checkpointColumn(lock, i, csrState, regionsToCheckpoint);
         }
         checkpointCSRHeaderColumns(csrState);
         persistentChunkGroup = createNewPersistentChunkGroup(
@@ -817,16 +817,21 @@ void CSRNodeGroup::redistributeCSRRegions(const CSRNodeGroupCheckpointState& csr
     csrState.newHeader->finalizeCSRRegionEndOffsets(rightCSROffsetOfRegions);
 }
 
-void CSRNodeGroup::checkpointColumn(const UniqLock& lock, column_id_t columnID,
+void CSRNodeGroup::checkpointColumn(const UniqLock& lock, idx_t columnIdx,
     const CSRNodeGroupCheckpointState& csrState, const std::vector<CSRRegion>& regions) const {
+    // csrState.columns and CSRRegion::hasUpdates are positional; the persistent group is indexed
+    // by column ID.
+    const auto columnID = csrState.columnIDs[columnIdx];
+    auto* column = csrState.columns[columnIdx];
     std::vector<ChunkCheckpointState> chunkCheckpointStates;
     chunkCheckpointStates.reserve(regions.size());
     for (auto& region : regions) {
-        if (!region.needCheckpointColumn(columnID)) {
+        if (!region.needCheckpointColumn(columnIdx)) {
             // Skip checkpoint for the column if it has no changes in the region.
             continue;
         }
-        auto regionCheckpointStates = checkpointColumnInRegion(lock, columnID, csrState, region);
+        auto regionCheckpointStates =
+            checkpointColumnInRegion(lock, columnID, column, csrState, region);
         // If there are no rows to write for the region, we don't aggressively reclaim the space in
         // the region, but keep deleted rows as gaps. This can happen when all rows are deleted
         // within the region.
@@ -834,7 +839,7 @@ void CSRNodeGroup::checkpointColumn(const UniqLock& lock, column_id_t columnID,
             chunkCheckpointStates.push_back(std::move(regionCheckpointState));
         }
     }
-    persistentChunkGroup->getColumnChunk(columnID).checkpoint(*csrState.columns[columnID],
+    persistentChunkGroup->getColumnChunk(columnID).checkpoint(*column,
         std::move(chunkCheckpointStates), csrState.pageAllocator);
 }
 
@@ -1039,7 +1044,7 @@ static void fillCSRGaps(CheckpointReadCursor& readCursor, CheckpointWriteCursor&
 }
 
 std::vector<ChunkCheckpointState> CSRNodeGroup::checkpointColumnInRegion(const UniqLock& lock,
-    column_id_t columnID, const CSRNodeGroupCheckpointState& csrState,
+    column_id_t columnID, Column* column, const CSRNodeGroupCheckpointState& csrState,
     const CSRRegion& region) const {
     const auto* txn = csrState.transaction ? csrState.transaction : &DUMMY_CHECKPOINT_TRANSACTION;
     const auto leftCSROffset = csrState.oldHeader->getStartCSROffset(region.leftNodeOffset);
@@ -1047,7 +1052,6 @@ std::vector<ChunkCheckpointState> CSRNodeGroup::checkpointColumnInRegion(const U
     const auto rightCSROffset = csrState.oldHeader->getEndCSROffset(region.rightNodeOffset);
     const auto numOldRowsInRegion = rightCSROffset - leftCSROffset;
 
-    Column* column = csrState.columns[columnID];
     LazySegmentScanner oldChunkScanner{*csrState.mm, column->getDataType().copy(),
         enableCompression};
     auto chunkState = scanCommittedUpdates(txn, persistentChunkGroup->getColumnChunk(columnID),

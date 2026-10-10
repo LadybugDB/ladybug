@@ -311,10 +311,10 @@ private:
     static bool isWithinDensityBound(const InMemChunkedCSRHeader& header,
         const std::vector<CSRRegion>& leafRegions, const CSRRegion& region);
 
-    void checkpointColumn(const common::UniqLock& lock, common::column_id_t columnID,
+    void checkpointColumn(const common::UniqLock& lock, common::idx_t columnIdx,
         const CSRNodeGroupCheckpointState& csrState, const std::vector<CSRRegion>& regions) const;
     std::vector<ChunkCheckpointState> checkpointColumnInRegion(const common::UniqLock& lock,
-        common::column_id_t columnID, const CSRNodeGroupCheckpointState& csrState,
+        common::column_id_t columnID, Column* column, const CSRNodeGroupCheckpointState& csrState,
         const CSRRegion& region) const;
     void checkpointCSRHeaderColumns(const CSRNodeGroupCheckpointState& csrState) const;
     void finalizeCheckpoint(const common::UniqLock& lock);
