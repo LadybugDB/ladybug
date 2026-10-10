@@ -13,6 +13,7 @@
 #include "storage/table/lazy_segment_scanner.h"
 #include "storage/table/rel_table.h"
 #include "transaction/transaction.h"
+#include <ranges>
 
 using namespace lbug::common;
 using namespace lbug::transaction;
@@ -382,8 +383,10 @@ NodeGroupScanResult CSRNodeGroup::scanCommittedInMem(const Transaction* transact
             nodeGroupScanState.inMemCSRList = nodeGroupScanState.pin.index->indices[offsetInGroup];
         }
         if (!nodeGroupScanState.inMemCSRList.isSequential) {
-            DASSERT(std::is_sorted(nodeGroupScanState.inMemCSRList.rowIndices.begin(),
-                nodeGroupScanState.inMemCSRList.rowIndices.end()));
+            DASSERT(std::ranges::is_sorted(nodeGroupScanState.inMemCSRList.rowIndices |
+                                           std::views::filter([](common::row_idx_t row) {
+                                               return row != common::INVALID_ROW_IDX;
+                                           })));
         }
         auto scanResult =
             nodeGroupScanState.inMemCSRList.isSequential ?
