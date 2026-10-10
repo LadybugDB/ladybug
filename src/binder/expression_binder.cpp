@@ -185,7 +185,7 @@ std::shared_ptr<Expression> ExpressionBinder::bindExpression(
     }
     expression = simplifyExpression(expression);
     if (ConstantExpressionVisitor::needFold(*expression)) {
-        return foldExpression(expression);
+        return tryFoldExpression(expression);
     }
     return expression;
 }
@@ -362,6 +362,21 @@ std::shared_ptr<Expression> ExpressionBinder::foldExpression(
     const std::shared_ptr<Expression>& expression) const {
     auto value =
         evaluator::ExpressionEvaluatorUtils::evaluateConstantExpression(expression, context);
+    return createFoldedExpression(expression, std::move(value));
+}
+
+std::shared_ptr<Expression> ExpressionBinder::tryFoldExpression(
+    const std::shared_ptr<Expression>& expression) const {
+    auto value =
+        evaluator::ExpressionEvaluatorUtils::tryEvaluateConstantExpression(expression, context);
+    if (!value.has_value()) {
+        return expression;
+    }
+    return createFoldedExpression(expression, std::move(*value));
+}
+
+std::shared_ptr<Expression> ExpressionBinder::createFoldedExpression(
+    const std::shared_ptr<Expression>& expression, Value value) const {
     auto result = createLiteralExpression(value);
     // Fold result should preserve the alias original expression. E.g.
     // RETURN 2, 1 + 1 AS x

@@ -33,5 +33,19 @@ TEST_F(EmptyDBTest, ConfidentialStatementVisitor) {
     ASSERT_FALSE(analyzerNotConfidential.isConfidential());
 }
 
+TEST_F(EmptyDBTest, LargeConstantListIsNotFolded) {
+    createDBAndConn();
+    conn->query("BEGIN TRANSACTION");
+    binder::Binder binder{conn->getClientContext()};
+    auto bindFirstColumn = [&](const std::string& query) {
+        auto parsed = parser::Parser::parseQuery(query);
+        return binder.bind(*parsed[0])->getStatementResult()->getColumns()[0];
+    };
+    EXPECT_EQ(bindFirstColumn("RETURN range(1, 10)")->expressionType,
+        common::ExpressionType::LITERAL);
+    EXPECT_EQ(bindFirstColumn("RETURN range(1, 100000)")->expressionType,
+        common::ExpressionType::FUNCTION);
+}
+
 } // namespace testing
 } // namespace lbug

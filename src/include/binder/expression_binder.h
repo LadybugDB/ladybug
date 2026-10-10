@@ -45,6 +45,9 @@ public:
     // TODO(Xiyang): move to an expression rewriter
     LBUG_API std::shared_ptr<Expression> foldExpression(
         const std::shared_ptr<Expression>& expression) const;
+    // Folds unless the result is too large to keep as a literal; then returns the expression.
+    std::shared_ptr<Expression> tryFoldExpression(
+        const std::shared_ptr<Expression>& expression) const;
 
     // Boolean expressions.
     std::shared_ptr<Expression> bindBooleanExpression(
@@ -152,6 +155,8 @@ public:
     const ExpressionBinderConfig& getConfig() { return config; }
 
 private:
+    std::shared_ptr<Expression> createFoldedExpression(
+        const std::shared_ptr<Expression>& expression, common::Value value) const;
     std::shared_ptr<Expression> simplifyExpression(const std::shared_ptr<Expression>& expression);
     std::shared_ptr<Expression> simplifyBooleanExpression(
         const std::shared_ptr<Expression>& expression);

@@ -15,9 +15,11 @@ void Planner::appendUnwind(const BoundReadingClause& readingClause, LogicalPlan&
     auto& unwindClause = dynamic_cast_checked<const BoundUnwindClause&>(readingClause);
     auto inExpr = unwindClause.getInExpr();
     if (ConstantExpressionVisitor::isConstant(*inExpr)) {
-        auto value =
-            evaluator::ExpressionEvaluatorUtils::evaluateConstantExpression(inExpr, clientContext);
-        inExpr = std::make_shared<LiteralExpression>(std::move(value), inExpr->getUniqueName());
+        if (auto value = evaluator::ExpressionEvaluatorUtils::tryEvaluateConstantExpression(inExpr,
+                clientContext)) {
+            inExpr =
+                std::make_shared<LiteralExpression>(std::move(*value), inExpr->getUniqueName());
+        }
     }
     auto unwind = make_shared<LogicalUnwind>(inExpr, unwindClause.getOutExpr(),
         unwindClause.getIDExpr(), plan.getLastOperator());
