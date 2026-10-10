@@ -26,6 +26,40 @@ static std::unique_ptr<FunctionBindData> bindFuncListAggr(const ScalarBindFuncIn
     return FunctionBindData::getSimpleBindData(input.arguments, resultType);
 }
 
+template<typename OPERATION>
+static std::unique_ptr<FunctionBindData> bindFuncListMinMax(const ScalarBindFuncInput& input) {
+    auto scalarFunction = input.definition->ptrCast<ScalarFunction>();
+    const auto& argType = input.arguments[0]->dataType;
+    if (argType.getPhysicalType() != PhysicalTypeID::LIST &&
+        argType.getPhysicalType() != PhysicalTypeID::ARRAY) {
+        if (argType.getLogicalTypeID() != LogicalTypeID::ANY) {
+            throw BinderException(std::format("Unsupported inner data type for {}: {}",
+                input.definition->name, LogicalTypeUtils::toString(argType.getLogicalTypeID())));
+        }
+        scalarFunction->execFunc =
+            ScalarFunction::UnaryExecNestedTypeFunction<list_entry_t, int64_t, OPERATION>;
+        std::vector<LogicalType> types;
+        types.push_back(LogicalType::LIST(LogicalType::INT64()));
+        return std::make_unique<FunctionBindData>(std::move(types), LogicalType::INT64());
+    }
+    const auto& resultType = ListType::getChildType(argType);
+    if (resultType.getLogicalTypeID() == LogicalTypeID::ANY) {
+        throw BinderException(std::format("Unsupported inner data type for {}: {}",
+            input.definition->name, LogicalTypeUtils::toString(resultType.getLogicalTypeID())));
+    }
+    TypeUtils::visit(
+        resultType.getPhysicalType(),
+        [&scalarFunction]<ComparableTypes T>(T) {
+            scalarFunction->execFunc =
+                ScalarFunction::UnaryExecNestedTypeFunction<list_entry_t, T, OPERATION>;
+        },
+        [&input, &resultType](auto) {
+            throw BinderException(std::format("Unsupported inner data type for {}: {}",
+                input.definition->name, LogicalTypeUtils::toString(resultType.getLogicalTypeID())));
+        });
+    return FunctionBindData::getSimpleBindData(input.arguments, resultType);
+}
+
 struct ListSum {
     template<typename T>
     static void operation(common::list_entry_t& input, T& result, common::ValueVector& inputVector,
@@ -70,6 +104,61 @@ function_set ListProductFunction::getFunctionSet() {
     auto function = std::make_unique<ScalarFunction>(name,
         std::vector<LogicalTypeID>{LogicalTypeID::LIST}, LogicalTypeID::INT64);
     function->bindFunc = bindFuncListAggr<ListProduct>;
+    result.push_back(std::move(function));
+    return result;
+}
+
+template<bool IS_MIN>
+struct ListMinMax {
+    template<typename T>
+    static void operation(common::list_entry_t& input, T& result, common::ValueVector& inputVector,
+        common::ValueVector& resultVector) {
+        auto inputDataVector = common::ListVector::getDataVector(&inputVector);
+        auto numBytesPerValue = inputDataVector->getNumBytesPerValue();
+        auto inputValues = common::ListVector::getListValues(&inputVector, input);
+        bool found = false;
+        uint8_t* foundPtr = nullptr;
+        T best{};
+        for (auto i = 0u; i < input.size; i++) {
+            if (!inputDataVector->isNull(input.offset + i)) {
+                auto val = inputDataVector->getValue<T>(input.offset + i);
+                if (!found || (IS_MIN ? val < best : val > best)) {
+                    best = val;
+                    found = true;
+                    foundPtr = inputValues;
+                }
+            }
+            inputValues += numBytesPerValue;
+        }
+        if (!found) {
+            auto resultPos =
+                static_cast<sel_t>((reinterpret_cast<uint8_t*>(&result) - resultVector.getData()) /
+                                   resultVector.getNumBytesPerValue());
+            resultVector.setNull(resultPos, true);
+            return;
+        }
+        resultVector.copyFromVectorData(reinterpret_cast<uint8_t*>(&result), inputDataVector,
+            foundPtr);
+    }
+};
+
+using ListMin = ListMinMax<true>;
+using ListMax = ListMinMax<false>;
+
+function_set ListMinFunction::getFunctionSet() {
+    function_set result;
+    auto function = std::make_unique<ScalarFunction>(name,
+        std::vector<LogicalTypeID>{LogicalTypeID::LIST}, LogicalTypeID::ANY);
+    function->bindFunc = bindFuncListMinMax<ListMin>;
+    result.push_back(std::move(function));
+    return result;
+}
+
+function_set ListMaxFunction::getFunctionSet() {
+    function_set result;
+    auto function = std::make_unique<ScalarFunction>(name,
+        std::vector<LogicalTypeID>{LogicalTypeID::LIST}, LogicalTypeID::ANY);
+    function->bindFunc = bindFuncListMinMax<ListMax>;
     result.push_back(std::move(function));
     return result;
 }
