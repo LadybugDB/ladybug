@@ -32,6 +32,10 @@ static std::unique_ptr<FunctionBindData> bindFuncListMinMax(const ScalarBindFunc
     const auto& argType = input.arguments[0]->dataType;
     if (argType.getPhysicalType() != PhysicalTypeID::LIST &&
         argType.getPhysicalType() != PhysicalTypeID::ARRAY) {
+        if (argType.getLogicalTypeID() != LogicalTypeID::ANY) {
+            throw BinderException(std::format("Unsupported inner data type for {}: {}",
+                input.definition->name, LogicalTypeUtils::toString(argType.getLogicalTypeID())));
+        }
         scalarFunction->execFunc =
             ScalarFunction::UnaryExecNestedTypeFunction<list_entry_t, int64_t, OPERATION>;
         std::vector<LogicalType> types;
