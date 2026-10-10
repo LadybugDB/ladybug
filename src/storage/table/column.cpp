@@ -295,12 +295,17 @@ void Column::scanSegment(const SegmentState& state, offset_t startOffsetInSegmen
 void Column::lookupValue(const ChunkState& state, offset_t nodeOffset, ValueVector* resultVector,
     uint32_t posInVector) const {
     auto [segmentState, offsetInSegment] = state.findSegment(nodeOffset);
+    lookupSegment(*segmentState, offsetInSegment, resultVector, posInVector);
+}
+
+void Column::lookupSegment(const SegmentState& state, offset_t offsetInSegment,
+    ValueVector* resultVector, uint32_t posInVector) const {
     if (nullColumn) {
-        nullColumn->lookupInternal(*segmentState->nullState, offsetInSegment, resultVector,
-            posInVector);
+        DASSERT(state.nullState);
+        nullColumn->lookupInternal(*state.nullState, offsetInSegment, resultVector, posInVector);
     }
     if (!resultVector->isNull(posInVector)) {
-        lookupInternal(*segmentState, offsetInSegment, resultVector, posInVector);
+        lookupInternal(state, offsetInSegment, resultVector, posInVector);
     }
 }
 

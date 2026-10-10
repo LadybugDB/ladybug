@@ -40,11 +40,29 @@ void StructExtractFunctions::compileFunc(FunctionBindData* bindData,
     result->state = parameters[0]->state;
 }
 
+// The result is the field's own vector (see compileFunc), so a field of a null struct would read
+// whatever the field slot holds. Mark it null instead; a field of a non-null struct keeps its own
+// null flag.
+static void execFunc(const std::vector<std::shared_ptr<ValueVector>>& parameters,
+    const std::vector<SelectionVector*>& parameterSelVectors, ValueVector& result,
+    SelectionVector* /*resultSelVector*/, void* /*dataPtr*/) {
+    const auto& structVector = *parameters[0];
+    if (structVector.hasNoNullsGuarantee()) {
+        return;
+    }
+    parameterSelVectors[0]->forEach([&](auto pos) {
+        if (structVector.isNull(pos)) {
+            result.setNull(pos, true);
+        }
+    });
+}
+
 static std::unique_ptr<ScalarFunction> getStructExtractFunction(LogicalTypeID logicalTypeID) {
     auto function = std::make_unique<ScalarFunction>(StructExtractFunctions::name,
         std::vector<LogicalTypeID>{logicalTypeID, LogicalTypeID::STRING}, LogicalTypeID::ANY);
     function->bindFunc = StructExtractFunctions::bindFunc;
     function->compileFunc = StructExtractFunctions::compileFunc;
+    function->execFunc = execFunc;
     return function;
 }
 

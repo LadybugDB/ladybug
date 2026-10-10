@@ -45,6 +45,8 @@ public:
     // Use lookupInternal to specialize
     void lookupValue(const ChunkState& state, common::offset_t nodeOffset,
         common::ValueVector* resultVector, uint32_t posInVector) const;
+    void lookupSegment(const SegmentState& state, common::offset_t offsetInSegment,
+        common::ValueVector* resultVector, uint32_t posInVector) const;
 
     // Scan from [offsetInChunk, offsetInChunk + length) (use scanInternal to specialize).
     //

@@ -71,7 +71,7 @@ void StructColumn::lookupInternal(const SegmentState& state, offset_t offsetInSe
     ValueVector* resultVector, uint32_t posInVector) const {
     for (auto i = 0u; i < childColumns.size(); i++) {
         const auto fieldVector = StructVector::getFieldVector(resultVector, i).get();
-        childColumns[i]->lookupInternal(state.childrenStates[i], offsetInSegment, fieldVector,
+        childColumns[i]->lookupSegment(state.childrenStates[i], offsetInSegment, fieldVector,
             posInVector);
     }
 }
