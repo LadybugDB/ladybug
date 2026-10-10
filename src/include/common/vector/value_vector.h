@@ -72,7 +72,7 @@ public:
 
     void setState(const std::shared_ptr<DataChunkState>& state_);
 
-    void setAllNull() { nullMask.setAllNull(); }
+    void setAllNull();
     void setAllNonNull() { nullMask.setAllNonNull(); }
     // On return true, there are no null. On return false, there may or may not be nulls.
     bool hasNoNullsGuarantee() const { return nullMask.hasNoNullsGuarantee(); }
@@ -285,6 +285,11 @@ public:
         dynamic_cast_checked<StructAuxiliaryBuffer*>(vector->auxiliaryBuffer.get())
             ->referenceChildVector(idx, std::move(vectorToReference));
     }
+
+    // Sets each field null wherever the struct is null in [startPos, startPos + numValues), for
+    // nulls written to the struct's mask directly rather than through setNull.
+    static void setNullFieldsOfNullStructs(ValueVector* vector, uint64_t startPos,
+        uint64_t numValues);
 
     static void copyFromRowData(ValueVector* vector, uint32_t pos, const uint8_t* rowData);
     static void copyToRowData(const ValueVector* vector, uint32_t pos, uint8_t* rowData,

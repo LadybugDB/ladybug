@@ -213,6 +213,29 @@ void NullMask::operator|=(const NullMask& other) {
     }
 }
 
+void NullMask::orFromRange(const NullMask& other, uint64_t offset, uint64_t numBits) {
+    if (other.hasNoNullsGuarantee() || numBits == 0) {
+        return;
+    }
+    const auto end = offset + numBits;
+    DASSERT(end <= getNumNullBits(data) && end <= getNumNullBits(other.data));
+    const auto lastEntry = (end - 1) >> NUM_BITS_PER_NULL_ENTRY_LOG2;
+    for (auto entry = offset >> NUM_BITS_PER_NULL_ENTRY_LOG2; entry <= lastEntry; entry++) {
+        auto bits = other.data[entry];
+        const auto entryStart = entry << NUM_BITS_PER_NULL_ENTRY_LOG2;
+        if (offset > entryStart) {
+            bits &= ALL_NULL_ENTRY << (offset - entryStart);
+        }
+        if (end < entryStart + NUM_BITS_PER_NULL_ENTRY) {
+            bits &= ALL_NULL_ENTRY >> (entryStart + NUM_BITS_PER_NULL_ENTRY - end);
+        }
+        if (bits != NO_NULL_ENTRY) {
+            data[entry] |= bits;
+            mayContainNulls = true;
+        }
+    }
+}
+
 std::pair<bool, bool> NullMask::getMinMax(const uint64_t* nullEntries, uint64_t offset,
     uint64_t numValues) {
     nullEntries += offset / NUM_BITS_PER_NULL_ENTRY;

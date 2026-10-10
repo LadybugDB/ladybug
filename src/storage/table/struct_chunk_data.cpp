@@ -153,13 +153,18 @@ void StructChunkData::scan(ValueVector& output, offset_t offset, length_t length
         childChunks[i]->scan(*StructVector::getFieldVector(&output, i), offset, length,
             posInOutputVector);
     }
+    StructVector::setNullFieldsOfNullStructs(&output, posInOutputVector, length);
 }
 
 void StructChunkData::lookup(offset_t offsetInChunk, ValueVector& output,
     sel_t posInOutputVector) const {
     DASSERT(offsetInChunk < numValues);
     const auto numFields = StructType::getNumFields(dataType);
-    output.setNull(posInOutputVector, nullData->isNull(offsetInChunk));
+    const auto isNull = nullData->isNull(offsetInChunk);
+    output.setNull(posInOutputVector, isNull);
+    if (isNull) {
+        return;
+    }
     for (auto i = 0u; i < numFields; i++) {
         childChunks[i]->lookup(offsetInChunk, *StructVector::getFieldVector(&output, i).get(),
             posInOutputVector);

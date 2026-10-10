@@ -398,6 +398,8 @@ static void scanArrowArrayStruct(const ArrowSchema* schema, const ArrowArray* ar
             *StructVector::getFieldVector(&outputVector, j).get(), mask->getChild(j),
             srcOffset + array->children[j]->offset, dstOffset, count);
     }
+    // Arrow allows a value in a child slot under a null struct.
+    StructVector::setNullFieldsOfNullStructs(&outputVector, dstOffset, count);
 }
 
 static void scanArrowArrayDenseUnion(const ArrowSchema* schema, const ArrowArray* array,

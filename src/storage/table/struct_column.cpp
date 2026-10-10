@@ -65,6 +65,8 @@ void StructColumn::scanSegment(const SegmentState& state, offset_t startOffsetIn
         childColumns[i]->scanSegment(state.childrenStates[i], startOffsetInSegment, numValuesToScan,
             fieldVector, offsetInResult);
     }
+    // Files may hold non-null field values under a null struct.
+    StructVector::setNullFieldsOfNullStructs(resultVector, offsetInResult, numValuesToScan);
 }
 
 void StructColumn::lookupInternal(const SegmentState& state, offset_t offsetInSegment,
