@@ -14,5 +14,6 @@ add_lbug_test(storage_utils_test storage_utils_test.cpp)
 add_lbug_test(string_chunk_scan_test string_chunk_scan_test.cpp)
 add_lbug_test(dictionary_offset_validation_test dictionary_offset_validation_test.cpp)
 add_lbug_test(ice_disk_utils_test ice_disk_utils_test.cpp)
+add_lbug_test(art_index_storage_info_test art_index_storage_info_test.cpp)
 
 target_include_directories(compression_test PRIVATE ${PROJECT_SOURCE_DIR}/third_party/alp/include)
