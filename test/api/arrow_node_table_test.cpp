@@ -311,3 +311,46 @@ TEST_F(ArrowNodeTableTest, CreateArrowTableIrregularFieldNames) {
     ASSERT_EQ(row->getValue(0)->getValue<int32_t>(), 2);
     ASSERT_EQ(row->getValue(1)->getValue<std::string>(), "y");
 }
+
+TEST_F(ArrowNodeTableTest, FieldOfNullStructIsNull) {
+    std::vector<int64_t> ids = {1, 2};
+    std::vector<int64_t> fieldValues = {10, 20};
+
+    ArrowSchemaWrapper schema;
+    createStructSchema(&schema, 2);
+    createSchema<int64_t>(schema.children[0], "id");
+    createStructSchema(schema.children[1], 1);
+    schema.children[1]->name = "s";
+    createSchema<int64_t>(schema.children[1]->children[0], "a");
+
+    // The second struct is null while its child slot still holds 20, which Arrow allows.
+    static const uint8_t onlyFirstValid = 0b01;
+    std::vector<ArrowArrayWrapper> arrays;
+    arrays.push_back(createStructArray(ids.size(),
+        {[&](ArrowArray* a) { createInt64Array(a, ids); },
+            [&](ArrowArray* a) {
+                auto structArray = createStructArray(fieldValues.size(),
+                    {[&](ArrowArray* f) { createInt64Array(f, fieldValues); }});
+                *a = structArray;
+                structArray.release = nullptr;
+                a->buffers[0] = &onlyFirstValid;
+                a->null_count = 1;
+            }}));
+
+    auto result = ArrowTableSupport::createViewFromArrowTable(*conn, "t3", std::move(schema),
+        std::move(arrays));
+    ASSERT_TRUE(result.queryResult->isSuccess()) << result.queryResult->getErrorMessage();
+
+    auto queryResult = conn->query("MATCH (n:t3) RETURN n.id, n.s IS NULL, n.s.a ORDER BY n.id");
+    ASSERT_TRUE(queryResult->isSuccess()) << queryResult->getErrorMessage();
+    ASSERT_TRUE(queryResult->hasNext());
+    auto row = queryResult->getNext();
+    ASSERT_EQ(row->getValue(0)->getValue<int64_t>(), 1);
+    ASSERT_FALSE(row->getValue(1)->getValue<bool>());
+    ASSERT_EQ(row->getValue(2)->getValue<int64_t>(), 10);
+    ASSERT_TRUE(queryResult->hasNext());
+    row = queryResult->getNext();
+    ASSERT_EQ(row->getValue(0)->getValue<int64_t>(), 2);
+    ASSERT_TRUE(row->getValue(1)->getValue<bool>());
+    ASSERT_TRUE(row->getValue(2)->isNull());
+}

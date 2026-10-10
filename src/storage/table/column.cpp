@@ -295,12 +295,29 @@ void Column::scanSegment(const SegmentState& state, offset_t startOffsetInSegmen
 void Column::lookupValue(const ChunkState& state, offset_t nodeOffset, ValueVector* resultVector,
     uint32_t posInVector) const {
     auto [segmentState, offsetInSegment] = state.findSegment(nodeOffset);
+    lookupSegment(*segmentState, offsetInSegment, resultVector, posInVector);
+}
+
+void Column::lookupSegment(const SegmentState& state, offset_t offsetInSegment,
+    ValueVector* resultVector, uint32_t posInVector) const {
     if (nullColumn) {
-        nullColumn->lookupInternal(*segmentState->nullState, offsetInSegment, resultVector,
-            posInVector);
+        DASSERT(state.nullState);
+        const auto& nullMetadata = state.nullState->metadata.compMeta;
+        if (nullMetadata.isConstant()) {
+            bool isNull = false;
+            ConstantCompression::decompressValues(reinterpret_cast<uint8_t*>(&isNull), 0 /*offset*/,
+                1 /*numValues*/, PhysicalTypeID::BOOL, 1 /*numBytesPerValue*/, nullMetadata);
+            resultVector->setNullRange(posInVector, 1, isNull);
+        } else {
+            nullColumn->lookupInternal(*state.nullState, offsetInSegment, resultVector,
+                posInVector);
+        }
     }
-    if (!resultVector->isNull(posInVector)) {
-        lookupInternal(*segmentState, offsetInSegment, resultVector, posInVector);
+    if (resultVector->isNull(posInVector)) {
+        // Also makes a struct's fields null.
+        resultVector->setNull(posInVector, true);
+    } else {
+        lookupInternal(state, offsetInSegment, resultVector, posInVector);
     }
 }
 
