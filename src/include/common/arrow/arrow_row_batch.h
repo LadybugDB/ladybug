@@ -68,14 +68,18 @@ private:
 
     static void copyNonNullValue(ArrowVector* vector, const Value& value, std::int64_t pos,
         bool fallbackExtensionTypes);
-    static void copyNullValue(ArrowVector* vector, const Value& value, std::int64_t pos);
+    static void copyNullValue(ArrowVector* vector, const LogicalType& type, std::int64_t pos);
 
     template<LogicalTypeID DT>
     static void templateCopyNonNullValue(ArrowVector* vector, const Value& value, std::int64_t pos,
         bool fallbackExtensionTypes);
     template<LogicalTypeID DT>
     static void templateCopyNullValue(ArrowVector* vector, std::int64_t pos);
-    static void copyNullValueUnion(ArrowVector* vector, const Value& value, std::int64_t pos);
+    static void copyNullValueStruct(ArrowVector* vector, const LogicalType& type, std::int64_t pos);
+    static void copyNullValueInternalID(ArrowVector* vector, std::int64_t pos);
+    static void copyNullValueArray(ArrowVector* vector, const LogicalType& type, std::int64_t pos);
+    static void copyNullValueUnion(ArrowVector* vector, const LogicalType& type, std::int64_t pos);
+    static void appendNullValue(ArrowVector* vector, const LogicalType& type);
     template<LogicalTypeID DT>
     static ArrowArray* templateCreateArray(ArrowVector& vector, const LogicalType& type,
         bool fallbackExtensionTypes);
