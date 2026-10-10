@@ -142,6 +142,7 @@ public:
     common::idx_t getNumColumns() const { return chunks.size(); }
     common::row_idx_t getStartRowIdx() const { return startRowIdx; }
     common::row_idx_t getNumRows() const { return numRows; }
+    bool hasRows() const { return numRows != 0; }
     const ColumnChunk& getColumnChunk(const common::column_id_t columnID) const {
         DASSERT(columnID < chunks.size());
         return *chunks[columnID];

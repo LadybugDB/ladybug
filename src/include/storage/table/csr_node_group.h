@@ -243,6 +243,10 @@ public:
     void reclaimStorage(PageAllocator& pageAllocator, const common::UniqLock& lock) const override;
 
     bool isEmpty() const override { return !persistentChunkGroup && NodeGroup::isEmpty(); }
+    bool hasRows() const override {
+        return NodeGroup::hasRows() ||
+               (persistentChunkGroup && persistentChunkGroup->getNumRows() != 0);
+    }
 
     ChunkedNodeGroup* getPersistentChunkedGroup() const { return persistentChunkGroup.get(); }
     const CSRIndex* getCSRIndex() const { return csrIndex.get(); }

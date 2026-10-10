@@ -393,3 +393,35 @@
 -STATEMENT CALL show_tables() RETURN COUNT(*);
 ---- 1
 0
+
+-CASE CopyRelRollbackAfterCheckpoint
+-STATEMENT CALL auto_checkpoint=false;
+---- ok
+-STATEMENT CREATE NODE TABLE A(id INT64 PRIMARY KEY);
+---- ok
+-STATEMENT CREATE REL TABLE T(FROM A TO A);
+---- ok
+-STATEMENT UNWIND range(0, 9) AS i CREATE (:A {id: i});
+---- ok
+-STATEMENT CHECKPOINT;
+---- ok
+-STATEMENT BEGIN TRANSACTION;
+---- ok
+-STATEMENT COPY T FROM (UNWIND range(0, 8) AS i RETURN i, i + 1);
+---- ok
+-STATEMENT ROLLBACK;
+---- ok
+-STATEMENT MATCH ()-[t:T]->() RETURN count(*);
+---- 1
+0
+-STATEMENT MATCH (a:A {id: 0}), (b:A {id: 7}) CREATE (a)-[:T]->(b);
+---- ok
+-STATEMENT CHECKPOINT;
+---- ok
+-STATEMENT MATCH (a:A)-[t:T]->(b:A) RETURN a.id, b.id;
+---- 1
+0|7
+-RELOADDB
+-STATEMENT MATCH (a:A)-[t:T]->(b:A) RETURN a.id, b.id;
+---- 1
+0|7

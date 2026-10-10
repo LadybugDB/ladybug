@@ -3,8 +3,11 @@
 #include "api_test/api_test.h"
 #include "api_test/private_api_test.h"
 #include "common/exception/runtime.h"
+#include "graph_test/private_graph_test.h"
+#include "storage/buffer_manager/buffer_manager.h"
 #include "storage/storage_utils.h"
 #include "storage/wal/wal.h"
+#include "transaction/transaction.h"
 #include <format>
 
 using namespace lbug::common;
@@ -764,3 +767,78 @@ TEST_F(EmptyDBTransactionTest, ConcurrentRelationshipUpdatesWithMixedTransaction
     ASSERT_EQ(originalCount, numTotalUpdates / 2);
 }
 #endif
+
+namespace {
+// Fails the first buffer reservation of the next commit's publish step, after its WAL record.
+class FailOnceInCommitBufferManager final : public lbug::storage::BufferManager {
+public:
+    using lbug::storage::BufferManager::BufferManager;
+
+    bool reserve(uint64_t sizeToReserve) override {
+        auto* transaction = ctx ? Transaction::Get(*ctx) : nullptr;
+        if (transaction && transaction->getCommitTS() != INVALID_TRANSACTION &&
+            failNextCommit.exchange(false)) {
+            return false;
+        }
+        return lbug::storage::BufferManager::reserve(sizeToReserve);
+    }
+
+    lbug::main::ClientContext* ctx = nullptr;
+    std::atomic<bool> failNextCommit = false;
+};
+
+class FailedCommitTest : public EmptyDBTest {
+public:
+    void TearDown() override {
+        // The connection goes before the database, which checkpoints on close.
+        if (bm) {
+            bm->ctx = nullptr;
+        }
+        EmptyDBTest::TearDown();
+    }
+
+    FailOnceInCommitBufferManager* bm = nullptr;
+};
+} // namespace
+
+TEST_F(FailedCommitTest, KeepsCheckpointedRels) {
+    auto constructBM = [&](const lbug::main::Database& db) {
+        auto manager = std::make_unique<FailOnceInCommitBufferManager>(databasePath,
+            databasePath + ".tmp", systemConfig->bufferPoolSize, systemConfig->maxDBSize,
+            getFileSystem(db), systemConfig->readOnly);
+        bm = manager.get();
+        return manager;
+    };
+    database = BaseGraphTest::constructDB(databasePath, *systemConfig, constructBM);
+    conn = std::make_unique<lbug::main::Connection>(database.get());
+    bm->ctx = conn->getClientContext();
+    auto countRels = [&]() {
+        return conn->query("MATCH (:A)-[t:T]->(:A) RETURN count(t)")
+            ->getNext()
+            ->getValue(0)
+            ->getValue<int64_t>();
+    };
+    ASSERT_TRUE(conn->query("CALL auto_checkpoint=false")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE A(id INT64 PRIMARY KEY, b INT64)")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE REL TABLE T(FROM A TO A)")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:A {id: 0, b: 0}), (:A {id: 1, b: 0})")->isSuccess());
+    const auto insert = "MATCH (a:A {id: 0}), (c:A {id: 1}) CREATE (a)-[:T]->(c)";
+    ASSERT_TRUE(conn->query(insert)->isSuccess());
+    ASSERT_TRUE(conn->query("CHECKPOINT")->isSuccess());
+
+    ASSERT_TRUE(conn->query("BEGIN TRANSACTION")->isSuccess());
+    // The SET pre-allocates the undo buffer, so the first reservation during COMMIT is the
+    // relationship append.
+    ASSERT_TRUE(conn->query("MATCH (a:A {id: 0}) SET a.b = 1")->isSuccess());
+    ASSERT_TRUE(conn->query(insert)->isSuccess());
+    bm->failNextCommit = true;
+    auto commit = conn->query("COMMIT");
+    ASSERT_FALSE(commit->isSuccess());
+    ASSERT_FALSE(hasActiveTransaction(*conn));
+    EXPECT_EQ(countRels(), 1);
+
+    ASSERT_TRUE(conn->query(insert)->isSuccess());
+    EXPECT_EQ(countRels(), 2);
+    ASSERT_TRUE(conn->query("CHECKPOINT")->isSuccess());
+    EXPECT_EQ(countRels(), 2);
+}

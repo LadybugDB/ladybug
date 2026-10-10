@@ -116,6 +116,8 @@ public:
     virtual ~NodeGroup() = default;
 
     virtual bool isEmpty() const { return numRows.load() == 0; }
+    // In memory or, for a CSR node group, in its persistent chunked group.
+    virtual bool hasRows() const { return numRows.load() != 0; }
     virtual common::row_idx_t getNumRows() const { return numRows.load(); }
     void moveNextRowToAppend(common::row_idx_t numRowsToAppend) {
         nextRowToAppend += numRowsToAppend;
