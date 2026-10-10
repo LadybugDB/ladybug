@@ -28,6 +28,9 @@ public:
     void beginWrite(ColumnWriterState& state) override;
     void write(ColumnWriterState& state, common::ValueVector* vector, uint64_t count) override;
     void finalizeWrite(ColumnWriterState& state) override;
+
+private:
+    void nullFieldsOfNullStructs(common::ValueVector* vector, uint64_t count);
 };
 
 class StructColumnWriterState : public ColumnWriterState {
