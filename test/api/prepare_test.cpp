@@ -1146,10 +1146,10 @@ TEST_F(ApiTest, ConcurrentCheckpointRead1160) {
     // while another connection checkpoints raced on PropertyDefinitionCollection::columnIDs
     // (checkpoint vacuum clear()/emplace() vs getColumnID at()), throwing unordered_map::at
     // or segfaulting.
-    ASSERT_TRUE(conn->query("CREATE NODE TABLE P1160(id INT64 PRIMARY KEY, age INT64)")
-                    ->isSuccess());
-    ASSERT_TRUE(conn->query("UNWIND range(0, 40) AS i CREATE (:P1160 {id: i, age: i})")
-                    ->isSuccess());
+    ASSERT_TRUE(
+        conn->query("CREATE NODE TABLE P1160(id INT64 PRIMARY KEY, age INT64)")->isSuccess());
+    ASSERT_TRUE(
+        conn->query("UNWIND range(0, 40) AS i CREATE (:P1160 {id: i, age: i})")->isSuccess());
     std::atomic<bool> done{false};
     std::atomic<int> failures{0};
     auto readerFn = [&]() {
@@ -1172,8 +1172,8 @@ TEST_F(ApiTest, ConcurrentCheckpointRead1160) {
         p["v"] = std::make_unique<Value>(v);
         return p;
     };
-    auto update = conn->prepareWithParams("MATCH (p:P1160 {id: $id}) SET p.age = $v",
-        makeParams(0, 0));
+    auto update =
+        conn->prepareWithParams("MATCH (p:P1160 {id: $id}) SET p.age = $v", makeParams(0, 0));
     ASSERT_TRUE(update->isSuccess());
     for (int i = 0; i < 500; ++i) {
         auto r = conn->executeWithParams(update.get(), makeParams(i % 41, i));

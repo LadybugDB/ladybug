@@ -50,8 +50,7 @@ private:
     // so definitions/name map reads remain lock-free. Shared via shared_ptr so the
     // explicit-copy helper keeps working (copies share the lock, which is safe if
     // slightly conservative).
-    mutable std::shared_ptr<std::shared_mutex> columnIDsMtx =
-        std::make_shared<std::shared_mutex>();
+    mutable std::shared_ptr<std::shared_mutex> columnIDsMtx = std::make_shared<std::shared_mutex>();
     common::column_id_t nextColumnID;
     common::property_id_t nextPropertyID;
     std::map<common::property_id_t, binder::PropertyDefinition> definitions;
