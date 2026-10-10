@@ -267,7 +267,7 @@ static void setBitToOne(std::uint8_t* data, std::int64_t pos) {
 void ArrowRowBatch::appendValue(ArrowVector* vector, const Value& value,
     bool fallbackExtensionTypes) {
     if (value.isNull()) {
-        copyNullValue(vector, value, vector->numValues);
+        copyNullValue(vector, value.dataType, vector->numValues);
     } else {
         copyNonNullValue(vector, value, vector->numValues, fallbackExtensionTypes);
     }
@@ -596,31 +596,51 @@ void ArrowRowBatch::templateCopyNullValue<LogicalTypeID::MAP>(ArrowVector* vecto
     return templateCopyNullValue<LogicalTypeID::LIST>(vector, pos);
 }
 
-template<>
-void ArrowRowBatch::templateCopyNullValue<LogicalTypeID::STRUCT>(ArrowVector* vector,
+// Arrow requires the children of a struct or fixed-size list to stay as long as the parent, so
+// a null parent appends a null to each child. Nodes and rels are exported as structs.
+void ArrowRowBatch::copyNullValueStruct(ArrowVector* vector, const LogicalType& type,
     std::int64_t pos) {
     setBitToZero(vector->validity.data(), pos);
     vector->numNulls++;
+    for (auto i = 0u; i < StructType::getNumFields(type); i++) {
+        appendNullValue(vector->childData[i].get(), StructType::getFieldType(type, i));
+    }
 }
 
-void ArrowRowBatch::copyNullValueUnion(ArrowVector* vector, const Value& value, std::int64_t pos) {
+void ArrowRowBatch::copyNullValueInternalID(ArrowVector* vector, std::int64_t pos) {
+    setBitToZero(vector->validity.data(), pos);
+    vector->numNulls++;
+    appendNullValue(vector->childData[0].get(), LogicalType::INT64());
+    appendNullValue(vector->childData[1].get(), LogicalType::INT64());
+}
+
+void ArrowRowBatch::copyNullValueArray(ArrowVector* vector, const LogicalType& type,
+    std::int64_t pos) {
+    setBitToZero(vector->validity.data(), pos);
+    vector->numNulls++;
+    for (auto i = 0u; i < ArrayType::getNumElements(type); i++) {
+        appendNullValue(vector->childData[0].get(), ArrayType::getChildType(type));
+    }
+}
+
+// A dense union has no validity buffer: a null points at a null appended to its first child.
+void ArrowRowBatch::copyNullValueUnion(ArrowVector* vector, const LogicalType& type,
+    std::int64_t pos) {
     auto typeBuffer = (std::uint8_t*)vector->data.data();
     auto offsetsBuffer = (std::int32_t*)vector->overflow.data();
     typeBuffer[pos] = 0;
     offsetsBuffer[pos] = vector->childData[0]->numValues;
-    copyNullValue(vector->childData[0].get(), *value.children[0], pos);
+    appendNullValue(vector->childData[0].get(), UnionType::getFieldType(type, 0));
     vector->numNulls++;
 }
 
-static void copyArrowArray(ArrowVector* vector, std::int64_t pos, uint64_t numElements) {
-    setBitToZero(vector->validity.data(), pos);
-    vector->numNulls++;
-    auto& child = vector->childData[0];
-    child->numValues += numElements;
+void ArrowRowBatch::appendNullValue(ArrowVector* vector, const LogicalType& type) {
+    copyNullValue(vector, type, vector->numValues);
+    vector->numValues++;
 }
 
-void ArrowRowBatch::copyNullValue(ArrowVector* vector, const Value& value, std::int64_t pos) {
-    switch (value.dataType.getLogicalTypeID()) {
+void ArrowRowBatch::copyNullValue(ArrowVector* vector, const LogicalType& type, std::int64_t pos) {
+    switch (type.getLogicalTypeID()) {
     case LogicalTypeID::BOOL: {
         templateCopyNullValue<LogicalTypeID::BOOL>(vector, pos);
     } break;
@@ -691,26 +711,22 @@ void ArrowRowBatch::copyNullValue(ArrowVector* vector, const Value& value, std::
         templateCopyNullValue<LogicalTypeID::LIST>(vector, pos);
     } break;
     case LogicalTypeID::ARRAY: {
-        copyArrowArray(vector, pos, ArrayType::getNumElements(value.dataType));
+        copyNullValueArray(vector, type, pos);
     } break;
     case LogicalTypeID::MAP: {
         templateCopyNullValue<LogicalTypeID::MAP>(vector, pos);
     } break;
     case LogicalTypeID::INTERNAL_ID: {
-        templateCopyNullValue<LogicalTypeID::INTERNAL_ID>(vector, pos);
+        copyNullValueInternalID(vector, pos);
     } break;
     case LogicalTypeID::RECURSIVE_REL:
-    case LogicalTypeID::STRUCT: {
-        templateCopyNullValue<LogicalTypeID::STRUCT>(vector, pos);
+    case LogicalTypeID::STRUCT:
+    case LogicalTypeID::NODE:
+    case LogicalTypeID::REL: {
+        copyNullValueStruct(vector, type, pos);
     } break;
     case LogicalTypeID::UNION: {
-        copyNullValueUnion(vector, value, pos);
-    } break;
-    case LogicalTypeID::NODE: {
-        templateCopyNullValue<LogicalTypeID::NODE>(vector, pos);
-    } break;
-    case LogicalTypeID::REL: {
-        templateCopyNullValue<LogicalTypeID::REL>(vector, pos);
+        copyNullValueUnion(vector, type, pos);
     } break;
     default: {
         UNREACHABLE_CODE;
