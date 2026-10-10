@@ -7376,6 +7376,27 @@ TEST_F(CheckpointRunningRelScanTest, FailedCheckpointWhileRelScanPinned) {
     checkRels(scanRels(false /*pause*/, error), expected, "scan after reopening");
     EXPECT_TRUE(error.empty()) << error;
 }
+
+TEST_F(CheckpointRunningRelScanTest, ScanAfterFailedCheckpointWithDeletedInMemRels) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    // Persistent rels 1..3999, in-memory rels 4000..5999, every 7th rel deleted.
+    const auto expected = setUpPersistentRelsWithPendingChanges(true /*deleteInMemRels*/);
+    auto context = getClientContext(*conn);
+    bool failed = false;
+    FlakyCheckpointer flakyCheckpointer([&failed](main::ClientContext& ctx) {
+        return std::make_unique<FlakyCheckpointerFailsDuringOutOfPlaceRewrite>(ctx, failed);
+    });
+    flakyCheckpointer.setCheckpointer(*context);
+    auto res = conn->query("CHECKPOINT;");
+    FlakyCheckpointer::resetCheckpointer(*context);
+    ASSERT_FALSE(res->isSuccess());
+    ASSERT_TRUE(failed);
+    std::string error;
+    checkRels(scanRels(false /*pause*/, error), expected, "scan after the failed checkpoint");
+    EXPECT_TRUE(error.empty()) << error;
+}
 #endif // __SINGLE_THREADED__
 
 } // namespace testing
