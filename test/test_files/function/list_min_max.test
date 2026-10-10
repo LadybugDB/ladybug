@@ -45,6 +45,9 @@ alice|carol
 -STATEMENT RETURN list_min(['Aida', NULL, 'Bobby']), list_max(['Aida', NULL, 'Bobby'])
 ---- 1
 Aida|Bobby
+-STATEMENT RETURN list_min(['mmmmmmmmmmmmmmmm', 'zzzzzzzzzzzzzzzz', NULL, 'aaaaaaaaaaaaaaaa']), list_max(['mmmmmmmmmmmmmmmm', 'zzzzzzzzzzzzzzzz', NULL, 'aaaaaaaaaaaaaaaa'])
+---- 1
+aaaaaaaaaaaaaaaa|zzzzzzzzzzzzzzzz
 -STATEMENT RETURN list_min([date('2020-01-02'), date('2019-12-31'), date('2020-01-01')]), list_max([date('2020-01-02'), date('2019-12-31'), date('2020-01-01')])
 ---- 1
 2019-12-31|2020-01-02
@@ -67,3 +70,13 @@ Binder exception: Unsupported inner data type for LIST_MIN: LIST
 -STATEMENT RETURN list_max([[1, 2], [3]])
 ---- error
 Binder exception: Unsupported inner data type for LIST_MAX: LIST
+-STATEMENT RETURN list_min(42)
+---- error
+Binder exception: Function LIST_MIN did not receive correct arguments:
+Actual:   (INT64)
+Expected: (LIST) -> ANY
+-STATEMENT RETURN list_max(42)
+---- error
+Binder exception: Function LIST_MAX did not receive correct arguments:
+Actual:   (INT64)
+Expected: (LIST) -> ANY
