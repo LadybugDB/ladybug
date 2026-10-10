@@ -111,3 +111,71 @@ C
 -STATEMENT RETURN keys(null)
 ---- 1
 
+
+-CASE StructExtractOfNullStruct
+
+-LOG FieldOfNullLiteral
+-STATEMENT RETURN CAST(NULL AS STRUCT(day DATE)).day IS NULL
+---- 1
+True
+
+-STATEMENT CREATE NODE TABLE ns(id INT64 PRIMARY KEY, s STRUCT(t STRUCT(day DATE, n INT64), name STRING))
+---- ok
+-STATEMENT CREATE (:ns {id: 1, s: {t: {day: date('2021-01-02'), n: 5}, name: 'a'}})
+---- ok
+-STATEMENT CREATE (:ns {id: 2, s: {t: NULL, name: 'b'}})
+---- ok
+-STATEMENT CREATE (:ns {id: 3, s: NULL})
+---- ok
+
+-LOG FieldsOfNullStructs
+-STATEMENT MATCH (x:ns) RETURN x.id, x.s.t IS NULL, x.s.t.day IS NULL, x.s.t.n IS NULL, x.s.name IS NULL ORDER BY x.id
+---- 3
+1|False|False|False|False
+2|True|True|True|False
+3|True|True|True|True
+
+-LOG AggregatesSkipFieldsOfNullStructs
+-STATEMENT MATCH (x:ns) RETURN count(x.s.t.day), min(x.s.t.day), sum(x.s.t.n)
+---- 1
+1|2021-01-02|5
+
+-LOG FieldsOfNullNodeAndRel
+-STATEMENT CREATE REL TABLE nk(FROM ns TO ns, w INT64)
+---- ok
+-STATEMENT MATCH (a:ns {id: 1}), (b:ns {id: 2}) CREATE (a)-[:nk {w: 7}]->(b)
+---- ok
+-STATEMENT MATCH (x:ns) OPTIONAL MATCH (x)-[r:nk]->(y:ns) UNWIND [y] AS n UNWIND [r] AS e RETURN x.id, n.id IS NULL, n.s.name IS NULL, e.w IS NULL ORDER BY x.id
+---- 3
+1|False|False|False
+2|True|True|True
+3|True|True|True
+
+-LOG FieldsOfNullStructsAfterCheckpoint
+-STATEMENT CHECKPOINT
+---- ok
+-STATEMENT MATCH (x:ns {id: 2}) RETURN x.s, x.s.t IS NULL, x.s.t.day IS NULL
+---- 1
+{t: , name: b}|True|True
+-STATEMENT MATCH (x:ns) RETURN x.id, x.s.t IS NULL, x.s.t.day IS NULL, x.s.t.n IS NULL, x.s.name IS NULL ORDER BY x.id
+---- 3
+1|False|False|False|False
+2|True|True|True|False
+3|True|True|True|True
+
+-LOG NullStructDoesNotLeakIntoNextLookupBatch
+-STATEMENT CREATE NODE TABLE nl(id INT64 PRIMARY KEY, s STRUCT(name STRING, t STRUCT(n INT64)))
+---- ok
+-STATEMENT UNWIND range(1, 2048) AS i CREATE (:nl {id: i, s: NULL})
+---- ok
+-STATEMENT UNWIND range(2049, 4096) AS i CREATE (:nl {id: i, s: {name: 'v', t: {n: 1}}})
+---- ok
+-STATEMENT CREATE (:nl {id: 4097, s: {name: 'w', t: NULL}})
+---- ok
+-STATEMENT CHECKPOINT
+---- ok
+-STATEMENT UNWIND range(1, 4097) AS i MATCH (x:nl {id: i}) RETURN x.s IS NULL, x.s.name IS NULL, x.s.t IS NULL, x.s.t.n IS NULL, count(*)
+---- 3
+True|True|True|True|2048
+False|False|False|False|2048
+False|False|True|True|1
