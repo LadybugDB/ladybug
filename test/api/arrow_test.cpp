@@ -545,6 +545,68 @@ TEST_F(ArrowTest, getArrowResult) {
     arrowArray->release(arrowArray.get());
 }
 
+// Every child of an Arrow struct must be as long as the struct, and the child of a fixed-size list
+// N times as long, including for null rows. Nodes, rels and internal IDs are exported as structs.
+static void assertChildrenMatchLength(const ArrowArray* array, const ArrowSchema* schema) {
+    std::string format = schema->format;
+    int64_t childLengthPerRow = 0;
+    if (format == "+s") {
+        childLengthPerRow = 1;
+    } else if (format.starts_with("+w:")) {
+        childLengthPerRow = std::stoll(format.substr(3));
+    } else {
+        return;
+    }
+    for (auto i = 0; i < array->n_children; i++) {
+        ASSERT_EQ(array->children[i]->length, array->length * childLengthPerRow)
+            << schema->children[i]->name;
+        assertChildrenMatchLength(array->children[i], schema->children[i]);
+    }
+}
+
+static bool isValid(const ArrowArray* array, int64_t pos) {
+    auto validity = static_cast<const uint8_t*>(array->buffers[0]);
+    return validity == nullptr || (validity[pos / 8] >> (pos % 8)) & 1;
+}
+
+TEST_F(ArrowTest, nullStructNodeRelUnionAndArrayKeepChildrenAligned) {
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE an_p(id INT64 PRIMARY KEY, "
+                            "s STRUCT(d DATE, l INT64[]), u UNION(n INT64, t STRING), "
+                            "a STRUCT(n INT64)[2])")
+                    ->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE REL TABLE an_k(FROM an_p TO an_p, w INT64)")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:an_p {id: 1, s: {d: date('2021-01-02'), l: [1, 2]}, "
+                            "u: union_value(n := 5), a: [{n: 1}, {n: 2}]})")
+                    ->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:an_p {id: 2})")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:an_p {id: 3, s: {d: date('1990-09-10'), l: [3]}, "
+                            "u: union_value(t := 'z'), a: [{n: 3}, {n: 4}]})")
+                    ->isSuccess());
+    ASSERT_TRUE(
+        conn->query("MATCH (a:an_p {id: 1}), (b:an_p {id: 3}) CREATE (a)-[:an_k {w: 7}]->(b)")
+            ->isSuccess());
+    auto result = conn->query("MATCH (a:an_p) OPTIONAL MATCH (a)-[r:an_k]->(b:an_p) "
+                              "RETURN a.s, a.u, a.a, b, r, id(b) ORDER BY a.id");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    auto schema = result->getArrowSchema();
+    auto array = result->getNextArrowChunk(3);
+    ASSERT_EQ(array->length, 3);
+    for (auto i = 0; i < array->n_children; i++) {
+        assertChildrenMatchLength(array->children[i], schema->children[i]);
+    }
+    // The null union in row 1 points at a null in its first child, which holds row 0's value too.
+    auto unionArray = array->children[1];
+    auto typeIDs = static_cast<const int8_t*>(unionArray->buffers[0]);
+    auto offsets = static_cast<const int32_t*>(unionArray->buffers[1]);
+    auto nullChild = unionArray->children[typeIDs[1]];
+    ASSERT_LT(offsets[1], nullChild->length);
+    ASSERT_FALSE(isValid(nullChild, offsets[1]));
+    ASSERT_EQ(unionArray->children[0]->length, 2);
+    ASSERT_EQ(unionArray->children[1]->length, 1);
+    array->release(array.get());
+    schema->release(schema.get());
+}
+
 TEST_F(ArrowTest, getArrowSchema) {
     auto query = "MATCH (a:person) RETURN a.fName as NAME";
     auto result = conn->query(query);
