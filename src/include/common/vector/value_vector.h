@@ -288,7 +288,7 @@ public:
 
     // Sets each field null wherever the struct is null in [startPos, startPos + numValues), for
     // nulls written to the struct's mask directly rather than through setNull.
-    static void setNullFieldsOfNullStructs(ValueVector* vector, uint64_t startPos,
+    LBUG_API static void setNullFieldsOfNullStructs(ValueVector* vector, uint64_t startPos,
         uint64_t numValues);
 
     static void copyFromRowData(ValueVector* vector, uint32_t pos, const uint8_t* rowData);
