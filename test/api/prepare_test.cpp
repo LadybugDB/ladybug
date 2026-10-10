@@ -1,5 +1,7 @@
 #include <algorithm>
+#include <atomic>
 #include <memory>
+#include <thread>
 #include <vector>
 
 #include "api_test/api_test.h"
@@ -1137,4 +1139,52 @@ TEST_F(ApiTest, GDSSharedStateResetForReuse) {
     runExecution(2);
     ASSERT_EQ(1u, globalTable->getNumTuples())
         << "second execution must see only its own rows, not the first execution's";
+}
+
+TEST_F(ApiTest, ConcurrentCheckpointRead1160) {
+    // Regression test for https://github.com/LadybugDB/ladybug/issues/1160: planning a read
+    // while another connection checkpoints raced on PropertyDefinitionCollection::columnIDs
+    // (checkpoint vacuum clear()/emplace() vs getColumnID at()), throwing unordered_map::at
+    // or segfaulting.
+    ASSERT_TRUE(
+        conn->query("CREATE NODE TABLE P1160(id INT64 PRIMARY KEY, age INT64)")->isSuccess());
+    ASSERT_TRUE(
+        conn->query("UNWIND range(0, 40) AS i CREATE (:P1160 {id: i, age: i})")->isSuccess());
+    std::atomic<bool> done{false};
+    std::atomic<int> failures{0};
+    auto readerFn = [&]() {
+        auto readerConn = std::make_unique<Connection>(database.get());
+        while (!done.load()) {
+            auto result = readerConn->query("MATCH (p:P1160) RETURN count(*), sum(p.age)");
+            if (!result->isSuccess()) {
+                failures.fetch_add(1);
+            }
+        }
+    };
+    const int numReaders = 2;
+    std::vector<std::thread> readers;
+    for (int i = 0; i < numReaders; ++i) {
+        readers.emplace_back(readerFn);
+    }
+    auto makeParams = [](int64_t id, int64_t v) {
+        std::unordered_map<std::string, std::unique_ptr<Value>> p;
+        p["id"] = std::make_unique<Value>(id);
+        p["v"] = std::make_unique<Value>(v);
+        return p;
+    };
+    auto update =
+        conn->prepareWithParams("MATCH (p:P1160 {id: $id}) SET p.age = $v", makeParams(0, 0));
+    ASSERT_TRUE(update->isSuccess());
+    for (int i = 0; i < 500; ++i) {
+        auto r = conn->executeWithParams(update.get(), makeParams(i % 41, i));
+        ASSERT_TRUE(r->isSuccess()) << r->getErrorMessage();
+        if (i % 10 == 0) {
+            ASSERT_TRUE(conn->query("CHECKPOINT")->isSuccess());
+        }
+    }
+    done.store(true);
+    for (auto& t : readers) {
+        t.join();
+    }
+    EXPECT_EQ(0, failures.load());
 }
