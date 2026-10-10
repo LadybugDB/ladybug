@@ -152,6 +152,117 @@ Grace
 -STATEMENT CALL enable_default_hash_index=true;
 ---- ok
 
+-CASE ArtIndexRangeLowerBound
+-STATEMENT CALL enable_default_hash_index=false;
+---- ok
+-STATEMENT CREATE NODE TABLE art_range_int (ID INT64, PRIMARY KEY(ID));
+---- ok
+-STATEMENT CREATE NODE TABLE art_range_str (name STRING, PRIMARY KEY(name));
+---- ok
+-STATEMENT CREATE ART INDEX art_range_int_pk FOR (p:art_range_int) ON (p.ID);
+---- ok
+-STATEMENT CREATE ART INDEX art_range_str_pk FOR (p:art_range_str) ON (p.name);
+---- ok
+-STATEMENT UNWIND range(-500, 499) AS i CREATE (:art_range_int {ID: i});
+---- ok
+-STATEMENT UNWIND ['abd', 'ba', 'a', 'abcd', 'b', 'abc', 'ab'] AS s CREATE (:art_range_str {name: s});
+---- ok
+-STATEMENT MATCH (p:art_range_int) WHERE p.ID >= 490 RETURN count(*), min(p.ID), max(p.ID);
+---- 1
+10|490|499
+-STATEMENT MATCH (p:art_range_int) WHERE p.ID > -3 AND p.ID <= 2 RETURN count(*), min(p.ID), max(p.ID);
+---- 1
+5|-2|2
+-STATEMENT MATCH (p:art_range_int) WHERE p.ID >= 250 AND p.ID < 260 RETURN count(*), min(p.ID), max(p.ID);
+---- 1
+10|250|259
+-STATEMENT MATCH (p:art_range_int) WHERE p.ID >= 255 AND p.ID <= 256 RETURN count(*), min(p.ID), max(p.ID);
+---- 1
+2|255|256
+-STATEMENT MATCH (p:art_range_int) WHERE p.ID > -257 AND p.ID < -254 RETURN count(*), min(p.ID), max(p.ID);
+---- 1
+2|-256|-255
+-STATEMENT MATCH (p:art_range_int) WHERE p.ID > 499 RETURN count(*), min(p.ID), max(p.ID);
+---- 1
+0||
+-STATEMENT MATCH (p:art_range_int) WHERE p.ID >= -500 RETURN count(*), min(p.ID), max(p.ID);
+---- 1
+1000|-500|499
+-STATEMENT MATCH (p:art_range_int) WHERE p.ID >= 1099511627776 RETURN count(*), min(p.ID), max(p.ID);
+---- 1
+0||
+-STATEMENT MATCH (p:art_range_int) WHERE p.ID > -1099511627776 RETURN count(*), min(p.ID), max(p.ID);
+---- 1
+1000|-500|499
+-STATEMENT MATCH (p:art_range_str) WHERE p.name >= 'ab' RETURN list_sort(collect(p.name));
+---- 1
+[ab,abc,abcd,abd,b,ba]
+-STATEMENT MATCH (p:art_range_str) WHERE p.name > 'ab' RETURN list_sort(collect(p.name));
+---- 1
+[abc,abcd,abd,b,ba]
+-STATEMENT MATCH (p:art_range_str) WHERE p.name >= 'abc' AND p.name < 'b' RETURN list_sort(collect(p.name));
+---- 1
+[abc,abcd,abd]
+-STATEMENT MATCH (p:art_range_str) WHERE p.name > 'abc' AND p.name <= 'abd' RETURN list_sort(collect(p.name));
+---- 1
+[abcd,abd]
+-STATEMENT MATCH (p:art_range_str) WHERE p.name >= 'abcz' RETURN list_sort(collect(p.name));
+---- 1
+[abd,b,ba]
+-STATEMENT MATCH (p:art_range_str) WHERE p.name >= '' RETURN list_sort(collect(p.name));
+---- 1
+[a,ab,abc,abcd,abd,b,ba]
+-STATEMENT CHECKPOINT;
+---- ok
+-RELOADDB
+-STATEMENT MATCH (p:art_range_int) WHERE p.ID >= 490 RETURN count(*), min(p.ID), max(p.ID);
+---- 1
+10|490|499
+-STATEMENT MATCH (p:art_range_int) WHERE p.ID > -3 AND p.ID <= 2 RETURN count(*), min(p.ID), max(p.ID);
+---- 1
+5|-2|2
+-STATEMENT MATCH (p:art_range_int) WHERE p.ID >= 250 AND p.ID < 260 RETURN count(*), min(p.ID), max(p.ID);
+---- 1
+10|250|259
+-STATEMENT MATCH (p:art_range_int) WHERE p.ID >= 255 AND p.ID <= 256 RETURN count(*), min(p.ID), max(p.ID);
+---- 1
+2|255|256
+-STATEMENT MATCH (p:art_range_int) WHERE p.ID > -257 AND p.ID < -254 RETURN count(*), min(p.ID), max(p.ID);
+---- 1
+2|-256|-255
+-STATEMENT MATCH (p:art_range_int) WHERE p.ID > 499 RETURN count(*), min(p.ID), max(p.ID);
+---- 1
+0||
+-STATEMENT MATCH (p:art_range_int) WHERE p.ID >= -500 RETURN count(*), min(p.ID), max(p.ID);
+---- 1
+1000|-500|499
+-STATEMENT MATCH (p:art_range_int) WHERE p.ID >= 1099511627776 RETURN count(*), min(p.ID), max(p.ID);
+---- 1
+0||
+-STATEMENT MATCH (p:art_range_int) WHERE p.ID > -1099511627776 RETURN count(*), min(p.ID), max(p.ID);
+---- 1
+1000|-500|499
+-STATEMENT MATCH (p:art_range_str) WHERE p.name >= 'ab' RETURN list_sort(collect(p.name));
+---- 1
+[ab,abc,abcd,abd,b,ba]
+-STATEMENT MATCH (p:art_range_str) WHERE p.name > 'ab' RETURN list_sort(collect(p.name));
+---- 1
+[abc,abcd,abd,b,ba]
+-STATEMENT MATCH (p:art_range_str) WHERE p.name >= 'abc' AND p.name < 'b' RETURN list_sort(collect(p.name));
+---- 1
+[abc,abcd,abd]
+-STATEMENT MATCH (p:art_range_str) WHERE p.name > 'abc' AND p.name <= 'abd' RETURN list_sort(collect(p.name));
+---- 1
+[abcd,abd]
+-STATEMENT MATCH (p:art_range_str) WHERE p.name >= 'abcz' RETURN list_sort(collect(p.name));
+---- 1
+[abd,b,ba]
+-STATEMENT MATCH (p:art_range_str) WHERE p.name >= '' RETURN list_sort(collect(p.name));
+---- 1
+[a,ab,abc,abcd,abd,b,ba]
+-STATEMENT CALL enable_default_hash_index=true;
+---- ok
+
 -CASE ArtIndexUnsupportedCreate
 -STATEMENT CALL enable_default_hash_index=false;
 ---- ok

@@ -941,6 +941,18 @@ static bool satisfiesUpperBound(const std::vector<uint8_t>& key, const ArtKey* u
     return upperInclusive ? cmp <= 0 : cmp < 0;
 }
 
+// Compares only the length the path shares with the bound: compareKeys ranks a shorter path below
+// the bound even when its subtree holds larger keys.
+static bool mayReachLowerBound(const std::vector<uint8_t>& path, const ArtKey* lowerBound) {
+    if (lowerBound == nullptr) {
+        return true;
+    }
+    const auto& bound = lowerBound->getBytes();
+    const auto length = std::min(path.size(), bound.size());
+    return !std::lexicographical_compare(path.begin(), path.begin() + length, bound.begin(),
+        bound.begin() + length);
+}
+
 template<class READER>
 static void collectDiskRange(READER& reader, std::vector<uint8_t>& key, const ArtKey* lowerBound,
     bool lowerInclusive, const ArtKey* upperBound, bool upperInclusive, idx_t maxResults,
@@ -970,7 +982,7 @@ static void collectDiskRange(READER& reader, std::vector<uint8_t>& key, const Ar
         uint64_t childSize = 0;
         reader.read(reinterpret_cast<uint8_t*>(&childSize), sizeof(childSize));
         key.push_back(byte);
-        if (satisfiesUpperBound(key, upperBound, true)) {
+        if (mayReachLowerBound(key, lowerBound) && satisfiesUpperBound(key, upperBound, true)) {
             collectDiskRange(reader, key, lowerBound, lowerInclusive, upperBound, upperInclusive,
                 maxResults, results, isVisible);
         } else {
@@ -1017,7 +1029,7 @@ void ArtPrimaryKeyIndex::collectRange(const Node& node, std::vector<uint8_t>& ke
     }
     auto visitChild = [&](uint8_t byte, const Node& child) {
         key.push_back(byte);
-        if (satisfiesUpperBound(key, upperBound, true)) {
+        if (mayReachLowerBound(key, lowerBound) && satisfiesUpperBound(key, upperBound, true)) {
             collectRange(child, key, lowerBound, lowerInclusive, upperBound, upperInclusive,
                 maxResults, results, isVisible);
         }
