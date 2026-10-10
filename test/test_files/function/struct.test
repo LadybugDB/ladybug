@@ -231,6 +231,11 @@ True|True|3
 1|False
 2|True
 
+-LOG UnionWrittenWhereAnEarlierBatchWasNull
+-STATEMENT UNWIND range(1, 3000) AS i WITH i, CASE WHEN i <= 2048 THEN NULL ELSE i END AS x WITH i, CAST(x AS UNION(b STRING, a INT64)) AS u ORDER BY i DESC LIMIT 1 RETURN u, union_tag(u)
+---- 1
+3000|a
+
 -LOG FieldsOfOptionalMatchNullNode
 -STATEMENT CREATE REL TABLE pk(FROM ps TO ps)
 ---- ok
