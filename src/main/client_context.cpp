@@ -393,10 +393,14 @@ std::unique_ptr<QueryResult> ClientContext::executeWithParams(PreparedStatement*
     }
     // LCOV_EXCL_STOP
     auto cachedStatement = cachedPreparedStatementManager->getCachedStatement(name);
+    const auto currentCatalogVersion = localDatabase->getCatalog()->getVersion();
+    const bool catalogChanged = cachedStatement->catalogVersion != currentCatalogVersion;
     // Statements with parameters baked into a plan (e.g. parameter-valued SKIP/LIMIT
     // frozen to uint64_t) must rebind/replan on every execution instead of reusing any
     // cached plan (https://github.com/LadybugDB/ladybug/issues/985).
-    if (useCachedPlan && !cachedStatement->hasBakedParameters) {
+    // Likewise, a catalog change (e.g. ALTER TABLE ADD) invalidates the bound logical
+    // plan (https://github.com/LadybugDB/ladybug/issues/1158).
+    if (useCachedPlan && !cachedStatement->hasBakedParameters && !catalogChanged) {
         return executeNoLock(preparedStatement, cachedStatement, queryID, {}, true);
     }
     // rebind
@@ -404,6 +408,20 @@ std::unique_ptr<QueryResult> ClientContext::executeWithParams(PreparedStatement*
         prepareNoLock(cachedStatement->parsedStatement, false /*shouldCommitNewTransaction*/,
             preparedStatement->parameterMap);
     useInternalCatalogEntry_ = false;
+    if (catalogChanged && newPreparedStatement->isSuccess()) {
+        // Refresh the manager entry so later executions reuse the rebound plan instead of
+        // rebinding on every call. The physical-plan cache is cleared; executeNoLock below
+        // rebuilds and repopulates it from the fresh logical plan.
+        cachedStatement->logicalPlan = std::move(newCachedStatement->logicalPlan);
+        cachedStatement->columns = std::move(newCachedStatement->columns);
+        cachedStatement->columnNames = std::move(newCachedStatement->columnNames);
+        cachedStatement->boundParameters = std::move(newCachedStatement->boundParameters);
+        cachedStatement->hasBakedParameters = newCachedStatement->hasBakedParameters;
+        cachedStatement->catalogVersion = newCachedStatement->catalogVersion;
+        cachedStatement->physicalPlanCache.reset();
+        cachedStatement->sinkResultSetDescriptors.clear();
+        return executeNoLock(newPreparedStatement.get(), cachedStatement, queryID, {}, true);
+    }
     return executeNoLock(newPreparedStatement.get(), newCachedStatement.get(), queryID, {}, true);
 }
 
@@ -572,6 +590,7 @@ ClientContext::PrepareResult ClientContext::prepareNoLock(
         preparedStatement->success = false;
         preparedStatement->errMsg = exception.what();
     }
+    cachedStatement->catalogVersion = localDatabase->getCatalog()->getVersion();
     prepareTimer.stop();
     preparedStatement->preparedSummary.compilingTime =
         parsedStatement->getParsingTime() + prepareTimer.getElapsedTimeMS();

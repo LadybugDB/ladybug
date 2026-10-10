@@ -1138,3 +1138,30 @@ TEST_F(ApiTest, GDSSharedStateResetForReuse) {
     ASSERT_EQ(1u, globalTable->getNumTuples())
         << "second execution must see only its own rows, not the first execution's";
 }
+
+TEST_F(ApiTest, PreparedCreateAfterAlterTableAdd1158) {
+    // Regression test for https://github.com/LadybugDB/ladybug/issues/1158: reusing a
+    // parameterized CREATE prepared before ALTER TABLE ADD shifted the new column.
+    ASSERT_TRUE(
+        conn->query("CREATE NODE TABLE P1158(id INT64 PRIMARY KEY, age INT64)")->isSuccess());
+    auto makeParams = [](int64_t id, int64_t age) {
+        std::unordered_map<std::string, std::unique_ptr<Value>> p;
+        p["id"] = std::make_unique<Value>(id);
+        p["age"] = std::make_unique<Value>(age);
+        return p;
+    };
+    auto insert =
+        conn->prepareWithParams("CREATE (:P1158 {id: $id, age: $age})", makeParams(1, 10));
+    ASSERT_TRUE(insert->isSuccess()) << insert->getErrorMessage();
+    ASSERT_TRUE(conn->executeWithParams(insert.get(), makeParams(1, 10))->isSuccess());
+    ASSERT_TRUE(conn->query("ALTER TABLE P1158 ADD c INT64 DEFAULT 2")->isSuccess());
+    // Reuses the statement prepared before the ALTER; must rebind against the new schema.
+    ASSERT_TRUE(conn->executeWithParams(insert.get(), makeParams(2, 20))->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:P1158 {id: 3, age: 30})")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:P1158 {id: 4, age: 40, c: 9})")->isSuccess());
+    ASSERT_TRUE(conn->query("CHECKPOINT")->isSuccess());
+    auto result = conn->query("MATCH (p:P1158) RETURN p.id, p.c ORDER BY p.id");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ((std::vector<std::string>{"1|2", "2|2", "3|2", "4|9"}),
+        TestHelper::convertResultToString(*result, true /* checkOutputOrder */));
+}
