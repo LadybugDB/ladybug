@@ -85,3 +85,57 @@ Runtime exception: Unrecognized parquet option: COMPRESSION1.
 -STATEMENT COPY (MATCH (p:person) RETURN p.*) TO "${DATABASE_PATH}/invalid.parquet" (compression=true)
 ---- error
 Runtime exception: Parquet compression option expects a string value, got: BOOL.
+
+-CASE CopyToParquetAfterNullStruct
+-STATEMENT CREATE NODE TABLE ns(id INT64 PRIMARY KEY, s STRUCT(t STRUCT(day DATE)), top STRUCT(day DATE), ls STRUCT(day DATE)[], ss STRUCT(name STRING), u UNION(a INT64, b STRING), m MAP(STRING, STRUCT(day DATE)))
+---- ok
+-STATEMENT CREATE (:ns {id: 1, s: {t: {day: date('2021-01-02')}}, top: {day: date('2021-01-02')}, ls: [{day: date('2021-01-02')}, NULL, {day: date('2021-01-03')}], ss: {name: 'a long string number one'}, u: union_value(a := 11), m: map(['k1', 'k2'], [{day: date('2021-01-02')}, NULL])})
+---- ok
+-STATEMENT CREATE (:ns {id: 2})
+---- ok
+-STATEMENT CREATE (:ns {id: 3, s: {t: {day: date('1990-09-10')}}, top: {day: date('1990-09-10')}, ls: [{day: date('1990-09-10')}], ss: {name: 'a long string number three'}, u: union_value(a := 33), m: map(['k3'], [{day: date('1990-09-10')}])})
+---- ok
+-STATEMENT CREATE (:ns {id: 4, s: {t: NULL}, top: {day: date('2000-01-01')}, ls: [NULL, {day: date('2000-01-01')}], ss: {name: 'a long string number four'}, u: union_value(a := 44), m: map(['k4'], [{day: date('2000-01-01')}])})
+---- ok
+-STATEMENT CREATE (:ns {id: 5, s: {t: {day: date('2000-01-02')}}, top: {day: date('2000-01-02')}, ls: [{day: date('2000-01-02')}], ss: {name: 'a long string number five'}, u: union_value(a := 55), m: map(['k5'], [{day: date('2000-01-02')}])})
+---- ok
+-LOG FieldValuesStayOnTheirRows
+-STATEMENT COPY (MATCH (x:ns) RETURN x.id AS id, x.s AS s, x.top AS top, x.ls AS ls, x.ss AS ss, x.u AS u, x.m AS m ORDER BY x.id) TO "${DATABASE_PATH}/null_struct.parquet"
+---- ok
+-STATEMENT LOAD FROM "${DATABASE_PATH}/null_struct.parquet" RETURN id, s, top, ls
+---- 5
+1|{t: {day: 2021-01-02}}|{day: 2021-01-02}|[{day: 2021-01-02},,{day: 2021-01-03}]
+2|||
+3|{t: {day: 1990-09-10}}|{day: 1990-09-10}|[{day: 1990-09-10}]
+4|{t: }|{day: 2000-01-01}|[,{day: 2000-01-01}]
+5|{t: {day: 2000-01-02}}|{day: 2000-01-02}|[{day: 2000-01-02}]
+-STATEMENT LOAD FROM "${DATABASE_PATH}/null_struct.parquet" RETURN id, ss, u, m
+---- 5
+1|{name: a long string number one}|{tag: 0, a: 11, b: }|{k1={day: 2021-01-02}, k2=}
+2|||
+3|{name: a long string number three}|{tag: 0, a: 33, b: }|{k3={day: 1990-09-10}}
+4|{name: a long string number four}|{tag: 0, a: 44, b: }|{k4={day: 2000-01-01}}
+5|{name: a long string number five}|{tag: 0, a: 55, b: }|{k5={day: 2000-01-02}}
+-STATEMENT CREATE NODE TABLE np(id INT64 PRIMARY KEY, s STRUCT(day DATE))
+---- ok
+-STATEMENT CREATE REL TABLE nk(FROM np TO np, t STRUCT(day DATE))
+---- ok
+-STATEMENT CREATE (:np {id: 1, s: {day: date('2021-01-02')}}), (:np {id: 2}), (:np {id: 3, s: {day: date('1990-09-10')}}), (:np {id: 4}), (:np {id: 5})
+---- ok
+-STATEMENT MATCH (a:np {id: 1}), (b:np {id: 2}) CREATE (a)-[:nk {t: {day: date('2021-01-02')}}]->(b)
+---- ok
+-STATEMENT MATCH (a:np {id: 2}), (b:np {id: 3}) CREATE (a)-[:nk]->(b)
+---- ok
+-STATEMENT MATCH (a:np {id: 2}), (b:np {id: 4}) CREATE (a)-[:nk {t: {day: date('1990-09-10')}}]->(b)
+---- ok
+-STATEMENT MATCH (a:np {id: 3}), (b:np {id: 5}) CREATE (a)-[:nk {t: {day: date('2000-01-01')}}]->(b)
+---- ok
+-LOG RelFieldValuesStayOnTheirRows
+-STATEMENT COPY (MATCH (a:np)-[k:nk]->(b:np) RETURN a.id AS aid, a.s AS s, b.id AS bid, k.t AS t) TO "${DATABASE_PATH}/null_struct_rel.parquet"
+---- ok
+-STATEMENT LOAD FROM "${DATABASE_PATH}/null_struct_rel.parquet" RETURN aid, s, bid, t
+---- 4
+1|{day: 2021-01-02}|2|{day: 2021-01-02}
+2||3|
+2||4|{day: 1990-09-10}
+3|{day: 1990-09-10}|5|{day: 2000-01-01}

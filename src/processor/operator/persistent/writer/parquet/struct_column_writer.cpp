@@ -29,9 +29,26 @@ bool StructColumnWriter::hasAnalyze() {
     return false;
 }
 
+// Child writers write a value for every non-null entry of their vector, so the fields of a null
+// struct must be null too, or their slots are written and later values move to other rows. The
+// vectors are read again from the factorized table before each pass, which leaves the fields of a
+// null struct as they were, so every pass sets them.
+void StructColumnWriter::nullFieldsOfNullStructs(ValueVector* vector, uint64_t count) {
+    auto& childVectors = StructVector::getFieldVectors(vector);
+    for (auto i = 0u; i < count; i++) {
+        auto pos = getVectorPos(vector, i);
+        if (vector->isNull(pos)) {
+            for (auto& childVector : childVectors) {
+                childVector->setNull(pos, true);
+            }
+        }
+    }
+}
+
 void StructColumnWriter::analyze(ColumnWriterState& state_p, ColumnWriterState* /*parent*/,
     ValueVector* vector, uint64_t count) {
     auto& state = reinterpret_cast<StructColumnWriterState&>(state_p);
+    nullFieldsOfNullStructs(vector, count);
     auto& childVectors = StructVector::getFieldVectors(vector);
     for (auto child_idx = 0u; child_idx < childWriters.size(); child_idx++) {
         // Need to check again. It might be that just one child needs it but the rest not
@@ -64,6 +81,7 @@ void StructColumnWriter::prepare(ColumnWriterState& state_p, ColumnWriterState* 
     handleRepeatLevels(state_p, parent);
     handleDefineLevels(state_p, parent, vector, count, ParquetConstants::PARQUET_DEFINE_VALID,
         maxDefine - 1);
+    nullFieldsOfNullStructs(vector, count);
     auto& child_vectors = StructVector::getFieldVectors(vector);
     for (auto child_idx = 0u; child_idx < childWriters.size(); child_idx++) {
         childWriters[child_idx]->prepare(*state.childStates[child_idx], &state_p,
@@ -80,6 +98,7 @@ void StructColumnWriter::beginWrite(ColumnWriterState& state_p) {
 
 void StructColumnWriter::write(ColumnWriterState& state_p, ValueVector* vector, uint64_t count) {
     auto& state = reinterpret_cast<StructColumnWriterState&>(state_p);
+    nullFieldsOfNullStructs(vector, count);
     auto& child_vectors = StructVector::getFieldVectors(vector);
     for (auto child_idx = 0u; child_idx < childWriters.size(); child_idx++) {
         childWriters[child_idx]->write(*state.childStates[child_idx],
