@@ -382,8 +382,20 @@ NodeGroupScanResult CSRNodeGroup::scanCommittedInMem(const Transaction* transact
             nodeGroupScanState.inMemCSRList = nodeGroupScanState.pin.index->indices[offsetInGroup];
         }
         if (!nodeGroupScanState.inMemCSRList.isSequential) {
-            DASSERT(std::is_sorted(nodeGroupScanState.inMemCSRList.rowIndices.begin(),
-                nodeGroupScanState.inMemCSRList.rowIndices.end()));
+            DASSERT([&]() {
+                common::row_idx_t prev = 0;
+                bool hasPrev = false;
+                for (const auto row : nodeGroupScanState.inMemCSRList.rowIndices) {
+                    if (row != common::INVALID_ROW_IDX) {
+                        if (hasPrev && prev > row) {
+                            return false;
+                        }
+                        prev = row;
+                        hasPrev = true;
+                    }
+                }
+                return true;
+            }());
         }
         auto scanResult =
             nodeGroupScanState.inMemCSRList.isSequential ?
