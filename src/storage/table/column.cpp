@@ -302,9 +302,21 @@ void Column::lookupSegment(const SegmentState& state, offset_t offsetInSegment,
     ValueVector* resultVector, uint32_t posInVector) const {
     if (nullColumn) {
         DASSERT(state.nullState);
-        nullColumn->lookupInternal(*state.nullState, offsetInSegment, resultVector, posInVector);
+        const auto& nullMetadata = state.nullState->metadata.compMeta;
+        if (nullMetadata.isConstant()) {
+            bool isNull = false;
+            ConstantCompression::decompressValues(reinterpret_cast<uint8_t*>(&isNull), 0 /*offset*/,
+                1 /*numValues*/, PhysicalTypeID::BOOL, 1 /*numBytesPerValue*/, nullMetadata);
+            resultVector->setNullRange(posInVector, 1, isNull);
+        } else {
+            nullColumn->lookupInternal(*state.nullState, offsetInSegment, resultVector,
+                posInVector);
+        }
     }
-    if (!resultVector->isNull(posInVector)) {
+    if (resultVector->isNull(posInVector)) {
+        // Also makes a struct's fields null.
+        resultVector->setNull(posInVector, true);
+    } else {
         lookupInternal(state, offsetInSegment, resultVector, posInVector);
     }
 }

@@ -492,8 +492,36 @@ void ValueVector::setValue(uint32_t pos, std::string_view val) {
     StringVector::addString(this, pos, val.data(), val.length());
 }
 
+// A null struct's fields are null too, so that reading a field of a null struct gives null.
 void ValueVector::setNull(uint32_t pos, bool isNull) {
     nullMask.setNull(pos, isNull);
+    if (isNull && dataType.getPhysicalType() == PhysicalTypeID::STRUCT) {
+        for (const auto& field : StructVector::getFieldVectors(this)) {
+            field->setNull(pos, true);
+        }
+    }
+}
+
+void ValueVector::setAllNull() {
+    nullMask.setAllNull();
+    if (dataType.getPhysicalType() == PhysicalTypeID::STRUCT) {
+        for (const auto& field : StructVector::getFieldVectors(this)) {
+            field->setAllNull();
+        }
+    }
+}
+
+void StructVector::setNullFieldsOfNullStructs(ValueVector* vector, uint64_t startPos,
+    uint64_t numValues) {
+    if (vector->hasNoNullsGuarantee()) {
+        return;
+    }
+    for (const auto& field : getFieldVectors(vector)) {
+        field->nullMask.orFromRange(vector->nullMask, startPos, numValues);
+        if (field->dataType.getPhysicalType() == PhysicalTypeID::STRUCT) {
+            setNullFieldsOfNullStructs(field.get(), startPos, numValues);
+        }
+    }
 }
 
 void StringVector::addString(ValueVector* vector, uint32_t vectorPos, string_t& srcStr) {
