@@ -5,6 +5,7 @@
 #include "api_test/api_test.h"
 #include "arrow_test_utils.h"
 #include "common/arrow/arrow_converter.h"
+#include "common/arrow/arrow_row_batch.h"
 #include "common/arrow/arrow_schema_metadata.h"
 #include "common/exception/runtime.h"
 #include "common/types/types.h"
@@ -554,6 +555,18 @@ static void assertChildrenMatchLength(const ArrowArray* array, const ArrowSchema
         childLengthPerRow = 1;
     } else if (format.starts_with("+w:")) {
         childLengthPerRow = std::stoll(format.substr(3));
+    } else if (format == "+l" || format == "+m") {
+        // An empty list array need not carry offsets.
+        if (array->length == 0) {
+            return;
+        }
+        auto offsets = static_cast<const int32_t*>(array->buffers[1]);
+        for (auto i = 0; i < array->length; i++) {
+            ASSERT_LE(offsets[i], offsets[i + 1]) << schema->name;
+        }
+        ASSERT_EQ(offsets[array->length], array->children[0]->length) << schema->name;
+        assertChildrenMatchLength(array->children[0], schema->children[0]);
+        return;
     } else {
         return;
     }
@@ -570,23 +583,27 @@ static bool isValid(const ArrowArray* array, int64_t pos) {
 }
 
 TEST_F(ArrowTest, nullStructNodeRelUnionAndArrayKeepChildrenAligned) {
-    ASSERT_TRUE(conn->query("CREATE NODE TABLE an_p(id INT64 PRIMARY KEY, "
-                            "s STRUCT(d DATE, l INT64[]), u UNION(n INT64, t STRING), "
-                            "a STRUCT(n INT64)[2])")
-                    ->isSuccess());
+    ASSERT_TRUE(
+        conn->query("CREATE NODE TABLE an_p(id INT64 PRIMARY KEY, "
+                    "s STRUCT(d DATE, l INT64[], n STRUCT(x INT64)), "
+                    "u UNION(n INT64, t STRING), a STRUCT(n INT64)[2], m MAP(STRING, INT64))")
+            ->isSuccess());
     ASSERT_TRUE(conn->query("CREATE REL TABLE an_k(FROM an_p TO an_p, w INT64)")->isSuccess());
-    ASSERT_TRUE(conn->query("CREATE (:an_p {id: 1, s: {d: date('2021-01-02'), l: [1, 2]}, "
-                            "u: union_value(n := 5), a: [{n: 1}, {n: 2}]})")
+    ASSERT_TRUE(conn->query("CREATE (:an_p {id: 1, s: {d: date('2021-01-02'), l: [1, 2], "
+                            "n: {x: 1}}, u: union_value(n := 5), a: [{n: 1}, {n: 2}], "
+                            "m: map(['k'], [1])})")
                     ->isSuccess());
     ASSERT_TRUE(conn->query("CREATE (:an_p {id: 2})")->isSuccess());
-    ASSERT_TRUE(conn->query("CREATE (:an_p {id: 3, s: {d: date('1990-09-10'), l: [3]}, "
-                            "u: union_value(t := 'z'), a: [{n: 3}, {n: 4}]})")
+    ASSERT_TRUE(conn->query("CREATE (:an_p {id: 3, s: {d: date('1990-09-10'), l: [3], "
+                            "n: {x: 3}}, u: union_value(t := 'z'), a: [{n: 3}, {n: 4}], "
+                            "m: map(['j'], [3])})")
                     ->isSuccess());
     ASSERT_TRUE(
         conn->query("MATCH (a:an_p {id: 1}), (b:an_p {id: 3}) CREATE (a)-[:an_k {w: 7}]->(b)")
             ->isSuccess());
     auto result = conn->query("MATCH (a:an_p) OPTIONAL MATCH (a)-[r:an_k]->(b:an_p) "
-                              "RETURN a.s, a.u, a.a, b, r, id(b) ORDER BY a.id");
+                              "OPTIONAL MATCH (a)-[e:an_k*1..2]->(c:an_p) "
+                              "RETURN a.s, a.u, a.a, b, r, id(b), a.m, e ORDER BY a.id");
     ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
     auto schema = result->getArrowSchema();
     auto array = result->getNextArrowChunk(3);
@@ -605,6 +622,30 @@ TEST_F(ArrowTest, nullStructNodeRelUnionAndArrayKeepChildrenAligned) {
     ASSERT_EQ(unionArray->children[1]->length, 1);
     array->release(array.get());
     schema->release(schema.get());
+}
+
+// With fallbackExtensionTypes a UUID is exported as text, so a null UUID needs an offset like a
+// null string, also when it is the field of a null struct.
+TEST_F(ArrowTest, nullUuidKeepsOffsetsWithFallbackExtensionTypes) {
+    auto result = conn->query(
+        "UNWIND [1, 2, 3] AS i WITH 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a1' + CAST(i AS STRING) AS "
+        "text, i RETURN CASE WHEN i <> 2 THEN UUID(text) END, CASE WHEN i <> 2 THEN "
+        "{v: UUID(text)} END ORDER BY i");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    auto types = result->getColumnDataTypes();
+    ArrowRowBatch batch(types, 3, true /*fallbackExtensionTypes*/);
+    while (result->hasNext()) {
+        batch.append(*result->getNext());
+    }
+    auto array = batch.toArray(types);
+    for (const auto* uuids : {array.children[0], array.children[1]->children[0]}) {
+        auto offsets = static_cast<const int32_t*>(uuids->buffers[1]);
+        auto chars = static_cast<const char*>(uuids->buffers[2]);
+        ASSERT_EQ(offsets[2], offsets[1]);
+        ASSERT_EQ(std::string(chars + offsets[2], offsets[3] - offsets[2]),
+            "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a13");
+    }
+    array.release(&array);
 }
 
 TEST_F(ArrowTest, getArrowSchema) {
