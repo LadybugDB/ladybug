@@ -12,22 +12,55 @@ using namespace lbug::processor;
 namespace lbug {
 namespace evaluator {
 
-static uint64_t getNumNestedValues(const ValueVector& vector) {
+// List elements and struct fields below `vector`, counted recursively, or nullopt for a type this
+// does not know, which is then not folded.
+static std::optional<uint64_t> getNumNestedValues(const ValueVector& vector) {
     switch (vector.dataType.getPhysicalType()) {
+    case PhysicalTypeID::ANY:
+    case PhysicalTypeID::BOOL:
+    case PhysicalTypeID::INT64:
+    case PhysicalTypeID::INT32:
+    case PhysicalTypeID::INT16:
+    case PhysicalTypeID::INT8:
+    case PhysicalTypeID::UINT64:
+    case PhysicalTypeID::UINT32:
+    case PhysicalTypeID::UINT16:
+    case PhysicalTypeID::UINT8:
+    case PhysicalTypeID::INT128:
+    case PhysicalTypeID::DOUBLE:
+    case PhysicalTypeID::FLOAT:
+    case PhysicalTypeID::INTERVAL:
+    case PhysicalTypeID::INTERNAL_ID:
+    case PhysicalTypeID::ALP_EXCEPTION_FLOAT:
+    case PhysicalTypeID::ALP_EXCEPTION_DOUBLE:
+    case PhysicalTypeID::UINT128:
+    case PhysicalTypeID::STRING:
+    case PhysicalTypeID::JSON:
+    case PhysicalTypeID::POINTER:
+        return 0;
     case PhysicalTypeID::LIST:
-    case PhysicalTypeID::ARRAY:
-        return ListVector::getDataVectorSize(&vector) +
-               getNumNestedValues(*ListVector::getDataVector(&vector));
+    case PhysicalTypeID::ARRAY: {
+        const auto numNested = getNumNestedValues(*ListVector::getDataVector(&vector));
+        if (!numNested) {
+            return std::nullopt;
+        }
+        return ListVector::getDataVectorSize(&vector) + *numNested;
+    }
     case PhysicalTypeID::STRUCT: {
         uint64_t numValues = 0;
         for (const auto& fieldVector : StructVector::getFieldVectors(&vector)) {
-            numValues += getNumNestedValues(*fieldVector);
+            const auto numNested = getNumNestedValues(*fieldVector);
+            if (!numNested) {
+                return std::nullopt;
+            }
+            numValues += *numNested;
         }
         return numValues;
     }
-    default:
-        return 0;
     }
+    // No default label, so that -Wswitch makes a new physical type a build failure here (see
+    // #935). This only guards against values outside the enum.
+    return std::nullopt;
 }
 
 static uint64_t getNumNestedValues(const Value& value) {
@@ -79,7 +112,8 @@ std::optional<Value> ExpressionEvaluatorUtils::tryEvaluateConstantExpression(
     ResultSet emptyResultSet{0};
     auto evaluator = evaluateConstant(expression, clientContext, emptyResultSet);
     const auto numValues = getNumNestedValues(*evaluator->resultVector);
-    if (numValues > MAX_FOLDED_NESTED_VALUES && numValues > getExpressionSize(*expression)) {
+    if (!numValues ||
+        (*numValues > MAX_FOLDED_NESTED_VALUES && *numValues > getExpressionSize(*expression))) {
         return std::nullopt;
     }
     return getConstantValue(*evaluator);
