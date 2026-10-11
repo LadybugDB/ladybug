@@ -67,6 +67,10 @@ struct CachedPreparedStatement {
     // re-execution and never populate or serve the physical-plan cache, since a cached
     // plan would keep serving the first execution's frozen values.
     bool hasBakedParameters = false;
+    // Catalog version the logical plan was bound against. If the catalog changed
+    // (e.g. ALTER TABLE ADD) since prepare, the cached logical/physical plan is stale
+    // and must be rebound (see https://github.com/LadybugDB/ladybug/issues/1158).
+    uint64_t catalogVersion = 0;
 
     CachedPreparedStatement();
     ~CachedPreparedStatement();
