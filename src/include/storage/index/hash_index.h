@@ -411,7 +411,24 @@ public:
     inline bool lookup(const transaction::Transaction* trx, T key, common::offset_t& result,
         visible_func isVisible) {
         DASSERT(indexInfo.keyDataTypes[0] == common::TypeUtils::getPhysicalTypeIDForType<T>());
-        return getTypedHashIndex(key)->lookupInternal(trx, key, result, isVisible);
+        auto* curIndex = getTypedHashIndex(key);
+        if (curIndex->lookupInternal(trx, key, result, isVisible)) {
+            return true;
+        }
+        if constexpr (std::same_as<HashIndexType<T>, common::string_t>) {
+            std::string_view sv = stringViewFromKey(key);
+            auto curPos = HashIndexUtils::getHashIndexPosition(key);
+            auto legacyPos = HashIndexUtils::getLegacyHashIndexPosition(sv);
+            if (legacyPos != curPos) {
+                common::offset_t legacyResult = 0;
+                auto* legacyIndex = getTypedHashIndexByPos<common::string_t>(legacyPos);
+                if (legacyIndex->lookupInternal(trx, sv, legacyResult, isVisible)) {
+                    result = legacyResult;
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     bool lookup(const transaction::Transaction* trx, common::ValueVector* keyVector,
@@ -440,6 +457,18 @@ public:
     inline bool insert(const transaction::Transaction* transaction, T key, common::offset_t value,
         visible_func isVisible) {
         DASSERT(indexInfo.keyDataTypes[0] == common::TypeUtils::getPhysicalTypeIDForType<T>());
+        if constexpr (std::same_as<HashIndexType<T>, common::string_t>) {
+            std::string_view sv = stringViewFromKey(key);
+            auto curPos = HashIndexUtils::getHashIndexPosition(key);
+            auto legacyPos = HashIndexUtils::getLegacyHashIndexPosition(sv);
+            if (legacyPos != curPos) {
+                common::offset_t tmp = 0;
+                auto* legacyIndex = getTypedHashIndexByPos<common::string_t>(legacyPos);
+                if (legacyIndex->lookupInternal(transaction, sv, tmp, isVisible)) {
+                    return false;
+                }
+            }
+        }
         return getTypedHashIndex(key)->insertInternal(transaction, std::move(key), value,
             isVisible);
     }
@@ -461,8 +490,32 @@ public:
         DASSERT(std::all_of(buffer.begin(), buffer.end(), [&](auto& elem) {
             return HashIndexUtils::getHashIndexPosition(elem.first) == indexPos;
         }));
+        if constexpr (std::same_as<HashIndexType<T>, common::string_t>) {
+            for (size_t i = bufferOffset; i < buffer.size(); i++) {
+                std::string_view sv = stringViewFromKey(buffer[i].first);
+                auto legacyPos = HashIndexUtils::getLegacyHashIndexPosition(sv);
+                if (legacyPos != indexPos) {
+                    common::offset_t tmp = 0;
+                    auto* legacyIndex = getTypedHashIndexByPos<common::string_t>(legacyPos);
+                    if (legacyIndex->lookupInternal(transaction, sv, tmp, isVisible)) {
+                        return i - bufferOffset;
+                    }
+                }
+            }
+        }
         return getTypedHashIndexByPos<HashIndexType<T>>(indexPos)->appendNoLock(transaction, buffer,
             bufferOffset, isVisible);
+    }
+
+    template<typename T>
+    static std::string_view stringViewFromKey(const T& key) {
+        if constexpr (std::same_as<T, common::string_t>) {
+            return key.getAsStringView();
+        } else if constexpr (std::same_as<T, std::string>) {
+            return std::string_view(key);
+        } else {
+            return key;
+        }
     }
 
     void delete_(common::string_t key) { return delete_(key.getAsStringView()); }

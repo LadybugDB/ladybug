@@ -97,8 +97,20 @@ public:
         return slotId;
     }
 
+    static uint64_t getHashIndexPositionForHash(common::hash_t hash) {
+        return (hash >> (64 - NUM_HASH_INDEXES_LOG2)) & (NUM_HASH_INDEXES - 1);
+    }
+
     static uint64_t getHashIndexPosition(common::IndexHashable auto key) {
-        return (HashIndexUtils::hash(key) >> (64 - NUM_HASH_INDEXES_LOG2)) & (NUM_HASH_INDEXES - 1);
+        return getHashIndexPositionForHash(HashIndexUtils::hash(key));
+    }
+
+    // Sub-index chosen by the pre-0.21 string hash (issue #1172). Keys persisted by <= 0.20.x
+    // on signed-char platforms sit in this sub-index, which usually differs from the current
+    // sub-index when the key is non-ASCII. Used solely to probe the legacy location so a
+    // stale entry fails loudly instead of silently missing.
+    static uint64_t getLegacyHashIndexPosition(std::string_view key) {
+        return getHashIndexPositionForHash(hashStringPre021(key));
     }
 
     static uint64_t getNumRequiredEntries(uint64_t numEntries) {
