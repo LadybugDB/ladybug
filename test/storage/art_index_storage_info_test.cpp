@@ -1,6 +1,8 @@
+#include <limits>
 #include <memory>
 #include <string>
 
+#include "common/exception/runtime.h"
 #include "common/serializer/buffer_reader.h"
 #include "common/serializer/buffer_writer.h"
 #include "common/serializer/serializer.h"
@@ -10,7 +12,7 @@
 using namespace lbug::common;
 using namespace lbug::storage;
 
-static std::unique_ptr<IndexStorageInfo> deserialize(const BufferWriter& writer) {
+static std::unique_ptr<IndexStorageInfo> deserializeStorageInfo(const BufferWriter& writer) {
     return ArtPrimaryKeyIndexStorageInfo::deserialize(
         std::make_unique<BufferReader>(writer.getBlobData(), writer.getSize()));
 }
@@ -25,7 +27,7 @@ TEST(ArtIndexStorageInfoTest, ReadsTheEntryListOf017) {
         ser.write(reinterpret_cast<const uint8_t*>(key.data()), key.size());
         ser.write<offset_t>(offset);
     }
-    auto info = deserialize(*writer);
+    auto info = deserializeStorageInfo(*writer);
     const auto& art = info->constCast<ArtPrimaryKeyIndexStorageInfo>();
     ASSERT_EQ(art.treePageRange.startPageIdx, INVALID_PAGE_IDX);
     ASSERT_EQ(art.entries.size(), 2u);
@@ -37,7 +39,7 @@ TEST(ArtIndexStorageInfoTest, ReadsAnEmptyEntryListOf017) {
     auto writer = std::make_shared<BufferWriter>();
     Serializer ser(writer);
     ser.write<uint64_t>(0);
-    auto info = deserialize(*writer);
+    auto info = deserializeStorageInfo(*writer);
     const auto& art = info->constCast<ArtPrimaryKeyIndexStorageInfo>();
     EXPECT_EQ(art.treePageRange.startPageIdx, INVALID_PAGE_IDX);
     EXPECT_TRUE(art.entries.empty());
@@ -45,7 +47,7 @@ TEST(ArtIndexStorageInfoTest, ReadsAnEmptyEntryListOf017) {
 
 TEST(ArtIndexStorageInfoTest, ReadsTheTreePageRange) {
     ArtPrimaryKeyIndexStorageInfo original{PageRange{12, 3}, 4096};
-    auto info = deserialize(*original.serialize());
+    auto info = deserializeStorageInfo(*original.serialize());
     const auto& art = info->constCast<ArtPrimaryKeyIndexStorageInfo>();
     EXPECT_EQ(art.treePageRange.startPageIdx, 12u);
     EXPECT_EQ(art.treePageRange.numPages, 3u);
@@ -60,10 +62,46 @@ TEST(ArtIndexStorageInfoTest, WritesBackAnEntryListWithoutATree) {
     entries.emplace_back(std::vector<uint8_t>{'a'}, 3);
     entries.emplace_back(std::vector<uint8_t>{'b', 'c'}, 9);
     ArtPrimaryKeyIndexStorageInfo original{std::move(entries)};
-    auto info = deserialize(*original.serialize());
+    auto info = deserializeStorageInfo(*original.serialize());
     const auto& art = info->constCast<ArtPrimaryKeyIndexStorageInfo>();
     EXPECT_EQ(art.treePageRange.startPageIdx, INVALID_PAGE_IDX);
     ASSERT_EQ(art.entries.size(), 2u);
     EXPECT_EQ(art.entries[1].first, (std::vector<uint8_t>{'b', 'c'}));
     EXPECT_EQ(art.entries[1].second, 9u);
+}
+
+// A truncated or corrupt entry list throws instead of reading past the blob.
+TEST(ArtIndexStorageInfoTest, RejectsAnEntryCountBeyondTheBlob) {
+    auto writer = std::make_shared<BufferWriter>();
+    Serializer ser(writer);
+    // Too many entries to reserve, so only the count check can reject it.
+    ser.write<uint64_t>(std::numeric_limits<uint64_t>::max());
+    EXPECT_THROW(deserializeStorageInfo(*writer), RuntimeException);
+}
+
+TEST(ArtIndexStorageInfoTest, RejectsAKeyBeyondTheBlob) {
+    auto writer = std::make_shared<BufferWriter>();
+    Serializer ser(writer);
+    ser.write<uint64_t>(1);
+    ser.write<uint64_t>(1000);
+    ser.write<offset_t>(0);
+    EXPECT_THROW(deserializeStorageInfo(*writer), RuntimeException);
+}
+
+TEST(ArtIndexStorageInfoTest, RejectsABlobShorterThanTheCount) {
+    auto writer = std::make_shared<BufferWriter>();
+    Serializer ser(writer);
+    ser.write<uint32_t>(0);
+    EXPECT_THROW(deserializeStorageInfo(*writer), RuntimeException);
+}
+
+TEST(ArtIndexStorageInfoTest, RejectsTrailingBytes) {
+    auto writer = std::make_shared<BufferWriter>();
+    Serializer ser(writer);
+    ser.write<uint64_t>(1);
+    ser.write<uint64_t>(1);
+    ser.write<uint8_t>('a');
+    ser.write<offset_t>(0);
+    ser.write<uint8_t>(0);
+    EXPECT_THROW(deserializeStorageInfo(*writer), RuntimeException);
 }
