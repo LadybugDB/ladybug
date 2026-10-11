@@ -1494,6 +1494,11 @@ TEST_F(FrozenWALRecoveryTest, FrozenWALWithDDLAndDependentActiveWALSurvivesRecov
 // DROP has to mark the rel table changed exactly like the normal DROP path does;
 // otherwise the post-reopen checkpoint skips the rel table while the catalog column IDs
 // are still vacuumed, and the re-added property aliases the stale column slot.
+// NOTE: the endpoints are labeled (a:P)/(b:P) on purpose. Anonymous () endpoints bind
+// every node table in the fixture database (including the tinysnb tables loaded by
+// ApiTest, whose UPPERCASE ID primary key collides case-insensitively with P's id),
+// which trips an unrelated pre-existing crash in CountRelTableOptimizer on the mixed-case
+// primary-key property. Labeling keeps this test focused on the WAL-replay scenario.
 TEST_F(FrozenWALRecoveryTest, RelDropPropertyReplayedFromWALThenCheckpointThenAdd) {
     runQuery("CREATE NODE TABLE P(id INT64 PRIMARY KEY);");
     runQuery("CREATE REL TABLE K(FROM P TO P, w INT64);");
@@ -1507,7 +1512,7 @@ TEST_F(FrozenWALRecoveryTest, RelDropPropertyReplayedFromWALThenCheckpointThenAd
     runQuery("CHECKPOINT;");
     runQuery("ALTER TABLE K ADD w INT64 DEFAULT 1;");
     {
-        auto res = conn->query("MATCH ()-[k:K]->() RETURN k.w, count(*);");
+        auto res = conn->query("MATCH (a:P)-[k:K]->(b:P) RETURN k.w, count(*);");
         ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
         ASSERT_TRUE(res->hasNext());
         auto tuple = res->getNext();
@@ -1518,5 +1523,5 @@ TEST_F(FrozenWALRecoveryTest, RelDropPropertyReplayedFromWALThenCheckpointThenAd
     closeDB();
 
     createDBAndConn();
-    EXPECT_EQ(queryCount("MATCH ()-[k:K]->() WHERE k.w = 1 RETURN COUNT(k);"), 3);
+    EXPECT_EQ(queryCount("MATCH (a:P)-[k:K]->(b:P) WHERE k.w = 1 RETURN COUNT(k);"), 3);
 }
