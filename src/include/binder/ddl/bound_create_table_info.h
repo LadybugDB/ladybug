@@ -103,6 +103,15 @@ struct BoundExtraCreateNodeTableInfo final : BoundExtraCreateTableInfo {
         partitionChildIndex = index;
     }
 
+    // Encoded LIST key for a dynamically created LIST partition (empty otherwise). Carried
+    // into the child entry so WAL replay can restore the parent's key -> child map.
+    std::string listPartitionKey;
+    // WAL replay only: the recorded parent's children each carry their own create record,
+    // so replay must not recreate the initial partition set implicitly.
+    bool skipInitialPartitionCreation = false;
+
+    void setListPartitionKey(std::string key) { listPartitionKey = std::move(key); }
+
     BoundExtraCreateNodeTableInfo(std::string primaryKeyName,
         std::vector<PropertyDefinition> definitions, std::string storage = "",
         common::StorageFormat storageFormat = common::StorageFormat::NONE,
@@ -115,7 +124,8 @@ struct BoundExtraCreateNodeTableInfo final : BoundExtraCreateTableInfo {
           primaryKeyName{other.primaryKeyName}, storage{other.storage},
           storageFormat{other.storageFormat}, partitionInfo{other.partitionInfo},
           partitionParentTableID{other.partitionParentTableID},
-          partitionChildIndex{other.partitionChildIndex} {}
+          partitionChildIndex{other.partitionChildIndex}, listPartitionKey{other.listPartitionKey},
+          skipInitialPartitionCreation{other.skipInitialPartitionCreation} {}
 
     std::unique_ptr<BoundExtraCreateCatalogEntryInfo> copy() const override {
         return std::make_unique<BoundExtraCreateNodeTableInfo>(*this);

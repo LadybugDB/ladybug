@@ -7378,5 +7378,75 @@ TEST_F(CheckpointRunningRelScanTest, FailedCheckpointWhileRelScanPinned) {
 }
 #endif // __SINGLE_THREADED__
 
+// WAL replay must rebuild a partitioned table exactly: the parent keeps its partition
+// method, every partition child re-attaches to the parent, and LIST children restore
+// their key mapping so later writes route into the existing partitions. Closing without
+// a checkpoint simulates a crash; reopening replays the WAL.
+class PartitionCrashRecoveryTest : public PrivateApiTest {
+public:
+    std::string getInputDir() override { return "empty"; }
+
+    void SetUp() override {
+        PrivateApiTest::SetUp();
+        ASSERT_TRUE(conn->query("CALL force_checkpoint_on_close=false;")->isSuccess());
+        ASSERT_TRUE(conn->query("CALL auto_checkpoint=false;")->isSuccess());
+    }
+
+    void runQuery(const std::string& query) {
+        auto res = conn->query(query);
+        ASSERT_TRUE(res->isSuccess()) << query << ": " << res->getErrorMessage();
+    }
+
+    std::vector<int64_t> scanIDs(const std::string& query) {
+        auto res = conn->query(query);
+        EXPECT_TRUE(res->isSuccess()) << query << ": " << res->getErrorMessage();
+        std::vector<int64_t> ids;
+        while (res->hasNext()) {
+            ids.push_back(res->getNext()->getValue(0)->getValue<int64_t>());
+        }
+        return ids;
+    }
+
+    void crashAndReopen() { createDBAndConn(); }
+};
+
+TEST_F(PartitionCrashRecoveryTest, ListParentSurvivesCrashRecovery) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    runQuery("CREATE NODE TABLE L(id INT64, cluster INT64, PRIMARY KEY(id)) "
+             "PARTITION BY LIST (cluster);");
+    runQuery("UNWIND [[1, 100], [2, 200], [3, 100], [4, 300]] AS r "
+             "CREATE (:L {id: r[1], cluster: r[2]});");
+    EXPECT_EQ(scanIDs("MATCH (n:L) RETURN n.id ORDER BY n.id;"),
+        std::vector<int64_t>({1, 2, 3, 4}));
+    crashAndReopen();
+    // Replayed rows stay visible through the parent ...
+    EXPECT_EQ(scanIDs("MATCH (n:L) RETURN n.id ORDER BY n.id;"),
+        std::vector<int64_t>({1, 2, 3, 4}));
+    // ... and a new row with a known key routes into its existing partition.
+    runQuery("CREATE (:L {id: 5, cluster: 200});");
+    EXPECT_EQ(scanIDs("MATCH (n:L) RETURN n.id ORDER BY n.id;"),
+        std::vector<int64_t>({1, 2, 3, 4, 5}));
+    EXPECT_EQ(scanIDs("MATCH (n:L_p2) RETURN n.id ORDER BY n.id;"), std::vector<int64_t>({2, 5}));
+}
+
+TEST_F(PartitionCrashRecoveryTest, HashParentSurvivesCrashRecovery) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    runQuery("CREATE NODE TABLE H(id INT64, amount INT64, PRIMARY KEY(id)) "
+             "PARTITION BY HASH(amount) PARTITIONS 2;");
+    runQuery("UNWIND [1, 2, 3, 4] AS i CREATE (:H {id: i, amount: i * 10});");
+    EXPECT_EQ(scanIDs("MATCH (n:H) RETURN n.id ORDER BY n.id;"),
+        std::vector<int64_t>({1, 2, 3, 4}));
+    crashAndReopen();
+    EXPECT_EQ(scanIDs("MATCH (n:H) RETURN n.id ORDER BY n.id;"),
+        std::vector<int64_t>({1, 2, 3, 4}));
+    runQuery("CREATE (:H {id: 5, amount: 50});");
+    EXPECT_EQ(scanIDs("MATCH (n:H) RETURN n.id ORDER BY n.id;"),
+        std::vector<int64_t>({1, 2, 3, 4, 5}));
+}
+
 } // namespace testing
 } // namespace lbug

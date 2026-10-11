@@ -178,6 +178,9 @@ ListPartitionRouter::Route ListPartitionRouter::getOrCreatePartitionLocked(
     // Register the parent link so the child is a proper partition subgraph, including across
     // WAL replay (the create record rebuilds via this extra info).
     extraInfo->setPartitionParent(parent->getTableID(), ordinal);
+    // Carry the encoded key into the child entry so WAL replay can restore the parent's
+    // key -> child map (the map itself lives on the parent and is never re-logged).
+    extraInfo->setListPartitionKey(encodedKey);
     auto childInfo = binder::BoundCreateTableInfo(CatalogEntryType::NODE_TABLE_ENTRY, childName,
         ConflictAction::ON_CONFLICT_THROW, std::move(extraInfo), false /* isInternal */);
     auto* childEntry =

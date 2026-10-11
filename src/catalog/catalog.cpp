@@ -691,6 +691,15 @@ CatalogEntry* Catalog::createNodeTableEntry(Transaction* transaction,
         // Dynamically created LIST partition child: register the parent link so reads expand
         // to it and writes can resolve it.
         entry->setParentInfo(extraInfo->partitionParentTableID, extraInfo->partitionChildIndex);
+        entry->setListPartitionKey(extraInfo->listPartitionKey);
+    }
+    if (extraInfo->partitionInfo.has_value()) {
+        // Register the partition method before the entry is logged: the WAL create record
+        // serializes the entry eagerly, so logging must see the method for replay to
+        // rebuild the parent as partitioned rather than as a plain table.
+        const auto& partitionInfo = *extraInfo->partitionInfo;
+        entry->setPartitionInfo(partitionInfo.method, partitionInfo.columnName,
+            entry->getPropertyID(partitionInfo.columnName), partitionInfo.numPartitions);
     }
     entry->setHasParent(info.hasParent);
     createSerialSequence(transaction, entry.get(), info.isInternal);
@@ -705,12 +714,9 @@ CatalogEntry* Catalog::createNodeTableEntry(Transaction* transaction,
     // catalog set as the parent so they get normal (small) table IDs: several execution-storage
     // structures index state by table ID, and internal entries carry OIDs near 2^63 which would
     // otherwise blow those up.
-    if (extraInfo->partitionInfo.has_value()) {
+    if (extraInfo->partitionInfo.has_value() && !extraInfo->skipInitialPartitionCreation) {
         auto* parent = parentEntry->ptrCast<NodeTableCatalogEntry>();
         const auto& partitionInfo = *extraInfo->partitionInfo;
-        auto partitionColumnID = parent->getPropertyID(partitionInfo.columnName);
-        parent->setPartitionInfo(partitionInfo.method, partitionInfo.columnName, partitionColumnID,
-            partitionInfo.numPartitions);
         // LIST starts with one partition and grows on demand; HASH creates its full set here.
         // LIST's initial partition keeps the >=1-partition invariant that reads and writes rely
         // on (partition expansion never yields an empty child set). It stays unkeyed and empty:
