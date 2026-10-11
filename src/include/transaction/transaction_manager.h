@@ -4,6 +4,7 @@
 #include <condition_variable>
 #include <memory>
 #include <mutex>
+#include <unordered_set>
 
 #include "common/constants.h"
 #include "common/uniq_lock.h"
@@ -64,6 +65,20 @@ private:
     // This function locks the mutex to stop new write transactions and waits until all active
     // write transactions leave the system. Read transactions are allowed to continue.
     common::UniqLock stopNewWriteTransactionsAndWaitUntilAllWriteTransactionsLeave();
+
+    // Snapshots the IDs of all currently active transactions. Must be called before the
+    // checkpoint write gate is acquired, so taking the public-function lock here cannot
+    // invert the beginTransaction() lock order.
+    std::unordered_set<common::transaction_t> snapshotActiveTransactionIDs();
+    // Waits until every snapshotted transaction has left the system. Transactions that begin
+    // after the snapshot are not waited on: no write can commit while the checkpoint write
+    // gate is held, so lastTimestamp is frozen and a newer reader's start timestamp covers
+    // everything the checkpoint persists.
+    void waitUntilSnapshottedTransactionsLeave(
+        std::unordered_set<common::transaction_t> transactionIDs);
+    // Best-effort check used by auto-checkpoint to defer (rather than stall or fail) while a
+    // read transaction holds an MVCC snapshot.
+    bool hasActiveReadTransaction();
 
     bool hasActiveWriteTransactionNoLock() const {
         return activeWriteTransactionCount.load(std::memory_order_acquire) > 0;

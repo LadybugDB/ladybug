@@ -5042,6 +5042,84 @@ TEST_F(ReviewFixesTest, ConcurrentReadsDuringCheckpointVacuum) {
     std::lock_guard<std::mutex> lk{errorsMtx};
     EXPECT_TRUE(errors.empty()) << "Reader errors during checkpoint: " << errors.front();
 }
+
+// Issue #1184 – a read-only transaction loses its snapshot when another connection runs
+// CHECKPOINT: the checkpoint merges committed versions into persistent storage and resets
+// their version/update info, so an older open reader then sees newer data. The checkpoint
+// must wait for read transactions that were already active before it started (readers that
+// begin mid-checkpoint observe a frozen lastTimestamp, so the reset is invisible to them).
+TEST_F(ReviewFixesTest, ReadOnlySnapshotSurvivesCheckpoint) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    conn->query("CALL auto_checkpoint=false;");
+    conn->query("CREATE NODE TABLE P(id INT64 PRIMARY KEY, v INT64);");
+    conn->query("CREATE REL TABLE K(FROM P TO P);");
+    for (int i = 1; i <= 4; ++i) {
+        auto r = conn->query(std::format("CREATE (:P {{id: {}, v: 0}});", i));
+        ASSERT_TRUE(r->isSuccess()) << r->getErrorMessage();
+    }
+    auto setup =
+        conn->query("MATCH (a:P), (b:P) WHERE a.id = 1 AND b.id = 2 CREATE (a)-[:K]->(b);");
+    ASSERT_TRUE(setup->isSuccess()) << setup->getErrorMessage();
+
+    auto readerConn = std::make_unique<lbug::main::Connection>(database.get());
+    readerConn->query("BEGIN TRANSACTION READ ONLY;");
+    auto queryState = [&](const std::string& query) {
+        auto res = readerConn->query(query);
+        EXPECT_TRUE(res->isSuccess()) << res->getErrorMessage();
+        std::vector<std::string> out;
+        if (res->isSuccess()) {
+            while (res->hasNext()) {
+                auto row = res->getNext();
+                out.push_back(row->getValue(0)->toString() + "|" + row->getValue(1)->toString());
+            }
+        }
+        return out;
+    };
+    auto readState = [&]() {
+        auto state = queryState("MATCH (p:P) RETURN p.id, p.v ORDER BY p.id;");
+        auto edges = queryState("MATCH (a:P)-[:K]->(b:P) RETURN a.id, b.id ORDER BY a.id, b.id;");
+        state.insert(state.end(), edges.begin(), edges.end());
+        return state;
+    };
+    const auto snapshot = readState();
+    ASSERT_EQ(snapshot.size(), 5u);
+
+    // Committed after the reader began: invisible to the reader's snapshot.
+    ASSERT_TRUE(conn->query("CREATE (:P {id: 5, v: 0});")->isSuccess());
+    ASSERT_TRUE(conn->query("MATCH (p:P) WHERE p.id = 3 SET p.v = 7;")->isSuccess());
+    ASSERT_TRUE(conn->query("MATCH (a:P), (b:P) WHERE a.id = 3 AND b.id = 4 CREATE (a)-[:K]->(b);")
+                    ->isSuccess());
+    EXPECT_EQ(readState(), snapshot) << "Committed writes leaked into the open read snapshot";
+
+    // The checkpoint must wait for the pre-existing reader instead of resetting the
+    // versions its snapshot still needs.
+    std::promise<bool> ckptOk;
+    auto ckptFuture = ckptOk.get_future();
+    std::thread ckptThread([&]() {
+        try {
+            auto r = conn->query("CHECKPOINT;");
+            ckptOk.set_value(r->isSuccess());
+        } catch (...) {
+            ckptOk.set_exception(std::current_exception());
+        }
+    });
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    EXPECT_EQ(readState(), snapshot) << "CHECKPOINT destroyed the open read-only snapshot (#1184)";
+    EXPECT_TRUE(readerConn->query("COMMIT;")->isSuccess());
+    ckptThread.join();
+    ASSERT_TRUE(ckptFuture.get()) << "CHECKPOINT failed";
+
+    // Sanity: a fresh snapshot observes the committed writes.
+    auto latest = readerConn->query("MATCH (p:P) RETURN count(p) AS c;");
+    ASSERT_TRUE(latest->isSuccess()) << latest->getErrorMessage();
+    ASSERT_EQ(latest->getNext()->getValue(0)->getValue<int64_t>(), 5);
+
+    // `readerConn` holds a raw pointer to `database`; reset it before the fixture tears
+    // the database down, otherwise its destructor accesses freed memory.
+    readerConn.reset();
+}
 #endif // __SINGLE_THREADED__
 
 // Hash index basic recovery
