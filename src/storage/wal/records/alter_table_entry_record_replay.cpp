@@ -63,6 +63,30 @@ void WALReplayer::replayAlterTableEntryRecord(const WALRecord& walRecord) const 
         }
         }
     } break;
+    case AlterType::DROP_PROPERTY: {
+        // Mirror the normal DDL path (Alter::alterTable): dropping a property removes
+        // the column from storage by bumping the table change epoch so the next
+        // checkpoint rewrites the table without the dropped column. Without this,
+        // a WAL-replayed DROP leaves the epoch untouched: a later checkpoint
+        // early-returns for the table while the catalog still vacuums the dropped
+        // column ID, so re-adding the property aliases the stale in-memory column.
+        const auto alteredEntry =
+            catalog->getTableCatalogEntry(transaction, ownedAlterInfo->tableName);
+        switch (alteredEntry->getTableType()) {
+        case TableType::NODE: {
+            storageManager->getTable(alteredEntry->getTableID())->dropColumn();
+        } break;
+        case TableType::REL: {
+            for (auto& innerRelEntry :
+                alteredEntry->cast<RelGroupCatalogEntry>().getRelEntryInfos()) {
+                storageManager->getTable(innerRelEntry.oid)->dropColumn();
+            }
+        } break;
+        default: {
+            UNREACHABLE_CODE;
+        }
+        }
+    } break;
     case AlterType::ADD_FROM_TO_CONNECTION: {
         auto extraInfo = ownedAlterInfo->extraInfo->constPtrCast<BoundExtraAlterFromToConnection>();
         auto relGroupEntry = catalog->getTableCatalogEntry(transaction, ownedAlterInfo->tableName)

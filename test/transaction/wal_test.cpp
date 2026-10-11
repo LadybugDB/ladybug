@@ -1487,3 +1487,36 @@ TEST_F(FrozenWALRecoveryTest, FrozenWALWithDDLAndDependentActiveWALSurvivesRecov
     EXPECT_EQ(queryCount("MATCH (p:P) RETURN COUNT(p);"), 3100);
     EXPECT_EQ(queryCount("MATCH (p:P {id: 0}) WHERE p.v = 3 RETURN COUNT(p);"), 1);
 }
+
+// A rel property dropped right before a crash lives only in the WAL. After the reopen
+// replays the DROP, an explicit CHECKPOINT followed by re-adding the property must fill
+// the re-added column with its default, not resurrect the dropped values. The replayed
+// DROP has to mark the rel table changed exactly like the normal DROP path does;
+// otherwise the post-reopen checkpoint skips the rel table while the catalog column IDs
+// are still vacuumed, and the re-added property aliases the stale column slot.
+TEST_F(FrozenWALRecoveryTest, RelDropPropertyReplayedFromWALThenCheckpointThenAdd) {
+    runQuery("CREATE NODE TABLE P(id INT64 PRIMARY KEY);");
+    runQuery("CREATE REL TABLE K(FROM P TO P, w INT64);");
+    runQuery("UNWIND range(1, 3) AS i CREATE (:P {id: i});");
+    runQuery("MATCH (a:P), (b:P) WHERE b.id = a.id % 3 + 1 CREATE (a)-[:K {w: -5}]->(b);");
+    runQuery("CHECKPOINT;");
+    runQuery("ALTER TABLE K DROP w;");
+    closeDB();
+
+    createDBAndConn();
+    runQuery("CHECKPOINT;");
+    runQuery("ALTER TABLE K ADD w INT64 DEFAULT 1;");
+    {
+        auto res = conn->query("MATCH ()-[k:K]->() RETURN k.w, count(*);");
+        ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+        ASSERT_TRUE(res->hasNext());
+        auto tuple = res->getNext();
+        EXPECT_EQ(tuple->getValue(0)->getValue<int64_t>(), 1);
+        EXPECT_EQ(tuple->getValue(1)->getValue<int64_t>(), 3);
+        EXPECT_FALSE(res->hasNext());
+    }
+    closeDB();
+
+    createDBAndConn();
+    EXPECT_EQ(queryCount("MATCH ()-[k:K]->() WHERE k.w = 1 RETURN COUNT(k);"), 3);
+}
