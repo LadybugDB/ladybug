@@ -18,14 +18,20 @@ namespace optimizer {
  *   NOT(NOT(x))                      -> x
  *   NOT(true) / NOT(false)           -> false / true
  *   AND(false, ...)                  -> false
- *   AND(p, NOT(p))                   -> false                (contradiction)
  *   AND(IS_NULL(x), IS_NOT_NULL(x))  -> false
  *   AND(true, x)                     -> x                    (identity)
  *   AND() / all-true conjuncts       -> true
  *   OR(true, ...)                    -> true
- *   OR(p, NOT(p))                    -> true                 (tautology)
  *   OR(IS_NULL(x), IS_NOT_NULL(x))   -> true
  *   OR(false, x)                     -> x                    (identity)
+ *
+ * A filter keeps a row only when its predicate is true, so directly under the filter and through
+ * AND/OR a NULL result drops the row like false does. Only there:
+ *
+ *   AND(NULL, ...) / AND(p, NOT(p))  -> false
+ *   OR(NULL, x)                      -> x
+ *
+ * Under NOT, NULL stays NULL. OR(p, NOT(p)) is never folded: it is NULL where p is NULL.
  *
  * When the predicate folds to false/null the FILTER operator is replaced
  * with an EmptyResult node (avoiding an unnecessary scan).  When it folds

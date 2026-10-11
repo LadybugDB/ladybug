@@ -1,0 +1,72 @@
+-DATASET CSV empty
+
+--
+
+-CASE FoldingKeepsRemainingOperands
+-STATEMENT CREATE NODE TABLE A (id INT64, x INT64, PRIMARY KEY(id));
+---- ok
+-STATEMENT UNWIND range(1, 100) AS i CREATE (:A {id: i, x: i % 10});
+---- ok
+-STATEMENT MATCH (p:A) WHERE (p.x IS NULL AND p.x IS NOT NULL) OR p.id = 1 OR p.id = 2 RETURN count(*);
+---- 1
+2
+-STATEMENT MATCH (p:A) WHERE p.id = 1 OR (p.x IS NULL AND p.x IS NOT NULL) OR p.id = 2 OR p.id = 3 RETURN count(*);
+---- 1
+3
+-STATEMENT MATCH (p:A) WHERE (p.x IS NULL OR p.x IS NOT NULL) AND p.id = 1 AND p.id = 2 RETURN count(*);
+---- 1
+0
+-STATEMENT MATCH (p:A) WHERE (p.x IS NULL OR p.x IS NOT NULL) AND p.id < 20 AND p.x > 5 RETURN count(*);
+---- 1
+8
+-STATEMENT MATCH (p:A) WHERE NOT (p.id = 1 OR (p.x IS NULL AND p.x IS NOT NULL)) RETURN count(*);
+---- 1
+99
+-STATEMENT MATCH (p:A) WHERE NOT ((p.x IS NULL OR p.x IS NOT NULL) AND p.id <= 3 AND p.x > 1) RETURN count(*);
+---- 1
+98
+-STATEMENT MATCH (p:A) WITH p WHERE (p.x IS NULL OR p.x IS NOT NULL) AND p.id < 20 AND p.x > 5 RETURN count(*);
+---- 1
+8
+
+-CASE FoldingRespectsNull
+-STATEMENT CREATE NODE TABLE B (id INT64, x INT64, PRIMARY KEY(id));
+---- ok
+-STATEMENT UNWIND range(1, 100) AS i CREATE (:B {id: i, x: CASE WHEN i % 10 = 0 THEN NULL ELSE i % 10 END});
+---- ok
+-STATEMENT MATCH (p:B) WHERE p.x > p.id OR NOT p.x > p.id RETURN count(*);
+---- 1
+90
+-STATEMENT MATCH (p:B) WHERE NOT (p.x > p.id AND NOT p.x > p.id) RETURN count(*);
+---- 1
+90
+-STATEMENT MATCH (p:B) WHERE NOT (p.id = 1 OR (p.x > p.id AND NOT p.x > p.id)) RETURN count(*);
+---- 1
+89
+-STATEMENT MATCH (p:B) WHERE NOT (p.x > 5 OR NULL) RETURN count(*);
+---- 1
+0
+-STATEMENT MATCH (p:B) WHERE NOT (p.x > 5 AND NULL) RETURN count(*);
+---- 1
+50
+-STATEMENT MATCH (p:B) WHERE (p.x IS NULL AND p.x IS NOT NULL) OR p.x IS NULL RETURN count(*);
+---- 1
+10
+-STATEMENT MATCH (p:B) WHERE p.id = 1 OR NULL OR p.id = 2 RETURN count(*);
+---- 1
+2
+-STATEMENT MATCH (p:B) WHERE p.x > 5 AND NULL RETURN count(*);
+---- 1
+0
+-STATEMENT MATCH (p:B) WHERE p.x > 5 OR NOT p.x > 5 RETURN count(*);
+---- 1
+90
+-STATEMENT MATCH (p:B) WHERE p.x IS NULL AND p.id IS NOT NULL RETURN count(*);
+---- 1
+10
+-STATEMENT MATCH (p:B) WHERE p.x > 5 XOR NULL RETURN count(*);
+---- 1
+0
+-STATEMENT MATCH (p:B) WHERE NOT (p.x > 5 XOR NULL) RETURN count(*);
+---- 1
+0
