@@ -255,6 +255,15 @@ TEST_F(ApiTest, PrepareExport) {
     if (databasePath == "" || databasePath == ":memory:") {
         return;
     }
+    // The tinysnb fixture contains INT128 columns and microsecond-precision INTERVAL values,
+    // which EXPORT DATABASE (parquet) loudly rejects (#1176). Drop them so the prepared
+    // export exercises the success path.
+    for (const auto& query : std::vector<std::string>{"DROP TABLE movies", "DROP TABLE studyAt",
+             "ALTER TABLE person DROP lastJobDuration", "ALTER TABLE organisation DROP history",
+             "ALTER TABLE organisation DROP licenseValidInterval",
+             "ALTER TABLE knows DROP validInterval"}) {
+        ASSERT_TRUE(conn->query(query)->isSuccess());
+    }
     auto newDBPath = TestHelper::getTempDir("export_db") + "/newdb";
     auto preparedStatement = conn->prepare("EXPORT DATABASE '" + newDBPath + '\'');
     auto result = conn->execute(preparedStatement.get());
