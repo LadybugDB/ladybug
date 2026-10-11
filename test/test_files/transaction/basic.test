@@ -130,3 +130,113 @@ True
 -STATEMENT CALL storage_info('person') WHERE residency='IN_MEMORY' RETURN COUNT(*);
 ---- 1
 0
+
+-CASE RelCountKeepsReadSnapshot
+-STATEMENT CALL auto_checkpoint=false
+---- ok
+-STATEMENT CREATE NODE TABLE P(id INT64, PRIMARY KEY(id));
+---- ok
+-STATEMENT CREATE REL TABLE K(FROM P TO P);
+---- ok
+-STATEMENT UNWIND range(1, 4) AS i CREATE (:P {id: i});
+---- ok
+-STATEMENT MATCH (a:P {id: 1}), (b:P {id: 2}) CREATE (a)-[:K]->(b);
+---- ok
+-STATEMENT MATCH (a:P {id: 2}), (b:P {id: 3}) CREATE (a)-[:K]->(b);
+---- ok
+-CREATE_CONNECTION conn1
+-STATEMENT [conn1] BEGIN TRANSACTION READ ONLY;
+---- ok
+-STATEMENT [conn1] MATCH ()-[k:K]->() RETURN count(*);
+---- 1
+2
+-CREATE_CONNECTION conn2
+-STATEMENT [conn2] MATCH (a:P {id: 3}), (b:P {id: 4}) CREATE (a)-[:K]->(b);
+---- ok
+-STATEMENT [conn2] MATCH (a:P {id: 4}), (b:P {id: 1}) CREATE (a)-[:K]->(b);
+---- ok
+-STATEMENT [conn2] MATCH (:P {id: 1})-[k:K]->() DELETE k;
+---- ok
+-STATEMENT [conn1] MATCH ()-[k:K]->() RETURN count(*);
+---- 1
+2
+-STATEMENT [conn1] MATCH (a:P)-[k:K]->(b:P) WHERE a.id > 0 RETURN count(*);
+---- 1
+2
+-STATEMENT [conn1] COMMIT;
+---- ok
+-STATEMENT [conn1] MATCH ()-[k:K]->() RETURN count(*);
+---- 1
+3
+
+-CASE RelCountAcrossInsertTransactions
+-STATEMENT CALL auto_checkpoint=false
+---- ok
+-STATEMENT CREATE NODE TABLE P(id INT64, PRIMARY KEY(id));
+---- ok
+-STATEMENT CREATE REL TABLE K(FROM P TO P);
+---- ok
+-STATEMENT UNWIND range(1, 4) AS i CREATE (:P {id: i});
+---- ok
+-STATEMENT MATCH (a:P {id: 1}), (b:P {id: 2}) CREATE (a)-[:K]->(b);
+---- ok
+-STATEMENT MATCH (a:P {id: 2}), (b:P {id: 3}) CREATE (a)-[:K]->(b);
+---- ok
+-CREATE_CONNECTION conn1
+-STATEMENT [conn1] BEGIN TRANSACTION READ ONLY;
+---- ok
+-STATEMENT [conn1] MATCH ()-[k:K]->() RETURN count(*);
+---- 1
+2
+-CREATE_CONNECTION conn2
+-STATEMENT [conn2] BEGIN TRANSACTION;
+---- ok
+-STATEMENT [conn2] MATCH (a:P {id: 3}), (b:P {id: 4}) CREATE (a)-[:K]->(b);
+---- ok
+-STATEMENT [conn2] MATCH ()-[k:K]->() RETURN count(*);
+---- 1
+3
+-STATEMENT [conn1] MATCH ()-[k:K]->() RETURN count(*);
+---- 1
+2
+-STATEMENT [conn2] ROLLBACK;
+---- ok
+-STATEMENT [conn2] MATCH ()-[k:K]->() RETURN count(*);
+---- 1
+2
+-STATEMENT [conn2] MATCH (a:P {id: 4}), (b:P {id: 1}) CREATE (a)-[:K]->(b);
+---- ok
+-STATEMENT [conn1] MATCH ()-[k:K]->() RETURN count(*);
+---- 1
+2
+-STATEMENT [conn1] COMMIT;
+---- ok
+-STATEMENT [conn1] MATCH ()-[k:K]->() RETURN count(*);
+---- 1
+3
+
+-CASE RelCountAfterRollingBackFirstRel
+-STATEMENT CALL auto_checkpoint=false
+---- ok
+-STATEMENT CREATE NODE TABLE P(id INT64, PRIMARY KEY(id));
+---- ok
+-STATEMENT CREATE REL TABLE K(FROM P TO P);
+---- ok
+-STATEMENT UNWIND range(1, 3) AS i CREATE (:P {id: i});
+---- ok
+-STATEMENT BEGIN TRANSACTION;
+---- ok
+-STATEMENT MATCH (a:P {id: 1}), (b:P {id: 2}) CREATE (a)-[:K]->(b);
+---- ok
+-STATEMENT ROLLBACK;
+---- ok
+-STATEMENT MATCH ()-[k:K]->() RETURN count(*);
+---- 1
+0
+-STATEMENT MATCH (a:P {id: 2}), (b:P {id: 3}) CREATE (a)-[:K]->(b);
+---- ok
+-STATEMENT MATCH (a:P {id: 3}), (b:P {id: 1}) CREATE (a)-[:K]->(b);
+---- ok
+-STATEMENT MATCH ()-[k:K]->() RETURN count(*);
+---- 1
+2
