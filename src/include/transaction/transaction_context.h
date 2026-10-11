@@ -20,7 +20,8 @@ namespace transaction {
  * rollback the transaction by calling commit() or rollback().
  *
  * AUTO_COMMIT is the default mode when a Connection is created. If an application calls
- * begin[ReadOnly/Write]Transaction at any point, the mode switches to MANUAL. This creates
+ * begin[ReadOnly/Write]Transaction at any point and the begin succeeds, the mode switches to
+ * MANUAL; a refused begin leaves the connection in AUTO_COMMIT. This creates
  * an "active transaction" in the connection. When a connection is in MANUAL mode and the
  * active transaction is rolled back or committed, then the active transaction is removed (so
  * the connection no longer has an active transaction), and the mode automatically switches
@@ -56,10 +57,13 @@ public:
 
 private:
     void beginTransactionInternal(TransactionType transactionType);
+    void beginManualTransaction(TransactionType transactionType);
 
 private:
     std::mutex mtx;
     main::ClientContext& clientContext;
+    // MANUAL implies activeTransaction != nullptr: beginManualTransaction sets the mode only after
+    // the begin succeeded and clearTransaction resets both. Callers hold ClientContext's mutex.
     TransactionMode mode;
     Transaction* activeTransaction;
 };
