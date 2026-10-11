@@ -77,7 +77,6 @@ Type::type ParquetWriter::convertToParquetType(const LogicalType& type) {
         return Type::INT64;
     case LogicalTypeID::FLOAT:
         return Type::FLOAT;
-    case LogicalTypeID::INT128:
     case LogicalTypeID::DOUBLE:
         return Type::DOUBLE;
     case LogicalTypeID::BLOB:

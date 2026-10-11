@@ -4,18 +4,22 @@
 
 -CASE TinySnbCopyToParquet
 
--STATEMENT COPY (MATCH (p:person) return p.*) to '${DATABASE_PATH}/tinysnb.parquet';
+-STATEMENT COPY (MATCH (p:person) RETURN p.ID, p.fName, p.gender, p.isStudent, p.isWorker, p.age, p.eyeSight, p.birthdate, p.registerTime, p.workedHours, p.usedNames, p.courseScoresPerTerm, p.grades, p.height, p.u) to '${DATABASE_PATH}/tinysnb.parquet';
 ---- ok
 -STATEMENT LOAD FROM '${DATABASE_PATH}/tinysnb.parquet' RETURN *;
 ---- 8
-0|Alice|1|True|False|35|5.000000|1900-01-01|2011-08-20 11:25:30|3 years 2 days 13:02:00|[10,5]|[Aida]|[[10,8],[6,7,8]]|[96,54,86,92]|1.731000|a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11
-2|Bob|2|True|False|30|5.100000|1900-01-01|2008-11-03 15:25:30.000526|10 years 5 months 13:00:00|[12,8]|[Bobby]|[[8,9],[9,10]]|[98,42,93,88]|0.990000|a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12
-3|Carol|1|False|True|45|5.000000|1940-06-22|1911-08-20 02:32:21|48:24:11|[4,5]|[Carmen,Fred]|[[8,10]]|[91,75,21,95]|1.000000|a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a13
-5|Dan|2|False|True|20|4.800000|1950-07-23|2031-11-30 12:25:30|10 years 5 months 13:00:00|[1,9]|[Wolfeschlegelstein,Daniel]|[[7,4],[8,8],[9]]|[76,88,99,89]|1.300000|a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a14
-7|Elizabeth|1|False|True|20|4.700000|1980-10-26|1976-12-23 11:21:42|48:24:11|[2]|[Ein]|[[6],[7],[8]]|[96,59,65,88]|1.463000|a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a15
-8|Farooq|2|True|False|25|4.500000|1980-10-26|1972-07-31 13:22:30.678559|00:18:00.024|[3,4,5,6,7]|[Fesdwe]|[[8]]|[80,78,34,83]|1.510000|a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a16
-9|Greg|2|False|False|40|4.900000|1980-10-26|1976-12-23 04:41:42|10 years 5 months 13:00:00|[1]|[Grad]|[[10]]|[43,83,67,43]|1.600000|a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a17
-10|Hubert Blaine Wolfeschlegelsteinhausenbergerdorff|2|False|True|83|4.900000|1990-11-27|2023-02-21 13:25:30|3 years 2 days 13:02:00|[10,11,12,3,4,5,6,7]|[Ad,De,Hi,Kye,Orlan]|[[7],[10],[6,7]]|[77,64,100,54]|1.323000|a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a18
+0|Alice|1|True|False|35|5.000000|1900-01-01|2011-08-20 11:25:30|[10,5]|[Aida]|[[10,8],[6,7,8]]|[96,54,86,92]|1.731000|a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11
+2|Bob|2|True|False|30|5.100000|1900-01-01|2008-11-03 15:25:30.000526|[12,8]|[Bobby]|[[8,9],[9,10]]|[98,42,93,88]|0.990000|a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12
+3|Carol|1|False|True|45|5.000000|1940-06-22|1911-08-20 02:32:21|[4,5]|[Carmen,Fred]|[[8,10]]|[91,75,21,95]|1.000000|a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a13
+5|Dan|2|False|True|20|4.800000|1950-07-23|2031-11-30 12:25:30|[1,9]|[Wolfeschlegelstein,Daniel]|[[7,4],[8,8],[9]]|[76,88,99,89]|1.300000|a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a14
+7|Elizabeth|1|False|True|20|4.700000|1980-10-26|1976-12-23 11:21:42|[2]|[Ein]|[[6],[7],[8]]|[96,59,65,88]|1.463000|a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a15
+8|Farooq|2|True|False|25|4.500000|1980-10-26|1972-07-31 13:22:30.678559|[3,4,5,6,7]|[Fesdwe]|[[8]]|[80,78,34,83]|1.510000|a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a16
+9|Greg|2|False|False|40|4.900000|1980-10-26|1976-12-23 04:41:42|[1]|[Grad]|[[10]]|[43,83,67,43]|1.600000|a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a17
+10|Hubert Blaine Wolfeschlegelsteinhausenbergerdorff|2|False|True|83|4.900000|1990-11-27|2023-02-21 13:25:30|[10,11,12,3,4,5,6,7]|[Ad,De,Hi,Kye,Orlan]|[[7],[10],[6,7]]|[77,64,100,54]|1.323000|a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a18
+
+-STATEMENT COPY (MATCH (p:person) RETURN p.lastJobDuration) TO "${DATABASE_PATH}/person_interval_us.parquet"
+---- error
+Runtime exception: Parquet files do not support INTERVAL values with microsecond precision
 
 -LOG CopyOrganisationToParquet
 -STATEMENT COPY (MATCH (o:organisation) RETURN o.*) TO "${DATABASE_PATH}/organisation.parquet" (compression='UNCOMPRESSED')
@@ -27,22 +31,22 @@
 6|DEsWork|824|4.100000|7|2 years 4 hours 22 us 34 minutes|82:00:00.1|0.520000|{revenue: 558, location: ['very long city name','new york'], stock: {price: [22], volume: 99}}|{tag: 1, price: , movein: 2023-12-15, note: }
 
 -LOG CopyMoviesToParquet
--STATEMENT COPY (MATCH (m:movies) RETURN m.*) TO "${DATABASE_PATH}/movies.parquet" (compression='snappy')
+-STATEMENT COPY (MATCH (m:movies) RETURN m.name, m.length, m.note, m.content, m.audience, m.grade) TO "${DATABASE_PATH}/movies.parquet" (compression='snappy')
 ---- ok
 -STATEMENT LOAD FROM "${DATABASE_PATH}/movies.parquet" RETURN *;
 ---- 3
-Sóló cón tu párejâ|126| this is a very very good movie|{rating: 5.300000, stars: 2, views: 152, release: 2011-08-20 11:25:30, release_ns: 2011-08-20 11:25:30.123456, release_ms: 2011-08-20 11:25:30.123, release_sec: 2011-08-20 11:25:30, release_tz: 2011-08-20 11:25:30.123456, film: 2012-05-11, u8: 220, u16: 20, u32: 1, u64: 180, hugedata: 1844674407370955161600000000.000000}|\xAA\xABinteresting\x0B|{audience1=52, audience53=42}|{tag: 0, credit: True, grade1: , grade2: }
-The 😂😃🧘🏻‍♂️🌍🌦️🍞🚗 movie|2544| the movie is very very good|{rating: 7.000000, stars: 10, views: 982, release: 2018-11-13 13:33:11, release_ns: 2018-11-13 13:33:11.123456, release_ms: 2018-11-13 13:33:11.123, release_sec: 2018-11-13 13:33:11, release_tz: 2018-11-13 13:33:11.123456, film: 2014-09-12, u8: 12, u16: 120, u32: 55, u64: 1, hugedata: -1844674407370955161600.000000}|\xAB\xCD|{audience1=33}|{tag: 1, credit: , grade1: 8.989000, grade2: }
-Roma|298|the movie is very interesting and funny|{rating: 1223.000000, stars: 100, views: 10003, release: 2011-02-11 16:44:22, release_ns: 2011-02-11 16:44:22.123456, release_ms: 2011-02-11 16:44:22.123, release_sec: 2011-02-11 16:44:22, release_tz: 2011-02-11 16:44:22.123456, film: 2013-02-22, u8: 1, u16: 15, u32: 200, u64: 4, hugedata: -15.000000}|pure ascii characters|{}|{tag: 1, credit: , grade1: 254.000000, grade2: }
+Sóló cón tu párejâ|126| this is a very very good movie|\xAA\xABinteresting\x0B|{audience1=52, audience53=42}|{tag: 0, credit: True, grade1: , grade2: }
+The 😂😃🧘🏻‍♂️🌍🌦️🍞🚗 movie|2544| the movie is very very good|\xAB\xCD|{audience1=33}|{tag: 1, credit: , grade1: 8.989000, grade2: }
+Roma|298|the movie is very interesting and funny|pure ascii characters|{}|{tag: 1, credit: , grade1: 254.000000, grade2: }
 
 -LOG CopyStudyAtToParquet
--STATEMENT COPY (match (:person)-[s:studyAt]->(:organisation) return s.*) to "${DATABASE_PATH}/studyAt.parquet" (compression='zstd')
+-STATEMENT COPY (match (:person)-[s:studyAt]->(:organisation) return s.year, s.places, s.length, s.level, s.code, s.temperature, s.ulength, s.ulevel) to "${DATABASE_PATH}/studyAt.parquet" (compression='zstd')
 ---- ok
 -STATEMENT LOAD FROM "${DATABASE_PATH}/studyAt.parquet" RETURN *;
 ---- 3
-2021|[wwAewsdndweusd,wek]|5|5|9223372036854775808|32800|33768|250|1844674407370955161600000000.000000
-2020|[anew,jsdnwusklklklwewsd]|55|120|6689|1|90|220|-1844674407370955161600.000000
-2020|[awndsnjwejwen,isuhuwennjnuhuhuwewe]|22|2|23|20|180|12|-15.000000
+2021|[wwAewsdndweusd,wek]|5|5|9223372036854775808|32800|33768|250
+2020|[anew,jsdnwusklklklwewsd]|55|120|6689|1|90|220
+2020|[awndsnjwejwen,isuhuwennjnuhuhuwewe]|22|2|23|20|180|12
 
 -LOG CopyEmptyListToParquet
 -STATEMENT COPY (RETURN null,[], [1,null,3], [[1],null,[3,4,5]], [[], ["a"]]) TO "${DATABASE_PATH}/emptyList.parquet" (compression='gzip')
@@ -139,3 +143,26 @@ Runtime exception: Parquet compression option expects a string value, got: BOOL.
 2||3|
 2||4|{day: 1990-09-10}
 3|{day: 1990-09-10}|5|{day: 2000-01-01}
+
+-CASE CopyToParquetUnsupportedTypes
+-STATEMENT COPY (RETURN CAST('18446744073709551617' AS INT128) AS big) TO "${DATABASE_PATH}/int128.parquet"
+---- error
+Runtime exception: Writing a column with type: INT128 to parquet is not supported.
+-STATEMENT COPY (RETURN CAST('170141183460469231731687303715884105727' AS INT128) AS big) TO "${DATABASE_PATH}/int128_max.parquet"
+---- error
+Runtime exception: Writing a column with type: INT128 to parquet is not supported.
+-STATEMENT COPY (RETURN [CAST('18446744073709551617' AS INT128)] AS l) TO "${DATABASE_PATH}/int128_list.parquet"
+---- error
+Runtime exception: Writing a column with type: INT128 to parquet is not supported.
+-STATEMENT COPY (RETURN {a: CAST('18446744073709551617' AS INT128)} AS s) TO "${DATABASE_PATH}/int128_struct.parquet"
+---- error
+Runtime exception: Writing a column with type: INT128 to parquet is not supported.
+-STATEMENT COPY (RETURN interval('1 day 2 microseconds') AS span) TO "${DATABASE_PATH}/interval_us.parquet"
+---- error
+Runtime exception: Parquet files do not support INTERVAL values with microsecond precision
+-STATEMENT COPY (RETURN interval('3 hours 4 minutes 5.123456 seconds') AS span) TO "${DATABASE_PATH}/interval_us2.parquet"
+---- error
+Runtime exception: Parquet files do not support INTERVAL values with microsecond precision
+-STATEMENT COPY (RETURN [interval('1 day 2 microseconds')] AS l) TO "${DATABASE_PATH}/interval_us_list.parquet"
+---- error
+Runtime exception: Parquet files do not support INTERVAL values with microsecond precision
