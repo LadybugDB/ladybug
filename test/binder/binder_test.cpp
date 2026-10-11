@@ -36,25 +36,26 @@ TEST_F(EmptyDBTest, ConfidentialStatementVisitor) {
 TEST_F(EmptyDBTest, LargeConstantListIsNotFolded) {
     createDBAndConn();
     conn->query("BEGIN TRANSACTION");
-    binder::Binder binder{conn->getClientContext()};
-    auto bindFirstColumn = [&](const std::string& query) {
-        auto parsed = parser::Parser::parseQuery(query);
-        return binder.bind(*parsed[0])->getStatementResult()->getColumns()[0];
+    auto bindReturnType = [&](const std::string& expression) {
+        binder::Binder binder{conn->getClientContext()};
+        auto parsed = parser::Parser::parseQuery("RETURN " + expression);
+        return binder.bind(*parsed[0])->getStatementResult()->getColumns()[0]->expressionType;
     };
-    EXPECT_EQ(bindFirstColumn("RETURN range(1, 10)")->expressionType,
-        common::ExpressionType::LITERAL);
-    EXPECT_EQ(bindFirstColumn("RETURN range(1, 100000)")->expressionType,
-        common::ExpressionType::FUNCTION);
+    const auto literal = common::ExpressionType::LITERAL;
+    const auto function = common::ExpressionType::FUNCTION;
+    EXPECT_EQ(bindReturnType("range(1, 8192)"), literal);
+    EXPECT_EQ(bindReturnType("range(1, 8193)"), function);
+    EXPECT_EQ(bindReturnType("[range(1, 9000)]"), function);
+    EXPECT_EQ(bindReturnType("{a: range(1, 9000)}"), function);
+    // Built from folded parts, or written out in the query: no larger than the expression.
+    EXPECT_EQ(bindReturnType("[range(1, 5000), range(1, 5000)]"), literal);
     std::string writtenOutList = "[0";
     for (auto i = 1; i < 10000; i++) {
         writtenOutList += ", " + std::to_string(i);
     }
     writtenOutList += "]";
-    EXPECT_EQ(bindFirstColumn("RETURN " + writtenOutList)->expressionType,
-        common::ExpressionType::LITERAL);
-    EXPECT_EQ(bindFirstColumn("RETURN CASE WHEN true THEN " + writtenOutList + " ELSE [1] END")
-                  ->expressionType,
-        common::ExpressionType::LITERAL);
+    EXPECT_EQ(bindReturnType(writtenOutList), literal);
+    EXPECT_EQ(bindReturnType("CASE WHEN true THEN " + writtenOutList + " ELSE [1] END"), literal);
 }
 
 } // namespace testing
