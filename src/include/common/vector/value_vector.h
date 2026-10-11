@@ -72,6 +72,8 @@ public:
 
     void setState(const std::shared_ptr<DataChunkState>& state_);
 
+    // Setting a struct null also sets its fields null (setNull too). Clearing does not: a non-null
+    // struct may have null fields, and whatever writes a field writes its null flag.
     void setAllNull();
     void setAllNonNull() { nullMask.setAllNonNull(); }
     // On return true, there are no null. On return false, there may or may not be nulls.
