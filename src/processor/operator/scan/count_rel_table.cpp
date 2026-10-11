@@ -108,19 +108,11 @@ bool CountRelTable::getNextTuplesInternal(ExecutionContext* context) {
                 }
             }
 
-            // Count in-memory committed data (not yet checkpointed)
-            // This data is stored in chunkedGroups within the NodeGroup
+            // In-memory (not yet checkpointed) rows visible to the transaction.
             auto numChunkedGroups = csrNodeGroup.getNumChunkedGroups();
             for (node_group_idx_t i = 0; i < numChunkedGroups; i++) {
-                auto* chunkedGroup = csrNodeGroup.getChunkedNodeGroup(i);
-                if (chunkedGroup) {
-                    auto numRows = chunkedGroup->getNumRows();
-                    totalCount += numRows;
-                    // Subtract deletions from in-memory committed data
-                    if (chunkedGroup->hasVersionInfo()) {
-                        auto numDeletions = chunkedGroup->getNumDeletions(transaction, 0, numRows);
-                        totalCount -= numDeletions;
-                    }
+                if (auto* chunkedGroup = csrNodeGroup.getChunkedNodeGroup(i)) {
+                    totalCount += chunkedGroup->getNumVisibleRows(transaction);
                 }
             }
         }

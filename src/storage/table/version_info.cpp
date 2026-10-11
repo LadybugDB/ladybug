@@ -1,5 +1,7 @@
 #include "storage/table/version_info.h"
 
+#include <atomic>
+
 #include "common/exception/runtime.h"
 #include "common/serializer/deserializer.h"
 #include "common/serializer/serializer.h"
@@ -27,14 +29,20 @@ struct VectorVersionInfo {
     // avoid the allocation of `array`.
     transaction_t sameInsertionVersion;
     transaction_t sameDeletionVersion;
+    // Rows of `insertedVersions` holding a commit timestamp, and the largest such timestamp; kept
+    // in step by setInsertedVersion. Never serialized: on disk insertions are never versioned.
+    // Read without the node group lock: the writer publishes the timestamp before the count.
+    std::atomic<row_idx_t> numCommittedInsertions;
+    std::atomic<transaction_t> maxCommittedInsertion;
     InsertionStatus insertionStatus;
     DeletionStatus deletionStatus;
 
     VectorVersionInfo()
         : sameInsertionVersion{INVALID_TRANSACTION}, sameDeletionVersion{INVALID_TRANSACTION},
+          numCommittedInsertions{0}, maxCommittedInsertion{0},
           insertionStatus{InsertionStatus::NO_INSERTED},
           deletionStatus{DeletionStatus::NO_DELETED} {}
-    DELETE_COPY_DEFAULT_MOVE(VectorVersionInfo);
+    DELETE_COPY_AND_MOVE(VectorVersionInfo);
 
     void append(transaction_t transactionID, row_idx_t startRow, row_idx_t numRows);
     bool delete_(transaction_t transactionID, row_idx_t rowIdx);
@@ -58,6 +66,8 @@ struct VectorVersionInfo {
 
     row_idx_t getNumDeletions(transaction_t startTS, transaction_t transactionID,
         row_idx_t startRow, length_t numRows) const;
+    row_idx_t getNumVisibleRows(transaction_t startTS, transaction_t transactionID,
+        row_idx_t startRow, length_t numRows) const;
 
     void serialize(Serializer& serializer) const;
     static std::unique_ptr<VectorVersionInfo> deSerialize(Deserializer& deSer);
@@ -65,6 +75,7 @@ struct VectorVersionInfo {
 private:
     void initInsertionVersionArray();
     void initDeletionVersionArray();
+    void setInsertedVersion(row_idx_t rowIdx, transaction_t version);
 
     bool isSameInsertionVersion() const;
     bool isSameDeletionVersion() const;
@@ -84,13 +95,13 @@ void VectorVersionInfo::append(const transaction_t transactionID, const row_idx_
     if (!insertedVersions) {
         initInsertionVersionArray();
         for (auto i = 0u; i < startRow; i++) {
-            insertedVersions->operator[](i) = sameInsertionVersion;
+            setInsertedVersion(i, sameInsertionVersion);
         }
         sameInsertionVersion = INVALID_TRANSACTION;
     }
     for (auto i = 0u; i < numRows; i++) {
         DASSERT(insertedVersions->operator[](startRow + i) == INVALID_TRANSACTION);
-        insertedVersions->operator[](startRow + i) = transactionID;
+        setInsertedVersion(startRow + i, transactionID);
     }
 }
 
@@ -128,7 +139,7 @@ void VectorVersionInfo::setInsertCommitTS(transaction_t commitTS, row_idx_t star
     }
     DASSERT(insertedVersions);
     for (auto rowIdx = startRow; rowIdx < startRow + numRows; rowIdx++) {
-        insertedVersions->operator[](rowIdx) = commitTS;
+        setInsertedVersion(rowIdx, commitTS);
     }
 }
 
@@ -252,6 +263,36 @@ row_idx_t VectorVersionInfo::getNumDeletions(transaction_t startTS, transaction_
     return numDeletions;
 }
 
+row_idx_t VectorVersionInfo::getNumVisibleRows(transaction_t startTS, transaction_t transactionID,
+    row_idx_t startRow, length_t numRows) const {
+    if (insertionStatus == InsertionStatus::NO_INSERTED) {
+        return 0;
+    }
+    if (deletionStatus == DeletionStatus::NO_DELETED) {
+        if (insertionStatus == InsertionStatus::ALWAYS_INSERTED || isSameInsertionVersion()) {
+            return isInserted(startTS, transactionID, startRow) ? numRows : 0;
+        }
+        // Rows are appended in commit order by one writer at a time and rolled back from the end,
+        // so committed rows form a prefix: if they number numRows, they are [0, numRows). The count
+        // is read first, so the timestamp read after it covers every row it counts.
+        if (startRow == 0 && numCommittedInsertions.load(std::memory_order_acquire) == numRows &&
+            maxCommittedInsertion.load(std::memory_order_relaxed) <= startTS) {
+            return numRows;
+        }
+        row_idx_t numVisible = 0u;
+        for (auto i = 0u; i < numRows; i++) {
+            const auto insertion = insertedVersions->operator[](startRow + i);
+            numVisible += insertion == transactionID || insertion <= startTS;
+        }
+        return numVisible;
+    }
+    row_idx_t numVisible = 0u;
+    for (auto i = 0u; i < numRows; i++) {
+        numVisible += isSelected(startTS, transactionID, startRow + i);
+    }
+    return numVisible;
+}
+
 void VectorVersionInfo::rollbackInsertions(row_idx_t startRowInVector, row_idx_t numRows) {
     if (isSameInsertionVersion()) {
         // This implicitly assumes that all rows are inserted in the same transaction, so regardless
@@ -260,7 +301,7 @@ void VectorVersionInfo::rollbackInsertions(row_idx_t startRowInVector, row_idx_t
     } else {
         if (insertedVersions) {
             for (auto row = startRowInVector; row < startRowInVector + numRows; row++) {
-                insertedVersions->operator[](row) = INVALID_TRANSACTION;
+                setInsertedVersion(row, INVALID_TRANSACTION);
             }
             bool hasAnyInsertions = false;
             for (const auto& version : *insertedVersions) {
@@ -310,6 +351,26 @@ void VectorVersionInfo::rollbackDeletions(row_idx_t startRowInVector, row_idx_t 
 void VectorVersionInfo::initInsertionVersionArray() {
     insertedVersions = std::make_unique<std::array<transaction_t, DEFAULT_VECTOR_CAPACITY>>();
     insertedVersions->fill(INVALID_TRANSACTION);
+    numCommittedInsertions.store(0, std::memory_order_relaxed);
+    maxCommittedInsertion.store(0, std::memory_order_relaxed);
+}
+
+// Called by the single writer only.
+void VectorVersionInfo::setInsertedVersion(row_idx_t rowIdx, transaction_t version) {
+    const auto isCommitted = [](transaction_t v) {
+        return v < transaction::Transaction::START_TRANSACTION_ID;
+    };
+    auto& slot = insertedVersions->operator[](rowIdx);
+    if (isCommitted(slot)) {
+        numCommittedInsertions.fetch_sub(1, std::memory_order_relaxed);
+    }
+    if (isCommitted(version)) {
+        if (version > maxCommittedInsertion.load(std::memory_order_relaxed)) {
+            maxCommittedInsertion.store(version, std::memory_order_relaxed);
+        }
+        numCommittedInsertions.fetch_add(1, std::memory_order_release);
+    }
+    slot = version;
 }
 
 void VectorVersionInfo::initDeletionVersionArray() {
@@ -548,6 +609,29 @@ row_idx_t VersionInfo::getNumDeletions(const transaction::Transaction* transacti
         vectorIdx++;
     }
     return numDeletions;
+}
+
+row_idx_t VersionInfo::getNumVisibleRows(const transaction::Transaction* transaction,
+    row_idx_t startRow, length_t numRows) const {
+    if (numRows == 0) {
+        return 0;
+    }
+    auto [startVector, startRowInVector] =
+        StorageUtils::getQuotientRemainder(startRow, DEFAULT_VECTOR_CAPACITY);
+    auto [endVectorIdx, endRowInVector] =
+        StorageUtils::getQuotientRemainder(startRow + numRows - 1, DEFAULT_VECTOR_CAPACITY);
+    row_idx_t numVisible = 0u;
+    for (auto vectorIdx = startVector; vectorIdx <= endVectorIdx; vectorIdx++) {
+        const auto rowInVector = vectorIdx == startVector ? startRowInVector : 0;
+        const auto numRowsInVector = vectorIdx == endVectorIdx ?
+                                         endRowInVector - rowInVector + 1 :
+                                         DEFAULT_VECTOR_CAPACITY - rowInVector;
+        const auto vectorVersion = getVectorVersionInfo(vectorIdx);
+        numVisible += vectorVersion ? vectorVersion->getNumVisibleRows(transaction->getStartTS(),
+                                          transaction->getID(), rowInVector, numRowsInVector) :
+                                      numRowsInVector;
+    }
+    return numVisible;
 }
 
 bool VersionInfo::hasInsertions() const {

@@ -438,6 +438,13 @@ row_idx_t ChunkedNodeGroup::getNumDeletions(const Transaction* transaction, row_
     return 0;
 }
 
+row_idx_t ChunkedNodeGroup::getNumVisibleRows(const Transaction* transaction) const {
+    if (versionInfo) {
+        return versionInfo->getNumVisibleRows(transaction, 0, numRows);
+    }
+    return numRows;
+}
+
 std::unique_ptr<ColumnChunk> InMemChunkedNodeGroup::flushInternal(ColumnChunkData& chunk,
     PageAllocator& pageAllocator) {
     // Finalize is necessary prior to splitting for strings and lists so that pruned values

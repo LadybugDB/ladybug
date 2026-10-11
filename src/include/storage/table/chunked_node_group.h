@@ -224,6 +224,7 @@ public:
         common::row_idx_t startRow, common::length_t numRowsToCheck) const;
     common::row_idx_t getNumDeletions(const transaction::Transaction* transaction,
         common::row_idx_t startRow, common::length_t numRowsToCheck) const;
+    common::row_idx_t getNumVisibleRows(const transaction::Transaction* transaction) const;
     bool hasVersionInfo() const { return versionInfo != nullptr; }
 
     static std::unique_ptr<ChunkedNodeGroup> flushEmpty(MemoryManager& mm,
