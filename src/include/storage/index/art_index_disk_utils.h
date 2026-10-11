@@ -119,10 +119,20 @@ private:
     bool hasPinnedPage = false;
 };
 
+// Keeps the page of its last read pinned, since most reads are a few bytes of a node header or a
+// child entry. Only one reader of a tree may be alive at a time: a second pin of the held page
+// spins, forever on the same thread. Callers hold the index mutex for the reader's whole life,
+// which serializes readers across threads.
 class ArtPageRangeReader {
 public:
     ArtPageRangeReader(FileHandle& fileHandle, PageRange pageRange, uint64_t size)
         : fileHandle{fileHandle}, pageRange{pageRange}, size{size} {}
+    DELETE_COPY_AND_MOVE(ArtPageRangeReader);
+    ~ArtPageRangeReader() {
+        if (pinnedPageIdx != common::INVALID_PAGE_IDX) {
+            fileHandle.unpinPage(pinnedPageIdx);
+        }
+    }
 
     void read(uint8_t* data, uint64_t numBytes) {
         if (offset + numBytes > size) {
@@ -135,9 +145,7 @@ public:
             const auto pageOffset = absoluteOffset % common::LBUG_PAGE_SIZE;
             const auto numBytesToCopy =
                 std::min<uint64_t>(remaining, common::LBUG_PAGE_SIZE - pageOffset);
-            auto* frame = fileHandle.pinPage(pageIdx, PageReadPolicy::READ_PAGE);
-            std::memcpy(data + (numBytes - remaining), frame + pageOffset, numBytesToCopy);
-            fileHandle.unpinPage(pageIdx);
+            std::memcpy(data + (numBytes - remaining), pin(pageIdx) + pageOffset, numBytesToCopy);
             offset += numBytesToCopy;
             remaining -= numBytesToCopy;
         }
@@ -160,10 +168,25 @@ public:
     }
 
 private:
+    uint8_t* pin(common::page_idx_t pageIdx) {
+        if (pageIdx != pinnedPageIdx) {
+            if (pinnedPageIdx != common::INVALID_PAGE_IDX) {
+                fileHandle.unpinPage(pinnedPageIdx);
+                pinnedPageIdx = common::INVALID_PAGE_IDX;
+                pinnedFrame = nullptr;
+            }
+            pinnedFrame = fileHandle.pinPage(pageIdx, PageReadPolicy::READ_PAGE);
+            pinnedPageIdx = pageIdx;
+        }
+        return pinnedFrame;
+    }
+
     FileHandle& fileHandle;
     PageRange pageRange;
     uint64_t size;
     uint64_t offset = 0;
+    common::page_idx_t pinnedPageIdx = common::INVALID_PAGE_IDX;
+    uint8_t* pinnedFrame = nullptr;
 };
 
 class ArtMemoryReader {
