@@ -537,8 +537,11 @@ PrimaryKeyIndex::PrimaryKeyIndex(IndexInfo indexInfo, std::unique_ptr<IndexStora
         DASSERT(hashIndexStorageInfo.overflowHeaderPage == INVALID_PAGE_IDX);
         hashIndexHeadersForReadTrx.resize(NUM_HASH_INDEXES);
         hashIndexHeadersForWriteTrx.resize(NUM_HASH_INDEXES);
+        // Slot pages must go through the shadow file: bypassing it leaves pages in the
+        // database file that no checkpoint commit record covers, so a crash before the commit
+        // point resurrects them under stale headers.
         hashIndexDiskArrays = std::make_unique<DiskArrayCollection>(*pageAllocator.getDataFH(),
-            *shadowFile, true /*bypassShadowing*/);
+            *shadowFile, false /*bypassShadowing*/);
         // Each index has a primary slot array and an overflow slot array
         for (size_t i = 0; i < NUM_HASH_INDEXES * 2; i++) {
             hashIndexDiskArrays->addDiskArray();
@@ -573,11 +576,12 @@ PrimaryKeyIndex::PrimaryKeyIndex(IndexInfo indexInfo, std::unique_ptr<IndexStora
         }
         hashIndexHeadersForWriteTrx.assign(hashIndexHeadersForReadTrx.begin(),
             hashIndexHeadersForReadTrx.end());
+        // See above: slot pages must stay covered by the checkpoint commit record.
         hashIndexDiskArrays = std::make_unique<DiskArrayCollection>(*pageAllocator.getDataFH(),
             *shadowFile,
             hashIndexStorageInfo.firstHeaderPage +
                 INDEX_HEADER_PAGES /*firstHeaderPage for the DAC follows the index header pages*/,
-            true /*bypassShadowing*/);
+            false /*bypassShadowing*/);
     }
     if (hashIndexDiskArrays->getNumHeaders() != NUM_HASH_INDEXES * 2) {
         throw RuntimeException(std::format(

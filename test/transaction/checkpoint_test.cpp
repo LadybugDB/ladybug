@@ -9,6 +9,7 @@
 #include <future>
 #include <iterator>
 #include <limits>
+#include <map>
 #include <mutex>
 #include <optional>
 #include <thread>
@@ -19,6 +20,7 @@
 #include "binder/ddl/bound_alter_info.h"
 #include "binder/ddl/bound_create_sequence_info.h"
 #include "catalog/catalog.h"
+#include "catalog/catalog_entry/node_table_catalog_entry.h"
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
 #include "catalog/catalog_entry/sequence_catalog_entry.h"
 #include "catalog/catalog_entry/table_catalog_entry.h"
@@ -36,6 +38,7 @@
 #include "storage/buffer_manager/memory_manager.h"
 #include "storage/checkpointer.h"
 #include "storage/database_header.h"
+#include "storage/index/index.h"
 #include "storage/page_allocator.h"
 #include "storage/page_manager.h"
 #include "storage/shadow_file.h"
@@ -128,6 +131,153 @@ TEST_F(FlakyCheckpointerTest, RecoverFromCheckpointStorageFailure) {
     };
     FlakyCheckpointer flakyCheckpointer(initFlakyCheckpointer);
     runTest(flakyCheckpointer);
+}
+
+// Simulates SIGKILL after the checkpoint storage phase but before the commit point (the WAL
+// checkpoint record): the storage phase runs to completion, so any pages it wrote to the
+// database file stay there, while recovery finds no commit record and must come back to the
+// pre-checkpoint state.
+class FlakyCheckpointerKilledAfterCheckpointStorage final : public Checkpointer {
+public:
+    explicit FlakyCheckpointerKilledAfterCheckpointStorage(main::ClientContext& clientContext)
+        : Checkpointer(clientContext) {}
+
+protected:
+    bool checkpointStorage() override {
+        Checkpointer::checkpointStorage();
+        throw RuntimeException("simulated crash after checkpoint storage phase.");
+    }
+};
+
+static std::map<page_idx_t, std::vector<uint8_t>> readPKIndexPages(main::Database* database,
+    const std::string& tableName) {
+    auto* entry = database->getCatalog()
+                      ->getTableCatalogEntry(&DUMMY_CHECKPOINT_TRANSACTION, tableName)
+                      ->ptrCast<catalog::NodeTableCatalogEntry>();
+    auto& nodeTable =
+        database->getStorageManager()->getTable(entry->getTableID())->cast<NodeTable>();
+    auto* dataFH = database->getStorageManager()->getDataFH();
+    std::map<page_idx_t, std::vector<uint8_t>> pages;
+    for (const auto& storageEntry : nodeTable.getPKIndex()->getStorageEntries()) {
+        for (auto i = 0u; i < storageEntry.pageRange.numPages; i++) {
+            const auto pageIdx = storageEntry.pageRange.startPageIdx + i;
+            std::vector<uint8_t> bytes(common::LBUG_PAGE_SIZE);
+            dataFH->getFileInfo()->readFromFile(bytes.data(), common::LBUG_PAGE_SIZE,
+                static_cast<uint64_t>(pageIdx) * common::LBUG_PAGE_SIZE);
+            pages.emplace(pageIdx, std::move(bytes));
+        }
+    }
+    return pages;
+}
+
+TEST_F(FlakyCheckpointerTest, InterruptedCopyCheckpointKeepsPKIndexUsable) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    // Process death is modeled by tearing down without checkpointing: disable every
+    // automatic persistence path so only explicit CHECKPOINT statements persist.
+    auto disableAutoPersistence = [&]() {
+        ASSERT_TRUE(conn->query("CALL force_checkpoint_on_close=false;")->isSuccess());
+        ASSERT_TRUE(conn->query("CALL auto_checkpoint=false;")->isSuccess());
+    };
+    createDBAndConn();
+    disableAutoPersistence();
+    ASSERT_TRUE(
+        conn->query("CREATE NODE TABLE Person(id INT64 PRIMARY KEY, name STRING, age INT64);")
+            ->isSuccess());
+    ASSERT_TRUE(conn->query("UNWIND range(0, 40) AS i CREATE (:Person {id: i, name: 'n', age: i});")
+                    ->isSuccess());
+    ASSERT_TRUE(conn->query("CHECKPOINT;")->isSuccess());
+    const auto baselineIndexPages = readPKIndexPages(database.get(), "Person");
+    ASSERT_FALSE(baselineIndexPages.empty());
+    // A bulk COPY logs no row data to the WAL; its durability rides entirely on the next
+    // checkpoint, so an interruption before the commit point must lose the COPY without
+    // modifying the committed index pages.
+    auto res = conn->query(
+        "COPY Person FROM (UNWIND RANGE(1000000, 1019999) AS i RETURN i, 'n', i % 1000);");
+    ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+    FlakyCheckpointer killer([](main::ClientContext& context) {
+        return std::make_unique<FlakyCheckpointerKilledAfterCheckpointStorage>(context);
+    });
+    auto context = getClientContext(*conn);
+    killer.setCheckpointer(*context);
+    res = conn->query("CHECKPOINT;");
+    ASSERT_FALSE(res->isSuccess());
+    ASSERT_NE(res->getErrorMessage().find("simulated crash"), std::string::npos)
+        << res->getErrorMessage();
+    FlakyCheckpointer::resetCheckpointer(*context);
+    // The interrupted checkpoint wrote no commit record, so every committed index page must be
+    // byte-identical: any difference is payload that outlived its headers and corrupts probes.
+    const auto interruptedIndexPages = readPKIndexPages(database.get(), "Person");
+    for (const auto& [pageIdx, baselineBytes] : baselineIndexPages) {
+        ASSERT_TRUE(interruptedIndexPages.contains(pageIdx))
+            << "committed index page " << pageIdx << " went missing";
+        EXPECT_EQ(interruptedIndexPages.at(pageIdx), baselineBytes)
+            << "committed index page " << pageIdx << " changed without a commit record";
+    }
+    // Tear down without checkpointing: the in-memory post-storage state dies with the process,
+    // exactly as with SIGKILL. The interrupted COPY must be entirely absent afterwards.
+    res.reset();
+    createDBAndConn();
+    disableAutoPersistence();
+    res = conn->query("MATCH (p:Person) WHERE p.id >= 1000000 RETURN COUNT(p);");
+    ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+    EXPECT_EQ(res->getNext()->getValue(0)->getValue<int64_t>(), 0);
+    // Mirror the crash loop: several rounds of COPY + interruption + reopen + small write.
+    // Every round must come back to the rows committed so far.
+    auto countRows = [&](int64_t round) -> int64_t {
+        auto countRes = conn->query("MATCH (p:Person) RETURN COUNT(p);");
+        if (!countRes->isSuccess()) {
+            ADD_FAILURE() << "round " << round << ": " << countRes->getErrorMessage();
+            return -1;
+        }
+        return countRes->getNext()->getValue(0)->getValue<int64_t>();
+    };
+    // Every round reuses the same key range: with the rows always lost (never checkpointed),
+    // any probe that still finds one of these keys - or walks a chain they left behind - is
+    // reading payload from an interrupted checkpoint.
+    for (auto round = 0; round < 6; round++) {
+        res = conn->query(
+            "COPY Person FROM (UNWIND RANGE(2000000, 2019999) AS i RETURN i, 'n', i % 1000);");
+        ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+        FlakyCheckpointer roundKiller([](main::ClientContext& context) {
+            return std::make_unique<FlakyCheckpointerKilledAfterCheckpointStorage>(context);
+        });
+        auto roundContext = getClientContext(*conn);
+        roundKiller.setCheckpointer(*roundContext);
+        res = conn->query("CHECKPOINT;");
+        ASSERT_FALSE(res->isSuccess());
+        ASSERT_NE(res->getErrorMessage().find("simulated crash"), std::string::npos)
+            << res->getErrorMessage();
+        FlakyCheckpointer::resetCheckpointer(*roundContext);
+        // Process death: drop everything without checkpointing. Live results must die
+        // with their connection, otherwise their later destruction corrupts the heap.
+        res.reset();
+        createDBAndConn();
+        disableAutoPersistence();
+        // Round 0 still has all 41 baseline rows; each round deletes id 5 once, so later
+        // rounds expect 40.
+        EXPECT_EQ(countRows(round), round == 0 ? 41 : 40)
+            << "round " << round << " adopted uncommitted rows";
+        // Small write + explicit checkpoint, like the reopen/delete/close between kills.
+        // Teardowns never checkpoint (process death); only this statement persists.
+        res = conn->query("MATCH (p:Person {id: 5}) DETACH DELETE p;");
+        EXPECT_TRUE(res->isSuccess()) << res->getErrorMessage();
+        res = conn->query("CHECKPOINT;");
+        EXPECT_TRUE(res->isSuccess()) << res->getErrorMessage();
+        res.reset();
+        createDBAndConn();
+        disableAutoPersistence();
+    }
+    res = conn->query("MATCH (p:Person) WHERE p.id >= 1000000 RETURN COUNT(p);");
+    ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+    EXPECT_EQ(res->getNext()->getValue(0)->getValue<int64_t>(), 0);
+    res = conn->query(
+        "COPY Person FROM (UNWIND RANGE(9000000, 9000999) AS i RETURN i, 'n', i % 1000);");
+    ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+    res = conn->query("MATCH (p:Person) RETURN COUNT(p);");
+    ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+    EXPECT_EQ(res->getNext()->getValue(0)->getValue<int64_t>(), 1040);
 }
 
 class CheckpointRetryAfterFailureTest : public FlakyCheckpointerTest {
