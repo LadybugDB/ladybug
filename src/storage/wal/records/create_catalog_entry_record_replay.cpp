@@ -7,7 +7,9 @@
 #include "catalog/catalog_entry/sequence_catalog_entry.h"
 #include "catalog/catalog_entry/table_catalog_entry.h"
 #include "catalog/catalog_entry/type_catalog_entry.h"
+#include "common/partition_routing.h"
 #include "storage/index/art_index.h"
+#include "storage/partition_storage_registry.h"
 #include "storage/storage_manager.h"
 #include "storage/table/node_table.h"
 #include "storage/wal/wal_replayer.h"
@@ -57,6 +59,27 @@ void WALReplayer::replayCreateCatalogEntryRecord(WALRecord& walRecord) const {
         auto& entry = record.ownedCatalogEntry->constCast<TableCatalogEntry>();
         auto boundInfo = entry.getBoundCreateTableInfo(transaction, record.isInternal);
         const auto isRelGroup = entry.getType() == CatalogEntryType::REL_GROUP_ENTRY;
+        auto* recordedNodeEntry = isRelGroup ? nullptr : &entry.constCast<NodeTableCatalogEntry>();
+        const auto isPartitionParent =
+            recordedNodeEntry != nullptr && recordedNodeEntry->isPartitioned();
+        const auto isPartitionChild =
+            recordedNodeEntry != nullptr && recordedNodeEntry->isPartitionChild();
+        auto replayedParentID = common::INVALID_TABLE_ID;
+        if (isPartitionParent) {
+            // Every partition child carries its own create record and re-attaches below, so
+            // replay must not recreate the initial partition set implicitly: the names
+            // would collide with the replayed children.
+            boundInfo.extraInfo->ptrCast<binder::BoundExtraCreateNodeTableInfo>()
+                ->skipInitialPartitionCreation = true;
+        }
+        if (isPartitionChild) {
+            // The recorded parent ID is stale when recovery shifted the ID space; the
+            // replayed parent always precedes its children in WAL order.
+            replayedParentID = getReplayedEntryID(CatalogEntryType::NODE_TABLE_ENTRY,
+                recordedNodeEntry->getParentTableID());
+            boundInfo.extraInfo->ptrCast<binder::BoundExtraCreateNodeTableInfo>()
+                ->setPartitionParent(replayedParentID, recordedNodeEntry->getPartitionIndex());
+        }
         if (isRelGroup) {
             for (auto& relTableInfo :
                 boundInfo.extraInfo->ptrCast<binder::BoundExtraCreateRelTableGroupInfo>()
@@ -81,7 +104,34 @@ void WALReplayer::replayCreateCatalogEntryRecord(WALRecord& walRecord) const {
                     replayedRelEntryInfos[i].oid);
             }
         }
-        storageManager->createTable(newTableEntry, &clientContext);
+        if (isPartitionChild) {
+            // Re-attach the child to the replayed parent: the child's own record is the
+            // only WAL trace of the parent's child set and LIST key map, both of which
+            // mutated after the parent's create record was logged.
+            auto* replayedParent = catalog->getTableCatalogEntry(transaction, replayedParentID)
+                                       ->ptrCast<NodeTableCatalogEntry>();
+            replayedParent->addChildTableID(newTableEntry->getTableID());
+            if (replayedParent->isPartitioned() &&
+                static_cast<common::PartitionMethod>(*replayedParent->getPartitionMethod()) ==
+                    common::PartitionMethod::LIST &&
+                !recordedNodeEntry->getListPartitionKey().empty()) {
+                replayedParent->addListPartition(recordedNodeEntry->getListPartitionKey(),
+                    newTableEntry->getTableID());
+            }
+            // Partition children own per-partition storage files; like the
+            // partitioned-parent branch of StorageManager::createTable, provision them
+            // through the registry rather than the primary storage manager.
+            auto* registry = PartitionStorageRegistry::Get(&clientContext);
+            if (!registry->isRemotelyRouted(replayedParentID,
+                    recordedNodeEntry->getPartitionIndex())) {
+                registry
+                    ->getOrCreate(&clientContext, newTableEntry->getTableID(),
+                        newTableEntry->getName())
+                    .createTable(newTableEntry, &clientContext);
+            }
+        } else {
+            storageManager->createTable(newTableEntry, &clientContext);
+        }
     } break;
     case CatalogEntryType::SCALAR_MACRO_ENTRY: {
         auto& macroEntry = record.ownedCatalogEntry->constCast<ScalarMacroCatalogEntry>();

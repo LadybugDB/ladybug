@@ -36,6 +36,11 @@ struct StorageVersionInfo {
     // Storage version 48 adds column min/max to table stats for range-selectivity
     // estimation. Older files have no min/max bytes; readers must leave min/max unset.
     static constexpr storage_version_t STORAGE_VERSION_48 = 48;
+    // Storage version 49 adds the child-side copy of the parent's encoded LIST key to
+    // partition-child node table catalog entries, so WAL replay can restore the parent's
+    // key -> child map. Older files have no key bytes; replayed LIST children stay
+    // unkeyed.
+    static constexpr storage_version_t STORAGE_VERSION_49 = 49;
 
     static std::unordered_map<std::string, storage_version_t> getStorageVersionInfo() {
         return {{"0.12.0", STORAGE_VERSION_40}, {"0.12.2", STORAGE_VERSION_40},
@@ -50,7 +55,7 @@ struct StorageVersionInfo {
             {"0.19.1", STORAGE_VERSION_43}, {"0.20.0", STORAGE_VERSION_47},
             {"0.20.1", STORAGE_VERSION_47}, {"0.20.2", STORAGE_VERSION_47},
             {"0.21.0", STORAGE_VERSION_47}, {"0.21.1", STORAGE_VERSION_47},
-            {"0.21.2", STORAGE_VERSION_47}, {"0.22.0", STORAGE_VERSION_48}};
+            {"0.21.2", STORAGE_VERSION_47}, {"0.22.0", STORAGE_VERSION_49}};
     }
 
     static LBUG_API storage_version_t getStorageVersion();
@@ -59,7 +64,7 @@ struct StorageVersionInfo {
                storageVersion == STORAGE_VERSION_42 || storageVersion == STORAGE_VERSION_43 ||
                storageVersion == STORAGE_VERSION_44 || storageVersion == STORAGE_VERSION_45 ||
                storageVersion == STORAGE_VERSION_46 || storageVersion == STORAGE_VERSION_47 ||
-               storageVersion == getStorageVersion();
+               storageVersion == STORAGE_VERSION_48 || storageVersion == getStorageVersion();
     }
 
     static constexpr const char* MAGIC_BYTES = "LBUG";

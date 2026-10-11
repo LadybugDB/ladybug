@@ -129,6 +129,12 @@ public:
     common::table_id_t getParentTableID() const { return parentTableID; }
     uint64_t getPartitionIndex() const { return partitionIndex; }
 
+    // Child-side copy of the parent's encoded LIST key for this partition (empty when the
+    // child is not a dynamically created LIST partition). WAL replay restores the parent's
+    // key -> child map from it so later writes keep routing into the existing partitions.
+    const std::string& getListPartitionKey() const { return listPartitionKey; }
+    void setListPartitionKey(std::string key) { listPartitionKey = std::move(key); }
+
     // ---- LIST partitioning ----
     // A LIST parent keeps one partition per distinct partition-key value. The value -> partition
     // mapping is persisted as an opaque encoded key (see processor-side encodeListPartitionKey)
@@ -178,6 +184,7 @@ private:
     std::vector<std::pair<std::string, common::table_id_t>> listPartitionKeys;
     common::table_id_t parentTableID = common::INVALID_TABLE_ID;
     uint64_t partitionIndex = 0;
+    std::string listPartitionKey;
 };
 
 } // namespace catalog

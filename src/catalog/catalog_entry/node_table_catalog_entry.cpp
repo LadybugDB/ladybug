@@ -105,6 +105,10 @@ void NodeTableCatalogEntry::serialize(common::Serializer& serializer) const {
     if (isPartitionChild()) {
         serializer.write(parentTableID);
         serializer.write(partitionIndex);
+        // Child-side copy of the parent's encoded LIST key (empty for HASH children and
+        // the initial unkeyed LIST partition). Lets WAL replay restore the parent's
+        // key -> child map.
+        serializer.write(listPartitionKey);
     }
 }
 
@@ -188,6 +192,10 @@ std::unique_ptr<NodeTableCatalogEntry> NodeTableCatalogEntry::deserialize(
         if (isPartitionChild) {
             deserializer.deserializeValue(nodeTableEntry->parentTableID);
             deserializer.deserializeValue(nodeTableEntry->partitionIndex);
+            if (deserializer.getStorageVersion() >=
+                ::lbug::storage::StorageVersionInfo::STORAGE_VERSION_49) {
+                deserializer.deserializeValue(nodeTableEntry->listPartitionKey);
+            }
         }
     }
     return nodeTableEntry;
@@ -239,8 +247,10 @@ std::unique_ptr<TableCatalogEntry> NodeTableCatalogEntry::copy() const {
     other->partitionColumnID = partitionColumnID;
     other->numPartitions = numPartitions;
     other->childTableIDs = childTableIDs;
+    other->listPartitionKeys = listPartitionKeys;
     other->parentTableID = parentTableID;
     other->partitionIndex = partitionIndex;
+    other->listPartitionKey = listPartitionKey;
     other->copyFrom(*this);
     return other;
 }
@@ -256,6 +266,7 @@ std::unique_ptr<BoundExtraCreateCatalogEntryInfo> NodeTableCatalogEntry::getBoun
         copyVector(getProperties()), storage, storageFormat, std::move(partitionInfo));
     if (isPartitionChild()) {
         boundExtraInfo->setPartitionParent(parentTableID, partitionIndex);
+        boundExtraInfo->setListPartitionKey(listPartitionKey);
     }
     return boundExtraInfo;
 }
