@@ -169,7 +169,8 @@ void CSVConverter::convertCSVFiles() {
     }
     for (auto table : tables) {
         spdlog::info("Converting: {} to {}", table->csvFilePath, table->outputFilePath);
-        auto cmd = table->getConverterQuery(tempConn->getClientContext());
+        auto cmd =
+            table->getConverterQuery(tempConn->getClientContext(), fileExtension == ".parquet");
         auto result = tempConn->query(cmd);
         if (!result->isSuccess()) {
             spdlog::error(result->getErrorMessage());
@@ -202,7 +203,8 @@ void CSVConverter::convertCSVDataset() {
     removeParentDirectoryOfDBPath(tempDatabasePath);
 }
 
-static std::string getColumnAlias(main::ClientContext* context, const std::string& tableName) {
+static std::string getColumnAlias(main::ClientContext* context, const std::string& tableName,
+    bool stringifyIntervals) {
     auto properties =
         catalog::Catalog::Get(*context)
             ->getTableCatalogEntry(&transaction::DUMMY_CHECKPOINT_TRANSACTION, tableName)
@@ -212,13 +214,22 @@ static std::string getColumnAlias(main::ClientContext* context, const std::strin
         if (property.getName() == "_ID") {
             continue;
         }
-        alias += std::format(", e.{} as {}", property.getName(), property.getName());
+        if (stringifyIntervals &&
+            property.getType().getLogicalTypeID() == common::LogicalTypeID::INTERVAL) {
+            // COPY TO parquet loudly rejects INTERVAL values with microsecond precision
+            // (#1176), so export intervals as strings; COPY FROM casts them back losslessly.
+            alias +=
+                std::format(", CAST(e.{} AS STRING) as {}", property.getName(), property.getName());
+        } else {
+            alias += std::format(", e.{} as {}", property.getName(), property.getName());
+        }
     }
     return alias;
 }
 
-std::string CSVConverter::NodeTableInfo::getConverterQuery(main::ClientContext* context) const {
-    auto alias = getColumnAlias(context, name);
+std::string CSVConverter::NodeTableInfo::getConverterQuery(main::ClientContext* context,
+    bool stringifyIntervals) const {
+    auto alias = getColumnAlias(context, name, stringifyIntervals);
     if (alias.size() > 1) {
         alias = alias.substr(1);
     }
@@ -226,8 +237,9 @@ std::string CSVConverter::NodeTableInfo::getConverterQuery(main::ClientContext* 
         outputFilePath);
 }
 
-std::string CSVConverter::RelTableInfo::getConverterQuery(main::ClientContext* context) const {
-    auto alias = getColumnAlias(context, name);
+std::string CSVConverter::RelTableInfo::getConverterQuery(main::ClientContext* context,
+    bool stringifyIntervals) const {
+    auto alias = getColumnAlias(context, name, stringifyIntervals);
     return std::format(
         "COPY (MATCH (a)-[e:{}]->(b) WITH a.{} AS `from`, b.{} AS `to`{} RETURN *) TO \"{}\";",
         name, fromTable->primaryKey, toTable->primaryKey, alias, outputFilePath);
