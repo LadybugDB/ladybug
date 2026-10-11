@@ -493,7 +493,9 @@ void ValueVector::setValue(uint32_t pos, std::string_view val) {
 }
 
 // A null struct's fields are null too, so that reading a field of a null struct gives null. Not a
-// union's: its tag and members are written without resetting their null flags.
+// union's: its tag and members are written without resetting their null flags. A null struct in a
+// LIST gets its field nulls where the list's data vector is written (setNull,
+// StructColumn::scanSegment, StructChunkData::scan, Arrow import), not through the list.
 static bool nullsCoverFields(const LogicalType& type) {
     return type.getPhysicalType() == PhysicalTypeID::STRUCT &&
            type.getLogicalTypeID() != LogicalTypeID::UNION;
