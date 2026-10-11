@@ -32,11 +32,12 @@ bool StructColumnWriter::hasAnalyze() {
 // Child writers write a value for every non-null entry of their vector, so the fields of a null
 // struct must be null too, or their slots are written and later values move to other rows. The
 // vectors are read again from the factorized table before each pass, which leaves the fields of a
-// null struct as they were, so every pass sets them.
+// null struct as they were, so every pass sets them. The field vectors share the struct's state
+// (ValueVector::setState), so pos is also the position the child writers read.
 void StructColumnWriter::nullFieldsOfNullStructs(ValueVector* vector, uint64_t count) {
     auto& childVectors = StructVector::getFieldVectors(vector);
     for (auto i = 0u; i < count; i++) {
-        auto pos = getVectorPos(vector, i);
+        auto pos = static_cast<uint32_t>(getVectorPos(vector, i));
         if (vector->isNull(pos)) {
             for (auto& childVector : childVectors) {
                 childVector->setNull(pos, true);
