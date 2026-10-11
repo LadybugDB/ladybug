@@ -294,6 +294,13 @@ void TransactionManager::tryCheckpoint(main::ClientContext& clientContext) {
     if (clientContext.isInMemory()) {
         return;
     }
+    // Best-effort background checkpoint: defer while a read transaction holds an MVCC
+    // snapshot instead of stalling that reader or failing the commit that triggered the
+    // checkpoint. The next commit retries. An explicit CHECKPOINT still waits for readers
+    // and fails closed on timeout.
+    if (hasActiveReadTransaction()) {
+        return;
+    }
     std::unique_lock checkpointLck{mtxForCheckpoint, std::try_to_lock};
     if (!checkpointLck.owns_lock()) {
         return;
@@ -301,16 +308,79 @@ void TransactionManager::tryCheckpoint(main::ClientContext& clientContext) {
     checkpointNoLock(clientContext);
 }
 
+bool TransactionManager::hasActiveReadTransaction() {
+    std::unique_lock lck{mtxForSerializingPublicFunctionCalls};
+    return std::ranges::any_of(activeTransactions, [](const auto& transaction) {
+        return transaction->getType() == TransactionType::READ_ONLY;
+    });
+}
+
+std::unordered_set<transaction_t> TransactionManager::snapshotActiveTransactionIDs() {
+    std::unique_lock lck{mtxForSerializingPublicFunctionCalls};
+    std::unordered_set<transaction_t> transactionIDs;
+    transactionIDs.reserve(activeTransactions.size());
+    for (const auto& transaction : activeTransactions) {
+        transactionIDs.insert(transaction->getID());
+    }
+    return transactionIDs;
+}
+
+void TransactionManager::waitUntilSnapshottedTransactionsLeave(
+    std::unordered_set<transaction_t> transactionIDs) {
+    if (transactionIDs.empty()) {
+        return;
+    }
+    uint64_t numTimesWaited = 0;
+    while (true) {
+        bool anyLeft = true;
+        {
+            // Use try_to_lock: the checkpoint holds the write gate here, and a concurrent
+            // write begin may hold the public-function lock while blocked on that gate, so
+            // a blocking acquisition could deadlock. A missed observation only retries.
+            // The overall wait stays bounded by the timeout below, so a persistent race
+            // fails closed instead of hanging.
+            std::unique_lock lck{mtxForSerializingPublicFunctionCalls, std::try_to_lock};
+            if (lck.owns_lock()) {
+                anyLeft = std::ranges::any_of(activeTransactions, [&](const auto& transaction) {
+                    return transactionIDs.contains(transaction->getID());
+                });
+            }
+        }
+        if (!anyLeft) {
+            break;
+        }
+        numTimesWaited++;
+        if (numTimesWaited * THREAD_SLEEP_TIME_WHEN_WAITING_IN_MICROS >
+            checkpointWaitTimeoutInMicros) {
+            throw TransactionManagerException(
+                "Timeout waiting for active transactions to leave the system before "
+                "checkpointing. If you have an open transaction, please close it and try "
+                "again.");
+        }
+        std::this_thread::sleep_for(
+            std::chrono::microseconds(THREAD_SLEEP_TIME_WHEN_WAITING_IN_MICROS));
+    }
+}
+
 void TransactionManager::checkpointNoLock(main::ClientContext& clientContext) {
     QueryProgressScope progress{clientContext, 0.01};
-    // We only need to wait for active write transactions to leave the system before
-    // checkpointing. Read transactions can continue because they use MVCC snapshot isolation.
+    // Snapshot the active transactions before acquiring the write gate. The checkpoint merges
+    // committed versions into persistent storage and resets their version/update info, which
+    // destroys the MVCC snapshots of transactions that are already open, so every snapshotted
+    // transaction must leave before the storage phase runs. Taking the public-function lock
+    // here is safe because the gate is not held yet.
+    auto preexistingTransactions = snapshotActiveTransactionIDs();
     // Column chunk metadata of in-place checkpointed data is published before the shadow pages
     // are applied, so column reads resolve such in-flight pages through the shadow file (see
     // ColumnReadWriter::readFromPage); applying shadow pages uses per-page locking.
     UniqLock writeGate;
     try {
         writeGate = stopNewWriteTransactionsAndWaitUntilAllWriteTransactionsLeave();
+    } catch (std::exception& e) {
+        throw CheckpointException{e};
+    }
+    try {
+        waitUntilSnapshottedTransactionsLeave(std::move(preexistingTransactions));
     } catch (std::exception& e) {
         throw CheckpointException{e};
     }
