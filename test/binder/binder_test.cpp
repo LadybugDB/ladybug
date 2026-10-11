@@ -45,6 +45,16 @@ TEST_F(EmptyDBTest, LargeConstantListIsNotFolded) {
         common::ExpressionType::LITERAL);
     EXPECT_EQ(bindFirstColumn("RETURN range(1, 100000)")->expressionType,
         common::ExpressionType::FUNCTION);
+    std::string writtenOutList = "[0";
+    for (auto i = 1; i < 10000; i++) {
+        writtenOutList += ", " + std::to_string(i);
+    }
+    writtenOutList += "]";
+    EXPECT_EQ(bindFirstColumn("RETURN " + writtenOutList)->expressionType,
+        common::ExpressionType::LITERAL);
+    EXPECT_EQ(bindFirstColumn("RETURN CASE WHEN true THEN " + writtenOutList + " ELSE [1] END")
+                  ->expressionType,
+        common::ExpressionType::LITERAL);
 }
 
 } // namespace testing

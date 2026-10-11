@@ -1,5 +1,8 @@
 #include "expression_evaluator/expression_evaluator_utils.h"
 
+#include "binder/expression/case_expression.h"
+#include "binder/expression/literal_expression.h"
+#include "common/types/value/nested.h"
 #include "common/types/value/value.h"
 #include "processor/expression_mapper.h"
 
@@ -27,6 +30,35 @@ static uint64_t getNumNestedValues(const ValueVector& vector) {
     }
 }
 
+static uint64_t getNumNestedValues(const Value& value) {
+    uint64_t numValues = value.getChildrenSize();
+    for (auto i = 0u; i < value.getChildrenSize(); i++) {
+        numValues += getNumNestedValues(*NestedVal::getChildVal(&value, i));
+    }
+    return numValues;
+}
+
+// Sub-expressions plus the nested values of the literals among them.
+static uint64_t getExpressionSize(const binder::Expression& expression) {
+    uint64_t size = 1;
+    if (expression.expressionType == ExpressionType::LITERAL) {
+        size += getNumNestedValues(expression.constCast<binder::LiteralExpression>().value);
+    } else if (expression.expressionType == ExpressionType::CASE_ELSE) {
+        // CASE keeps its branches outside the children.
+        const auto& caseExpression = expression.constCast<binder::CaseExpression>();
+        for (auto i = 0u; i < caseExpression.getNumCaseAlternatives(); i++) {
+            const auto* alternative = caseExpression.getCaseAlternative(i);
+            size += getExpressionSize(*alternative->whenExpression) +
+                    getExpressionSize(*alternative->thenExpression);
+        }
+        size += getExpressionSize(*caseExpression.getElseExpression());
+    }
+    for (auto i = 0u; i < expression.getNumChildren(); i++) {
+        size += getExpressionSize(*expression.getChild(i));
+    }
+    return size;
+}
+
 static std::unique_ptr<ExpressionEvaluator> evaluateConstant(
     const std::shared_ptr<binder::Expression>& expression, main::ClientContext* clientContext,
     ResultSet& emptyResultSet) {
@@ -46,7 +78,8 @@ std::optional<Value> ExpressionEvaluatorUtils::tryEvaluateConstantExpression(
     std::shared_ptr<binder::Expression> expression, main::ClientContext* clientContext) {
     ResultSet emptyResultSet{0};
     auto evaluator = evaluateConstant(expression, clientContext, emptyResultSet);
-    if (getNumNestedValues(*evaluator->resultVector) > MAX_FOLDED_NESTED_VALUES) {
+    const auto numValues = getNumNestedValues(*evaluator->resultVector);
+    if (numValues > MAX_FOLDED_NESTED_VALUES && numValues > getExpressionSize(*expression)) {
         return std::nullopt;
     }
     return getConstantValue(*evaluator);

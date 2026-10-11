@@ -14,7 +14,7 @@ namespace planner {
 void Planner::appendUnwind(const BoundReadingClause& readingClause, LogicalPlan& plan) {
     auto& unwindClause = dynamic_cast_checked<const BoundUnwindClause&>(readingClause);
     auto inExpr = unwindClause.getInExpr();
-    if (ConstantExpressionVisitor::isConstant(*inExpr)) {
+    if (ConstantExpressionVisitor::needFold(*inExpr)) {
         if (auto value = evaluator::ExpressionEvaluatorUtils::tryEvaluateConstantExpression(inExpr,
                 clientContext)) {
             inExpr =
