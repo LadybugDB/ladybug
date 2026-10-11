@@ -260,6 +260,33 @@ Grace
 -STATEMENT MATCH (p:art_range_str) WHERE p.name >= '' RETURN list_sort(collect(p.name));
 ---- 1
 [a,ab,abc,abcd,abd,b,ba]
+-STATEMENT MATCH (p:art_range_int) WHERE p.ID = -500 RETURN p.ID;
+---- 1
+-500
+-STATEMENT MATCH (p:art_range_int) WHERE p.ID = 499 RETURN p.ID;
+---- 1
+499
+-STATEMENT MATCH (p:art_range_int) WHERE p.ID = 500 RETURN p.ID;
+---- 0
+-STATEMENT MATCH (p:art_range_str) WHERE p.name = 'abcd' RETURN p.name;
+---- 1
+abcd
+-STATEMENT CREATE (:art_range_int {ID: 500});
+---- ok
+-STATEMENT CREATE (:art_range_str {name: 'abca'});
+---- ok
+-STATEMENT MATCH (p:art_range_int) WHERE p.ID >= 490 RETURN count(*), min(p.ID), max(p.ID);
+---- 1
+11|490|500
+-STATEMENT MATCH (p:art_range_int) WHERE p.ID >= -500 RETURN count(*), min(p.ID), max(p.ID);
+---- 1
+1001|-500|500
+-STATEMENT MATCH (p:art_range_str) WHERE p.name > 'abc' AND p.name <= 'abd' RETURN list_sort(collect(p.name));
+---- 1
+[abca,abcd,abd]
+-STATEMENT MATCH (p:art_range_str) WHERE p.name >= '' RETURN list_sort(collect(p.name));
+---- 1
+[a,ab,abc,abca,abcd,abd,b,ba]
 -STATEMENT CALL enable_default_hash_index=true;
 ---- ok
 

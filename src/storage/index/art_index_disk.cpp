@@ -217,6 +217,7 @@ void ArtPrimaryKeyIndex::loadEntries(const ArtPrimaryKeyIndexStorageInfo& storag
     }
 }
 
+// Callers hold `mutex`, which the reader's pin relies on.
 void ArtPrimaryKeyIndex::materializeDiskTree() {
     if (!diskBacked) {
         return;
