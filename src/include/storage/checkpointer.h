@@ -43,7 +43,8 @@ public:
     void writeCheckpoint();
     void beginCheckpoint(common::transaction_t snapshotTS,
         common::transaction_t retentionHorizon = common::INVALID_TRANSACTION,
-        std::vector<common::transaction_t> openStartTSs = {});
+        std::vector<common::transaction_t> openStartTSs = {},
+        common::transaction_t pinningTxnID = common::INVALID_TRANSACTION);
     // Materialize storage while the write gate remains held. WAL rotation alone does not protect
     // the version chains and update metadata scanned and reset in this phase.
     void checkpointStoragePhase();
@@ -74,7 +75,11 @@ protected:
         bool hasStorageChanges);
     virtual void writeDatabaseHeader(const DatabaseHeader& header);
     virtual void logCheckpointAndApplyShadowPages(bool walRotated = false);
+    // Runs before the WAL retirement step on every checkpoint, whether or not retirement
+    // is skipped for a pinned horizon.
     virtual void beforeWALRetirement(bool walRotated);
+    // Runs only when WAL retirement actually executes; skipped alongside retirement while
+    // the horizon pins the WAL.
     virtual void onWALRetired(bool walRotated);
     virtual void beforeGraphShadowApply(StorageManager& storageManager);
     void applyShadowPagesForPartitionChildren();
@@ -110,9 +115,14 @@ protected:
     // Snapshot timestamp captured at drain time for MVCC catalog serialization.
     common::transaction_t snapshotTS = 0;
     // Snapshot-horizon floor captured alongside snapshotTS (before the write gate).
-    // Version data committed at or after it is retained for open readers;
-    // INVALID_TRANSACTION when no transaction was open (fast path: wipe as before).
+    // Version data committed at or after it is retained for open readers, and WAL
+    // rotation/retirement is skipped while it pins (the WAL keeps the commit records the
+    // pinned snapshot may still need);
+    // INVALID_TRANSACTION when no transaction was open (fast path: wipe and retire as before).
     common::transaction_t retentionHorizon = common::INVALID_TRANSACTION;
+    // Transaction holding the horizon above, for pin observability. Meaningful only when
+    // the horizon is pinned.
+    common::transaction_t pinningTxnID = common::INVALID_TRANSACTION;
     // Open-reader start timestamps captured alongside the horizon. CSR groups use the set
     // (not the scalar) to cover and prune retained pre-checkpoint snapshots.
     std::vector<common::transaction_t> openStartTSs;

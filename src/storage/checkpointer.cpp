@@ -1,6 +1,7 @@
 #include "storage/checkpointer.h"
 
 #include <chrono>
+#include <cstdio>
 #include <string_view>
 #include <thread>
 #include <vector>
@@ -260,7 +261,8 @@ void Checkpointer::writeCheckpoint() {
 }
 
 void Checkpointer::beginCheckpoint(common::transaction_t snapshotTimestamp,
-    common::transaction_t retentionHorizon_, std::vector<common::transaction_t> openStartTSs_) {
+    common::transaction_t retentionHorizon_, std::vector<common::transaction_t> openStartTSs_,
+    common::transaction_t pinningTxnID_) {
     if (isInMemory) {
         return;
     }
@@ -269,10 +271,16 @@ void Checkpointer::beginCheckpoint(common::transaction_t snapshotTimestamp,
     snapshotTS = snapshotTimestamp;
     retentionHorizon = retentionHorizon_;
     openStartTSs = std::move(openStartTSs_);
+    pinningTxnID = pinningTxnID_;
     checkpointTargets = collectCheckpointTargets();
 
+    // A held-open reader pins the WAL: rotating now would orphan the frozen records its
+    // snapshot may still need, and the next checkpoint refuses to overwrite a leftover
+    // frozen WAL. The checkpoint proceeds without rotation; the CHECKPOINT record lands in
+    // the active WAL and retirement below is skipped the same way.
+    const bool pinWAL = retentionHorizon != common::INVALID_TRANSACTION;
     for (const auto& target : checkpointTargets) {
-        const auto rotated = target.storageManager == mainStorageManager &&
+        const auto rotated = !pinWAL && target.storageManager == mainStorageManager &&
                              target.storageManager->getWAL().rotateForCheckpoint(&clientContext);
         walRotatedByManager[target.storageManager] = rotated;
         walRotated = walRotated || rotated;
@@ -404,8 +412,15 @@ void Checkpointer::postCheckpointCleanup(bool canResetPageManagerToCurrent) try 
             }
         }
     }
+    // The snapshot horizon pins the WAL alongside the version chains: retirement is
+    // skipped while a reader is open and resumes at the next unpinned checkpoint. With no
+    // transaction open every path below is exactly as before.
+    const bool pinWALRetirement = retentionHorizon != common::INVALID_TRANSACTION;
     for (const auto& target : checkpointTargets) {
         if (target.storageManager == mainStorageManager) {
+            continue;
+        }
+        if (pinWALRetirement) {
             continue;
         }
         target.storageManager->getWAL().retireFrozenWAL();
@@ -413,12 +428,24 @@ void Checkpointer::postCheckpointCleanup(bool canResetPageManagerToCurrent) try 
     }
     const auto mainWALRotated = walRotatedByManager.at(mainStorageManager);
     beforeWALRetirement(mainWALRotated);
-    if (mainWALRotated) {
-        mainStorageManager->getWAL().retireFrozenWAL();
+    if (pinWALRetirement) {
+        auto& mainWAL = mainStorageManager->getWAL();
+        std::fprintf(stderr,
+            "Checkpoint pinned the WAL for open transaction %llu (horizon %llu, %zu open): "
+            "retaining %llu active and %llu frozen bytes; "
+            "retirement resumes once it closes.\n",
+            static_cast<unsigned long long>(pinningTxnID),
+            static_cast<unsigned long long>(retentionHorizon), openStartTSs.size(),
+            static_cast<unsigned long long>(mainWAL.getFileSize()),
+            static_cast<unsigned long long>(mainWAL.getFrozenWALFileSize()));
     } else {
-        mainStorageManager->getWAL().retireActiveWAL();
+        if (mainWALRotated) {
+            mainStorageManager->getWAL().retireFrozenWAL();
+        } else {
+            mainStorageManager->getWAL().retireActiveWAL();
+        }
+        onWALRetired(mainWALRotated);
     }
-    onWALRetired(mainWALRotated);
     for (const auto& target : checkpointTargets) {
         target.storageManager->getShadowFile().clear(*bufferManager, false);
         target.storageManager->getShadowFile().reset();

@@ -347,6 +347,14 @@ uint64_t WAL::getFileSize() {
     return serializer->getWriter()->getSize();
 }
 
+uint64_t WAL::getFrozenWALFileSize() {
+    std::unique_lock lck{mtx};
+    if (inMemory || !vfs->fileOrPathExists(checkpointWalPath)) {
+        return 0;
+    }
+    return vfs->openFile(checkpointWalPath, FileOpenFlags(FileFlags::READ_ONLY))->getFileSize();
+}
+
 bool WAL::mayHaveCheckpointRecord() {
     std::unique_lock lck{mtx};
     return checkpointRecordMayExist;

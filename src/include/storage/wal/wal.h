@@ -58,6 +58,9 @@ public:
     void reset();
 
     uint64_t getFileSize();
+    // On-disk size of the frozen checkpoint WAL, or 0 when absent/in-memory. Pinned-byte
+    // source for WAL pin observability alongside getFileSize() (active).
+    uint64_t getFrozenWALFileSize();
     bool mayHaveCheckpointRecord();
     void throwIfPoisoned();
     void poison(const std::string& reason);

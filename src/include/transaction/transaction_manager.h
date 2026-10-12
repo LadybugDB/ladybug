@@ -59,6 +59,16 @@ public:
     // pruning. Brief lock acquisition; capture before the checkpoint write gate alongside
     // the horizon (a small skew between the two snapshots is safe in both directions).
     std::vector<common::transaction_t> snapshotOpenStartTSs();
+    // Pin behind the snapshot horizon: the minimum open start timestamp, the transaction
+    // holding it, and the open-transaction count (which transaction pins WAL growth).
+    // INVALID_TRANSACTION/0 when no transaction is open. Brief lock acquisition; capture
+    // before the checkpoint write gate alongside the horizon.
+    struct HorizonPinInfo {
+        common::transaction_t horizon = common::INVALID_TRANSACTION;
+        common::transaction_t pinningTxnID = common::INVALID_TRANSACTION;
+        size_t openTxnCount = 0;
+    };
+    HorizonPinInfo snapshotHorizonInfo();
 
     static TransactionManager* Get(const main::ClientContext& context);
 
