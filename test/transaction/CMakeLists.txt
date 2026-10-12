@@ -13,7 +13,17 @@ target_include_directories(lbug_test_registry_mutating_extension PRIVATE
 set_target_properties(lbug_test_registry_mutating_extension PROPERTIES
     LIBRARY_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
 if (WIN32)
-    target_link_libraries(lbug_test_registry_mutating_extension PRIVATE lbug)
+    # Windows has no dynamic symbol lookup, so the extension must link
+    # against the core library. Prefer the shared library so the extension
+    # shares state with the test process; the static archive would duplicate
+    # core state. The static target may not exist (Windows CI disables it
+    # with BUILD_STATIC_LBUG=FALSE because the bundled archive exceeds
+    # MSVC's COFF size limit), so fall back to it only when shared is off.
+    if (TARGET lbug_shared)
+        target_link_libraries(lbug_test_registry_mutating_extension PRIVATE lbug_shared)
+    elseif (TARGET lbug)
+        target_link_libraries(lbug_test_registry_mutating_extension PRIVATE lbug)
+    endif()
 endif()
 if (APPLE)
     set_target_properties(lbug_test_registry_mutating_extension PROPERTIES
