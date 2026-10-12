@@ -332,8 +332,9 @@ void ColumnChunk::checkpoint(Column& column,
 
 void ColumnChunk::readBaseValue(row_idx_t rowInChunk, ColumnChunkData& out,
     row_idx_t outPos) const {
-    auto [segment, offsetInSegment] = genericFindSegment(std::span(data), rowInChunk);
-    DASSERT(segment != data.end());
+    std::span<const std::unique_ptr<ColumnChunkData>> segments{data};
+    auto [segment, offsetInSegment] = genericFindSegment(segments, rowInChunk);
+    DASSERT(segment != segments.end());
     out.write(segment->get(), offsetInSegment, outPos, 1);
 }
 
