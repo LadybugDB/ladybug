@@ -3,6 +3,7 @@
 #include <array>
 #include <bitset>
 #include <memory>
+#include <vector>
 
 #include "common/constants.h"
 #include "common/system_config.h"
@@ -193,6 +194,19 @@ struct CSRNodeGroupCheckpointState final : NodeGroupCheckpointState {
 static constexpr common::column_id_t NBR_ID_COLUMN_ID = 0;
 static constexpr common::column_id_t REL_ID_COLUMN_ID = 1;
 
+// A pre-checkpoint CSR snapshot retained for parked readers. Covers readers whose start
+// timestamp falls in [floorTS, snapshotTS]: the group objects carry full version history,
+// so snapshot resolution at any startTS in the interval is exact. Entries are pruned once
+// no open reader falls in their interval, and are never serialized (reopen starts empty).
+struct RetainedCSRSnapshot {
+    common::transaction_t snapshotTS = 0;
+    common::transaction_t floorTS = 0;
+    std::shared_ptr<ChunkedNodeGroup> persistent;
+    std::shared_ptr<CSRIndex> index;
+    std::vector<std::shared_ptr<ChunkedNodeGroup>> inMemGroups;
+    std::shared_ptr<PageReclaimDeferral> pages;
+};
+
 // Data in a CSRNodeGroup is organized as follows:
 // - persistent data: checkpointed data or flushed data from batch insert. `persistentChunkGroup`.
 // - transient data: data that is being committed but kept in memory. `chunkedGroups`.
@@ -250,6 +264,8 @@ public:
 
     ChunkedNodeGroup* getPersistentChunkedGroup() const { return persistentChunkGroup.get(); }
     const CSRIndex* getCSRIndex() const { return csrIndex.get(); }
+    // Number of retained pre-checkpoint snapshots (observability and test hook).
+    size_t getNumRetainedSnapshots() const;
     void setPersistentChunkedGroup(std::unique_ptr<ChunkedNodeGroup> chunkedNodeGroup) {
         DASSERT(chunkedNodeGroup->getFormat() == NodeGroupDataFormat::CSR);
         // A scan copies this pointer under the group lock when it starts (captureScanPin).
@@ -285,6 +301,13 @@ private:
         const RelTableScanState& tableState, CSRNodeGroupScanState& nodeGroupScanState) const;
 
     void captureScanPin(const common::UniqLock& lock, CSRNodeGroupScanState& scanState) const;
+    // Fill the scan pin from the oldest retained snapshot covering the transaction, or from
+    // the live group when none does (including a null transaction). Parked readers thus
+    // re-resolve their exact pre-checkpoint state after checkpoints they sat out.
+    void captureRoutedScanPin(const common::UniqLock& lock,
+        const transaction::Transaction* transaction, CSRNodeGroupScanState& scanState) const;
+    void pruneRetainedSnapshotsNoLock(const std::vector<common::transaction_t>& openStartTSs);
+    bool needsRetainedSnapshotNoLock(const std::vector<common::transaction_t>& openStartTSs) const;
     void ensureCSRIndex();
 
     void checkpointInMemOnly(const common::UniqLock& lock, NodeGroupCheckpointState& state);
@@ -326,6 +349,12 @@ private:
 private:
     std::shared_ptr<ChunkedNodeGroup> persistentChunkGroup;
     std::shared_ptr<CSRIndex> csrIndex;
+    // Retained pre-checkpoint snapshots for parked readers, in creation order, guarded by
+    // the chunkedGroups lock (checkpoint holds it; scan capture takes it; no new lock).
+    mutable std::vector<RetainedCSRSnapshot> retainedSnapshots;
+    // Snapshot timestamp of the last checkpoint that reset this group: the coverage floor
+    // for the next retained snapshot. Stale is safe (over-covers); never the horizon.
+    mutable common::transaction_t lastCollapseTS = 0;
     // Copied into a scan pin when a scan starts on this node group. use_count > 1 means a
     // scan still names the pages this checkpoint would reclaim or overwrite.
     mutable std::shared_ptr<PageReclaimDeferral> scanPagePin;

@@ -2,6 +2,7 @@
 
 #include <mutex>
 #include <shared_mutex>
+#include <vector>
 
 #include "shadow_file.h"
 #include "storage/index/index.h"
@@ -55,7 +56,8 @@ public:
     bool checkpoint(main::ClientContext* context, const catalog::Catalog& catalog,
         const transaction::Transaction& snapshotTxn, PageAllocator& pageAllocator,
         const std::unordered_map<common::table_id_t, uint64_t>& epochWatermarks,
-        common::transaction_t retentionHorizon = common::INVALID_TRANSACTION);
+        common::transaction_t retentionHorizon = common::INVALID_TRANSACTION,
+        const std::vector<common::transaction_t>& openStartTSs = {});
 
     // Capture the current changeEpoch for every table. Must be called under the
     // write gate so that no active writers can bump epochs concurrently.

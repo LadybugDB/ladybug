@@ -723,7 +723,7 @@ void RelTable::prepareCommitForNodeGroup(const Transaction* transaction,
 
 bool RelTable::checkpoint(main::ClientContext*, TableCatalogEntry* tableEntry,
     PageAllocator& pageAllocator, const Transaction* snapshotTxn, uint64_t epochWatermark,
-    transaction_t retentionHorizon) {
+    transaction_t retentionHorizon, const std::vector<transaction_t>& openStartTSs) {
     const auto effectiveEpoch =
         epochWatermark > 0 ? epochWatermark : changeEpoch.load(std::memory_order_acquire);
     if (effectiveEpoch <= lastCheckpointedEpoch) {
@@ -736,7 +736,8 @@ bool RelTable::checkpoint(main::ClientContext*, TableCatalogEntry* tableEntry,
         columnIDs.push_back(tableEntry->getColumnID(property.getName()));
     }
     for (auto& directedRelData : directedRelData) {
-        directedRelData->checkpoint(columnIDs, pageAllocator, snapshotTxn, retentionHorizon);
+        directedRelData->checkpoint(columnIDs, pageAllocator, snapshotTxn, retentionHorizon,
+            openStartTSs);
     }
     lastCheckpointedEpoch = effectiveEpoch;
     return true;

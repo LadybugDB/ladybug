@@ -57,6 +57,10 @@ struct NodeGroupCheckpointState {
     // checkpoint wipes version metadata as before). Ignored by CSR groups in this phase.
 
     common::transaction_t retentionHorizon = common::INVALID_TRANSACTION;
+    // Open-reader start timestamps captured alongside the horizon (before the write gate).
+    // CSR groups use the set to cover and prune retained pre-checkpoint snapshots;
+    // regular groups ignore it.
+    std::vector<common::transaction_t> openStartTSs;
 
     NodeGroupCheckpointState(std::vector<common::column_id_t> columnIDs,
         std::vector<Column*> columns, PageAllocator& pageAllocator, MemoryManager* mm,
