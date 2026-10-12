@@ -210,7 +210,8 @@ public:
         LocalTable* localTable) override;
     bool checkpoint(main::ClientContext* context, catalog::TableCatalogEntry* tableEntry,
         PageAllocator& pageAllocator, const transaction::Transaction* snapshotTxn = nullptr,
-        uint64_t epochWatermark = 0) override;
+        uint64_t epochWatermark = 0,
+        common::transaction_t retentionHorizon = common::INVALID_TRANSACTION) override;
     void rollbackCheckpoint() override;
     void finalizeCheckpoint(main::ClientContext& context) override;
     void reclaimStorage(PageAllocator& pageAllocator) const override;

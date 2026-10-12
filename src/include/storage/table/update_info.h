@@ -1,7 +1,9 @@
 #pragma once
 
 #include <array>
+#include <bitset>
 #include <shared_mutex>
+#include <vector>
 
 #include "column_chunk_data.h"
 #include "common/types/types.h"
@@ -63,6 +65,23 @@ struct UpdateNode {
         std::unique_lock lock{mtx};
         info = nullptr;
     }
+};
+
+// Retention plan for one update vector at a checkpoint horizon: the chain nodes a
+// parked reader (startTS >= horizon) may still observe, plus the row sets that decide
+// synthetic horizon base nodes. Raw node pointers are stable across the checkpoint merge:
+// writers are drained by the checkpoint gate and readers only take shared locks.
+struct VectorRetentionPlan {
+    common::idx_t vectorIdx = 0;
+    // Chain nodes with version >= horizon (newest-first). Uncommitted entries qualify by
+    // comparison (writer IDs sort above any horizon); none are expected post-drain.
+    std::vector<VectorUpdateInfo*> kept;
+    // Newest chain node with version < horizon, or nullptr when no older node exists.
+    VectorUpdateInfo* newestBelow = nullptr;
+    // Chunk-row coordinates (within the vector) touched by kept / below-horizon nodes.
+    std::bitset<common::DEFAULT_VECTOR_CAPACITY> keptRows;
+    std::bitset<common::DEFAULT_VECTOR_CAPACITY> belowRows;
+    bool hasKept() const { return !kept.empty(); }
 };
 
 class UpdateInfo {
@@ -128,6 +147,27 @@ public:
     void iterateScan(const transaction::Transaction* transaction, uint64_t startOffsetToScan,
         uint64_t numRowsToScan, uint64_t startPosInOutput,
         const iterate_read_from_row_func_t& readFromRowFunc) const;
+
+    // Classifies every vector chain against the horizon (shared locks only). The checkpoint
+    // computes plans before its page-rewrite phase and applies them after; the gate keeps
+    // writers out in between, so the captured node pointers stay valid.
+    std::vector<VectorRetentionPlan> planRetention(common::transaction_t horizon) const;
+    static bool plansHaveKeptNodes(const std::vector<VectorRetentionPlan>& plans);
+    // Drops every chain node that is neither kept nor the retained newest-below node of a
+    // vector with kept nodes. Prunes empty vector shells only when `exclusive` (no scan
+    // shares this object); shared owners keep their shells so in-flight scans never observe
+    // structural churn. Content removal is safe either way: every dropped node is older
+    // than the horizon, hence invisible to every live scan (startTS >= horizon).
+    void dropUnretainedNodes(const std::vector<VectorRetentionPlan>& plans, bool exclusive);
+    // Finds the chain node stamped with `version` in the vector, or prepends a new empty
+    // newest node. Used to stage synthetic horizon base nodes and transplanted chains.
+    VectorUpdateInfo& getOrCreateNodeForVersion(MemoryManager& memoryManager,
+        common::LogicalType dataType, common::idx_t vectorIdx, common::transaction_t version);
+    // Creates the synthetic horizon base node (version == horizon) spliced directly above
+    // the newest-below node (or at the tail when none exists), so newer kept nodes keep
+    // shadowing it. Returns the existing node when one is already stamped with horizon.
+    VectorUpdateInfo& insertRetainedBaseNode(MemoryManager& memoryManager,
+        common::LogicalType dataType, common::idx_t vectorIdx, common::transaction_t horizon);
 
 private:
     UpdateNode& getUpdateNode(common::idx_t vectorIdx);

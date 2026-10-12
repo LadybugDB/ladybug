@@ -38,6 +38,11 @@ struct VectorVersionInfo {
 
     void append(transaction_t transactionID, row_idx_t startRow, row_idx_t numRows);
     bool delete_(transaction_t transactionID, row_idx_t rowIdx);
+    transaction_t getInsertCommitTS(row_idx_t rowIdxInVector) const;
+    transaction_t getDeleteCommitTS(row_idx_t rowIdxInVector) const;
+    void stampInsertCommitTS(row_idx_t rowIdxInVector, transaction_t commitTS);
+    void stampDeleteCommitTS(row_idx_t rowIdxInVector, transaction_t commitTS);
+    bool hasRetainedEntries(transaction_t horizon) const;
     void setInsertCommitTS(transaction_t commitTS, row_idx_t startRow, row_idx_t numRows);
     void setDeleteCommitTS(transaction_t commitTS, row_idx_t startRow, row_idx_t numRows);
 
@@ -142,6 +147,86 @@ void VectorVersionInfo::setDeleteCommitTS(transaction_t commitTS, row_idx_t star
     for (auto rowIdx = startRow; rowIdx < startRow + numRows; rowIdx++) {
         deletedVersions->operator[](rowIdx) = commitTS;
     }
+}
+
+transaction_t VectorVersionInfo::getInsertCommitTS(row_idx_t rowIdxInVector) const {
+    if (isSameInsertionVersion()) {
+        return sameInsertionVersion;
+    }
+    if (!insertedVersions) {
+        return INVALID_TRANSACTION;
+    }
+    return insertedVersions->operator[](rowIdxInVector);
+}
+
+transaction_t VectorVersionInfo::getDeleteCommitTS(row_idx_t rowIdxInVector) const {
+    if (isSameDeletionVersion()) {
+        return sameDeletionVersion;
+    }
+    if (!deletedVersions) {
+        return INVALID_TRANSACTION;
+    }
+    return deletedVersions->operator[](rowIdxInVector);
+}
+
+void VectorVersionInfo::stampInsertCommitTS(row_idx_t rowIdxInVector, transaction_t commitTS) {
+    insertionStatus = InsertionStatus::CHECK_VERSION;
+    if (isSameInsertionVersion()) {
+        if (sameInsertionVersion == commitTS) {
+            return;
+        }
+        initInsertionVersionArray();
+        insertedVersions->fill(sameInsertionVersion);
+        sameInsertionVersion = INVALID_TRANSACTION;
+    }
+    if (!insertedVersions) {
+        // Fresh checkpoint-built vector: unstamped rows are baked-visible, so default the
+        // array to visible-to-all rather than absent.
+        initInsertionVersionArray();
+        insertedVersions->fill(0);
+    }
+    insertedVersions->operator[](rowIdxInVector) = commitTS;
+}
+
+void VectorVersionInfo::stampDeleteCommitTS(row_idx_t rowIdxInVector, transaction_t commitTS) {
+    deletionStatus = DeletionStatus::CHECK_VERSION;
+    if (isSameDeletionVersion()) {
+        if (sameDeletionVersion == commitTS) {
+            return;
+        }
+        initDeletionVersionArray();
+        deletedVersions->fill(sameDeletionVersion);
+        sameDeletionVersion = INVALID_TRANSACTION;
+    }
+    if (!deletedVersions) {
+        // Fresh checkpoint-built vector: unstamped rows carry no delete.
+        initDeletionVersionArray();
+    }
+    deletedVersions->operator[](rowIdxInVector) = commitTS;
+}
+
+bool VectorVersionInfo::hasRetainedEntries(transaction_t horizon) const {
+    if (sameInsertionVersion != INVALID_TRANSACTION && sameInsertionVersion >= horizon) {
+        return true;
+    }
+    if (sameDeletionVersion != INVALID_TRANSACTION && sameDeletionVersion >= horizon) {
+        return true;
+    }
+    if (insertedVersions) {
+        for (const auto version : *insertedVersions) {
+            if (version != INVALID_TRANSACTION && version >= horizon) {
+                return true;
+            }
+        }
+    }
+    if (deletedVersions) {
+        for (const auto version : *deletedVersions) {
+            if (version != INVALID_TRANSACTION && version >= horizon) {
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 bool VectorVersionInfo::isSelected(const transaction_t startTS, const transaction_t transactionID,
@@ -334,10 +419,14 @@ void VectorVersionInfo::serialize(Serializer& serializer) const {
             UNUSED(deleted);
         }
     }
-    DASSERT(insertionStatus == InsertionStatus::NO_INSERTED ||
-            insertionStatus == InsertionStatus::ALWAYS_INSERTED);
+    // Retained insert stamps are memory-only: no pre-restart reader survives recovery and
+    // post-restart timestamps start fresh, so collapsing them to baked-visible on the wire
+    // resolves identically after a restart while keeping the durable encoding unchanged.
+    const auto wireInsertionStatus = insertionStatus == InsertionStatus::CHECK_VERSION ?
+                                         InsertionStatus::ALWAYS_INSERTED :
+                                         insertionStatus;
     serializer.writeDebuggingInfo("insertion_status");
-    serializer.serializeValue<InsertionStatus>(insertionStatus);
+    serializer.serializeValue<InsertionStatus>(wireInsertionStatus);
     serializer.writeDebuggingInfo("deletion_status");
     serializer.serializeValue<DeletionStatus>(deletionStatus);
     switch (deletionStatus) {
@@ -587,6 +676,47 @@ bool VersionInfo::isInserted(const transaction::Transaction* transaction,
 bool VersionInfo::hasDeletions(const transaction::Transaction* transaction) const {
     for (auto& vectorInfo : vectorsInfo) {
         if (vectorInfo && vectorInfo->hasDeletions(transaction) > 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+transaction_t VersionInfo::getInsertCommitTS(row_idx_t rowInChunk) const {
+    auto [vectorIdx, rowInVector] =
+        StorageUtils::getQuotientRemainder(rowInChunk, DEFAULT_VECTOR_CAPACITY);
+    const auto vectorVersion = getVectorVersionInfo(vectorIdx);
+    if (!vectorVersion) {
+        return INVALID_TRANSACTION;
+    }
+    return vectorVersion->getInsertCommitTS(rowInVector);
+}
+
+transaction_t VersionInfo::getDeleteCommitTS(row_idx_t rowInChunk) const {
+    auto [vectorIdx, rowInVector] =
+        StorageUtils::getQuotientRemainder(rowInChunk, DEFAULT_VECTOR_CAPACITY);
+    const auto vectorVersion = getVectorVersionInfo(vectorIdx);
+    if (!vectorVersion) {
+        return INVALID_TRANSACTION;
+    }
+    return vectorVersion->getDeleteCommitTS(rowInVector);
+}
+
+void VersionInfo::stampDeleteCommitTS(row_idx_t rowInChunk, transaction_t commitTS) {
+    auto [vectorIdx, rowInVector] =
+        StorageUtils::getQuotientRemainder(rowInChunk, DEFAULT_VECTOR_CAPACITY);
+    getOrCreateVersionInfo(vectorIdx).stampDeleteCommitTS(rowInVector, commitTS);
+}
+
+void VersionInfo::stampInsertCommitTS(row_idx_t rowInChunk, transaction_t commitTS) {
+    auto [vectorIdx, rowInVector] =
+        StorageUtils::getQuotientRemainder(rowInChunk, DEFAULT_VECTOR_CAPACITY);
+    getOrCreateVersionInfo(vectorIdx).stampInsertCommitTS(rowInVector, commitTS);
+}
+
+bool VersionInfo::hasRetainedEntries(transaction_t horizon) const {
+    for (const auto& vectorVersion : vectorsInfo) {
+        if (vectorVersion && vectorVersion->hasRetainedEntries(horizon)) {
             return true;
         }
     }

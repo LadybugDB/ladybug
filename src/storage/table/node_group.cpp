@@ -475,11 +475,31 @@ void NodeGroup::checkpoint(MemoryManager& memoryManager, NodeGroupCheckpointStat
     const auto firstGroup = chunkedGroups.getFirstGroup(lock);
     const auto hasPersistentData = firstGroup->getResidencyState() == ResidencyState::ON_DISK;
     const auto* txn = state.transaction ? state.transaction : &DUMMY_CHECKPOINT_TRANSACTION;
+    // Snapshot-horizon floor for open readers (INVALID_TRANSACTION when none are open, in
+    // which case every path below behaves exactly as before).
+    const auto horizon = state.retentionHorizon;
     // Re-populate version info here first.
-    auto checkpointedVersionInfo = checkpointVersionInfo(lock, txn);
+    auto checkpointedVersionInfo = checkpointVersionInfo(lock, txn, horizon);
+    const auto allDeleted = checkpointedVersionInfo->getNumDeletions(txn, 0, numRows) ==
+                            numRows - firstGroup->getStartRowIdx();
+    // A group whose rows are all deleted may only be flushed empty when no open reader
+    // needs any of them: rows deleted at/after the horizon stay visible to older readers
+    // and must be physically retained with their markers.
+    auto useEmpty = allDeleted;
+    if (useEmpty && horizon != INVALID_TRANSACTION) {
+        useEmpty = !checkpointedVersionInfo->hasRetainedEntries(horizon) &&
+                   !hasRetainedUpdateNodes(lock, horizon);
+    }
+    // Capture persistent retention state before the page-rewrite phase below observes
+    // rewritten pages. In-memory sources stay intact until the group swap at the end, so
+    // their transplants read live state afterwards.
+    std::vector<UpdateRetentionCapture> persistentCaptures;
+    const auto numPersistentRows = firstGroup->getNumRows();
+    if (!useEmpty && horizon != INVALID_TRANSACTION && hasPersistentData) {
+        persistentCaptures = capturePersistentUpdateRetention(lock, horizon);
+    }
     std::unique_ptr<ChunkedNodeGroup> checkpointedChunkedGroup;
-    if (checkpointedVersionInfo->getNumDeletions(txn, 0, numRows) ==
-        numRows - firstGroup->getStartRowIdx()) {
+    if (useEmpty) {
         reclaimStorage(state.pageAllocator, lock);
         std::vector<LogicalType> checkpointedTypes;
         for (const auto columnID : state.columnIDs) {
@@ -495,6 +515,11 @@ void NodeGroup::checkpoint(MemoryManager& memoryManager, NodeGroupCheckpointStat
             checkpointedChunkedGroup = checkpointInMemOnly(memoryManager, lock, state);
         }
         checkpointedChunkedGroup->setVersionInfo(std::move(checkpointedVersionInfo));
+        if (horizon != INVALID_TRANSACTION) {
+            applyRetainedUpdates(lock, *checkpointedChunkedGroup, state, horizon,
+                std::move(persistentCaptures), hasPersistentData, numPersistentRows);
+            checkpointedChunkedGroup->setRetentionHorizon(horizon);
+        }
     }
     chunkedGroups.clear(lock);
     chunkedGroups.appendGroup(lock, std::move(checkpointedChunkedGroup));
@@ -576,7 +601,14 @@ std::unique_ptr<ChunkedNodeGroup> NodeGroup::checkpointInMemAndOnDisk(MemoryMana
         std::make_unique<ChunkedNodeGroup>(*chunkedGroups.getGroup(lock, 0), state.columnIDs);
     DASSERT(checkpointedChunkedGroup->getResidencyState() == ResidencyState::ON_DISK);
     checkpointedChunkedGroup->resetNumRowsFromChunks();
-    checkpointedChunkedGroup->resetVersionAndUpdateInfo();
+    if (state.retentionHorizon == INVALID_TRANSACTION) {
+        checkpointedChunkedGroup->resetVersionAndUpdateInfo();
+    } else {
+        // Retention path: the moved version info is discarded (the caller installs a
+        // horizon-aware fresh build), but the moved update chains are kept for the
+        // retention filter/transplant that runs after the page rewrite.
+        checkpointedChunkedGroup->setVersionInfo(nullptr);
+    }
     // The first chunked group is the only persistent one
     // The checkpointed columns have been moved to the checkpointedChunkedGroup, the
     // remaining must have been dropped
@@ -599,8 +631,11 @@ std::unique_ptr<ChunkedNodeGroup> NodeGroup::checkpointInMemOnly(MemoryManager& 
 }
 
 std::unique_ptr<VersionInfo> NodeGroup::checkpointVersionInfo(const UniqLock& lock,
-    const Transaction* transaction) const {
+    const Transaction* transaction, transaction_t retentionHorizon) const {
     auto checkpointVersionInfo = std::make_unique<VersionInfo>();
+    // The merge below keeps every source row (identity-concat in group order), so source
+    // row currRow + i lands at the same merged index the checkpointed group observes.
+    const bool retain = retentionHorizon != INVALID_TRANSACTION;
     row_idx_t currRow = 0;
     for (auto& chunkedGroup : chunkedGroups.getAllGroups(lock)) {
         if (chunkedGroup->hasVersionInfo()) {
@@ -608,12 +643,72 @@ std::unique_ptr<VersionInfo> NodeGroup::checkpointVersionInfo(const UniqLock& lo
             for (auto i = 0u; i < chunkedGroup->getNumRows(); i++) {
                 if (chunkedGroup->isDeleted(transaction, i)) {
                     checkpointVersionInfo->delete_(transaction->getID(), currRow + i);
+                    if (retain) {
+                        const auto deleteTS = chunkedGroup->getDeleteCommitTS(i);
+                        if (deleteTS != INVALID_TRANSACTION && deleteTS >= retentionHorizon) {
+                            checkpointVersionInfo->stampDeleteCommitTS(currRow + i, deleteTS);
+                        }
+                    }
+                } else if (retain) {
+                    const auto insertTS = chunkedGroup->getInsertCommitTS(i);
+                    if (insertTS != INVALID_TRANSACTION && insertTS >= retentionHorizon) {
+                        checkpointVersionInfo->stampInsertCommitTS(currRow + i, insertTS);
+                    }
                 }
             }
         }
         currRow += chunkedGroup->getNumRows();
     }
     return checkpointVersionInfo;
+}
+
+bool NodeGroup::hasRetainedUpdateNodes(const UniqLock& lock, transaction_t horizon) const {
+    for (auto& chunkedGroup : chunkedGroups.getAllGroups(lock)) {
+        for (auto columnID = 0u; columnID < chunkedGroup->getNumColumns(); columnID++) {
+            if (chunkedGroup->getColumnChunk(columnID).hasRetainedUpdates(horizon)) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+std::vector<UpdateRetentionCapture> NodeGroup::capturePersistentUpdateRetention(
+    const UniqLock& lock, transaction_t horizon) const {
+    std::vector<UpdateRetentionCapture> captures;
+    const auto* firstGroup = chunkedGroups.getFirstGroup(lock);
+    captures.reserve(firstGroup->getNumColumns());
+    for (auto columnID = 0u; columnID < firstGroup->getNumColumns(); columnID++) {
+        captures.push_back(firstGroup->getColumnChunk(columnID).captureUpdateRetention(horizon));
+    }
+    return captures;
+}
+
+void NodeGroup::applyRetainedUpdates(const UniqLock& lock, ChunkedNodeGroup& checkpointedGroup,
+    const NodeGroupCheckpointState& state, transaction_t horizon,
+    std::vector<UpdateRetentionCapture>&& persistentCaptures, bool hadPersistentData,
+    row_idx_t numPersistentRows) const {
+    if (hadPersistentData) {
+        for (auto i = 0u; i < state.columnIDs.size(); i++) {
+            const auto columnID = state.columnIDs[i];
+            checkpointedGroup.getColumnChunk(i).applyUpdateRetention(
+                std::move(persistentCaptures[columnID]));
+        }
+    }
+    // Transplant chains from in-memory sources, whose rows the merge appended in group
+    // order starting at numPersistentRows (zero when nothing was persistent).
+    row_idx_t mergedOffset = hadPersistentData ? numPersistentRows : 0;
+    for (auto& chunkedGroup : chunkedGroups.getAllGroups(lock)) {
+        if (chunkedGroup->getResidencyState() != ResidencyState::IN_MEMORY) {
+            continue;
+        }
+        for (auto i = 0u; i < state.columnIDs.size(); i++) {
+            const auto columnID = state.columnIDs[i];
+            checkpointedGroup.getColumnChunk(i).transplantRetainedUpdates(
+                chunkedGroup->getColumnChunk(columnID), mergedOffset, horizon);
+        }
+        mergedOffset += chunkedGroup->getNumRows();
+    }
 }
 
 uint64_t NodeGroup::getEstimatedMemoryUsage() const {

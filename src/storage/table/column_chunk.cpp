@@ -330,5 +330,143 @@ void ColumnChunk::checkpoint(Column& column,
     }
 }
 
+void ColumnChunk::readBaseValue(row_idx_t rowInChunk, ColumnChunkData& out,
+    row_idx_t outPos) const {
+    auto [segment, offsetInSegment] = genericFindSegment(std::span(data), rowInChunk);
+    DASSERT(segment != data.end());
+    out.write(segment->get(), offsetInSegment, outPos, 1);
+}
+
+bool ColumnChunk::hasRetainedUpdates(transaction_t horizon) const {
+    return UpdateInfo::plansHaveKeptNodes(updateInfo->planRetention(horizon));
+}
+
+UpdateRetentionCapture ColumnChunk::captureUpdateRetention(transaction_t horizon) const {
+    UpdateRetentionCapture capture;
+    capture.horizon = horizon;
+    capture.plans = updateInfo->planRetention(horizon);
+    auto& mm = data.front()->getMemoryManager();
+    for (const auto& plan : capture.plans) {
+        if (!plan.hasKept()) {
+            capture.baseStaging.push_back(nullptr);
+            continue;
+        }
+        const auto synthetic = plan.keptRows & ~plan.belowRows;
+        if (synthetic.none()) {
+            capture.baseStaging.push_back(nullptr);
+            continue;
+        }
+        auto staging = ColumnChunkFactory::createColumnChunkData(mm, getDataType().copy(),
+            false /*enableCompression*/, DEFAULT_VECTOR_CAPACITY, ResidencyState::IN_MEMORY);
+        for (auto r = 0u; r < DEFAULT_VECTOR_CAPACITY; r++) {
+            if (synthetic.test(r)) {
+                readBaseValue(plan.vectorIdx * DEFAULT_VECTOR_CAPACITY + r, *staging, r);
+            }
+        }
+        capture.baseStaging.push_back(std::move(staging));
+    }
+    return capture;
+}
+
+static bool updateNodeContainsRow(const VectorUpdateInfo& node, common::sel_t rowInVector) {
+    for (auto i = 0u; i < node.numRowsUpdated; i++) {
+        if (node.rowsInVector[i] == rowInVector) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void ColumnChunk::applyUpdateRetention(UpdateRetentionCapture&& capture) {
+    const bool exclusive = updateInfo.use_count() == 1;
+    updateInfo->dropUnretainedNodes(capture.plans, exclusive);
+    auto& mm = data.front()->getMemoryManager();
+    for (auto i = 0u; i < capture.plans.size(); i++) {
+        const auto& plan = capture.plans[i];
+        if (!plan.hasKept() || capture.baseStaging[i] == nullptr) {
+            continue;
+        }
+        const auto synthetic = plan.keptRows & ~plan.belowRows;
+        if (synthetic.none()) {
+            continue;
+        }
+        // Spliced below the kept nodes (never prepended): a prepended base node
+        // would shadow newer updates for readers past their commit timestamps.
+        auto& node = updateInfo->insertRetainedBaseNode(mm, getDataType().copy(), plan.vectorIdx,
+            capture.horizon);
+        for (auto r = 0u; r < DEFAULT_VECTOR_CAPACITY; r++) {
+            if (!synthetic.test(r) || updateNodeContainsRow(node, r)) {
+                continue;
+            }
+            const auto pos = node.numRowsUpdated++;
+            node.rowsInVector[pos] = r;
+            node.data->write(capture.baseStaging[i].get(), r, pos, 1);
+        }
+    }
+}
+
+void ColumnChunk::transplantRetainedUpdates(const ColumnChunk& src, row_idx_t rowDelta,
+    transaction_t horizon) {
+    if (!src.updateInfo->isSet()) {
+        return;
+    }
+    const auto plans = src.updateInfo->planRetention(horizon);
+    if (!UpdateInfo::plansHaveKeptNodes(plans)) {
+        return;
+    }
+    auto& mm = data.front()->getMemoryManager();
+    auto staging = ColumnChunkFactory::createColumnChunkData(mm, getDataType().copy(),
+        false /*enableCompression*/, 1, ResidencyState::IN_MEMORY);
+    auto copyNodeRows = [&](const VectorUpdateInfo* node, idx_t srcVectorIdx) {
+        for (auto i = 0u; i < node->numRowsUpdated; i++) {
+            const auto srcRow = srcVectorIdx * DEFAULT_VECTOR_CAPACITY + node->rowsInVector[i];
+            const auto tgtRow = srcRow + rowDelta;
+            const auto tgtVec = tgtRow / DEFAULT_VECTOR_CAPACITY;
+            const auto tgtRowInVec = tgtRow % DEFAULT_VECTOR_CAPACITY;
+            auto& tgtNode = updateInfo->getOrCreateNodeForVersion(mm, getDataType().copy(), tgtVec,
+                node->version);
+            const auto pos = tgtNode.numRowsUpdated++;
+            tgtNode.rowsInVector[pos] = tgtRowInVec;
+            tgtNode.data->write(node->data.get(), i, pos, 1);
+        }
+    };
+    for (const auto& plan : plans) {
+        if (!plan.hasKept()) {
+            continue;
+        }
+        // Oldest-first so each staged node lands above the previous one: the retained
+        // below-horizon node first, then the synthetic horizon base (via the splicing
+        // insert, never a prepend), then the kept nodes oldest-first.
+        if (plan.newestBelow != nullptr) {
+            copyNodeRows(plan.newestBelow, plan.vectorIdx);
+        }
+        const auto synthetic = plan.keptRows & ~plan.belowRows;
+        if (!synthetic.none()) {
+            // Synthetic rows may fan out across target vectors when rowDelta misaligns
+            // them; resolve the target vector per row.
+            for (auto r = 0u; r < DEFAULT_VECTOR_CAPACITY; r++) {
+                if (!synthetic.test(r)) {
+                    continue;
+                }
+                const auto srcRow = plan.vectorIdx * DEFAULT_VECTOR_CAPACITY + r;
+                const auto tgtRow = srcRow + rowDelta;
+                const auto tgtVec = tgtRow / DEFAULT_VECTOR_CAPACITY;
+                const auto tgtRowInVec = tgtRow % DEFAULT_VECTOR_CAPACITY;
+                auto& rowNode =
+                    updateInfo->insertRetainedBaseNode(mm, getDataType().copy(), tgtVec, horizon);
+                if (updateNodeContainsRow(rowNode, tgtRowInVec)) {
+                    continue;
+                }
+                src.readBaseValue(srcRow, *staging, 0);
+                const auto pos = rowNode.numRowsUpdated++;
+                rowNode.rowsInVector[pos] = tgtRowInVec;
+                rowNode.data->write(staging.get(), 0, pos, 1);
+            }
+        }
+        for (auto k = plan.kept.size(); k > 0; k--) {
+            copyNodeRows(plan.kept[k - 1], plan.vectorIdx);
+        }
+    }
+}
 } // namespace storage
 } // namespace lbug

@@ -176,6 +176,14 @@ public:
     // keep the object.
     std::shared_ptr<VersionInfo> moveVersionInfo() { return std::move(versionInfo); }
     void resetVersionAndUpdateInfo();
+    // Coarse page-level retention marker: the horizon whose readers the retained version
+    // metadata still covers (INVALID_TRANSACTION when nothing is retained). Transient
+    // observability state only; never serialized, never consulted on read paths.
+    void setRetentionHorizon(common::transaction_t horizon) { retentionHorizon = horizon; }
+    common::transaction_t getRetentionHorizon() const { return retentionHorizon; }
+    // Insert/delete commit timestamps of one row (INVALID_TRANSACTION when baked).
+    common::transaction_t getInsertCommitTS(common::row_idx_t rowInChunk) const;
+    common::transaction_t getDeleteCommitTS(common::row_idx_t rowInChunk) const;
 
     uint64_t append(const transaction::Transaction* transaction,
         const std::vector<common::ValueVector*>& columnVectors, common::row_idx_t startRowInVectors,
@@ -257,6 +265,7 @@ public:
     }
 
 protected:
+    common::transaction_t retentionHorizon = common::INVALID_TRANSACTION;
     NodeGroupDataFormat format;
     ResidencyState residencyState;
     common::row_idx_t startRowIdx;
