@@ -314,6 +314,19 @@ transaction_t TransactionManager::snapshotHorizon() {
     return cachedHorizon;
 }
 
+TransactionManager::HorizonPinInfo TransactionManager::snapshotHorizonInfo() {
+    std::unique_lock lck{mtxForSerializingPublicFunctionCalls};
+    HorizonPinInfo pin;
+    pin.openTxnCount = openTxnStartTS.size();
+    for (const auto& entry : openTxnStartTS) {
+        if (pin.horizon == INVALID_TRANSACTION || entry.second < pin.horizon) {
+            pin.horizon = entry.second;
+            pin.pinningTxnID = entry.first;
+        }
+    }
+    return pin;
+}
+
 std::vector<transaction_t> TransactionManager::snapshotOpenStartTSs() {
     std::unique_lock lck{mtxForSerializingPublicFunctionCalls};
     std::vector<transaction_t> startTSs;
@@ -346,7 +359,8 @@ void TransactionManager::checkpointNoLock(main::ClientContext& clientContext) {
     // public-function lock here is safe because the gate is not held yet; the value is
     // threaded through the checkpointer so no later stage re-acquires that lock under
     // the gate.
-    const auto retentionHorizon = snapshotHorizon();
+    const auto horizonPin = snapshotHorizonInfo();
+    const auto retentionHorizon = horizonPin.horizon;
     const auto openStartTSs = snapshotOpenStartTSs();
     // We only need to wait for active write transactions to leave the system before
     // checkpointing. Read transactions can continue because they use MVCC snapshot isolation.
@@ -372,7 +386,8 @@ void TransactionManager::checkpointNoLock(main::ClientContext& clientContext) {
         // checkpoint holds the write gate (start), deadlocking concurrent writers during an
         // auto-checkpoint triggered from commit().
         transaction_t snapshotTimestamp = lastTimestamp.load(std::memory_order_acquire);
-        checkpointer->beginCheckpoint(snapshotTimestamp, retentionHorizon, openStartTSs);
+        checkpointer->beginCheckpoint(snapshotTimestamp, retentionHorizon, openStartTSs,
+            horizonPin.pinningTxnID);
         progress.update(0.15);
     } catch (std::exception& e) {
         checkpointer->rollback();

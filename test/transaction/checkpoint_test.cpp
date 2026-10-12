@@ -5458,6 +5458,107 @@ TEST_F(ReviewFixesTest, ReadOnlySnapshotSurvivesCheckpointCSR) {
 
     readerConn.reset();
 }
+
+// WAL retirement follows the same snapshot horizon that gates version collapse: a parked
+// read-only transaction pins the WAL (segments newer than the horizon survive while it is
+// open) and the WAL is retired once it closes. Every checkpoint below succeeds promptly;
+// readers never block checkpoints.
+TEST_F(ReviewFixesTest, WALRetirementPinnedByParkedReader) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    conn->query("CALL auto_checkpoint=false;");
+    conn->query("CREATE NODE TABLE W(id INT64 PRIMARY KEY, v INT64);");
+    ASSERT_TRUE(conn->query("CREATE (:W {id: 1, v: 0});")->isSuccess());
+    ASSERT_TRUE(conn->query("CHECKPOINT;")->isSuccess());
+
+    auto readerConn = std::make_unique<lbug::main::Connection>(database.get());
+    ASSERT_TRUE(readerConn->query("BEGIN TRANSACTION READ ONLY;")->isSuccess());
+    auto readRows = [&]() {
+        auto res = readerConn->query("MATCH (p:W) RETURN p.id, p.v ORDER BY p.id;");
+        EXPECT_TRUE(res->isSuccess()) << res->getErrorMessage();
+        std::vector<std::string> out;
+        if (res->isSuccess()) {
+            while (res->hasNext()) {
+                auto row = res->getNext();
+                out.push_back(row->getValue(0)->toString() + "|" + row->getValue(1)->toString());
+            }
+        }
+        return out;
+    };
+    const std::vector<std::string> snapshot{"1|0"};
+    EXPECT_EQ(readRows(), snapshot);
+
+    // Committed after the reader began: newer than the horizon, so the WAL holding its
+    // commit record must survive checkpoints while the reader is open.
+    ASSERT_TRUE(conn->query("MATCH (p:W) WHERE p.id = 1 SET p.v = 7;")->isSuccess());
+
+    const auto activeWALPath = StorageUtils::getWALFilePath(databasePath);
+    const auto frozenWALPath = StorageUtils::getCheckpointWALFilePath(databasePath);
+    ASSERT_TRUE(std::filesystem::exists(activeWALPath))
+        << "Test setup produced no active WAL; the pin has nothing to retain";
+
+    // Pinned checkpoint: succeeds promptly, snapshot stable, WAL survives.
+    const auto ckptStart = std::chrono::steady_clock::now();
+    ASSERT_TRUE(conn->query("CHECKPOINT;")->isSuccess());
+    EXPECT_LT(std::chrono::duration_cast<std::chrono::milliseconds>(
+                  std::chrono::steady_clock::now() - ckptStart)
+                  .count(),
+        10000)
+        << "CHECKPOINT stalled on an open reader";
+    EXPECT_EQ(readRows(), snapshot) << "CHECKPOINT destroyed the parked snapshot";
+    EXPECT_TRUE(std::filesystem::exists(activeWALPath))
+        << "WAL retired while a parked reader still pins the horizon";
+    EXPECT_FALSE(std::filesystem::exists(frozenWALPath))
+        << "Pinned checkpoint must skip rotation, leaving no frozen WAL behind";
+
+    // Pin observability: the horizon names the parked reader while it is open.
+    {
+        auto* txnManager = getTransactionManager(*database);
+        const auto pin = txnManager->snapshotHorizonInfo();
+        EXPECT_NE(pin.horizon, INVALID_TRANSACTION);
+        EXPECT_NE(pin.pinningTxnID, INVALID_TRANSACTION);
+        EXPECT_GE(pin.openTxnCount, 1u);
+        EXPECT_GT(std::filesystem::file_size(activeWALPath), 0u)
+            << "Pinned WAL must hold the post-horizon commit records";
+    }
+
+    // Second pinned checkpoint: still succeeds (no frozen-WAL-pending failure) and the
+    // snapshot and WAL stay put.
+    ASSERT_TRUE(conn->query("CHECKPOINT;")->isSuccess());
+    EXPECT_EQ(readRows(), snapshot) << "Second pinned CHECKPOINT broke the parked snapshot";
+    EXPECT_TRUE(std::filesystem::exists(activeWALPath))
+        << "WAL retired while a parked reader still pins the horizon";
+
+    EXPECT_TRUE(readerConn->query("COMMIT;")->isSuccess());
+    readerConn.reset();
+
+    // The pin clears once the reader closes.
+    {
+        auto* txnManager = getTransactionManager(*database);
+        const auto pin = txnManager->snapshotHorizonInfo();
+        EXPECT_EQ(pin.horizon, INVALID_TRANSACTION);
+        EXPECT_EQ(pin.pinningTxnID, INVALID_TRANSACTION);
+        EXPECT_EQ(pin.openTxnCount, 0u);
+    }
+
+    // Unpinned checkpoint retires the WAL exactly as before.
+    ASSERT_TRUE(conn->query("CHECKPOINT;")->isSuccess());
+    EXPECT_FALSE(std::filesystem::exists(activeWALPath));
+    EXPECT_FALSE(std::filesystem::exists(frozenWALPath));
+
+    // Recovery across the pinned checkpoint: all committed data present, no WAL residue.
+    createDBAndConn();
+    auto res = conn->query("MATCH (p:W) RETURN p.id, p.v ORDER BY p.id;");
+    ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+    ASSERT_TRUE(res->hasNext());
+    auto row = res->getNext();
+    EXPECT_EQ(row->getValue(0)->getValue<int64_t>(), 1);
+    EXPECT_EQ(row->getValue(1)->getValue<int64_t>(), 7);
+    EXPECT_FALSE(res->hasNext());
+    EXPECT_FALSE(std::filesystem::exists(activeWALPath));
+    EXPECT_FALSE(std::filesystem::exists(frozenWALPath));
+}
 #endif // __SINGLE_THREADED__
 
 // Hash index basic recovery
