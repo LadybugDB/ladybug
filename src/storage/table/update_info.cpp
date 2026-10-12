@@ -127,7 +127,12 @@ void UpdateInfo::iterateVectorInfo(const Transaction* transaction, idx_t idx,
     DASSERT(head);
     std::shared_lock chainLock{head->mtx};
     auto current = head->info.get();
-    DASSERT(current);
+    if (current == nullptr) {
+        // The chain was emptied after the prefix check (retention dropped every node
+        // below the horizon, or a rollback removed its entries). Either way the base
+        // page now holds the newest value, so there is nothing to overlay.
+        return;
+    }
     while (current) {
         if (current->version == transaction->getID() ||
             current->version <= transaction->getStartTS()) {
@@ -444,24 +449,40 @@ VectorUpdateInfo& UpdateInfo::insertRetainedBaseNode(MemoryManager& memoryManage
     return *result;
 }
 
-VectorUpdateInfo& UpdateInfo::getOrCreateNodeForVersion(MemoryManager& memoryManager,
-    LogicalType dataType, idx_t vectorIdx, transaction_t version) {
+bool UpdateInfo::stageRetainedRow(MemoryManager& memoryManager, LogicalType dataType,
+    idx_t vectorIdx, transaction_t version, sel_t rowInVector, const ColumnChunkData& srcData,
+    row_idx_t srcPos) {
     auto& header = getOrCreateUpdateNode(vectorIdx);
     std::unique_lock chainLock{header.mtx};
+    VectorUpdateInfo* node = nullptr;
     for (auto* current = header.info.get(); current != nullptr; current = current->getPrev()) {
         if (current->version == version) {
-            return *current;
+            node = current;
+            break;
         }
     }
-    auto newInfo = std::make_unique<VectorUpdateInfo>(memoryManager, version, std::move(dataType));
-    auto* result = newInfo.get();
-    auto currentInfo = std::move(header.info);
-    if (currentInfo) {
-        currentInfo->setNext(newInfo.get());
+    if (node == nullptr) {
+        // Prepended as newest: callers stage oldest-first (below-horizon node, then the
+        // horizon base, then kept nodes oldest-first), so chain order is preserved.
+        auto newInfo =
+            std::make_unique<VectorUpdateInfo>(memoryManager, version, std::move(dataType));
+        node = newInfo.get();
+        auto currentInfo = std::move(header.info);
+        if (currentInfo) {
+            currentInfo->setNext(node);
+        }
+        newInfo->setPrev(std::move(currentInfo));
+        header.info = std::move(newInfo);
     }
-    newInfo->setPrev(std::move(currentInfo));
-    header.info = std::move(newInfo);
-    return *result;
+    for (auto i = 0u; i < node->numRowsUpdated; i++) {
+        if (node->rowsInVector[i] == rowInVector) {
+            return false;
+        }
+    }
+    const auto pos = node->numRowsUpdated++;
+    node->rowsInVector[pos] = rowInVector;
+    node->data->write(&srcData, srcPos, pos, 1);
+    return true;
 }
 
 } // namespace storage

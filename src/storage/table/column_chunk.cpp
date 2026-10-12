@@ -332,50 +332,19 @@ void ColumnChunk::checkpoint(Column& column,
 
 void ColumnChunk::readBaseValue(row_idx_t rowInChunk, ColumnChunkData& out,
     row_idx_t outPos) const {
+    DASSERT(getResidencyState() == ResidencyState::IN_MEMORY);
     std::span<const std::unique_ptr<ColumnChunkData>> segments{data};
     auto [segment, offsetInSegment] = genericFindSegment(segments, rowInChunk);
     DASSERT(segment != segments.end());
     out.write(segment->get(), offsetInSegment, outPos, 1);
 }
 
+std::vector<VectorRetentionPlan> ColumnChunk::planUpdateRetention(transaction_t horizon) const {
+    return updateInfo->planRetention(horizon);
+}
+
 bool ColumnChunk::hasRetainedUpdates(transaction_t horizon) const {
     return UpdateInfo::plansHaveKeptNodes(updateInfo->planRetention(horizon));
-}
-
-UpdateRetentionCapture ColumnChunk::captureUpdateRetention(transaction_t horizon) const {
-    UpdateRetentionCapture capture;
-    capture.horizon = horizon;
-    capture.plans = updateInfo->planRetention(horizon);
-    auto& mm = data.front()->getMemoryManager();
-    for (const auto& plan : capture.plans) {
-        if (!plan.hasKept()) {
-            capture.baseStaging.push_back(nullptr);
-            continue;
-        }
-        const auto synthetic = plan.keptRows & ~plan.belowRows;
-        if (synthetic.none()) {
-            capture.baseStaging.push_back(nullptr);
-            continue;
-        }
-        auto staging = ColumnChunkFactory::createColumnChunkData(mm, getDataType().copy(),
-            false /*enableCompression*/, DEFAULT_VECTOR_CAPACITY, ResidencyState::IN_MEMORY);
-        for (auto r = 0u; r < DEFAULT_VECTOR_CAPACITY; r++) {
-            if (synthetic.test(r)) {
-                readBaseValue(plan.vectorIdx * DEFAULT_VECTOR_CAPACITY + r, *staging, r);
-            }
-        }
-        capture.baseStaging.push_back(std::move(staging));
-    }
-    return capture;
-}
-
-static bool updateNodeContainsRow(const VectorUpdateInfo& node, common::sel_t rowInVector) {
-    for (auto i = 0u; i < node.numRowsUpdated; i++) {
-        if (node.rowsInVector[i] == rowInVector) {
-            return true;
-        }
-    }
-    return false;
 }
 
 void ColumnChunk::applyUpdateRetention(UpdateRetentionCapture&& capture) {
@@ -392,16 +361,16 @@ void ColumnChunk::applyUpdateRetention(UpdateRetentionCapture&& capture) {
             continue;
         }
         // Spliced below the kept nodes (never prepended): a prepended base node
-        // would shadow newer updates for readers past their commit timestamps.
-        auto& node = updateInfo->insertRetainedBaseNode(mm, getDataType().copy(), plan.vectorIdx,
+        // would shadow newer updates for readers past their commit timestamps. The
+        // row copy itself runs under the chain lock inside stageRetainedRow.
+        updateInfo->insertRetainedBaseNode(mm, getDataType().copy(), plan.vectorIdx,
             capture.horizon);
         for (auto r = 0u; r < DEFAULT_VECTOR_CAPACITY; r++) {
-            if (!synthetic.test(r) || updateNodeContainsRow(node, r)) {
+            if (!synthetic.test(r)) {
                 continue;
             }
-            const auto pos = node.numRowsUpdated++;
-            node.rowsInVector[pos] = r;
-            node.data->write(capture.baseStaging[i].get(), r, pos, 1);
+            updateInfo->stageRetainedRow(mm, getDataType().copy(), plan.vectorIdx, capture.horizon,
+                r, *capture.baseStaging[i], r);
         }
     }
 }
@@ -416,19 +385,15 @@ void ColumnChunk::transplantRetainedUpdates(const ColumnChunk& src, row_idx_t ro
         return;
     }
     auto& mm = data.front()->getMemoryManager();
-    auto staging = ColumnChunkFactory::createColumnChunkData(mm, getDataType().copy(),
-        false /*enableCompression*/, 1, ResidencyState::IN_MEMORY);
+    // Staging is created lazily inside the synthetic branch below: instantiating it
+    // unconditionally would also instantiate column types that never stage anything.
+    std::unique_ptr<ColumnChunkData> staging;
     auto copyNodeRows = [&](const VectorUpdateInfo* node, idx_t srcVectorIdx) {
         for (auto i = 0u; i < node->numRowsUpdated; i++) {
             const auto srcRow = srcVectorIdx * DEFAULT_VECTOR_CAPACITY + node->rowsInVector[i];
             const auto tgtRow = srcRow + rowDelta;
-            const auto tgtVec = tgtRow / DEFAULT_VECTOR_CAPACITY;
-            const auto tgtRowInVec = tgtRow % DEFAULT_VECTOR_CAPACITY;
-            auto& tgtNode = updateInfo->getOrCreateNodeForVersion(mm, getDataType().copy(), tgtVec,
-                node->version);
-            const auto pos = tgtNode.numRowsUpdated++;
-            tgtNode.rowsInVector[pos] = tgtRowInVec;
-            tgtNode.data->write(node->data.get(), i, pos, 1);
+            updateInfo->stageRetainedRow(mm, getDataType().copy(), tgtRow / DEFAULT_VECTOR_CAPACITY,
+                node->version, tgtRow % DEFAULT_VECTOR_CAPACITY, *node->data, i);
         }
     };
     for (const auto& plan : plans) {
@@ -453,15 +418,18 @@ void ColumnChunk::transplantRetainedUpdates(const ColumnChunk& src, row_idx_t ro
                 const auto tgtRow = srcRow + rowDelta;
                 const auto tgtVec = tgtRow / DEFAULT_VECTOR_CAPACITY;
                 const auto tgtRowInVec = tgtRow % DEFAULT_VECTOR_CAPACITY;
-                auto& rowNode =
-                    updateInfo->insertRetainedBaseNode(mm, getDataType().copy(), tgtVec, horizon);
-                if (updateNodeContainsRow(rowNode, tgtRowInVec)) {
-                    continue;
+                // Pre-staged below the kept copies that follow (never prepended over them).
+                updateInfo->insertRetainedBaseNode(mm, getDataType().copy(), tgtVec, horizon);
+                if (!staging) {
+                    // Word-sized null mask: single-row capacities leave the mask
+                    // narrower than the word the null copy asserts on.
+                    staging = ColumnChunkFactory::createColumnChunkData(mm, getDataType().copy(),
+                        false /*enableCompression*/, DEFAULT_VECTOR_CAPACITY,
+                        ResidencyState::IN_MEMORY);
                 }
                 src.readBaseValue(srcRow, *staging, 0);
-                const auto pos = rowNode.numRowsUpdated++;
-                rowNode.rowsInVector[pos] = tgtRowInVec;
-                rowNode.data->write(staging.get(), 0, pos, 1);
+                updateInfo->stageRetainedRow(mm, getDataType().copy(), tgtVec, horizon, tgtRowInVec,
+                    *staging, 0);
             }
         }
         for (auto k = plan.kept.size(); k > 0; k--) {

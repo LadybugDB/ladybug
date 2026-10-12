@@ -159,10 +159,13 @@ public:
     // structural churn. Content removal is safe either way: every dropped node is older
     // than the horizon, hence invisible to every live scan (startTS >= horizon).
     void dropUnretainedNodes(const std::vector<VectorRetentionPlan>& plans, bool exclusive);
-    // Finds the chain node stamped with `version` in the vector, or prepends a new empty
-    // newest node. Used to stage synthetic horizon base nodes and transplanted chains.
-    VectorUpdateInfo& getOrCreateNodeForVersion(MemoryManager& memoryManager,
-        common::LogicalType dataType, common::idx_t vectorIdx, common::transaction_t version);
+    // Stages one retained row into the chain node stamped with `version`, creating the
+    // node when absent. The find-or-create, the duplicate check, and the value copy all
+    // run under the chain lock, so in-flight scans never observe a half-staged row.
+    // Returns false when the row is already staged (stable across re-checkpoints).
+    bool stageRetainedRow(MemoryManager& memoryManager, common::LogicalType dataType,
+        common::idx_t vectorIdx, common::transaction_t version, common::sel_t rowInVector,
+        const ColumnChunkData& srcData, common::row_idx_t srcPos);
     // Creates the synthetic horizon base node (version == horizon) spliced directly above
     // the newest-below node (or at the tail when none exists), so newer kept nodes keep
     // shadowing it. Returns the existing node when one is already stamped with horizon.
