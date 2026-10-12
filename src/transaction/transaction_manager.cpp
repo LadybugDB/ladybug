@@ -301,7 +301,8 @@ void TransactionManager::registerTransactionNoLock(transaction_t transactionID,
 
 void TransactionManager::recomputeHorizonNoLock() {
     cachedHorizon = INVALID_TRANSACTION;
-    for (const auto& [_, startTS] : openTxnStartTS) {
+    for (const auto& entry : openTxnStartTS) {
+        const auto startTS = entry.second;
         if (cachedHorizon == INVALID_TRANSACTION || startTS < cachedHorizon) {
             cachedHorizon = startTS;
         }
