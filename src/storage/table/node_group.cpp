@@ -1,12 +1,15 @@
 #include "storage/table/node_group.h"
 
 #include "common/assert.h"
+#include "common/data_chunk/data_chunk_state.h"
 #include "common/types/types.h"
 #include "common/uniq_lock.h"
+#include "common/vector/value_vector.h"
 #include "storage/buffer_manager/memory_manager.h"
 #include "storage/enums/residency_state.h"
 #include "storage/storage_utils.h"
 #include "storage/table/chunked_node_group.h"
+#include "storage/table/column.h"
 #include "storage/table/column_chunk.h"
 #include "storage/table/column_chunk_scanner.h"
 #include "storage/table/columnar_node_table_base.h"
@@ -496,7 +499,7 @@ void NodeGroup::checkpoint(MemoryManager& memoryManager, NodeGroupCheckpointStat
     std::vector<UpdateRetentionCapture> persistentCaptures;
     const auto numPersistentRows = firstGroup->getNumRows();
     if (!useEmpty && horizon != INVALID_TRANSACTION && hasPersistentData) {
-        persistentCaptures = capturePersistentUpdateRetention(lock, horizon);
+        persistentCaptures = capturePersistentUpdateRetention(lock, memoryManager, state, horizon);
     }
     std::unique_ptr<ChunkedNodeGroup> checkpointedChunkedGroup;
     if (useEmpty) {
@@ -674,14 +677,48 @@ bool NodeGroup::hasRetainedUpdateNodes(const UniqLock& lock, transaction_t horiz
 }
 
 std::vector<UpdateRetentionCapture> NodeGroup::capturePersistentUpdateRetention(
-    const UniqLock& lock, transaction_t horizon) const {
-    std::vector<UpdateRetentionCapture> captures;
+    const UniqLock& lock, MemoryManager& memoryManager, const NodeGroupCheckpointState& state,
+    transaction_t horizon) const {
+    // Captures are indexed by column ID so the apply phase can address moved chunks, which
+    // hold only the checkpointed column subset.
     const auto* firstGroup = chunkedGroups.getFirstGroup(lock);
-    captures.reserve(firstGroup->getNumColumns());
-    for (auto columnID = 0u; columnID < firstGroup->getNumColumns(); columnID++) {
-        captures.push_back(firstGroup->getColumnChunk(columnID).captureUpdateRetention(horizon));
+    std::vector<UpdateRetentionCapture> byColumn(firstGroup->getNumColumns());
+    for (auto i = 0u; i < state.columnIDs.size(); i++) {
+        const auto columnID = state.columnIDs[i];
+        const auto& chunk = firstGroup->getColumnChunk(columnID);
+        UpdateRetentionCapture capture;
+        capture.horizon = horizon;
+        capture.plans = chunk.planUpdateRetention(horizon);
+        for (const auto& plan : capture.plans) {
+            if (!plan.hasKept()) {
+                capture.baseStaging.push_back(nullptr);
+                continue;
+            }
+            const auto synthetic = plan.keptRows & ~plan.belowRows;
+            if (synthetic.none()) {
+                capture.baseStaging.push_back(nullptr);
+                continue;
+            }
+            auto staging = ColumnChunkFactory::createColumnChunkData(memoryManager,
+                chunk.getDataType().copy(), false /*enableCompression*/, DEFAULT_VECTOR_CAPACITY,
+                ResidencyState::IN_MEMORY);
+            ChunkState chunkState;
+            chunk.initializeScanState(chunkState, state.columns[i]);
+            ValueVector baseValue{chunk.getDataType().copy()};
+            baseValue.setState(std::make_shared<DataChunkState>(DEFAULT_VECTOR_CAPACITY));
+            for (auto r = 0u; r < DEFAULT_VECTOR_CAPACITY; r++) {
+                if (!synthetic.test(r)) {
+                    continue;
+                }
+                state.columns[i]->lookupValue(chunkState,
+                    plan.vectorIdx * DEFAULT_VECTOR_CAPACITY + r, &baseValue, 0);
+                staging->write(&baseValue, 0, r);
+            }
+            capture.baseStaging.push_back(std::move(staging));
+        }
+        byColumn[columnID] = std::move(capture);
     }
-    return captures;
+    return byColumn;
 }
 
 void NodeGroup::applyRetainedUpdates(const UniqLock& lock, ChunkedNodeGroup& checkpointedGroup,

@@ -251,9 +251,8 @@ public:
     }
     bool hasUpdates(const transaction::Transaction* transaction, common::row_idx_t startRow,
         common::length_t numRows) const;
-    // Plans retention against the horizon without mutating: safe to call before the
-    // checkpoint page rewrite (base values are read from pre-checkpoint pages).
-    UpdateRetentionCapture captureUpdateRetention(common::transaction_t horizon) const;
+    // Plans retention against the horizon without mutating or reading pages.
+    std::vector<VectorRetentionPlan> planUpdateRetention(common::transaction_t horizon) const;
     // True when any chain node still filters readers at the horizon. Plan-only.
     bool hasRetainedUpdates(common::transaction_t horizon) const;
     // Applies a capture taken earlier: drops sub-horizon chains in place and stages
@@ -267,6 +266,8 @@ public:
     void transplantRetainedUpdates(const ColumnChunk& src, common::row_idx_t rowDelta,
         common::transaction_t horizon);
     // Reads the base segment value at the row (ignoring update chains) into `out`.
+    // In-memory chunks only: on-disk segments must be read through their Column (page
+    // path), since their chunk-level buffers and null masks are not positionally valid.
     void readBaseValue(common::row_idx_t rowInChunk, ColumnChunkData& out,
         common::row_idx_t outPos) const;
 

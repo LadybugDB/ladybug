@@ -247,9 +247,12 @@ private:
     // True when any update chain still filters readers at the horizon.
     bool hasRetainedUpdateNodes(const common::UniqLock& lock, common::transaction_t horizon) const;
     // Captures retention state (plans + pre-rewrite base values) for the persistent
-    // group's chunks, indexed by column. Must run before the page-rewrite phase.
+    // group's chunks, indexed by column. Must run before the page-rewrite phase. Base
+    // values are read through the columns (page path): on-disk chunk buffers and null
+    // masks are not positionally readable.
     std::vector<UpdateRetentionCapture> capturePersistentUpdateRetention(
-        const common::UniqLock& lock, common::transaction_t horizon) const;
+        const common::UniqLock& lock, MemoryManager& memoryManager,
+        const NodeGroupCheckpointState& state, common::transaction_t horizon) const;
     // Retains update chains on the checkpointed group: in-place filtering for the
     // persistent region plus transplants from in-memory sources for appended rows.
     void applyRetainedUpdates(const common::UniqLock& lock, ChunkedNodeGroup& checkpointedGroup,
