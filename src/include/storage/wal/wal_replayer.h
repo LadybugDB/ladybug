@@ -93,6 +93,11 @@ private:
     void replayCommittedCheckpoint(Checkpointer& checkpointer,
         std::unique_ptr<common::FileInfo>& fileInfo, const std::string& checkpointWALPath,
         const WALReplayInfo& replayInfo) const;
+    // Active-WAL-only recovery for a trailing CHECKPOINT record with no shadow file: the
+    // checkpoint is already applied and durable, so this skips shadow replay while keeping
+    // the version and database-ID checks. The frozen-WAL path keeps requiring the shadow.
+    void replayPinnedActiveCheckpoint(Checkpointer& checkpointer,
+        std::unique_ptr<common::FileInfo>& fileInfo, const WALReplayInfo& replayInfo) const;
     // Checkpoints the state replayed from a frozen WAL without a CHECKPOINT record, committing
     // that frozen WAL instead of rotating the active WAL.
     void completeInterruptedCheckpoint() const;

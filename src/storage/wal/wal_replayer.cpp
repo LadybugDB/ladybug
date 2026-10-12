@@ -705,7 +705,12 @@ void WALReplayer::replayActiveWAL(Checkpointer& checkpointer, bool throwOnWalRep
         const auto offsetDeserialized = replayInfo.offsetDeserialized;
         if (replayInfo.isLastRecordCheckpoint) {
             throwIfReadOnlyCheckpointState(clientContext, true /* hasFrozenWAL */, shadowFilePath);
-            replayCommittedCheckpoint(checkpointer, fileInfo, walPath, replayInfo);
+            auto vfs = VirtualFileSystem::GetUnsafe(clientContext);
+            if (!vfs->fileOrPathExists(shadowFilePath, &clientContext)) {
+                replayPinnedActiveCheckpoint(checkpointer, fileInfo, replayInfo);
+            } else {
+                replayCommittedCheckpoint(checkpointer, fileInfo, walPath, replayInfo);
+            }
         } else {
             removeFileAndSyncParentDirectory(shadowFilePath);
             if (!checkpointRead) {
@@ -744,6 +749,49 @@ void WALReplayer::replayActiveWAL(Checkpointer& checkpointer, bool throwOnWalRep
         }
         throw;
     }
+}
+
+void WALReplayer::replayPinnedActiveCheckpoint(Checkpointer& checkpointer,
+    std::unique_ptr<FileInfo>& fileInfo, const WALReplayInfo& replayInfo) const {
+    // A checkpoint taken while a reader pins the WAL skips rotation, so its CHECKPOINT record
+    // lands in the active WAL while cleanup still removes the already-applied shadow file. A
+    // trailing CHECKPOINT with no shadow therefore means the checkpoint is already durable:
+    // skip shadow replay but keep the version and database-ID checks before loading the
+    // checkpoint and retiring the WAL. Only the active-WAL path uses this; a frozen WAL with
+    // no shadow keeps throwing in replayCommittedCheckpoint.
+    if (replayInfo.checkpointFormatVersion > WAL::CHECKPOINT_BUNDLE_FORMAT_VERSION) {
+        throw RuntimeException(std::format("Cannot recover checkpoint WAL {}: {}", walPath,
+            unsupportedCheckpointFormatMessage(replayInfo.checkpointFormatVersion)));
+    }
+    auto* mainStorageManager = clientContext.getDatabase()->getStorageManager();
+    if (mainStorageManager->getDataFH() == nullptr) {
+        throw RuntimeException(
+            std::format("Cannot recover committed checkpoint: database file {} is missing.",
+                clientContext.getDatabasePath()));
+    }
+    const auto mainDatabaseID = readPersistedDatabaseID(*mainStorageManager);
+    const bool checkpointBundle =
+        replayInfo.checkpointFormatVersion >= 1 &&
+        replayInfo.checkpointFormatVersion <= WAL::CHECKPOINT_BUNDLE_FORMAT_VERSION;
+    if (checkpointBundle && replayInfo.walDatabaseID.value != mainDatabaseID.value) {
+        throw RuntimeException(std::format(
+            "Cannot recover committed checkpoint: WAL {} does not match the Database ID of {}. Do "
+            "not delete the WAL or shadow files; they hold committed pages. Restore the database "
+            "file they were written for.",
+            walPath, clientContext.getDatabasePath()));
+    }
+    std::optional<uuid> checkpointDatabaseID = std::nullopt;
+    if (checkpointBundle) {
+        checkpointDatabaseID = ShadowFile::CHECKPOINT_BUNDLE_DATABASE_ID;
+    }
+    checkpointer.readCheckpoint(true, checkpointDatabaseID, checkpointBundle);
+    recoverGraphCheckpoints(clientContext, true, checkpointBundle, checkpointDatabaseID);
+
+    truncateWALFile(*fileInfo, 0);
+    fileInfo.reset();
+    removeWALAndShadowFiles(walPath);
+    removePartitionChildShadowFiles(clientContext);
+    removeGraphCheckpointShadows(clientContext);
 }
 
 void WALReplayer::replayCommittedCheckpoint(Checkpointer& checkpointer,
