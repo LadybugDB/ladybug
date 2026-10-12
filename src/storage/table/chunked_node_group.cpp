@@ -123,6 +123,20 @@ void ChunkedNodeGroup::resetNumRowsFromChunks() {
     }
 }
 
+transaction_t ChunkedNodeGroup::getInsertCommitTS(row_idx_t rowInChunk) const {
+    if (!versionInfo) {
+        return INVALID_TRANSACTION;
+    }
+    return versionInfo->getInsertCommitTS(rowInChunk);
+}
+
+transaction_t ChunkedNodeGroup::getDeleteCommitTS(row_idx_t rowInChunk) const {
+    if (!versionInfo) {
+        return INVALID_TRANSACTION;
+    }
+    return versionInfo->getDeleteCommitTS(rowInChunk);
+}
+
 void ChunkedNodeGroup::resetVersionAndUpdateInfo() {
     if (versionInfo) {
         versionInfo.reset();

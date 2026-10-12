@@ -448,7 +448,8 @@ bool StorageManager::checkpoint(main::ClientContext* context, const Catalog& cat
 
 bool StorageManager::checkpoint(main::ClientContext* context, const Catalog& catalog,
     const Transaction& snapshotTxn, PageAllocator& pageAllocator,
-    const std::unordered_map<table_id_t, uint64_t>& epochWatermarks) {
+    const std::unordered_map<table_id_t, uint64_t>& epochWatermarks,
+    transaction_t retentionHorizon) {
     bool hasChanges = false;
     auto nodeTableEntries = catalog.getNodeTableEntries(&snapshotTxn);
     const auto relGroupEntries = catalog.getRelGroupEntries(&snapshotTxn);
@@ -469,14 +470,15 @@ bool StorageManager::checkpoint(main::ClientContext* context, const Catalog& cat
             const uint64_t watermark =
                 watermarkIt != epochWatermarks.end() ? watermarkIt->second : 0;
             hasChanges = childSM->getTable(tableID)->checkpoint(context, entry,
-                             *childSM->getDataFH()->getPageManager(), &snapshotTxn, watermark) ||
+                             *childSM->getDataFH()->getPageManager(), &snapshotTxn, watermark,
+                             retentionHorizon) ||
                          hasChanges;
             continue;
         }
         const auto watermarkIt = epochWatermarks.find(tableID);
         const uint64_t watermark = watermarkIt != epochWatermarks.end() ? watermarkIt->second : 0;
         hasChanges = tables.at(tableID)->checkpoint(context, entry, pageAllocator, &snapshotTxn,
-                         watermark) ||
+                         watermark, retentionHorizon) ||
                      hasChanges;
     }
     for (const auto entry : relGroupEntries) {
@@ -489,7 +491,7 @@ bool StorageManager::checkpoint(main::ClientContext* context, const Catalog& cat
             const uint64_t watermark =
                 watermarkIt != epochWatermarks.end() ? watermarkIt->second : 0;
             hasChanges = tables.at(info.oid)->checkpoint(context, entry, pageAllocator,
-                             &snapshotTxn, watermark) ||
+                             &snapshotTxn, watermark, retentionHorizon) ||
                          hasChanges;
         }
         entry->vacuumColumnIDs(1);

@@ -93,6 +93,19 @@ common::offset_t genericRangeSegmentsFromIt(std::span<SegmentView> segments,
 }
 
 class ColumnChunk;
+
+// Staged retention state for one column chunk: chain plans plus pre-rewrite base values
+// for rows needing synthetic horizon nodes. Captured before the checkpoint page rewrite,
+// applied after, so the captured values observe pre-checkpoint pages.
+struct UpdateRetentionCapture {
+    common::transaction_t horizon = common::INVALID_TRANSACTION;
+    std::vector<VectorRetentionPlan> plans;
+    // Parallel to plans; null when the vector stages nothing. Values live at chunk-row
+    // coordinates within the vector (sparse; only synthetic rows are read).
+    std::vector<std::unique_ptr<ColumnChunkData>> baseStaging;
+};
+
+class ColumnChunk;
 struct ColumnCheckpointState {
     ColumnChunkData& persistentData;
     std::vector<SegmentCheckpointState> segmentCheckpointStates;
@@ -238,6 +251,25 @@ public:
     }
     bool hasUpdates(const transaction::Transaction* transaction, common::row_idx_t startRow,
         common::length_t numRows) const;
+    // Plans retention against the horizon without mutating: safe to call before the
+    // checkpoint page rewrite (base values are read from pre-checkpoint pages).
+    UpdateRetentionCapture captureUpdateRetention(common::transaction_t horizon) const;
+    // True when any chain node still filters readers at the horizon. Plan-only.
+    bool hasRetainedUpdates(common::transaction_t horizon) const;
+    // Applies a capture taken earlier: drops sub-horizon chains in place and stages
+    // synthetic horizon base nodes from the captured values. Safe on chunks shared with
+    // in-flight scans: every removed node is invisible to all live scans (startTS is
+    // always >= the horizon), and empty vector shells are pruned only when unshared.
+    void applyUpdateRetention(UpdateRetentionCapture&& capture);
+    // Copies retained chains (kept nodes, kept newest-below nodes, synthetic horizon base
+    // nodes) from an in-memory source chunk whose rows land `rowDelta` rows later in this
+    // chunk. The source stays intact; base values are read from it directly.
+    void transplantRetainedUpdates(const ColumnChunk& src, common::row_idx_t rowDelta,
+        common::transaction_t horizon);
+    // Reads the base segment value at the row (ignoring update chains) into `out`.
+    void readBaseValue(common::row_idx_t rowInChunk, ColumnChunkData& out,
+        common::row_idx_t outPos) const;
+
     // Clears the pending updates. If a scan shares them, drops only this chunk's reference
     // and the scan keeps the pre-checkpoint updates.
     void resetUpdateInfo() {

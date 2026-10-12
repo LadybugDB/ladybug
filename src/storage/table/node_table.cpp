@@ -758,7 +758,8 @@ visible_func NodeTable::getVisibleFunc(const Transaction* transaction) const {
 }
 
 bool NodeTable::checkpoint(main::ClientContext* context, TableCatalogEntry* tableEntry,
-    PageAllocator& pageAllocator, const Transaction* snapshotTxn, uint64_t epochWatermark) {
+    PageAllocator& pageAllocator, const Transaction* snapshotTxn, uint64_t epochWatermark,
+    transaction_t retentionHorizon) {
     const auto effectiveEpoch =
         epochWatermark > 0 ? epochWatermark : changeEpoch.load(std::memory_order_acquire);
     if (effectiveEpoch <= lastCheckpointedEpoch) {
@@ -782,6 +783,7 @@ bool NodeTable::checkpoint(main::ClientContext* context, TableCatalogEntry* tabl
 
     NodeGroupCheckpointState state{columnIDs, std::move(checkpointColumnPtrs), pageAllocator,
         memoryManager, snapshotTxn};
+    state.retentionHorizon = retentionHorizon;
     nodeGroups->checkpoint(*memoryManager, state);
     for (auto& index : indexes) {
         // TODO: The hash index checkpoint currently operates on live index state rather than

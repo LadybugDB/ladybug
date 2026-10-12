@@ -43,6 +43,18 @@ public:
 
     common::idx_t getNumVectors() const { return vectorsInfo.size(); }
 
+    // Insert/delete commit timestamp of a single row, or INVALID_TRANSACTION when the row
+    // carries no entry (baked pre-history). Uncommitted entries surface as their writer ID.
+    common::transaction_t getInsertCommitTS(common::row_idx_t rowInChunk) const;
+    common::transaction_t getDeleteCommitTS(common::row_idx_t rowInChunk) const;
+    // Records a retained insert stamp on a checkpoint-built VersionInfo. Rows never stamped
+    // stay baked-visible (fresh vectors default to visible); only stamped rows filter.
+    void stampInsertCommitTS(common::row_idx_t rowInChunk, common::transaction_t commitTS);
+    void stampDeleteCommitTS(common::row_idx_t rowInChunk, common::transaction_t commitTS);
+    // True when any entry still filters readers at the horizon (committed at/after it, or
+    // uncommitted). Baked entries (0) and absent entries do not count.
+    bool hasRetainedEntries(common::transaction_t horizon) const;
+
     void commitInsert(common::row_idx_t startRow, common::row_idx_t numRows,
         common::transaction_t commitTS);
     void rollbackInsert(common::row_idx_t startRow, common::row_idx_t numRows);

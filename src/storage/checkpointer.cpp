@@ -259,13 +259,15 @@ void Checkpointer::writeCheckpoint() {
     postCheckpointCleanup();
 }
 
-void Checkpointer::beginCheckpoint(common::transaction_t snapshotTimestamp) {
+void Checkpointer::beginCheckpoint(common::transaction_t snapshotTimestamp,
+    common::transaction_t retentionHorizon_) {
     if (isInMemory) {
         return;
     }
 
     acquireCheckpointLocks();
     snapshotTS = snapshotTimestamp;
+    retentionHorizon = retentionHorizon_;
     checkpointTargets = collectCheckpointTargets();
 
     for (const auto& target : checkpointTargets) {
@@ -454,9 +456,9 @@ bool Checkpointer::checkpointStorage() {
         if (snapshotTS > 0) {
             const transaction::Transaction snapshotTxn(transaction::TransactionType::CHECKPOINT,
                 transaction::Transaction::DUMMY_TRANSACTION_ID, snapshotTS);
-            targetHasChanges =
-                target.storageManager->checkpoint(&clientContext, *target.catalog, snapshotTxn,
-                    *pageAllocator, tableEpochWatermarksByManager.at(target.storageManager));
+            targetHasChanges = target.storageManager->checkpoint(&clientContext, *target.catalog,
+                snapshotTxn, *pageAllocator,
+                tableEpochWatermarksByManager.at(target.storageManager), retentionHorizon);
         } else {
             targetHasChanges =
                 target.storageManager->checkpoint(&clientContext, *target.catalog, *pageAllocator);

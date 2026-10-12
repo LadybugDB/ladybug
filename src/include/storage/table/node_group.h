@@ -53,6 +53,10 @@ struct NodeGroupCheckpointState {
     MemoryManager* mm;
 
     const transaction::Transaction* transaction;
+    // Snapshot-horizon floor for MVCC version retention (INVALID_TRANSACTION = none open:
+    // checkpoint wipes version metadata as before). Ignored by CSR groups in this phase.
+
+    common::transaction_t retentionHorizon = common::INVALID_TRANSACTION;
 
     NodeGroupCheckpointState(std::vector<common::column_id_t> columnIDs,
         std::vector<Column*> columns, PageAllocator& pageAllocator, MemoryManager* mm,
@@ -237,7 +241,21 @@ private:
     std::unique_ptr<ChunkedNodeGroup> checkpointInMemAndOnDisk(MemoryManager& memoryManager,
         const common::UniqLock& lock, NodeGroupCheckpointState& state) const;
     std::unique_ptr<VersionInfo> checkpointVersionInfo(const common::UniqLock& lock,
-        const transaction::Transaction* transaction) const;
+        const transaction::Transaction* transaction,
+        common::transaction_t retentionHorizon = common::INVALID_TRANSACTION) const;
+    // Retention helpers (all under the group lock; writers are drained by the gate).
+    // True when any update chain still filters readers at the horizon.
+    bool hasRetainedUpdateNodes(const common::UniqLock& lock, common::transaction_t horizon) const;
+    // Captures retention state (plans + pre-rewrite base values) for the persistent
+    // group's chunks, indexed by column. Must run before the page-rewrite phase.
+    std::vector<UpdateRetentionCapture> capturePersistentUpdateRetention(
+        const common::UniqLock& lock, common::transaction_t horizon) const;
+    // Retains update chains on the checkpointed group: in-place filtering for the
+    // persistent region plus transplants from in-memory sources for appended rows.
+    void applyRetainedUpdates(const common::UniqLock& lock, ChunkedNodeGroup& checkpointedGroup,
+        const NodeGroupCheckpointState& state, common::transaction_t horizon,
+        std::vector<UpdateRetentionCapture>&& persistentCaptures, bool hadPersistentData,
+        common::row_idx_t numPersistentRows) const;
 
     template<ResidencyState SCAN_RESIDENCY_STATE>
     common::row_idx_t getNumResidentRows(const common::UniqLock& lock) const;

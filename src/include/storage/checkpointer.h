@@ -41,7 +41,8 @@ public:
     virtual ~Checkpointer();
 
     void writeCheckpoint();
-    void beginCheckpoint(common::transaction_t snapshotTS);
+    void beginCheckpoint(common::transaction_t snapshotTS,
+        common::transaction_t retentionHorizon = common::INVALID_TRANSACTION);
     // Materialize storage while the write gate remains held. WAL rotation alone does not protect
     // the version chains and update metadata scanned and reset in this phase.
     void checkpointStoragePhase();
@@ -107,6 +108,10 @@ protected:
     bool walRotated = false;
     // Snapshot timestamp captured at drain time for MVCC catalog serialization.
     common::transaction_t snapshotTS = 0;
+    // Snapshot-horizon floor captured alongside snapshotTS (before the write gate).
+    // Version data committed at or after it is retained for open readers;
+    // INVALID_TRANSACTION when no transaction was open (fast path: wipe as before).
+    common::transaction_t retentionHorizon = common::INVALID_TRANSACTION;
     // Database header captured during beginCheckpoint for use in finishCheckpoint.
     DatabaseHeader checkpointHeader{};
     // Whether storage had changes during checkpointStoragePhase.
