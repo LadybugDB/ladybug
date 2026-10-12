@@ -190,7 +190,8 @@ public:
     virtual bool checkpoint(main::ClientContext* context, catalog::TableCatalogEntry* tableEntry,
         PageAllocator& pageAllocator, const transaction::Transaction* snapshotTxn = nullptr,
         uint64_t epochWatermark = 0,
-        common::transaction_t retentionHorizon = common::INVALID_TRANSACTION) = 0;
+        common::transaction_t retentionHorizon = common::INVALID_TRANSACTION,
+        const std::vector<common::transaction_t>& openStartTSs = {}) = 0;
     virtual void rollbackCheckpoint() = 0;
     // Runs after the checkpoint commit point (shadow pages applied). Used to publish
     // in-memory state that must not become visible if the checkpoint still fails.

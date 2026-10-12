@@ -75,6 +75,16 @@ TEST_F(MVCCRetentionTest, HorizonIsMinimumOverOpenTransactions) {
     readerB.reset();
 }
 
+TEST_F(MVCCRetentionTest, OpenStartTSsTracksOpenTransactions) {
+    EXPECT_TRUE(getTM()->snapshotOpenStartTSs().empty());
+    ASSERT_TRUE(conn->query("BEGIN TRANSACTION READ ONLY;")->isSuccess());
+    const auto open = getTM()->snapshotOpenStartTSs();
+    ASSERT_EQ(open.size(), 1u);
+    EXPECT_EQ(open[0], getTM()->snapshotHorizon());
+    ASSERT_TRUE(conn->query("COMMIT;")->isSuccess());
+    EXPECT_TRUE(getTM()->snapshotOpenStartTSs().empty());
+}
+
 TEST_F(MVCCRetentionTest, AutoTransactionDoesNotPinHorizon) {
     ASSERT_TRUE(conn->query("CREATE NODE TABLE H(id INT64 PRIMARY KEY);")->isSuccess());
     ASSERT_TRUE(conn->query("CREATE (:H {id: 1});")->isSuccess());

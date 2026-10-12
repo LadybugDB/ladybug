@@ -241,7 +241,8 @@ public:
     bool checkpoint(main::ClientContext*, catalog::TableCatalogEntry* tableEntry,
         PageAllocator& pageAllocator, const transaction::Transaction* snapshotTxn = nullptr,
         uint64_t epochWatermark = 0,
-        common::transaction_t retentionHorizon = common::INVALID_TRANSACTION) override;
+        common::transaction_t retentionHorizon = common::INVALID_TRANSACTION,
+        const std::vector<common::transaction_t>& openStartTSs = {}) override;
     void rollbackCheckpoint() override {};
     void reclaimStorage(PageAllocator& pageAllocator) const override;
 

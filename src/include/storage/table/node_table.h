@@ -2,6 +2,7 @@
 
 #include <optional>
 #include <shared_mutex>
+#include <vector>
 
 #include "common/types/types.h"
 #include "storage/index/hash_index.h"
@@ -211,7 +212,8 @@ public:
     bool checkpoint(main::ClientContext* context, catalog::TableCatalogEntry* tableEntry,
         PageAllocator& pageAllocator, const transaction::Transaction* snapshotTxn = nullptr,
         uint64_t epochWatermark = 0,
-        common::transaction_t retentionHorizon = common::INVALID_TRANSACTION) override;
+        common::transaction_t retentionHorizon = common::INVALID_TRANSACTION,
+        const std::vector<common::transaction_t>& openStartTSs = {}) override;
     void rollbackCheckpoint() override;
     void finalizeCheckpoint(main::ClientContext& context) override;
     void reclaimStorage(PageAllocator& pageAllocator) const override;

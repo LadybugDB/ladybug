@@ -168,6 +168,63 @@ void CSRNodeGroup::captureScanPin(const UniqLock& lock, CSRNodeGroupScanState& s
     pin.persistent = persistentChunkGroup;
 }
 
+void CSRNodeGroup::captureRoutedScanPin(const UniqLock& lock, const Transaction* transaction,
+    CSRNodeGroupScanState& scanState) const {
+    if (transaction != nullptr) {
+        const auto startTS = transaction->getStartTS();
+        for (const auto& entry : retainedSnapshots) {
+            if (entry.floorTS <= startTS && startTS <= entry.snapshotTS) {
+                auto& pin = scanState.pin;
+                pin.persistent = entry.persistent;
+                pin.index = entry.index;
+                pin.inMemGroups = entry.inMemGroups;
+                pin.pages = entry.pages;
+                return;
+            }
+        }
+    }
+    captureScanPin(lock, scanState);
+}
+
+void CSRNodeGroup::pruneRetainedSnapshotsNoLock(const std::vector<transaction_t>& openStartTSs) {
+    std::erase_if(retainedSnapshots, [&](const RetainedCSRSnapshot& entry) {
+        for (const auto startTS : openStartTSs) {
+            if (entry.floorTS <= startTS && startTS <= entry.snapshotTS) {
+                return false;
+            }
+        }
+        return true;
+    });
+}
+
+bool CSRNodeGroup::needsRetainedSnapshotNoLock(
+    const std::vector<transaction_t>& openStartTSs) const {
+    // A new snapshot is needed when some open reader falls in no existing entry's
+    // interval. Post-checkpoint live data serves no currently open reader (every open
+    // startTS predates this checkpoint's snapshot), so uncovered readers must be covered
+    // by a snapshot taken now. A reader whose startTS merely equals the floor still needs
+    // coverage: the merge below resets the live state its snapshot would otherwise come
+    // from.
+    for (const auto startTS : openStartTSs) {
+        auto covered = false;
+        for (const auto& entry : retainedSnapshots) {
+            if (entry.floorTS <= startTS && startTS <= entry.snapshotTS) {
+                covered = true;
+                break;
+            }
+        }
+        if (!covered) {
+            return true;
+        }
+    }
+    return false;
+}
+
+size_t CSRNodeGroup::getNumRetainedSnapshots() const {
+    const auto lock = chunkedGroups.lock();
+    return retainedSnapshots.size();
+}
+
 void CSRNodeGroup::initializeScanState(const Transaction* transaction,
     TableScanState& state) const {
     auto& relScanState = state.cast<RelTableScanState>();
@@ -180,7 +237,7 @@ void CSRNodeGroup::initializeScanState(const Transaction* transaction,
             // half-rewritten group, and a checkpoint sees every pin taken before it started.
             // Everything after the capture reads the pin, so the lock is not needed for it.
             const auto lock = chunkedGroups.lock();
-            captureScanPin(lock, nodeGroupScanState);
+            captureRoutedScanPin(lock, transaction, nodeGroupScanState);
         }
         if (nodeGroupScanState.pin.persistent) {
             initScanForCommittedPersistent(transaction, relScanState, nodeGroupScanState);
@@ -620,6 +677,54 @@ void CSRNodeGroup::serialize(Serializer& serializer) {
 
 void CSRNodeGroup::checkpoint(MemoryManager&, NodeGroupCheckpointState& state) {
     const auto lock = chunkedGroups.lock();
+    auto& csrState = state.cast<CSRNodeGroupCheckpointState>();
+    // Parked-reader retention runs on the snapshot path only: without a snapshot timestamp
+    // there is no coverage interval to reason about, so legacy checkpoints behave exactly
+    // as before (no prune, no capture, no floor update).
+    const auto snapshotTS =
+        state.transaction != nullptr ? state.transaction->getStartTS() : INVALID_TRANSACTION;
+    const auto retentionPath = state.transaction != nullptr;
+    if (retentionPath) {
+        // Prune first: dropping unneeded snapshots frees their pages immediately, outside
+        // the checkpoint's own deferral scope, exactly like a scan releasing its pin.
+        pruneRetainedSnapshotsNoLock(csrState.openStartTSs);
+    }
+    // The in-mem-only path resets nothing when there are no rels; anything captured there
+    // would alias live objects the checkpoint keeps mutating, so only prune there.
+    auto numInMemRels = 0u;
+    if (retentionPath && persistentChunkGroup == nullptr) {
+        for (const auto& chunkedGroup : chunkedGroups.getAllGroups(lock)) {
+            numInMemRels += chunkedGroup->getNumRows();
+        }
+    }
+    const auto inMemNoop = persistentChunkGroup == nullptr && numInMemRels == 0;
+
+    // A pending pre-checkpoint snapshot, appended to the retained set only if the merge
+    // below succeeds. Holding the pre-checkpoint objects before the copy checks elevates
+    // their use_counts, so the checkpoint works on its own copies while the entry keeps
+    // the pristine originals — the same sharing the pinned-scan path relies on.
+    RetainedCSRSnapshot pending;
+    // A scan that captured this group just before the checkpoint holds the live objects
+    // and is already protected by the pin machinery (private copies plus page deferral):
+    // covering its transaction with a retained snapshot would duplicate that protection
+    // past the pin's release and stall page reclamation, and the scan's own re-reads
+    // resolve against live data. Parked readers hold nothing, so a retained snapshot is
+    // taken only when no scan currently pins this group.
+    const auto freshlyPinned = scanPagePin && scanPagePin.use_count() > 1;
+    const auto wantRetain = retentionPath && !inMemNoop && !freshlyPinned &&
+                            needsRetainedSnapshotNoLock(csrState.openStartTSs);
+    if (wantRetain) {
+        if (!scanPagePin) {
+            scanPagePin = PageReclaimDeferral::create();
+        }
+        pending.floorTS = lastCollapseTS;
+        pending.snapshotTS = snapshotTS;
+        pending.pages = scanPagePin;
+        pending.index = csrIndex;
+        const auto& groups = chunkedGroups.getAllGroups(lock);
+        pending.inMemGroups.assign(groups.begin(), groups.end());
+        pending.persistent = persistentChunkGroup;
+    }
     // A scan holds the index object itself. setInvalid during this checkpoint must not
     // change the row lists that scan is still walking.
     if (csrIndex && csrIndex.use_count() > 1) {
@@ -702,6 +807,14 @@ void CSRNodeGroup::checkpoint(MemoryManager&, NodeGroupCheckpointState& state) {
             shadowFile->rollbackToSavepoint(shadowSavepoint);
         }
         throw;
+    }
+    if (retentionPath && !inMemNoop) {
+        // Every merge path above resets version state, so the floor advances here. The
+        // pending entry (if any) covers readers down to the previous floor.
+        lastCollapseTS = snapshotTS;
+        if (wantRetain) {
+            retainedSnapshots.push_back(std::move(pending));
+        }
     }
     if (deferredPages) {
         scanPagePin = PageReclaimDeferral::create();

@@ -759,7 +759,7 @@ visible_func NodeTable::getVisibleFunc(const Transaction* transaction) const {
 
 bool NodeTable::checkpoint(main::ClientContext* context, TableCatalogEntry* tableEntry,
     PageAllocator& pageAllocator, const Transaction* snapshotTxn, uint64_t epochWatermark,
-    transaction_t retentionHorizon) {
+    transaction_t retentionHorizon, const std::vector<transaction_t>&) {
     const auto effectiveEpoch =
         epochWatermark > 0 ? epochWatermark : changeEpoch.load(std::memory_order_acquire);
     // A group that still carries a retention horizon from an earlier pinned checkpoint is

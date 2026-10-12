@@ -5,6 +5,7 @@
 #include <memory>
 #include <mutex>
 #include <unordered_map>
+#include <vector>
 
 #include "common/constants.h"
 #include "common/uniq_lock.h"
@@ -54,6 +55,10 @@ public:
     // transaction is open. Brief lock acquisition; callers holding the checkpoint write
     // gate must use a value captured before the gate was acquired.
     common::transaction_t snapshotHorizon();
+    // Start timestamps of all currently open transactions, for CSR snapshot coverage and
+    // pruning. Brief lock acquisition; capture before the checkpoint write gate alongside
+    // the horizon (a small skew between the two snapshots is safe in both directions).
+    std::vector<common::transaction_t> snapshotOpenStartTSs();
 
     static TransactionManager* Get(const main::ClientContext& context);
 

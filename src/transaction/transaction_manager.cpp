@@ -314,6 +314,16 @@ transaction_t TransactionManager::snapshotHorizon() {
     return cachedHorizon;
 }
 
+std::vector<transaction_t> TransactionManager::snapshotOpenStartTSs() {
+    std::unique_lock lck{mtxForSerializingPublicFunctionCalls};
+    std::vector<transaction_t> startTSs;
+    startTSs.reserve(openTxnStartTS.size());
+    for (const auto& entry : openTxnStartTS) {
+        startTSs.push_back(entry.second);
+    }
+    return startTSs;
+}
+
 std::unique_ptr<Checkpointer> TransactionManager::initCheckpointer(
     main::ClientContext& clientContext) {
     return std::make_unique<Checkpointer>(clientContext);
@@ -337,6 +347,7 @@ void TransactionManager::checkpointNoLock(main::ClientContext& clientContext) {
     // threaded through the checkpointer so no later stage re-acquires that lock under
     // the gate.
     const auto retentionHorizon = snapshotHorizon();
+    const auto openStartTSs = snapshotOpenStartTSs();
     // We only need to wait for active write transactions to leave the system before
     // checkpointing. Read transactions can continue because they use MVCC snapshot isolation.
     // Column chunk metadata of in-place checkpointed data is published before the shadow pages
@@ -361,7 +372,7 @@ void TransactionManager::checkpointNoLock(main::ClientContext& clientContext) {
         // checkpoint holds the write gate (start), deadlocking concurrent writers during an
         // auto-checkpoint triggered from commit().
         transaction_t snapshotTimestamp = lastTimestamp.load(std::memory_order_acquire);
-        checkpointer->beginCheckpoint(snapshotTimestamp, retentionHorizon);
+        checkpointer->beginCheckpoint(snapshotTimestamp, retentionHorizon, openStartTSs);
         progress.update(0.15);
     } catch (std::exception& e) {
         checkpointer->rollback();

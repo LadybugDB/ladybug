@@ -264,7 +264,8 @@ void RelTableData::pushInsertInfo(const Transaction* transaction, const CSRNodeG
 }
 
 void RelTableData::checkpoint(const std::vector<column_id_t>& columnIDs,
-    PageAllocator& pageAllocator, const Transaction* snapshotTxn, transaction_t retentionHorizon) {
+    PageAllocator& pageAllocator, const Transaction* snapshotTxn, transaction_t retentionHorizon,
+    const std::vector<transaction_t>& openStartTSs) {
     std::vector<std::unique_ptr<Column>> checkpointColumns;
     for (auto i = 0u; i < columnIDs.size(); i++) {
         const auto columnID = columnIDs[i];
@@ -281,6 +282,7 @@ void RelTableData::checkpoint(const std::vector<column_id_t>& columnIDs,
         csrHeaderColumns.offset.get(), csrHeaderColumns.length.get()};
     state.transaction = snapshotTxn;
     state.retentionHorizon = retentionHorizon;
+    state.openStartTSs = openStartTSs;
     nodeGroups->checkpoint(*mm, state);
 }
 

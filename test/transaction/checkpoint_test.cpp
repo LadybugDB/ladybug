@@ -5376,6 +5376,88 @@ TEST_F(ReviewFixesTest, ReadOnlySnapshotSurvivesCheckpointRelData) {
 
     readerConn.reset();
 }
+
+// A parked CSR (rel) reader keeps its exact snapshot across CHECKPOINT: rel structure,
+// property values, and both visibility directions (post-begin insert/update invisible,
+// post-begin delete still visible). The CSR header/index rebuild carries no timestamps,
+// so without retention the post-checkpoint re-resolution observes the merged state.
+TEST_F(ReviewFixesTest, ReadOnlySnapshotSurvivesCheckpointCSR) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    conn->query("CALL auto_checkpoint=false;");
+    conn->query("CREATE NODE TABLE CSR_R(id INT64 PRIMARY KEY);");
+    conn->query("CREATE REL TABLE CSR_E(FROM CSR_R TO CSR_R, w INT64);");
+    for (int i = 1; i <= 3; ++i) {
+        auto r = conn->query(std::format("CREATE (:CSR_R {{id: {}}});", i));
+        ASSERT_TRUE(r->isSuccess()) << r->getErrorMessage();
+    }
+    ASSERT_TRUE(conn->query("MATCH (a:CSR_R), (b:CSR_R) WHERE a.id = 1 AND b.id = 2 "
+                            "CREATE (a)-[:CSR_E {w: 10}]->(b);")
+                    ->isSuccess());
+    ASSERT_TRUE(conn->query("MATCH (a:CSR_R), (b:CSR_R) WHERE a.id = 2 AND b.id = 3 "
+                            "CREATE (a)-[:CSR_E {w: 20}]->(b);")
+                    ->isSuccess());
+    ASSERT_TRUE(conn->query("CHECKPOINT;")->isSuccess());
+
+    auto readerConn = std::make_unique<lbug::main::Connection>(database.get());
+    readerConn->query("BEGIN TRANSACTION READ ONLY;");
+    auto queryState = [&](const std::string& query) {
+        auto res = readerConn->query(query);
+        EXPECT_TRUE(res->isSuccess()) << res->getErrorMessage();
+        std::vector<std::string> out;
+        if (res->isSuccess()) {
+            while (res->hasNext()) {
+                auto row = res->getNext();
+                std::string rendered;
+                for (auto i = 0u; i < row->len(); i++) {
+                    if (i > 0) {
+                        rendered += "|";
+                    }
+                    rendered += row->getValue(i)->toString();
+                }
+                out.push_back(rendered);
+            }
+        }
+        return out;
+    };
+    auto readRels = [&]() {
+        return queryState("MATCH (a:CSR_R)-[e:CSR_E]->(b:CSR_R) RETURN a.id, b.id, e.w "
+                          "ORDER BY a.id, b.id;");
+    };
+    const std::vector<std::string> snapshot{"1|2|10", "2|3|20"};
+    EXPECT_EQ(readRels(), snapshot);
+
+    // Committed after the reader began: rel update, rel insert, rel delete.
+    ASSERT_TRUE(conn->query("MATCH (a:CSR_R)-[e:CSR_E]->(b:CSR_R) WHERE a.id = 1 AND b.id = 2 "
+                            "SET e.w = 30;")
+                    ->isSuccess());
+    ASSERT_TRUE(conn->query("MATCH (a:CSR_R), (b:CSR_R) WHERE a.id = 1 AND b.id = 3 "
+                            "CREATE (a)-[:CSR_E {w: 40}]->(b);")
+                    ->isSuccess());
+    ASSERT_TRUE(conn->query("MATCH (a:CSR_R)-[e:CSR_E]->(b:CSR_R) WHERE a.id = 2 AND b.id = 3 "
+                            "DELETE e;")
+                    ->isSuccess());
+    EXPECT_EQ(readRels(), snapshot) << "Committed rel writes leaked pre-checkpoint";
+
+    const auto ckptStart = std::chrono::steady_clock::now();
+    ASSERT_TRUE(conn->query("CHECKPOINT;")->isSuccess());
+    EXPECT_LT(std::chrono::duration_cast<std::chrono::milliseconds>(
+                  std::chrono::steady_clock::now() - ckptStart)
+                  .count(),
+        10000)
+        << "CHECKPOINT stalled on an open reader";
+    EXPECT_EQ(readRels(), snapshot) << "CHECKPOINT destroyed the parked CSR snapshot";
+
+    ASSERT_TRUE(conn->query("CHECKPOINT;")->isSuccess());
+    EXPECT_EQ(readRels(), snapshot) << "Second CHECKPOINT broke the retained CSR snapshot";
+
+    EXPECT_TRUE(readerConn->query("COMMIT;")->isSuccess());
+    EXPECT_EQ(readRels(), (std::vector<std::string>{"1|2|30", "1|3|40"}))
+        << "Fresh snapshot must observe all committed rel writes exactly";
+
+    readerConn.reset();
+}
 #endif // __SINGLE_THREADED__
 
 // Hash index basic recovery
@@ -7369,6 +7451,27 @@ public:
         return pages;
     }
 
+    size_t numRetainedSnapshots() const {
+        const auto* nodeGroup =
+            relTableK().getDirectedTableData(RelDataDirection::FWD)->getNodeGroup(0);
+        return nodeGroup == nullptr ? 0 : nodeGroup->cast<CSRNodeGroup>().getNumRetainedSnapshots();
+    }
+
+    // The parked snapshot of node 0's rels seen through a reader connection.
+    static std::vector<int64_t> readNodeZeroRels(main::Connection& readerConn) {
+        std::vector<int64_t> ws;
+        auto res =
+            readerConn.query("MATCH (a:P)-[r:K]->(b:P) WHERE a.id = 0 RETURN r.w ORDER BY r.w;");
+        EXPECT_TRUE(res->isSuccess()) << res->getErrorMessage();
+        if (!res->isSuccess()) {
+            return ws;
+        }
+        while (res->hasNext()) {
+            ws.push_back(res->getNext()->getValue(0)->getValue<int64_t>());
+        }
+        return ws;
+    }
+
     // The pages the free space manager would hand out again.
     std::unordered_set<page_idx_t> reusablePages() const {
         std::unordered_set<page_idx_t> pages;
@@ -7625,6 +7728,137 @@ TEST_F(CheckpointRunningRelScanTest, ReleasedScanPinLetsCheckpointReclaimPages) 
     // The scan state is still alive and usable.
     checkRels(relScan.scanAll(error), expectedRels(1, numDsts, deleted), "scan after the release");
     EXPECT_TRUE(error.empty()) << error;
+}
+
+// A parked reader (explicit read-only transaction, between queries, holding no scan pin)
+// keeps its CSR snapshot across checkpoints via a retained pre-checkpoint snapshot, and
+// the pages that snapshot names stay unreusable until the reader closes. Mirrors
+// ReleasedScanPinLetsCheckpointReclaimPages with a parked reader instead of a pinned scan.
+TEST_F(CheckpointRunningRelScanTest, ParkedCSRReaderReclaimsPagesAfterClose) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    insertRels(1, 4000);
+    runQuery("CHECKPOINT;");
+    const auto oldPages = fwdGroupPages();
+    ASSERT_FALSE(oldPages.empty());
+    auto readerConn = std::make_unique<main::Connection>(database.get());
+    ASSERT_TRUE(readerConn->query("BEGIN TRANSACTION READ ONLY;")->isSuccess());
+    const auto snapshot = readNodeZeroRels(*readerConn);
+    ASSERT_EQ(snapshot, expectedRels(1, 4000));
+    insertRels(4000, numDsts);
+    runQuery("MATCH (a:P)-[r:K]->(b:P) WHERE a.id = 0 AND r.w % 7 = 0 DELETE r;");
+    std::unordered_set<int64_t> deleted;
+    for (auto i = 7; i < numDsts; i += 7) {
+        deleted.insert(i);
+    }
+    runQuery("CHECKPOINT;");
+    EXPECT_EQ(numRetainedSnapshots(), 1) << "parked reader holds one retained snapshot";
+    const auto newPages = fwdGroupPages();
+    std::vector<page_idx_t> replacedPages;
+    for (const auto page : oldPages) {
+        if (!newPages.contains(page)) {
+            replacedPages.push_back(page);
+        }
+    }
+    ASSERT_FALSE(replacedPages.empty());
+    auto numReusable = [&]() {
+        const auto reusable = reusablePages();
+        return std::count_if(replacedPages.begin(), replacedPages.end(),
+            [&](page_idx_t page) { return reusable.contains(page); });
+    };
+    // Freed pages become reusable at the end of the next checkpoint. Run one with the
+    // reader still parked: it must not publish the pages the snapshot still names.
+    runQuery("MATCH (a:P), (b:P) WHERE a.id = 1 AND b.id = 2 CREATE (a)-[:K {w: 999999}]->(b);");
+    runQuery("CHECKPOINT;");
+    EXPECT_EQ(numReusable(), 0) << "of " << replacedPages.size()
+                                << " replaced pages, while the reader is still parked";
+    EXPECT_EQ(numRetainedSnapshots(), 1) << "one entry still covers the parked reader";
+    EXPECT_EQ(readNodeZeroRels(*readerConn), snapshot) << "parked snapshot across checkpoints";
+
+    ASSERT_TRUE(readerConn->query("COMMIT;")->isSuccess());
+    readerConn.reset();
+    EXPECT_EQ(numRetainedSnapshots(), 1) << "entry still held before the next checkpoint";
+    // Force rel-table checkpoints (node-only writes may not bump the rel epoch).
+    runQuery("MATCH (a:P), (b:P) WHERE a.id = 1 AND b.id = 2 CREATE (a)-[:K {w: 999998}]->(b);");
+    runQuery("CHECKPOINT;");
+    runQuery("MATCH (a:P), (b:P) WHERE a.id = 1 AND b.id = 2 CREATE (a)-[:K {w: 999997}]->(b);");
+    runQuery("CHECKPOINT;");
+    EXPECT_EQ(numRetainedSnapshots(), 0) << "entry pruned once no reader needs it";
+    EXPECT_GT(numReusable(), 0) << "of " << replacedPages.size()
+                                << " replaced pages, after the reader closed";
+}
+
+// Many checkpoints under one forever-parked reader keep exactly one retained snapshot:
+// later checkpoints find the reader already covered and take no new snapshot.
+TEST_F(CheckpointRunningRelScanTest, RetainedCSRSnapshotBoundedUnderPinnedHorizon) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    insertRels(1, 100);
+    runQuery("CHECKPOINT;");
+    auto readerConn = std::make_unique<main::Connection>(database.get());
+    ASSERT_TRUE(readerConn->query("BEGIN TRANSACTION READ ONLY;")->isSuccess());
+    const auto snapshot = readNodeZeroRels(*readerConn);
+    ASSERT_EQ(snapshot, expectedRels(1, 100));
+    for (auto i = 0; i < 5; i++) {
+        runQuery(std::format("MATCH (a:P), (b:P) WHERE a.id = 1 AND b.id = 2 CREATE (a)-[:K {{w: "
+                             "{}}}]->(b);",
+            100000 + i));
+        runQuery("CHECKPOINT;");
+        EXPECT_EQ(numRetainedSnapshots(), 1) << "after checkpoint " << i;
+    }
+    EXPECT_EQ(readNodeZeroRels(*readerConn), snapshot) << "parked snapshot under a pinned horizon";
+    ASSERT_TRUE(readerConn->query("COMMIT;")->isSuccess());
+    readerConn.reset();
+}
+
+// A retained snapshot is memory-only: after close/reopen the count is zero, the committed
+// data is intact, and shutdown with a live entry is clean.
+TEST_F(CheckpointRunningRelScanTest, RetainedCSRSnapshotReclaimedAcrossReopen) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    insertRels(1, 100);
+    runQuery("CHECKPOINT;");
+    auto readerConn = std::make_unique<main::Connection>(database.get());
+    ASSERT_TRUE(readerConn->query("BEGIN TRANSACTION READ ONLY;")->isSuccess());
+    ASSERT_EQ(readNodeZeroRels(*readerConn), expectedRels(1, 100));
+    runQuery("MATCH (a:P), (b:P) WHERE a.id = 1 AND b.id = 2 CREATE (a)-[:K {w: 7}]->(b);");
+    runQuery("CHECKPOINT;");
+    EXPECT_EQ(numRetainedSnapshots(), 1) << "entry retained while the reader is parked";
+    // Close with the entry still live (no pruning checkpoint runs after the commit).
+    ASSERT_TRUE(readerConn->query("COMMIT;")->isSuccess());
+    readerConn.reset();
+    createDBAndConn();
+    EXPECT_EQ(numRetainedSnapshots(), 0) << "reopen starts with no retained snapshots";
+    std::string error;
+    checkRels(scanRels(false /*pause*/, error), expectedRels(1, 100), "node-0 rels after reopen");
+    EXPECT_TRUE(error.empty()) << error;
+    auto checkConn = std::make_unique<main::Connection>(database.get());
+    auto res = checkConn->query("MATCH (a:P)-[r:K]->(b:P) WHERE a.id = 1 RETURN r.w;");
+    ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+    ASSERT_TRUE(res->hasNext());
+    EXPECT_EQ(res->getNext()->getValue(0)->getValue<int64_t>(), 7);
+}
+
+// Boundary for the retained-snapshot coverage: a reader that begins between two checkpoints
+// is covered by the next checkpoint's snapshot. Correct snapshot behavior is asserted;
+// disabled so the boundary is pinned without running.
+TEST_F(CheckpointRunningRelScanTest, DISABLED_ParkedCSRReaderBeginningBetweenCheckpoints) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    insertRels(1, 100);
+    runQuery("CHECKPOINT;");
+    auto readerConn = std::make_unique<main::Connection>(database.get());
+    ASSERT_TRUE(readerConn->query("BEGIN TRANSACTION READ ONLY;")->isSuccess());
+    runQuery("MATCH (a:P)-[r:K]->(b:P) WHERE a.id = 0 AND b.id = 50 SET r.w = -r.w;");
+    runQuery("CHECKPOINT;");
+    EXPECT_EQ(readNodeZeroRels(*readerConn), expectedRels(1, 100))
+        << "post-begin update invisible to a reader that began between checkpoints";
+    ASSERT_TRUE(readerConn->query("COMMIT;")->isSuccess());
+    readerConn.reset();
 }
 
 // A scan that started before two checkpoints of its node group. The first checkpoint leaves
