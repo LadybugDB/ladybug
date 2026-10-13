@@ -112,3 +112,9 @@
 -STATEMENT MATCH (p:B) WHERE (p.x IS NULL OR p.id / 0 = 1) OR p.x IS NOT NULL RETURN count(*);
 ---- 1
 100
+-STATEMENT MATCH (p:B) WHERE NOT ((p.x IS NULL OR p.x IS NOT NULL) AND NOT (p.x IS NULL OR p.id > 2)) OR p.x IS NOT NULL RETURN count(*);
+---- 1
+100
+-STATEMENT MATCH (p:B) WHERE (NOT ((p.x IS NULL OR p.x IS NOT NULL) AND NOT (p.x IS NULL AND p.id > 2)) AND p.x IS NOT NULL) OR p.id = 50 RETURN count(*);
+---- 1
+1
