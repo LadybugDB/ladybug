@@ -1457,5 +1457,13 @@ TEST_F(AntiEdgeChainStorageGateTest, SkipsIcebugDiskTables) {
         planner::LogicalOperatorType::COUNT_ANTI_EDGE_CHAIN));
 }
 
+TEST_F(OptimizerTest, BoolFoldingFindsTautologyAcrossNestedOrs) {
+    auto plan = getRoot("MATCH (a:person) WHERE (a.age IS NULL OR a.ID > 2) OR a.age IS NOT NULL "
+                        "RETURN a.ID");
+    auto* root = plan->getLastOperator().get();
+    ASSERT_FALSE(hasOperatorType(root, planner::LogicalOperatorType::FILTER));
+    ASSERT_FALSE(hasOperatorType(root, planner::LogicalOperatorType::EMPTY_RESULT));
+}
+
 } // namespace testing
 } // namespace lbug
