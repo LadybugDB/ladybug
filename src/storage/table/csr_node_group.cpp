@@ -704,14 +704,16 @@ void CSRNodeGroup::checkpoint(MemoryManager&, NodeGroupCheckpointState& state) {
     // their use_counts, so the checkpoint works on its own copies while the entry keeps
     // the pristine originals — the same sharing the pinned-scan path relies on.
     RetainedCSRSnapshot pending;
-    // A scan that captured this group just before the checkpoint holds the live objects
-    // and is already protected by the pin machinery (private copies plus page deferral):
-    // covering its transaction with a retained snapshot would duplicate that protection
-    // past the pin's release and stall page reclamation, and the scan's own re-reads
-    // resolve against live data. Parked readers hold nothing, so a retained snapshot is
-    // taken only when no scan currently pins this group.
+    // An in-flight scan pins the live objects via the pin machinery (private copies plus
+    // page deferral) and protects its own re-reads, but parked readers hold nothing: a
+    // single scan must not disable retention for every parked reader of the group. The
+    // checkpoint cannot tell scanning from parked transactions, so a pinned group still
+    // retains when multiple readers are open (a lone scanning transaction needs no
+    // snapshot and would only stall page reclamation past its pin release); the
+    // copy-on-write below keeps the retained entry pristine while working on copies.
     const auto freshlyPinned = scanPagePin && scanPagePin.use_count() > 1;
-    const auto wantRetain = retentionPath && !inMemNoop && !freshlyPinned &&
+    const auto wantRetain = retentionPath && !inMemNoop &&
+                            (!freshlyPinned || csrState.openStartTSs.size() > 1) &&
                             needsRetainedSnapshotNoLock(csrState.openStartTSs);
     if (wantRetain) {
         if (!scanPagePin) {
