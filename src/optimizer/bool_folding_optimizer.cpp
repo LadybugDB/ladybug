@@ -199,7 +199,8 @@ static std::shared_ptr<Expression> foldBool(const std::shared_ptr<Expression>& e
                 anyChanged = true;
                 continue;
             }
-            kept.push_back(effective);
+            // An AND that folding produced, e.g. from NOT(NOT(p AND q)), joins this one.
+            splitOperands(ExpressionType::AND, effective, kept);
         }
 
         // 2) Contradictions among kept children. p ∧ ¬p is NULL, not false, when p is NULL.
@@ -234,7 +235,8 @@ static std::shared_ptr<Expression> foldBool(const std::shared_ptr<Expression>& e
             if (f) {
                 anyChanged = true;
             }
-            folded.push_back(eff);
+            // An OR that folding produced joins this one.
+            splitOperands(ExpressionType::OR, eff, folded);
         }
 
         // 2) IS_NULL(x) ∨ IS_NOT_NULL(x) is always true. p ∨ ¬p is NULL, not true, when p is NULL.

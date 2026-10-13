@@ -1496,5 +1496,25 @@ TEST_F(OptimizerTest, BoolFoldingFindsTautologyAcrossNestedOrs) {
     ASSERT_FALSE(hasOperatorType(root, planner::LogicalOperatorType::EMPTY_RESULT));
 }
 
+TEST_F(OptimizerTest, BoolFoldingFlattensAnOrItProduces) {
+    // The double negation leaves (a.age IS NULL OR a.ID > 2), a tautology with the last operand.
+    auto plan = getRoot("MATCH (a:person) WHERE NOT ((a.age IS NULL OR a.age IS NOT NULL) AND "
+                        "NOT (a.age IS NULL OR a.ID > 2)) OR a.age IS NOT NULL RETURN a.ID");
+    auto* root = plan->getLastOperator().get();
+    ASSERT_FALSE(hasOperatorType(root, planner::LogicalOperatorType::FILTER));
+    ASSERT_FALSE(hasOperatorType(root, planner::LogicalOperatorType::EMPTY_RESULT));
+}
+
+TEST_F(OptimizerTest, BoolFoldingFlattensAnAndItProduces) {
+    // The double negation leaves (a.age IS NULL AND a.ID > 2), a contradiction with the next
+    // conjunct; the OR keeps the planner from splitting the AND into separate filters.
+    auto plan = getRoot("MATCH (a:person) WHERE (NOT ((a.age IS NULL OR a.age IS NOT NULL) AND "
+                        "NOT (a.age IS NULL AND a.ID > 2)) AND a.age IS NOT NULL) OR a.age = 5 "
+                        "RETURN a.ID");
+    auto* filter = findFilter(plan->getLastOperator().get());
+    ASSERT_NE(filter, nullptr);
+    ASSERT_EQ(filter->getPredicate()->toString(), "EQUALS(a.age,5)");
+}
+
 } // namespace testing
 } // namespace lbug
