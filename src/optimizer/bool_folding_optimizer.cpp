@@ -221,12 +221,14 @@ static std::shared_ptr<Expression> foldBool(const std::shared_ptr<Expression>& e
 
     // --- OR ------------------------------------------------------------
     if (expr->expressionType == ExpressionType::OR) {
-        // 1) Fold all children in one pass.
+        // 1) Fold all operands of the nested ORs in one pass.
         std::vector<std::shared_ptr<Expression>> folded;
         bool anyChanged = false;
-        for (auto i = 0u; i < expr->getNumChildren(); ++i) {
-            auto f = foldBool(expr->getChild(i), nullAsFalse);
-            auto eff = f ? f : expr->getChild(i);
+        expression_vector parts;
+        splitOperands(ExpressionType::OR, expr, parts);
+        for (auto& part : parts) {
+            auto f = foldBool(part, nullAsFalse);
+            auto eff = f ? f : part;
             if (f) {
                 anyChanged = true;
             }

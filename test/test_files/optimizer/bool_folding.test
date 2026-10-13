@@ -70,3 +70,27 @@
 -STATEMENT MATCH (p:B) WHERE NOT (p.x > 5 XOR NULL) RETURN count(*);
 ---- 1
 0
+
+-CASE FoldingCascadesThroughNotAndNestedOr
+-STATEMENT CREATE NODE TABLE B (id INT64, x INT64, PRIMARY KEY(id));
+---- ok
+-STATEMENT UNWIND range(1, 100) AS i CREATE (:B {id: i, x: CASE WHEN i % 10 = 0 THEN NULL ELSE i % 10 END});
+---- ok
+-STATEMENT MATCH (p:B) WHERE (p.x IS NULL OR p.id > 2) OR p.x IS NOT NULL RETURN count(*);
+---- 1
+100
+-STATEMENT MATCH (p:B) WHERE NOT ((p.x IS NULL OR p.id > 2) OR p.x IS NOT NULL) RETURN count(*);
+---- 1
+0
+-STATEMENT MATCH (p:B) WHERE (p.x > 5 OR p.id > 98) OR NULL RETURN count(*);
+---- 1
+41
+-STATEMENT MATCH (p:B) WHERE NOT ((p.x > 5 OR p.id > 98) OR NULL) RETURN count(*);
+---- 1
+0
+-STATEMENT MATCH (p:B) WHERE (p.x > 5 OR (p.id < 3 OR p.x IS NULL)) OR p.id = 50 RETURN count(*);
+---- 1
+52
+-STATEMENT MATCH (p:B) WHERE (p.x IS NULL OR p.id / 0 = 1) OR p.x IS NOT NULL RETURN count(*);
+---- 1
+100
