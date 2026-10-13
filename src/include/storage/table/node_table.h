@@ -225,6 +225,9 @@ public:
     }
 
     common::node_group_idx_t getNumNodeGroups() const { return nodeGroups->getNumNodeGroups(); }
+    // True while any group carries a retention horizon from a pinned checkpoint; a later
+    // unpinned checkpoint reclaims it (see NodeTable::checkpoint).
+    bool hasRetainedHorizon() const { return nodeGroups->hasRetainedHorizon(); }
     common::offset_t getNumTuplesInNodeGroup(common::node_group_idx_t nodeGroupIdx) const {
         return nodeGroups->getNodeGroup(nodeGroupIdx)->getNumRows();
     }

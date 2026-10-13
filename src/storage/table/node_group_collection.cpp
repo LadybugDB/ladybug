@@ -199,6 +199,16 @@ uint64_t NodeGroupCollection::getEstimatedMemoryUsage() const {
 }
 
 // NOLINTNEXTLINE(readability-make-member-function-const): Semantically non-const.
+bool NodeGroupCollection::hasRetainedHorizon() const {
+    const auto lock = nodeGroups.lock();
+    for (const auto& nodeGroup : nodeGroups.getAllGroups(lock)) {
+        if (nodeGroup->hasRetainedHorizon()) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void NodeGroupCollection::checkpoint(MemoryManager& memoryManager,
     NodeGroupCheckpointState& state) {
     DASSERT(residency == ResidencyState::ON_DISK);
