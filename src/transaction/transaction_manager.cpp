@@ -359,9 +359,10 @@ void TransactionManager::checkpointNoLock(main::ClientContext& clientContext) {
     // public-function lock here is safe because the gate is not held yet; the value is
     // threaded through the checkpointer so no later stage re-acquires that lock under
     // the gate.
-    const auto horizonPin = snapshotHorizonInfo();
-    const auto retentionHorizon = horizonPin.horizon;
-    const auto openStartTSs = snapshotOpenStartTSs();
+    const auto preHorizonPin = snapshotHorizonInfo();
+    auto retentionHorizon = preHorizonPin.horizon;
+    auto openStartTSs = snapshotOpenStartTSs();
+    auto pinningTxnID = preHorizonPin.pinningTxnID;
     // We only need to wait for active write transactions to leave the system before
     // checkpointing. Read transactions can continue because they use MVCC snapshot isolation.
     // Column chunk metadata of in-place checkpointed data is published before the shadow pages
@@ -385,9 +386,55 @@ void TransactionManager::checkpointNoLock(main::ClientContext& clientContext) {
         // lock order against beginTransaction() (which takes public -> start) while the
         // checkpoint holds the write gate (start), deadlocking concurrent writers during an
         // auto-checkpoint triggered from commit().
+        //
+        // A reader that begins between the pre-gate capture above and the write gate (or
+        // during the storage phase) would be missing from the pre-gate horizon and lose its
+        // snapshot. Isolate newcomers by bumping lastTimestamp: the checkpoint snapshot is
+        // the pre-bump value, and every transaction that begins afterwards observes the
+        // collapsed post-checkpoint base with a larger start timestamp, so it needs no
+        // retention. Readers that began before the bump keep startTS <= snapshotTimestamp
+        // and must be covered by retention below.
         transaction_t snapshotTimestamp = lastTimestamp.load(std::memory_order_acquire);
+        lastTimestamp.fetch_add(1, std::memory_order_acq_rel);
+        // Re-sample the registry to include gap readers without deadlocking: a waiting
+        // writer holds the public lock while blocked on the gate, so only try_lock here.
+        // Keep only start timestamps at or below the checkpoint snapshot; anything larger
+        // began after the bump and observes the post-checkpoint base.
+        {
+            std::unique_lock tryLck{mtxForSerializingPublicFunctionCalls, std::try_to_lock};
+            if (tryLck.owns_lock()) {
+                transaction_t postHorizon = INVALID_TRANSACTION;
+                transaction_t postPin = INVALID_TRANSACTION;
+                std::vector<transaction_t> postOpen;
+                postOpen.reserve(openTxnStartTS.size());
+                for (const auto& entry : openTxnStartTS) {
+                    if (entry.second > snapshotTimestamp) {
+                        continue;
+                    }
+                    postOpen.push_back(entry.second);
+                    if (postHorizon == INVALID_TRANSACTION || entry.second < postHorizon) {
+                        postHorizon = entry.second;
+                        postPin = entry.first;
+                    }
+                }
+                retentionHorizon = postHorizon;
+                openStartTSs = std::move(postOpen);
+                pinningTxnID = postPin;
+            } else if (retentionHorizon == INVALID_TRANSACTION) {
+                // A writer is waiting on the gate and holds the public lock. Fall back to a
+                // conservative horizon: any gap reader holds startTS == snapshotTimestamp.
+                // This over-retains only when a writer races the checkpoint with no actual
+                // gap reader, which is rare and still correct.
+                retentionHorizon = snapshotTimestamp;
+                openStartTSs.push_back(snapshotTimestamp);
+            } else if (std::ranges::find(openStartTSs, snapshotTimestamp) == openStartTSs.end()) {
+                // Pre-gate horizon already covers gap readers (their startTS >= horizon),
+                // but CSR coverage needs their timestamp present to take a snapshot.
+                openStartTSs.push_back(snapshotTimestamp);
+            }
+        }
         checkpointer->beginCheckpoint(snapshotTimestamp, retentionHorizon, openStartTSs,
-            horizonPin.pinningTxnID);
+            pinningTxnID);
         progress.update(0.15);
     } catch (std::exception& e) {
         checkpointer->rollback();
