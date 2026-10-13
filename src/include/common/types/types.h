@@ -317,7 +317,7 @@ public:
     static LogicalType convertFromString(const std::string& str, main::ClientContext* context);
 
     LogicalTypeID getLogicalTypeID() const { return typeID; }
-    bool containsAny() const;
+    LBUG_API bool containsAny() const;
     bool isInternalType() const { return category == TypeCategory::INTERNAL; }
 
     PhysicalTypeID getPhysicalType() const { return physicalType; }
