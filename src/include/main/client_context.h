@@ -96,6 +96,9 @@ public:
     common::Value getCurrentSetting(const std::string& optionName) const;
 
     // Timer and timeout
+    // Async-signal-safe: the Python driver calls this from its SIGINT handler, so it must stay a
+    // single lock-free atomic store, with no locks, allocation or exceptions.
+    static_assert(decltype(ActiveQuery::interrupted)::is_always_lock_free);
     void interrupt() { activeQuery.interrupted = true; }
     bool interrupted() const { return activeQuery.interrupted; }
     void setActiveQueryID(uint64_t queryID) { activeQuery.queryID = queryID; }
