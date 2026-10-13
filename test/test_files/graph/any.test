@@ -182,7 +182,7 @@ WorksAt
 -LOG WholeRelLabelIsRealType
 -STATEMENT MATCH ()-[e:WorksAt]->() RETURN e
 ---- 1
-(0:0)-{_LABEL: WorksAt, _id: 1:0, data: {"since":2020}}->(0:1)
+(0:0)-{_LABEL: WorksAt, _ID: 1:0, data: {"since":2020}}->(0:1)
 
 -LOG Cleanup
 -STATEMENT USE GRAPH main
