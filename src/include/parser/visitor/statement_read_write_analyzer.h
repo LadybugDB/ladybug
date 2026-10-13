@@ -25,6 +25,10 @@ private:
     void visitStandaloneCallFunction(const Statement& statement) override;
     void visitCreateMacro(const Statement& /*statement*/) override { readOnly = false; }
     void visitCreateGraph(const Statement& /*statement*/) override { readOnly = false; }
+    // ATTACH/DETACH mutate catalog state (attached list plus shadow
+    // entries), so they need write transactions for the changes to commit.
+    void visitAttachDatabase(const Statement& /*statement*/) override { readOnly = false; }
+    void visitDetachDatabase(const Statement& /*statement*/) override { readOnly = false; }
     void visitExtension(const Statement& /*statement*/) override;
 
     void visitReadingClause(const ReadingClause* readingClause) override;

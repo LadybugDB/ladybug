@@ -13,6 +13,7 @@
 #include "common/constants.h"
 #include "common/enums/rel_direction.h"
 #include "common/exception/binder.h"
+#include "common/exception/exception.h"
 #include "common/partition_routing_hook.h"
 #include "common/types/types.h"
 #include "common/utils.h"
@@ -35,9 +36,18 @@ namespace binder {
 // Returns true only for attached native LBUG databases. Foreign attached databases
 // (sqlite/duckdb/postgres/...) must not participate in default-database or rel-context
 // resolution: rel tables referencing foreign node tables live in the main catalog and
-// unqualified names must keep resolving there.
+// unqualified names must keep resolving there. Unknown (e.g. detached) names are not
+// LBUG databases rather than an error: stale shadow entries can outlive their database
+// (DETACH leaves shadows behind), and binding must keep resolving around them.
 static bool isLbugDatabase(main::DatabaseManager* dbManager, const std::string& dbName) {
-    return dbManager->getAttachedDatabase(dbName)->getDBType() == ATTACHED_LBUG_DB_TYPE;
+    auto* attached = [&]() -> main::AttachedDatabase* {
+        try {
+            return dbManager->getAttachedDatabase(dbName);
+        } catch (const common::Exception&) {
+            return nullptr;
+        }
+    }();
+    return attached != nullptr && attached->getDBType() == ATTACHED_LBUG_DB_TYPE;
 }
 
 // A graph pattern contains node/rel and a set of key-value pairs associated with the variable. We

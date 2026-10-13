@@ -92,6 +92,12 @@ void DatabaseManager::detachDatabase(const std::string& databaseName) {
         StringUtils::toUpper(attachedDBName);
         if (attachedDBName == upperCaseName) {
             attachedDatabases.erase(it);
+            // The first attached database becomes the default; detaching it
+            // must not leave a dangling default behind (every node-pattern
+            // bind resolves the default database and would fail on it).
+            if (StringUtils::getUpper(defaultDatabase) == upperCaseName) {
+                defaultDatabase.clear();
+            }
             return;
         }
     }
