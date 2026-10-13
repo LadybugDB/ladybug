@@ -736,16 +736,31 @@ void WALReplayer::replayActiveWAL(Checkpointer& checkpointer, bool throwOnWalRep
                 replayCommittedCheckpoint(checkpointer, fileInfo, walPath, replayInfo);
             }
         } else {
-            // A missing shadow proves every CHECKPOINT in the file completed (each
-            // cleanup clears it only after the checkpoint is applied and synced), so the
-            // pre-checkpoint prefix is already durable and only the suffix after the
-            // last CHECKPOINT replays. A remaining shadow means some checkpoint may never
+            // A missing shadow proves every CHECKPOINT in the file completed only when the
+            // pinned-checkpoint marker proves it: cleanup clears the shadow only after the
+            // checkpoint is applied and synced, and writes the marker in the same cleanup.
+            // With no shadow and pinned CHECKPOINT records but no marker, the shadow was
+            // lost out of band and the prefix may not be durable: throw instead of silently
+            // deleting committed records. A remaining shadow means some checkpoint may never
             // have completed: replay the pre-checkpoint prefix exactly as before and
             // discard everything from the first CHECKPOINT record onward. Check before
             // deleting below.
-            const bool discardCheckpointPrefix =
-                !VirtualFileSystem::GetUnsafe(clientContext)
-                     ->fileOrPathExists(shadowFilePath, &clientContext);
+            auto* vfsNoShadow = VirtualFileSystem::GetUnsafe(clientContext);
+            const bool noShadow = !vfsNoShadow->fileOrPathExists(shadowFilePath, &clientContext);
+            if (noShadow && replayInfo.lastCheckpointOffset != 0) {
+                const auto markerPath =
+                    StorageUtils::getPinnedCheckpointMarkerPath(clientContext.getDatabasePath());
+                if (!vfsNoShadow->fileOrPathExists(markerPath, &clientContext)) {
+                    throw RuntimeException(
+                        std::format("Cannot recover WAL {}: it holds CHECKPOINT records but its "
+                                    "shadow file {} is missing "
+                                    "with no pinned-checkpoint marker. Do not delete the WAL or "
+                                    "shadow files; they hold "
+                                    "committed pages. Restore both files they were written for.",
+                            walPath, shadowFilePath));
+                }
+            }
+            const bool discardCheckpointPrefix = noShadow;
             removeFileAndSyncParentDirectory(shadowFilePath);
             if (!checkpointRead) {
                 checkpointer.readCheckpoint();
@@ -803,14 +818,29 @@ void WALReplayer::replayActiveWAL(Checkpointer& checkpointer, bool throwOnWalRep
 void WALReplayer::replayPinnedActiveCheckpoint(Checkpointer& checkpointer,
     std::unique_ptr<FileInfo>& fileInfo, const WALReplayInfo& replayInfo) const {
     // A checkpoint taken while a reader pins the WAL skips rotation, so its CHECKPOINT record
-    // lands in the active WAL while cleanup still removes the already-applied shadow file. A
-    // trailing CHECKPOINT with no shadow therefore means the checkpoint is already durable:
-    // skip shadow replay but keep the version and database-ID checks before loading the
-    // checkpoint and retiring the WAL. Only the active-WAL path uses this; a frozen WAL with
-    // no shadow keeps throwing in replayCommittedCheckpoint.
+    // lands in the active WAL while cleanup still removes the already-applied shadow file and
+    // writes the pinned-checkpoint marker in the same cleanup. A trailing CHECKPOINT with no
+    // shadow is durable only when that marker exists: without it the shadow was lost out of
+    // band and the prefix may not be durable, so throw instead of silently deleting the WAL.
+    // Only the active-WAL path uses this; a frozen WAL with no shadow keeps throwing in
+    // replayCommittedCheckpoint.
     if (replayInfo.checkpointFormatVersion > WAL::CHECKPOINT_BUNDLE_FORMAT_VERSION) {
         throw RuntimeException(std::format("Cannot recover checkpoint WAL {}: {}", walPath,
             unsupportedCheckpointFormatMessage(replayInfo.checkpointFormatVersion)));
+    }
+    {
+        auto* vfs = VirtualFileSystem::GetUnsafe(clientContext);
+        const auto markerPath =
+            StorageUtils::getPinnedCheckpointMarkerPath(clientContext.getDatabasePath());
+        if (!vfs->fileOrPathExists(shadowFilePath, &clientContext) &&
+            !vfs->fileOrPathExists(markerPath, &clientContext)) {
+            throw RuntimeException(std::format("Cannot recover checkpoint WAL {}: shadow file {} "
+                                               "is missing with no pinned-checkpoint "
+                                               "marker. Do not delete the WAL or shadow files; "
+                                               "they hold committed pages. Restore the "
+                                               "database file they were written for.",
+                walPath, shadowFilePath));
+        }
     }
     auto* mainStorageManager = clientContext.getDatabase()->getStorageManager();
     if (mainStorageManager->getDataFH() == nullptr) {
@@ -839,6 +869,8 @@ void WALReplayer::replayPinnedActiveCheckpoint(Checkpointer& checkpointer,
     truncateWALFile(*fileInfo, 0);
     fileInfo.reset();
     removeWALAndShadowFiles(walPath);
+    removeFileAndSyncParentDirectory(
+        StorageUtils::getPinnedCheckpointMarkerPath(clientContext.getDatabasePath()));
     removePartitionChildShadowFiles(clientContext);
     removeGraphCheckpointShadows(clientContext);
 }

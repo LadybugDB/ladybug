@@ -77,6 +77,15 @@ public:
     static std::string getShadowFilePath(const std::string& path) {
         return std::format("{}.{}", path, common::StorageConstants::SHADOWING_SUFFIX);
     }
+    // Marker proving a pinned checkpoint (CHECKPOINT record in the active WAL with no WAL
+    // rotation) completed and its shadow was applied before cleanup removed the shadow.
+    // Recovery only treats a trailing/mid-file active-WAL CHECKPOINT with no shadow as
+    // durable when this marker exists; otherwise a missing shadow is an error, never a
+    // silent WAL delete (out-of-band shadow loss must stay loud). Uses a `.tmp` suffix so
+    // the file-deletion allowlist permits cleanup.
+    static std::string getPinnedCheckpointMarkerPath(const std::string& path) {
+        return std::format("{}.pinned.tmp", path);
+    }
     static std::string getCheckpointIntentLockFilePath(const std::string& path) {
         return std::format("{}.checkpoint.intent.lock", path);
     }
