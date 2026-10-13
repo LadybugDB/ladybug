@@ -650,6 +650,23 @@ catalog::Catalog* DatabaseManager::getDefaultGraphCatalog() const {
     return nullptr;
 }
 
+bool DatabaseManager::isDefaultGraphAny(const ClientContext& context) const {
+    if (defaultGraph == "" || defaultGraph == "main") {
+        return false;
+    }
+    auto* transaction = Transaction::Get(context);
+    auto useInternal = context.useInternalCatalogEntry();
+    auto upperCaseName = StringUtils::getUpper(defaultGraph);
+    GraphsSharedLock lck{*this};
+    for (auto& graph : graphs) {
+        auto graphNameUpper = StringUtils::getUpper(graph->getCatalogName());
+        if (graphNameUpper == upperCaseName) {
+            return graph->containsTable(transaction, "_nodes", useInternal);
+        }
+    }
+    return false;
+}
+
 storage::StorageManager* DatabaseManager::getDefaultGraphStorageManager() const {
     auto graphCatalog = getDefaultGraphCatalog();
     if (graphCatalog != nullptr) {

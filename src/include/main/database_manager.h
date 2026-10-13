@@ -85,6 +85,13 @@ public:
     bool withGraphCatalogIfAlive(catalog::Catalog* catalog,
         const std::function<void()>& action) const;
     catalog::Catalog* getDefaultGraphCatalog() const;
+    // Extension-safe query: is the session's current graph an open ANY graph
+    // (backed by the internal `_nodes` table) rather than a typed/tabled graph?
+    // Returns false when no graph is selected (main/default catalog). Holds the
+    // graph registry shared lock across the lookup and the check, so unlike
+    // getDefaultGraphCatalog it never hands out a raw pointer that a concurrent
+    // DROP GRAPH can destroy before use.
+    LBUG_API bool isDefaultGraphAny(const ClientContext& context) const;
     catalog::Catalog* getReplayOwnerCatalog() const { return replayOwnerCatalog; }
     void setReplayOwnerCatalog(catalog::Catalog* catalog) { replayOwnerCatalog = catalog; }
     bool hasDefaultGraph() const { return defaultGraph != "" && defaultGraph != "main"; }
