@@ -5559,6 +5559,78 @@ TEST_F(ReviewFixesTest, WALRetirementPinnedByParkedReader) {
     EXPECT_FALSE(std::filesystem::exists(activeWALPath));
     EXPECT_FALSE(std::filesystem::exists(frozenWALPath));
 }
+
+// A pinned CHECKPOINT leaves its record mid-file in the active WAL; commits that follow
+// must still recover after a crash (recovery replays the suffix after the last
+// CHECKPOINT instead of failing with "not the final record").
+TEST_F(ReviewFixesTest, PinnedCheckpointFollowedByCommitRecoversAfterCrash) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CALL auto_checkpoint=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CALL force_checkpoint_on_close=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE P(id INT64 PRIMARY KEY, v INT64);")->isSuccess());
+    ASSERT_TRUE(conn->query("UNWIND range(1, 5) AS i CREATE (:P {id: i, v: 0});")->isSuccess());
+    auto readerConn = std::make_unique<lbug::main::Connection>(database.get());
+    ASSERT_TRUE(readerConn->query("BEGIN TRANSACTION READ ONLY;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:P {id: 6, v: 6});")->isSuccess());
+    // Pinned: the CHECKPOINT record lands in the active WAL (no rotation).
+    ASSERT_TRUE(conn->query("CHECKPOINT;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:P {id: 7, v: 7});")->isSuccess());
+    // Crash with the reader still open: drop everything without a closing checkpoint.
+    // Without suffix replay this fails to reopen: dryReplay throws on the mid-file
+    // CHECKPOINT (or, with throwOnWalReplayFailure=false, replays the pre-checkpoint
+    // prefix against the checkpoint-loaded catalog and fails with "already exists").
+    readerConn.reset();
+    conn.reset();
+    database.reset();
+    createDBAndConn();
+    auto res = conn->query("MATCH (p:P) RETURN p.id, p.v ORDER BY p.id;");
+    ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+    std::vector<std::pair<int64_t, int64_t>> rows;
+    while (res->hasNext()) {
+        auto row = res->getNext();
+        rows.emplace_back(row->getValue(0)->getValue<int64_t>(),
+            row->getValue(1)->getValue<int64_t>());
+    }
+    const std::vector<std::pair<int64_t, int64_t>> expectedRows =
+        {{1, 0}, {2, 0}, {3, 0}, {4, 0}, {5, 0}, {6, 6}, {7, 7}};
+    EXPECT_EQ(rows, expectedRows);
+}
+
+// Consecutive pinned checkpoints leave several CHECKPOINT records in the active WAL;
+// a later crash must still recover by replaying the suffix after the last one.
+TEST_F(ReviewFixesTest, ConsecutivePinnedCheckpointsRecoverAfterCrash) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CALL auto_checkpoint=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CALL force_checkpoint_on_close=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE P(id INT64 PRIMARY KEY, v INT64);")->isSuccess());
+    ASSERT_TRUE(conn->query("UNWIND range(1, 5) AS i CREATE (:P {id: i, v: 0});")->isSuccess());
+    auto readerConn = std::make_unique<lbug::main::Connection>(database.get());
+    ASSERT_TRUE(readerConn->query("BEGIN TRANSACTION READ ONLY;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:P {id: 6, v: 6});")->isSuccess());
+    ASSERT_TRUE(conn->query("CHECKPOINT;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:P {id: 7, v: 7});")->isSuccess());
+    ASSERT_TRUE(conn->query("CHECKPOINT;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:P {id: 8, v: 8});")->isSuccess());
+    readerConn.reset();
+    conn.reset();
+    database.reset();
+    createDBAndConn();
+    auto res = conn->query("MATCH (p:P) RETURN p.id, p.v ORDER BY p.id;");
+    ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+    std::vector<std::pair<int64_t, int64_t>> rows;
+    while (res->hasNext()) {
+        auto row = res->getNext();
+        rows.emplace_back(row->getValue(0)->getValue<int64_t>(),
+            row->getValue(1)->getValue<int64_t>());
+    }
+    const std::vector<std::pair<int64_t, int64_t>> expectedRows =
+        {{1, 0}, {2, 0}, {3, 0}, {4, 0}, {5, 0}, {6, 6}, {7, 7}, {8, 8}};
+    EXPECT_EQ(rows, expectedRows);
+}
 #endif // __SINGLE_THREADED__
 
 // Hash index basic recovery

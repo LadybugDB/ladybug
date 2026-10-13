@@ -49,6 +49,17 @@ private:
     struct WALReplayInfo {
         uint64_t offsetDeserialized = 0;
         bool isLastRecordCheckpoint = false;
+        // End offset of the last CHECKPOINT record, or 0 when the file holds none. A
+        // pinned checkpoint skips WAL rotation, so its record can sit mid-file (with
+        // later commits after it); only the suffix past this offset replays, and only
+        // when no shadow file remains (see below).
+        uint64_t lastCheckpointOffset = 0;
+        // offsetDeserialized as of just before the first CHECKPOINT record (meaningful
+        // only when lastCheckpointOffset != 0). When a shadow file remains, some
+        // checkpoint may never have completed, so recovery replays exactly the
+        // pre-checkpoint prefix ending here and discards everything from the first
+        // CHECKPOINT record onward.
+        uint64_t offsetBeforeFirstCheckpoint = 0;
         common::uuid walDatabaseID{};
         uint64_t checkpointFormatVersion = 0;
     };
