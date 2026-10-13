@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <utility>
 
 #include "catalog/catalog.h"
@@ -183,7 +184,19 @@ void Planner::appendRecursiveExtend(const std::shared_ptr<NodeExpression>& bound
         // throw (local execution still reports the unsupported scan later,
         // and the push-down optimizer replaces the whole subtree anyway).
         if (recursiveInfo->rel->hasPropertyExpression(InternalKeyword::ID)) {
-            relProperties.push_back(recursiveInfo->rel->getInternalID());
+            auto relInternalID = recursiveInfo->rel->getInternalID();
+            // On ANY graphs the rel's internal ID is the physical `_id` column, which
+            // the binder already kept in relProjectionList: isInternalID() only matches
+            // the exact `_ID` spelling, while the case-insensitive property map resolves
+            // `_ID` to `_id`. Pushing it again would insert the same unique name twice
+            // into the extend schema.
+            const auto alreadyProjected =
+                std::any_of(relProperties.begin(), relProperties.end(), [&](const auto& property) {
+                    return property->getUniqueName() == relInternalID->getUniqueName();
+                });
+            if (!alreadyProjected) {
+                relProperties.push_back(std::move(relInternalID));
+            }
         }
         bool extendFromSource = *boundNode == *rel->getSrcNode();
         createPathRelPropertyScanPlan(recursiveInfo->node, recursiveInfo->nodeCopy,
