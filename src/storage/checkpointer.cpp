@@ -284,8 +284,7 @@ void Checkpointer::beginCheckpoint(common::transaction_t snapshotTimestamp,
     // would break crash recovery. The record stays in the active WAL, whose recovery
     // replays the suffix after the last CHECKPOINT.
     const bool pinWAL = retentionHorizon != common::INVALID_TRANSACTION;
-    const bool activeWALHasCheckpoint =
-        mainStorageManager->getWAL().mayHaveCheckpointRecord();
+    const bool activeWALHasCheckpoint = mainStorageManager->getWAL().mayHaveCheckpointRecord();
     for (const auto& target : checkpointTargets) {
         const auto rotated = !pinWAL && !activeWALHasCheckpoint &&
                              target.storageManager == mainStorageManager &&
@@ -436,17 +435,7 @@ void Checkpointer::postCheckpointCleanup(bool canResetPageManagerToCurrent) try 
     }
     const auto mainWALRotated = walRotatedByManager.at(mainStorageManager);
     beforeWALRetirement(mainWALRotated);
-    if (pinWALRetirement) {
-        auto& mainWAL = mainStorageManager->getWAL();
-        std::fprintf(stderr,
-            "Checkpoint pinned the WAL for open transaction %llu (horizon %llu, %zu open): "
-            "retaining %llu active and %llu frozen bytes; "
-            "retirement resumes once it closes.\n",
-            static_cast<unsigned long long>(pinningTxnID),
-            static_cast<unsigned long long>(retentionHorizon), openStartTSs.size(),
-            static_cast<unsigned long long>(mainWAL.getFileSize()),
-            static_cast<unsigned long long>(mainWAL.getFrozenWALFileSize()));
-    } else {
+    if (!pinWALRetirement) {
         if (mainWALRotated) {
             mainStorageManager->getWAL().retireFrozenWAL();
         } else {
