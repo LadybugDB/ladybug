@@ -23,7 +23,7 @@ static std::shared_ptr<Expression> rewriteFunc(const RewriteFunctionBindInput& i
         auto rel = param->constPtrCast<RelExpression>();
         return rel->getPropertyExpression(InternalKeyword::ID);
     }
-    // Bind as struct_extract(param, "_id")
+    // Bind as struct_extract(param, "_ID")
     auto extractKey = input.expressionBinder->createLiteralExpression(InternalKeyword::ID);
     return input.expressionBinder->bindScalarFunctionExpression({input.arguments[0], extractKey},
         StructExtractFunctions::name);

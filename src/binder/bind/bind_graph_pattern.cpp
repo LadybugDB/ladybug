@@ -476,6 +476,19 @@ std::shared_ptr<RelExpression> Binder::createRecursiveQueryRel(const parser::Rel
     auto node = createQueryNode(recursivePatternInfo->nodeName, nodeEntries, nodeDbNames, {});
     addToScope(node->toString(), node);
     auto nodeFields = getBaseNodeStructFields();
+    if (isAnyGraphNodeOrRel(*node, clientContext) && node->hasPropertyExpression("label")) {
+        // ANY graph: a node carries a *set* of labels, hence STRING[] (see createQueryNode).
+        // The intermediate node's struct must agree with the outer node structs merged
+        // into the path type and with the physical `_nodes.label` vectors; scalar STRING
+        // here trips the path evaluator's field-type check.
+        for (auto& field : nodeFields) {
+            if (field.getName() == InternalKeyword::LABEL) {
+                field = common::StructField(InternalKeyword::LABEL,
+                    common::LogicalType::LIST(common::LogicalType::STRING()));
+                break;
+            }
+        }
+    }
     auto nodeProjectionList = bindRecursivePatternNodeProjectionList(*recursivePatternInfo, *node);
     bindProjectionListAsStructField(nodeProjectionList, nodeFields);
     node->setDataType(LogicalType::NODE(std::move(nodeFields)));
