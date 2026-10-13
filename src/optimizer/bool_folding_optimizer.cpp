@@ -152,12 +152,8 @@ static std::shared_ptr<Expression> foldBool(const std::shared_ptr<Expression>& e
     bool nullAsFalse) {
     // --- NOT -----------------------------------------------------------
     if (expr->expressionType == ExpressionType::NOT) {
-        // NOT(NOT(x)) → x — structural, no folding needed.
-        auto child = expr->getChild(0);
-        if (child->expressionType == ExpressionType::NOT && child->getNumChildren() == 1) {
-            return child->getChild(0);
-        }
         // Fold the inner expression and invert if it becomes a constant.
+        auto child = expr->getChild(0);
         auto folded = foldBool(child, false /* nullAsFalse */);
         auto effective = folded ? folded : child;
         if (effective->expressionType == ExpressionType::LITERAL) {
@@ -166,6 +162,12 @@ static std::shared_ptr<Expression> foldBool(const std::shared_ptr<Expression>& e
                 return effective; // NOT NULL is NULL
             }
             return boolLiteral(!lit.getValue().getValue<bool>());
+        }
+        // NOT(NOT(x)) → x. NOT NOT NULL is NULL, so x folds under this NOT's own NULL rule.
+        if (effective->expressionType == ExpressionType::NOT && effective->getNumChildren() == 1) {
+            auto inner = effective->getChild(0);
+            auto innerFolded = foldBool(inner, nullAsFalse);
+            return innerFolded ? innerFolded : inner;
         }
         return folded ? boolOperator(ExpressionType::NOT, {folded}) : nullptr;
     }

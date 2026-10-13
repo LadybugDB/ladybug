@@ -44,6 +44,18 @@ public:
         return std::move(cachedStatement->logicalPlan);
     }
 
+    static planner::LogicalFilter* findFilter(planner::LogicalOperator* op) {
+        if (op->getOperatorType() == planner::LogicalOperatorType::FILTER) {
+            return op->ptrCast<planner::LogicalFilter>();
+        }
+        for (auto i = 0u; i < op->getNumChildren(); ++i) {
+            if (auto* filter = findFilter(op->getChild(i).get())) {
+                return filter;
+            }
+        }
+        return nullptr;
+    }
+
     // Helper to check if a specific operator type exists in the plan
     static bool hasOperatorType(planner::LogicalOperator* op, planner::LogicalOperatorType type) {
         if (op->getOperatorType() == type) {
@@ -1455,6 +1467,25 @@ TEST_F(AntiEdgeChainStorageGateTest, SkipsIcebugDiskTables) {
     auto plan = getRoot(kAntiEdgeChainQuery);
     ASSERT_FALSE(OptimizerTest::hasOperatorType(plan->getLastOperator().get(),
         planner::LogicalOperatorType::COUNT_ANTI_EDGE_CHAIN));
+}
+
+TEST_F(OptimizerTest, BoolFoldingCancelsDoubleNegationItProduces) {
+    // The tautology folds away, leaving NOT(NOT(a.ID > 2)).
+    auto plan = getRoot("MATCH (a:person) WHERE NOT ((a.age IS NULL OR a.age IS NOT NULL) AND "
+                        "NOT a.ID > 2) RETURN a.ID");
+    auto* filter = findFilter(plan->getLastOperator().get());
+    ASSERT_NE(filter, nullptr);
+    ASSERT_EQ(filter->getPredicate()->toString(), "GREATER_THAN(a.ID,2)");
+}
+
+TEST_F(OptimizerTest, BoolFoldingRefoldsUnderCancelledDoubleNegation) {
+    // Under the outer NOT the NULL disjunct must stay; once NOT(NOT(...)) cancels, the filter may
+    // drop it.
+    auto plan = getRoot("MATCH (a:person) WHERE NOT ((a.age IS NULL OR a.age IS NOT NULL) AND "
+                        "NOT (a.ID > 2 OR NULL)) RETURN a.ID");
+    auto* filter = findFilter(plan->getLastOperator().get());
+    ASSERT_NE(filter, nullptr);
+    ASSERT_EQ(filter->getPredicate()->toString(), "GREATER_THAN(a.ID,2)");
 }
 
 TEST_F(OptimizerTest, BoolFoldingFindsTautologyAcrossNestedOrs) {
