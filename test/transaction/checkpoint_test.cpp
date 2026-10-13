@@ -5593,8 +5593,8 @@ TEST_F(ReviewFixesTest, PinnedCheckpointFollowedByCommitRecoversAfterCrash) {
         rows.emplace_back(row->getValue(0)->getValue<int64_t>(),
             row->getValue(1)->getValue<int64_t>());
     }
-    const std::vector<std::pair<int64_t, int64_t>> expectedRows =
-        {{1, 0}, {2, 0}, {3, 0}, {4, 0}, {5, 0}, {6, 6}, {7, 7}};
+    const std::vector<std::pair<int64_t, int64_t>> expectedRows = {{1, 0}, {2, 0}, {3, 0}, {4, 0},
+        {5, 0}, {6, 6}, {7, 7}};
     EXPECT_EQ(rows, expectedRows);
 }
 
@@ -5627,8 +5627,8 @@ TEST_F(ReviewFixesTest, ConsecutivePinnedCheckpointsRecoverAfterCrash) {
         rows.emplace_back(row->getValue(0)->getValue<int64_t>(),
             row->getValue(1)->getValue<int64_t>());
     }
-    const std::vector<std::pair<int64_t, int64_t>> expectedRows =
-        {{1, 0}, {2, 0}, {3, 0}, {4, 0}, {5, 0}, {6, 6}, {7, 7}, {8, 8}};
+    const std::vector<std::pair<int64_t, int64_t>> expectedRows = {{1, 0}, {2, 0}, {3, 0}, {4, 0},
+        {5, 0}, {6, 6}, {7, 7}, {8, 8}};
     EXPECT_EQ(rows, expectedRows);
 }
 #endif // __SINGLE_THREADED__
