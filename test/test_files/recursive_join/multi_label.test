@@ -70,7 +70,7 @@
 6
 
 -LOG MultiLabelFilter
--STATEMENT MATCH p = (a)-[e*2..3 (r, n | WHERE n.ID < 3)]->(b) WHERE a.ID = 2 WITH properties(nodes(p), "ID") AS o, properties(rels(p), "_id") AS p, b.ID AS q WHERE q = 1 RETURN o, p
+-STATEMENT MATCH p = (a)-[e*2..3 (r, n | WHERE n.ID < 3)]->(b) WHERE a.ID = 2 WITH properties(nodes(p), "ID") AS o, properties(rels(p), "_ID") AS p, b.ID AS q WHERE q = 1 RETURN o, p
 ---- 4
 [2,0,1]|[3:3,5:0]
 [2,0,2,1]|[3:3,3:0,5:1]

@@ -153,7 +153,8 @@ static void createAnyGraphTables(catalog::Catalog& catalog) {
     auto nodeTableID = nodeEntry->ptrCast<catalog::TableCatalogEntry>()->getTableID();
 
     std::vector<binder::PropertyDefinition> relProperties;
-    relProperties.emplace_back(binder::ColumnDefinition("_id", common::LogicalType::INTERNAL_ID()));
+    relProperties.emplace_back(
+        binder::ColumnDefinition(common::InternalKeyword::ID, common::LogicalType::INTERNAL_ID()));
     relProperties.emplace_back(binder::ColumnDefinition("label", common::LogicalType::STRING()));
     relProperties.emplace_back(binder::ColumnDefinition("data", LogicalType::JSON()));
 
