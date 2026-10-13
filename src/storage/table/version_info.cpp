@@ -410,6 +410,21 @@ bool VectorVersionInfo::isSameDeletionVersion() const {
     return sameDeletionVersion != INVALID_TRANSACTION;
 }
 
+namespace {
+// Collapse a committed deletion timestamp to the always-deleted wire marker (0): no
+// pre-restart reader survives recovery and post-restart timestamps restart at 1, so the
+// stored commit timestamp could never satisfy (deletion <= startTS) again and the row would
+// wrongly reappear. INVALID (live) and uncommitted entries (never expected on the wire;
+// checkpoints drain writers first) pass through unchanged.
+transaction_t collapseCommittedDelete(transaction_t version) {
+    if (version != INVALID_TRANSACTION &&
+        version < transaction::Transaction::START_TRANSACTION_ID) {
+        return 0;
+    }
+    return version;
+}
+} // namespace
+
 void VectorVersionInfo::serialize(Serializer& serializer) const {
     if (deletedVersions) {
         for (const auto deleted : *deletedVersions) {
@@ -434,12 +449,21 @@ void VectorVersionInfo::serialize(Serializer& serializer) const {
         // Nothing to serialize.
     } break;
     case DeletionStatus::CHECK_VERSION: {
+        // Retained delete stamps are memory-only, like inserts above: post-restart
+        // timestamps start fresh, so a stored commit timestamp would never satisfy
+        // (deletion <= startTS) and the row would wrongly reappear. Committed deletes
+        // collapse to the always-deleted marker 0; anything else (INVALID, or an
+        // unexpected uncommitted entry) passes through unchanged.
         serializer.writeDebuggingInfo("same_deletion_version");
-        serializer.serializeValue<transaction_t>(sameDeletionVersion);
+        serializer.serializeValue<transaction_t>(collapseCommittedDelete(sameDeletionVersion));
         if (sameDeletionVersion == INVALID_TRANSACTION) {
             DASSERT(deletedVersions);
             serializer.writeDebuggingInfo("deleted_versions");
-            serializer.serializeArray<transaction_t, DEFAULT_VECTOR_CAPACITY>(*deletedVersions);
+            std::array<transaction_t, DEFAULT_VECTOR_CAPACITY> wireVersions;
+            for (auto i = 0u; i < DEFAULT_VECTOR_CAPACITY; i++) {
+                wireVersions[i] = collapseCommittedDelete((*deletedVersions)[i]);
+            }
+            serializer.serializeArray<transaction_t, DEFAULT_VECTOR_CAPACITY>(wireVersions);
         }
     } break;
     default: {

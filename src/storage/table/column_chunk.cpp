@@ -406,7 +406,18 @@ void ColumnChunk::transplantRetainedUpdates(const ColumnChunk& src, row_idx_t ro
         if (plan.newestBelow != nullptr) {
             copyNodeRows(plan.newestBelow, plan.vectorIdx);
         }
-        const auto synthetic = plan.keptRows & ~plan.belowRows;
+        auto synthetic = plan.keptRows & ~plan.belowRows;
+        // Rows whose kept update sits exactly at the horizon need no synthetic base: the
+        // kept copy itself is visible to every reader the horizon retains (startTS >=
+        // horizon). Staging a horizon-versioned base for them would collide with the kept
+        // copy below (same version slot) and suppress the real update.
+        for (const auto* kept : plan.kept) {
+            if (kept->version == horizon) {
+                for (auto i = 0u; i < kept->numRowsUpdated; i++) {
+                    synthetic.reset(kept->rowsInVector[i]);
+                }
+            }
+        }
         if (!synthetic.none()) {
             // Synthetic rows may fan out across target vectors when rowDelta misaligns
             // them; resolve the target vector per row.

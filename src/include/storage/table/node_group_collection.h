@@ -79,6 +79,9 @@ public:
     uint64_t getEstimatedMemoryUsage() const;
 
     void checkpoint(MemoryManager& memoryManager, NodeGroupCheckpointState& state);
+    // True when any node group still carries a retention horizon from an earlier pinned
+    // checkpoint (see NodeGroup::hasRetainedHorizon).
+    bool hasRetainedHorizon() const;
     void reclaimStorage(PageAllocator& pageAllocator) const;
 
     TableStats getStats() const {

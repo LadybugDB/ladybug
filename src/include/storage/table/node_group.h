@@ -201,6 +201,10 @@ public:
         const auto lock = chunkedGroups.lock();
         return chunkedGroups.getGroup(lock, groupIdx);
     }
+    // True when any chunked group still carries a retention horizon from an earlier
+    // pinned checkpoint. Used to force a reclaiming checkpoint after the readers drain,
+    // even when the table epoch is unchanged.
+    bool hasRetainedHorizon() const;
 
     template<class TARGET>
     TARGET& cast() {

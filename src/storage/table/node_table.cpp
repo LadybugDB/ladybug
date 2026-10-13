@@ -762,7 +762,13 @@ bool NodeTable::checkpoint(main::ClientContext* context, TableCatalogEntry* tabl
     transaction_t retentionHorizon) {
     const auto effectiveEpoch =
         epochWatermark > 0 ? epochWatermark : changeEpoch.load(std::memory_order_acquire);
-    if (effectiveEpoch <= lastCheckpointedEpoch) {
+    // A group that still carries a retention horizon from an earlier pinned checkpoint is
+    // re-checkpointed even when its epoch is unchanged, provided no reader is open: the
+    // retained versions and update chains are then unobservable garbage and this is the
+    // only reclamation pass. While readers are open the old retention still covers them
+    // (the horizon never moves backward across overlapping checkpoints), so the skip stands.
+    if (effectiveEpoch <= lastCheckpointedEpoch &&
+        (retentionHorizon != INVALID_TRANSACTION || !nodeGroups->hasRetainedHorizon())) {
         return false;
     }
     // Build column IDs and raw pointers for checkpoint WITHOUT moving columns yet.

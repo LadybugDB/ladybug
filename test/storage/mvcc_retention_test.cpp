@@ -1,3 +1,5 @@
+#include "catalog/catalog.h"
+#include "catalog/catalog_entry/node_table_catalog_entry.h"
 #include "common/serializer/buffer_reader.h"
 #include "common/serializer/buffer_writer.h"
 #include "common/serializer/deserializer.h"
@@ -5,6 +7,7 @@
 #include "graph_test/private_graph_test.h"
 #include "main/connection.h"
 #include "storage/buffer_manager/memory_manager.h"
+#include "storage/table/node_table.h"
 #include "storage/table/update_info.h"
 #include "storage/table/version_info.h"
 #include "transaction/transaction.h"
@@ -150,10 +153,159 @@ TEST(VersionRetentionTest, RetainedInsertsCollapseOnTheWire) {
     // and post-restart timestamps start fresh, so this resolves identically.
     const Transaction oldReader{TransactionType::READ_ONLY, 7, 11};
     EXPECT_TRUE(restored->isInserted(&oldReader, 5));
-    // Retained deletes round-trip with their stamps intact.
-    EXPECT_FALSE(restored->isDeleted(&oldReader, 9));
+    // Retained deletes collapse to always-deleted on the wire: post-restart timestamps
+    // start fresh (a reopened database never assigns the stored stamp), so the delete
+    // must already hold for the oldest possible reader.
+    EXPECT_TRUE(restored->isDeleted(&oldReader, 9));
     const Transaction newReader{TransactionType::READ_ONLY, 8, 14};
     EXPECT_TRUE(restored->isDeleted(&newReader, 9));
+    // Post-restart readers observe both the collapsed insert and the collapsed delete.
+    const Transaction restartedReader{TransactionType::READ_ONLY, 50, 1};
+    EXPECT_TRUE(restored->isInserted(&restartedReader, 5));
+    EXPECT_TRUE(restored->isDeleted(&restartedReader, 9));
+}
+
+TEST_F(MVCCRetentionTest, RetainedDeleteSurvivesReopen) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CALL auto_checkpoint=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE P(id INT64 PRIMARY KEY, v INT64);")->isSuccess());
+    ASSERT_TRUE(conn->query("UNWIND range(1, 5) AS i CREATE (:P {id: i, v: 0});")->isSuccess());
+    ASSERT_TRUE(conn->query("CHECKPOINT;")->isSuccess());
+    auto reader = std::make_unique<main::Connection>(database.get());
+    ASSERT_TRUE(reader->query("BEGIN TRANSACTION READ ONLY;")->isSuccess());
+    ASSERT_TRUE(conn->query("MATCH (p:P {id: 3}) DETACH DELETE p;")->isSuccess());
+    ASSERT_TRUE(conn->query("CHECKPOINT;")->isSuccess());
+    ASSERT_TRUE(reader->query("COMMIT;")->isSuccess());
+    reader.reset();
+    // Reopen: the committed delete must stay deleted; the row must not come back.
+    createDBAndConn();
+    auto res = conn->query("MATCH (p:P) RETURN p.id ORDER BY p.id;");
+    ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+    std::vector<int64_t> ids;
+    while (res->hasNext()) {
+        ids.push_back(res->getNext()->getValue(0)->getValue<int64_t>());
+    }
+    EXPECT_EQ(ids, std::vector<int64_t>({1, 2, 4, 5}));
+}
+
+TEST_F(MVCCRetentionTest, RetainedDeleteSurvivesCrash) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CALL auto_checkpoint=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CALL force_checkpoint_on_close=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE P(id INT64 PRIMARY KEY, v INT64);")->isSuccess());
+    ASSERT_TRUE(conn->query("UNWIND range(1, 5) AS i CREATE (:P {id: i, v: 0});")->isSuccess());
+    ASSERT_TRUE(conn->query("CHECKPOINT;")->isSuccess());
+    auto reader = std::make_unique<main::Connection>(database.get());
+    ASSERT_TRUE(reader->query("BEGIN TRANSACTION READ ONLY;")->isSuccess());
+    ASSERT_TRUE(conn->query("MATCH (p:P {id: 3}) DETACH DELETE p;")->isSuccess());
+    ASSERT_TRUE(conn->query("CHECKPOINT;")->isSuccess());
+    ASSERT_TRUE(reader->query("COMMIT;")->isSuccess());
+    reader.reset();
+    // Simulate a crash: drop the connections without a closing checkpoint.
+    conn.reset();
+    database.reset();
+    createDBAndConn();
+    auto res = conn->query("MATCH (p:P) RETURN p.id ORDER BY p.id;");
+    ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+    std::vector<int64_t> ids;
+    while (res->hasNext()) {
+        ids.push_back(res->getNext()->getValue(0)->getValue<int64_t>());
+    }
+    EXPECT_EQ(ids, std::vector<int64_t>({1, 2, 4, 5}));
+}
+
+TEST_F(MVCCRetentionTest, CommittedUpdatesSurvivePinnedCheckpoint) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CALL auto_checkpoint=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE P(id INT64 PRIMARY KEY, v INT64);")->isSuccess());
+    ASSERT_TRUE(conn->query("UNWIND range(1, 5) AS i CREATE (:P {id: i, v: 0});")->isSuccess());
+    // No checkpoint before the updates: the groups are still in memory.
+    ASSERT_TRUE(conn->query("MATCH (p:P {id: 1}) SET p.v = 10;")->isSuccess());
+    ASSERT_TRUE(conn->query("MATCH (p:P {id: 2}) SET p.v = 20;")->isSuccess());
+    auto reader = std::make_unique<main::Connection>(database.get());
+    ASSERT_TRUE(reader->query("BEGIN TRANSACTION READ ONLY;")->isSuccess());
+    ASSERT_TRUE(conn->query("MATCH (p:P {id: 1}) SET p.v = 30;")->isSuccess());
+    ASSERT_TRUE(conn->query("CHECKPOINT;")->isSuccess());
+    // The parked reader still observes the pre-begin values.
+    auto parked = reader->query("MATCH (p:P {id: 2}) RETURN p.v;");
+    ASSERT_TRUE(parked->isSuccess()) << parked->getErrorMessage();
+    ASSERT_TRUE(parked->hasNext());
+    EXPECT_EQ(parked->getNext()->getValue(0)->getValue<int64_t>(), 20);
+    parked = reader->query("MATCH (p:P {id: 1}) RETURN p.v;");
+    ASSERT_TRUE(parked->isSuccess()) << parked->getErrorMessage();
+    ASSERT_TRUE(parked->hasNext());
+    EXPECT_EQ(parked->getNext()->getValue(0)->getValue<int64_t>(), 10);
+    ASSERT_TRUE(reader->query("COMMIT;")->isSuccess());
+    reader.reset();
+    // The committed updates are durable, not just visible to the parked reader.
+    auto fresh = conn->query("MATCH (p:P {id: 2}) RETURN p.v;");
+    ASSERT_TRUE(fresh->isSuccess()) << fresh->getErrorMessage();
+    ASSERT_TRUE(fresh->hasNext());
+    EXPECT_EQ(fresh->getNext()->getValue(0)->getValue<int64_t>(), 20);
+    fresh = conn->query("MATCH (p:P {id: 1}) RETURN p.v;");
+    ASSERT_TRUE(fresh->isSuccess()) << fresh->getErrorMessage();
+    ASSERT_TRUE(fresh->hasNext());
+    EXPECT_EQ(fresh->getNext()->getValue(0)->getValue<int64_t>(), 30);
+    // And they survive a reopen.
+    createDBAndConn();
+    auto reopened = conn->query("MATCH (p:P) RETURN p.id, p.v ORDER BY p.id;");
+    ASSERT_TRUE(reopened->isSuccess()) << reopened->getErrorMessage();
+    std::vector<std::pair<int64_t, int64_t>> rows;
+    while (reopened->hasNext()) {
+        auto row = reopened->getNext();
+        rows.emplace_back(row->getValue(0)->getValue<int64_t>(),
+            row->getValue(1)->getValue<int64_t>());
+    }
+    const std::vector<std::pair<int64_t, int64_t>> expectedRows = {{1, 30}, {2, 20}, {3, 0}, {4, 0},
+        {5, 0}};
+    EXPECT_EQ(rows, expectedRows);
+}
+
+TEST_F(MVCCRetentionTest, NoWriteCheckpointReclaimsRetention) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CALL auto_checkpoint=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE P(id INT64 PRIMARY KEY, v INT64);")->isSuccess());
+    ASSERT_TRUE(conn->query("UNWIND range(1, 5) AS i CREATE (:P {id: i, v: 0});")->isSuccess());
+    ASSERT_TRUE(conn->query("CHECKPOINT;")->isSuccess());
+    auto tableHasRetainedHorizon = [&]() {
+        auto* entry = database->getCatalog()
+                          ->getTableCatalogEntry(&transaction::DUMMY_CHECKPOINT_TRANSACTION, "P")
+                          ->ptrCast<catalog::NodeTableCatalogEntry>();
+        return database->getStorageManager()
+            ->getTable(entry->getTableID())
+            ->cast<storage::NodeTable>()
+            .hasRetainedHorizon();
+    };
+    EXPECT_FALSE(tableHasRetainedHorizon());
+    auto reader = std::make_unique<main::Connection>(database.get());
+    ASSERT_TRUE(reader->query("BEGIN TRANSACTION READ ONLY;")->isSuccess());
+    ASSERT_TRUE(conn->query("MATCH (p:P {id: 2}) SET p.v = 20;")->isSuccess());
+    ASSERT_TRUE(conn->query("CHECKPOINT;")->isSuccess());
+    EXPECT_TRUE(tableHasRetainedHorizon());
+    ASSERT_TRUE(reader->query("COMMIT;")->isSuccess());
+    reader.reset();
+    // No further writes: the next checkpoint must still reclaim the retained state.
+    ASSERT_TRUE(conn->query("CHECKPOINT;")->isSuccess());
+    EXPECT_FALSE(tableHasRetainedHorizon());
+    auto res = conn->query("MATCH (p:P) RETURN p.id, p.v ORDER BY p.id;");
+    ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+    std::vector<std::pair<int64_t, int64_t>> rows;
+    while (res->hasNext()) {
+        auto row = res->getNext();
+        rows.emplace_back(row->getValue(0)->getValue<int64_t>(),
+            row->getValue(1)->getValue<int64_t>());
+    }
+    const std::vector<std::pair<int64_t, int64_t>> expectedRows = {{1, 0}, {2, 20}, {3, 0}, {4, 0},
+        {5, 0}};
+    EXPECT_EQ(rows, expectedRows);
 }
 
 TEST_F(MVCCRetentionTest, UpdateRetentionPlanClassifiesChains) {

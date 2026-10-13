@@ -445,6 +445,16 @@ bool NodeGroup::hasDeletions(const Transaction* transaction) const {
     return false;
 }
 
+bool NodeGroup::hasRetainedHorizon() const {
+    const auto lock = chunkedGroups.lock();
+    for (auto i = 0u; i < chunkedGroups.getNumGroups(lock); i++) {
+        if (chunkedGroups.getGroup(lock, i)->getRetentionHorizon() != INVALID_TRANSACTION) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void NodeGroup::addColumn(TableAddColumnState& addColumnState, PageAllocator* pageAllocator,
     ColumnStats* newColumnStats) {
     dataTypes.push_back(addColumnState.propertyDefinition.getType().copy());
