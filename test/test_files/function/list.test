@@ -723,6 +723,24 @@ False
 -STATEMENT RETURN 5 IN NULL
 ---- 1
 
+-STATEMENT RETURN '' IN ['a', null]
+---- 1
+False
+-STATEMENT RETURN false IN [true, null]
+---- 1
+False
+-STATEMENT RETURN array_position([null, 0], 0)
+---- 1
+2
+-STATEMENT RETURN list_has_any([null], [0])
+---- 1
+False
+-STATEMENT RETURN list_has_all([null], [0])
+---- 1
+False
+-STATEMENT RETURN list_position([[1], null], [])
+---- 1
+0
 -STATEMENT RETURN null in []
 ---- 1
 
@@ -2209,3 +2227,11 @@ True
 -STATEMENT RETURN LIST_CAT(null, null)
 ---- 1
 
+-CASE ListContainsStoredNullElements
+-STATEMENT CREATE NODE TABLE StoredLists(id INT64 PRIMARY KEY, l STRING[])
+---- ok
+-STATEMENT CREATE (:StoredLists {id: 1, l: [NULL]}), (:StoredLists {id: 2, l: ['', 'a']}), (:StoredLists {id: 3, l: ['a', NULL]})
+---- ok
+-STATEMENT MATCH (t:StoredLists) WHERE '' IN t.l RETURN t.id
+---- 1
+2
