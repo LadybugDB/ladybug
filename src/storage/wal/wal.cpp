@@ -72,8 +72,10 @@ bool WAL::rotateForCheckpoint(main::ClientContext* /*context*/) {
     if (adoptFrozenWAL) {
         // The frozen WAL on disk becomes this checkpoint's frozen WAL. The active WAL, if any,
         // holds later records that recovery replays after this checkpoint, so it is left alone.
-        // It has no CHECKPOINT record yet, so any state tracking whether the frozen WAL holds
-        // one must read "no" here, as it does after a fresh rotation.
+        // The adopted file normally holds no CHECKPOINT record yet (it may inherit mid-file
+        // ones from pinned checkpoints; recovery replays the suffix after the last one), so any
+        // state tracking whether the frozen WAL holds one must read "no" here, as it does
+        // after a fresh rotation.
         adoptFrozenWAL = false;
         return true;
     }
