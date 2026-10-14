@@ -84,6 +84,8 @@ private:
     std::vector<uint32_t> tupleIdxPerBuildSide;
     // This is used to indicate which build side to increment the tuple idx for.
     uint32_t carryBuildSideIdx;
+    // Aligned copy of the right-hand list being intersected (see intersectLists).
+    std::vector<common::nodeID_t> alignedRightList;
 };
 
 } // namespace processor

@@ -40,6 +40,7 @@ void Intersect::initLocalStateInternal(ResultSet* resultSet, ExecutionContext* /
         isIntersectListAFlatValue.push_back(
             sharedHT->getHashTable()->getTableSchema()->getColumn(1)->isFlat());
     }
+    alignedRightList.resize(DEFAULT_VECTOR_CAPACITY);
 }
 
 void Intersect::probeHTs() {
@@ -135,16 +136,17 @@ void Intersect::intersectLists(const std::vector<overflow_value_t>& listsToInter
     std::vector<SelectionVector*> selVectorsForIntersectedLists;
     intersectSelVectors[0]->setToUnfiltered(listsToIntersect[0].numElements);
     selVectorsForIntersectedLists.push_back(intersectSelVectors[0].get());
-    // Reusable aligned buffer for the right-hand adjacency list. Lists live in packed
-    // factorized-table/unflat storage without alignment padding, so the raw value pointer
-    // may be misaligned for nodeID_t; copy it into aligned storage before intersecting.
-    std::vector<nodeID_t> alignedRightList;
+    // Lists live in packed factorized-table/unflat storage without alignment padding, so the raw
+    // value pointer may be misaligned for nodeID_t; copy each right-hand list into aligned storage
+    // before intersecting. Each list is one build-side tuple appended from a single ValueVector, so
+    // it holds at most DEFAULT_VECTOR_CAPACITY nodeIDs, like the left list in outKeyVector.
     for (auto i = 0u; i < listsToIntersect.size() - 1; i++) {
-        intersectSelVectors[i + 1]->setToUnfiltered(listsToIntersect[i + 1].numElements);
-        alignedRightList.resize(listsToIntersect[i + 1].numElements);
-        if (!alignedRightList.empty()) {
-            memcpy(alignedRightList.data(), listsToIntersect[i + 1].value,
-                listsToIntersect[i + 1].numElements * sizeof(nodeID_t));
+        const auto& rightList = listsToIntersect[i + 1];
+        DASSERT(rightList.numElements <= DEFAULT_VECTOR_CAPACITY);
+        intersectSelVectors[i + 1]->setToUnfiltered(rightList.numElements);
+        if (rightList.numElements > 0) {
+            memcpy(alignedRightList.data(), rightList.value,
+                rightList.numElements * sizeof(nodeID_t));
         }
         twoWayIntersect((nodeID_t*)outKeyVector->getData(), lSelVector, alignedRightList.data(),
             *intersectSelVectors[i + 1]);
