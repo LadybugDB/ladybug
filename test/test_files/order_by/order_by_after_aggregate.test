@@ -80,3 +80,23 @@ b|1
 ---- 2
 b
 a
+
+-CASE OrderByRandomAfterAggregate
+# After an aggregate or DISTINCT, ORDER BY random() is the projected random(), aliased or not. With
+# seed 0.2 the rows draw 0.910543, 0.650728 and 0.111587; a new draw would order them 3, 1, 2.
+-STATEMENT RETURN setseed(0.2)
+---- ok
+-STATEMENT UNWIND [1, 2, 3] AS x RETURN x, random() AS r, count(*) AS c ORDER BY random()
+-CHECK_ORDER
+---- 3
+3|0.111587|1
+2|0.650728|1
+1|0.910543|1
+-STATEMENT RETURN setseed(0.2)
+---- ok
+-STATEMENT UNWIND [1, 2, 3] AS x RETURN DISTINCT x, random() AS r ORDER BY random()
+-CHECK_ORDER
+---- 3
+3|0.111587
+2|0.650728
+1|0.910543
