@@ -183,7 +183,13 @@ std::shared_ptr<Expression> ExpressionBinder::bindExpression(
         throw NotImplementedException(
             "bindExpression(" + ExpressionTypeUtil::toString(expressionType) + ").");
     }
-    expression = simplifyExpression(expression);
+    // A direct reference to a variable returns an expression of an earlier clause, simplified when
+    // it was bound; it is not simplified again, as a new object would escape the binder's identity
+    // check for expressions an earlier clause computed. References nested in a larger expression
+    // rely on each simplifier returning an already simplified input unchanged.
+    if (expressionType != ExpressionType::VARIABLE) {
+        expression = simplifyExpression(expression);
+    }
     if (ConstantExpressionVisitor::needFold(*expression)) {
         return tryFoldExpression(expression);
     }
@@ -341,10 +347,14 @@ std::shared_ptr<Expression> ExpressionBinder::simplifyCaseExpression(
             continue;
         }
         if (isBoolLiteral(*whenExpression, true)) {
-            changed = true;
             if (simplifiedCaseExpression->getNumCaseAlternatives() == 0) {
                 return thenExpression;
             }
+            // Later alternatives are unreachable. Report a change only when some are dropped, so
+            // simplifying an already simplified CASE returns the same object.
+            const bool dropsLater = i + 1 < caseExpression.getNumCaseAlternatives();
+            changed = changed || dropsLater || whenExpression != alternative->whenExpression ||
+                      thenExpression != alternative->thenExpression;
             simplifiedCaseExpression->addCaseAlternative(whenExpression, thenExpression);
             break;
         }

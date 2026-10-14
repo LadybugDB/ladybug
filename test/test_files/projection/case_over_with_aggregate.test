@@ -1,0 +1,30 @@
+-DATASET CSV empty
+
+--
+
+-CASE CaseOverAggregateFromWith
+-STATEMENT UNWIND [1, 2, 3] AS x WITH count(*) AS n WITH CASE WHEN n > 1 THEN n WHEN true THEN 5 ELSE 0 END AS c RETURN c
+---- 1
+3
+-STATEMENT UNWIND [1, 2, 3] AS x WITH count(*) AS n WITH (CASE WHEN n > 1 THEN true WHEN true THEN false ELSE false END) AND n > 0 AS b RETURN b
+---- 1
+True
+-STATEMENT UNWIND [1, 2, 3] AS x WITH count(*) AS n WITH CASE WHEN n > 1 THEN n WHEN true THEN 5 ELSE 0 END AS c RETURN c + 1, c * 2
+---- 1
+4|6
+-STATEMENT UNWIND [1, 2, 3] AS x WITH count(*) AS n WITH CASE WHEN n > 1 THEN n WHEN true THEN 5 ELSE 0 END AS c RETURN sum(c)
+---- 1
+3
+-STATEMENT UNWIND [1, 2, 3] AS x WITH count(*) AS n WITH (CASE WHEN n > 1 THEN true WHEN true THEN false ELSE false END) AS c, n > 0 AS p WITH c AND p AS b RETURN b
+---- 1
+True
+-STATEMENT UNWIND [1, 2, 3] AS x WITH count(*) AS n WITH (CASE WHEN n > 1 THEN true WHEN true THEN false ELSE false END) AS c WITH NOT c AS b RETURN b
+---- 1
+False
+
+-CASE CaseWhenTrueShadowsLaterAlternatives
+-STATEMENT UNWIND [1, 2, 3] AS x RETURN CASE WHEN x > 2 THEN 'big' WHEN true THEN 'small' WHEN x > 0 THEN 'never' END AS s, count(*) AS c ORDER BY s
+-CHECK_ORDER
+---- 2
+big|1
+small|2
