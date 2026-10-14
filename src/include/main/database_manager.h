@@ -34,13 +34,13 @@ public:
     ~DatabaseManager();
 
     void registerAttachedDatabase(std::unique_ptr<AttachedDatabase> attachedDatabase);
-    bool hasAttachedDatabase(const std::string& name);
+    LBUG_API bool hasAttachedDatabase(const std::string& name);
     LBUG_API AttachedDatabase* getAttachedDatabase(const std::string& name);
     void detachDatabase(const std::string& databaseName);
     std::string getDefaultDatabase() const { return defaultDatabase; }
     bool hasDefaultDatabase() const { return defaultDatabase != ""; }
     void setDefaultDatabase(const std::string& databaseName);
-    std::vector<AttachedDatabase*> getAttachedDatabases() const;
+    LBUG_API std::vector<AttachedDatabase*> getAttachedDatabases() const;
 
     void createGraph(const std::string& graphName, storage::MemoryManager* memoryManager,
         main::ClientContext* clientContext, bool isAnyGraph = false);
