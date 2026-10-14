@@ -13,11 +13,14 @@ using namespace common;
 using re2_replace_func_t =
     std::function<void(std::string* str, const RE2& re, const regex::StringPiece& rewrite)>;
 
-struct RegexReplaceBindData : public FunctionBindData {
+// A pattern that is not a literal is compiled as given, without the Cypher escape handling a
+// literal pattern gets.
+struct RegexReplaceBindData : public RegexpBindData {
     re2_replace_func_t replaceFunc;
 
     RegexReplaceBindData(common::logical_type_vec_t paramTypes, re2_replace_func_t replaceFunc)
-        : FunctionBindData{std::move(paramTypes), common::LogicalType::STRING()},
+        : RegexpBindData{std::move(paramTypes), common::LogicalType::STRING(),
+              false /* parseCypherEscapes */},
           replaceFunc{std::move(replaceFunc)} {}
 
     std::unique_ptr<FunctionBindData> copy() const override {
@@ -30,8 +33,8 @@ struct RegexpReplace {
         string_t& result, common::ValueVector& resultValueVector, void* dataPtr) {
         auto bindData = reinterpret_cast<RegexReplaceBindData*>(dataPtr);
         std::string resultStr = value.getAsString();
-        RE2 re2Pattern{pattern.getAsString()};
-        bindData->replaceFunc(&resultStr, re2Pattern, replacement.getAsString());
+        bindData->replaceFunc(&resultStr, RegexpBindData::getRegex(dataPtr, pattern),
+            replacement.getAsString());
         BaseRegexpOperation::copyToLbugString(resultStr, result, resultValueVector);
     }
 };

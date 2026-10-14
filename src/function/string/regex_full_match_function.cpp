@@ -22,9 +22,11 @@ struct RegexFullMatchBindData : public FunctionBindData {
 };
 
 struct RegexpFullMatch {
-    static void operation(string_t& left, string_t& right, uint8_t& result) {
-        result = RE2::FullMatch(left.getAsString(),
-            BaseRegexpOperation::parseCypherPattern(right.getAsString()));
+    static void operation(string_t& left, string_t& right, uint8_t& result,
+        common::ValueVector& /*leftValueVector*/, common::ValueVector& /*rightValueVector*/,
+        common::ValueVector& /*resultValueVector*/, void* dataPtr) {
+        result = RE2::FullMatch(BaseRegexpOperation::toStringPiece(left),
+            RegexpBindData::getRegex(dataPtr, right));
     }
 };
 
@@ -52,7 +54,8 @@ static std::unique_ptr<FunctionBindData> regexFullMatchBindFunc(const ScalarBind
             binder::ExpressionUtil::getDataTypes(input.arguments),
             BaseRegexpOperation::parseCypherPattern(patternInStr));
     } else {
-        return FunctionBindData::getSimpleBindData(input.arguments, LogicalType::BOOL());
+        return std::make_unique<RegexpBindData>(
+            binder::ExpressionUtil::getDataTypes(input.arguments), LogicalType::BOOL());
     }
 }
 
@@ -61,8 +64,8 @@ function_set RegexpFullMatchFunction::getFunctionSet() {
     auto scalarFunc = make_unique<ScalarFunction>(name,
         std::vector<LogicalTypeID>{LogicalTypeID::STRING, LogicalTypeID::STRING},
         LogicalTypeID::BOOL,
-        ScalarFunction::BinaryExecFunction<string_t, string_t, uint8_t, RegexpFullMatch>,
-        ScalarFunction::BinarySelectFunction<string_t, string_t, RegexpFullMatch>);
+        ScalarFunction::BinaryExecWithBindData<string_t, string_t, uint8_t, RegexpFullMatch>,
+        ScalarFunction::BinarySelectWithBindData<string_t, string_t, RegexpFullMatch>);
     scalarFunc->bindFunc = regexFullMatchBindFunc;
     functionSet.emplace_back(std::move(scalarFunc));
     return functionSet;

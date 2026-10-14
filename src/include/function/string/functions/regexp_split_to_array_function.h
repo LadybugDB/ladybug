@@ -8,10 +8,12 @@ namespace lbug {
 namespace function {
 
 struct RegexpSplitToArray : BaseRegexpOperation {
-    static void operation(common::string_t& value, common::string_t& regex,
-        common::list_entry_t& result, common::ValueVector& resultVector) {
+    static void operation(common::string_t& value, common::string_t& pattern,
+        common::list_entry_t& result, common::ValueVector& /*leftValueVector*/,
+        common::ValueVector& /*rightValueVector*/, common::ValueVector& resultVector,
+        void* dataPtr) {
         std::vector<std::string> matches =
-            regexExtractAll(value.getAsString(), regex.getAsString());
+            regexExtractAll(value.getAsString(), RegexpBindData::getRegex(dataPtr, pattern));
         result = common::ListVector::addList(&resultVector, matches.size());
         auto resultValues = common::ListVector::getListValues(&resultVector, result);
         auto resultDataVector = common::ListVector::getDataVector(&resultVector);
@@ -25,9 +27,7 @@ struct RegexpSplitToArray : BaseRegexpOperation {
         }
     }
 
-    static std::vector<std::string> regexExtractAll(const std::string& value,
-        const std::string& pattern) {
-        RE2 regex(parseCypherPattern(pattern));
+    static std::vector<std::string> regexExtractAll(const std::string& value, const RE2& regex) {
 
         regex::StringPiece input(value);
         regex::StringPiece match;

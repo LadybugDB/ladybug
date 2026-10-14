@@ -8,8 +8,10 @@ namespace lbug {
 namespace function {
 
 struct RegexpMatches : BaseRegexpOperation {
-    static inline void operation(common::string_t& left, common::string_t& right, uint8_t& result) {
-        result = RE2::PartialMatch(left.getAsString(), parseCypherPattern(right.getAsString()));
+    static void operation(common::string_t& left, common::string_t& right, uint8_t& result,
+        common::ValueVector& /*leftValueVector*/, common::ValueVector& /*rightValueVector*/,
+        common::ValueVector& /*resultValueVector*/, void* dataPtr) {
+        result = RE2::PartialMatch(toStringPiece(left), RegexpBindData::getRegex(dataPtr, right));
     }
 };
 

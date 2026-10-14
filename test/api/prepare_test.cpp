@@ -70,6 +70,27 @@ TEST_F(ApiTest, MultiParamsPrepare) {
     ASSERT_FALSE(result->hasNext());
 }
 
+// Patterns are compiled once and cached per evaluator; a re-execution with another value must
+// not match against the previous execution's pattern.
+TEST_F(ApiTest, RepeatedExecuteRegexpParameter) {
+    auto preparedStatement = conn->prepare(
+        "MATCH (a:person) WHERE regexp_matches(a.fName, $p) AND a.fName =~ $q "
+        "RETURN a.fName, regexp_extract(a.fName, $p), regexp_extract_all(a.fName, $p), "
+        "regexp_split_to_array(a.fName, $p), regexp_replace(a.fName, $p, '#') "
+        "ORDER BY a.fName");
+    auto check = [&](const std::string& p, const std::string& q, const std::string& expected) {
+        auto result = conn->execute(preparedStatement.get(), std::make_pair(std::string("p"), p),
+            std::make_pair(std::string("q"), q));
+        ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+        ASSERT_TRUE(result->hasNext());
+        checkTuple(result->getNext().get(), expected);
+        ASSERT_FALSE(result->hasNext());
+    };
+    check("^Al", "A.*", "Alice|Al|[Al]|[ice]|#ice\n");
+    check("^Bo", "B.*", "Bob|Bo|[Bo]|[b]|#b\n");
+    check("^Al", "A.*", "Alice|Al|[Al]|[ice]|#ice\n");
+}
+
 TEST_F(ApiTest, PrepareBool) {
     auto preparedStatement =
         conn->prepare("MATCH (a:person) WHERE a.isStudent = $1 RETURN COUNT(*)");
