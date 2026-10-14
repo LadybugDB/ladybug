@@ -4,6 +4,7 @@
 #include <memory>
 #include <mutex>
 #include <stack>
+#include <vector>
 
 #include "common/system_config.h"
 #include "common/types/types.h"
@@ -74,6 +75,12 @@ private:
  *
  * MM will return a MemoryBuffer to the caller, which is a wrapper of the allocated memory block,
  * and it will automatically call its allocator to reclaim the memory block when it is destroyed.
+ *
+ * Other sizes are malloc'd. Freed buffers of REUSABLE_BUFFER_SIZE are kept, still counted as used
+ * memory, for the next allocation of that size, up to getMaxReusableBuffers(); they are released
+ * when an allocation can't reserve memory and when the MM is destroyed, so the BufferManager must
+ * outlive the MM. When REUSABLE_BUFFER_SIZE is TEMP_PAGE_SIZE, those buffers are pool pages and
+ * nothing is kept.
  */
 class LBUG_API MemoryManager {
     friend class MemoryBuffer;
@@ -81,9 +88,15 @@ class LBUG_API MemoryManager {
     friend class MmAllocator;
 
 public:
+    // One node group of an 8-byte column: CSR header offsets and lengths, and the length chunks of
+    // rel counts and degrees, allocated and freed by every query that scans rels.
+    static constexpr uint64_t REUSABLE_BUFFER_SIZE =
+        common::StorageConfig::NODE_GROUP_SIZE * sizeof(uint64_t);
+    static constexpr uint64_t MAX_REUSABLE_MEMORY = 64 * 1024 * 1024;
+
     MemoryManager(BufferManager* bm, common::VirtualFileSystem* vfs);
 
-    ~MemoryManager() = default;
+    ~MemoryManager();
 
     std::unique_ptr<MemoryBuffer> allocateBuffer(bool initializeToZero = false,
         uint64_t size = common::TEMP_PAGE_SIZE);
@@ -93,10 +106,17 @@ public:
 
     static MemoryManager* Get(const main::ClientContext& context);
 
+    uint64_t getMaxReusableBuffers() const;
+    uint64_t getNumReusableBuffers();
+    // Frees the buffers kept for reuse; returns whether there were any.
+    bool releaseReusableBuffers();
+
 private:
     void freeBlock(common::page_idx_t pageIdx, std::span<uint8_t> buffer);
     void updateUsedMemoryForFreedBlock(common::page_idx_t pageIdx, std::span<uint8_t> buffer);
     std::span<uint8_t> mallocBuffer(bool initializeToZero, uint64_t size);
+    uint8_t* takeReusableBuffer();
+    bool keepForReuse(std::span<uint8_t> buffer);
 
 private:
     // EXTENSION ABI: extensions ship once per minor version and must keep working with
@@ -107,6 +127,8 @@ private:
     common::page_offset_t pageSize;
     std::stack<common::page_idx_t> freePages;
     std::mutex allocatorLock;
+    // Guarded by allocatorLock.
+    std::vector<uint8_t*> reusableBuffers;
 };
 
 } // namespace storage
