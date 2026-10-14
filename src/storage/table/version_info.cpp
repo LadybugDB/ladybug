@@ -30,8 +30,9 @@ struct VectorVersionInfo {
     transaction_t sameInsertionVersion;
     transaction_t sameDeletionVersion;
     // Rows of `insertedVersions` holding a commit timestamp, and the largest such timestamp; kept
-    // in step by setInsertedVersion. Never serialized: on disk insertions are never versioned.
-    // Read without the node group lock: the writer publishes the timestamp before the count.
+    // in step by setInsertedVersion and fillInsertedVersions. Never serialized: on disk insertions
+    // are never versioned. Read without the node group lock: the writer publishes the timestamp
+    // before the count.
     std::atomic<row_idx_t> numCommittedInsertions;
     std::atomic<transaction_t> maxCommittedInsertion;
     InsertionStatus insertionStatus;
@@ -81,6 +82,7 @@ private:
     void initInsertionVersionArray();
     void initDeletionVersionArray();
     void setInsertedVersion(row_idx_t rowIdx, transaction_t version);
+    void fillInsertedVersions(transaction_t version);
 
     bool isSameInsertionVersion() const;
     bool isSameDeletionVersion() const;
@@ -187,16 +189,16 @@ void VectorVersionInfo::stampInsertCommitTS(row_idx_t rowIdxInVector, transactio
             return;
         }
         initInsertionVersionArray();
-        insertedVersions->fill(sameInsertionVersion);
+        fillInsertedVersions(sameInsertionVersion);
         sameInsertionVersion = INVALID_TRANSACTION;
     }
     if (!insertedVersions) {
         // Fresh checkpoint-built vector: unstamped rows are baked-visible, so default the
         // array to visible-to-all rather than absent.
         initInsertionVersionArray();
-        insertedVersions->fill(0);
+        fillInsertedVersions(0);
     }
-    insertedVersions->operator[](rowIdxInVector) = commitTS;
+    setInsertedVersion(rowIdxInVector, commitTS);
 }
 
 void VectorVersionInfo::stampDeleteCommitTS(row_idx_t rowIdxInVector, transaction_t commitTS) {
@@ -440,22 +442,31 @@ void VectorVersionInfo::initInsertionVersionArray() {
     maxCommittedInsertion.store(0, std::memory_order_relaxed);
 }
 
+static bool isCommittedVersion(transaction_t version) {
+    return version < transaction::Transaction::START_TRANSACTION_ID;
+}
+
 // Called by the single writer only.
 void VectorVersionInfo::setInsertedVersion(row_idx_t rowIdx, transaction_t version) {
-    const auto isCommitted = [](transaction_t v) {
-        return v < transaction::Transaction::START_TRANSACTION_ID;
-    };
     auto& slot = insertedVersions->operator[](rowIdx);
-    if (isCommitted(slot)) {
+    if (isCommittedVersion(slot)) {
         numCommittedInsertions.fetch_sub(1, std::memory_order_relaxed);
     }
-    if (isCommitted(version)) {
+    if (isCommittedVersion(version)) {
         if (version > maxCommittedInsertion.load(std::memory_order_relaxed)) {
             maxCommittedInsertion.store(version, std::memory_order_relaxed);
         }
         numCommittedInsertions.fetch_add(1, std::memory_order_release);
     }
     slot = version;
+}
+
+void VectorVersionInfo::fillInsertedVersions(transaction_t version) {
+    insertedVersions->fill(version);
+    const auto committed = isCommittedVersion(version);
+    maxCommittedInsertion.store(committed ? version : 0, std::memory_order_relaxed);
+    numCommittedInsertions.store(committed ? DEFAULT_VECTOR_CAPACITY : 0,
+        std::memory_order_release);
 }
 
 void VectorVersionInfo::initDeletionVersionArray() {

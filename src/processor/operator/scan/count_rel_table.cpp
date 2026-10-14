@@ -66,10 +66,11 @@ bool CountRelTable::getNextTuplesInternal(ExecutionContext* context) {
                 continue;
             }
 
-            auto& csrNodeGroup = nodeGroup->cast<CSRNodeGroup>();
+            // Pinned under the group lock; parked readers get their retained snapshot.
+            const auto pin = nodeGroup->cast<CSRNodeGroup>().captureScanPin(transaction);
 
             // Count from persistent (checkpointed) data
-            if (auto* persistentGroup = csrNodeGroup.getPersistentChunkedGroup()) {
+            if (auto* persistentGroup = pin.persistent.get()) {
                 // Sum the actual relationship lengths from the CSR header instead of using
                 // getNumRows() which includes dummy rows added for CSR offset array gaps
                 auto& csrPersistentGroup = persistentGroup->cast<ChunkedCSRNodeGroup>();
@@ -109,11 +110,8 @@ bool CountRelTable::getNextTuplesInternal(ExecutionContext* context) {
             }
 
             // In-memory (not yet checkpointed) rows visible to the transaction.
-            auto numChunkedGroups = csrNodeGroup.getNumChunkedGroups();
-            for (node_group_idx_t i = 0; i < numChunkedGroups; i++) {
-                if (auto* chunkedGroup = csrNodeGroup.getChunkedNodeGroup(i)) {
-                    totalCount += chunkedGroup->getNumVisibleRows(transaction);
-                }
+            for (const auto& chunkedGroup : pin.inMemGroups) {
+                totalCount += chunkedGroup->getNumVisibleRows(transaction);
             }
         }
 
