@@ -11,22 +11,25 @@ namespace function {
 
 struct RegexpExtract : BaseRegexpOperation {
     static inline void operation(common::string_t& value, common::string_t& pattern,
-        std::int64_t& group, common::string_t& result, common::ValueVector& resultValueVector) {
-        regexExtract(value.getAsString(), pattern.getAsString(), group, result, resultValueVector);
-    }
-
-    static inline void operation(common::string_t& value, common::string_t& pattern,
-        common::string_t& result, common::ValueVector& resultValueVector) {
-        int64_t defaultGroup = 0;
-        regexExtract(value.getAsString(), pattern.getAsString(), defaultGroup, result,
+        std::int64_t& group, common::string_t& result, common::ValueVector& resultValueVector,
+        void* dataPtr) {
+        regexExtract(value.getAsString(), RegexpBindData::getRegex(dataPtr, pattern), group, result,
             resultValueVector);
     }
 
-    static void regexExtract(const std::string& input, const std::string& pattern,
-        std::int64_t& group, common::string_t& result, common::ValueVector& resultValueVector) {
-        RE2 regex(parseCypherPattern(pattern));
+    static inline void operation(common::string_t& value, common::string_t& pattern,
+        common::string_t& result, common::ValueVector& /*leftValueVector*/,
+        common::ValueVector& /*rightValueVector*/, common::ValueVector& resultValueVector,
+        void* dataPtr) {
+        int64_t defaultGroup = 0;
+        regexExtract(value.getAsString(), RegexpBindData::getRegex(dataPtr, pattern), defaultGroup,
+            result, resultValueVector);
+    }
+
+    static void regexExtract(const std::string& input, const RE2& regex, std::int64_t& group,
+        common::string_t& result, common::ValueVector& resultValueVector) {
         auto submatchCount = regex.NumberOfCapturingGroups() + 1;
-        if (group >= submatchCount) {
+        if (group < 0 || group >= submatchCount) {
             throw common::RuntimeException("Regex match group index is out of range");
         }
 

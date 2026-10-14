@@ -713,6 +713,23 @@ hellolongstringtest
 ---- 1
 [hello, world, 42]
 
+-LOG RegexpExtractNegativeGroup
+-STATEMENT RETURN regexp_extract('abc', 'b', -1);
+---- error
+Runtime exception: Regex match group index is out of range
+-STATEMENT RETURN regexp_extract_all('abc', 'b', -1);
+---- error
+Runtime exception: Regex match group index is out of range
+
+-LOG RegexpPatternChangesPerRow
+-STATEMENT UNWIND [{i: 1, s: 'hello_world', p: '([a-z]+)_'}, {i: 2, s: 'abc123', p: '([0-9]+)'}, {i: 3, s: 'abc456', p: '([0-9]+)'}, {i: 4, s: 'hello_there', p: '([a-z]+)_'}, {i: 5, s: '777', p: '([0-9]+)'}] AS x RETURN x.i, regexp_matches(x.s, x.p), regexp_extract(x.s, x.p), regexp_extract(x.s, x.p, 1), regexp_extract_all(x.s, x.p), regexp_split_to_array(x.s, x.p), x.s =~ x.p, regexp_replace(x.s, x.p, '#') ORDER BY x.i;
+---- 5
+1|True|hello_|hello|[hello_]|[world]|False|#world
+2|True|123|123|[123]|[abc]|False|abc#
+3|True|456|456|[456]|[abc]|False|abc#
+4|True|hello_|hello|[hello_]|[there]|False|#there
+5|True|777|777|[777]|[]|True|#
+
 -LOG LevenshteinDistance
 -STATEMENT return levenshtein('kitten', 'sitting');
 ---- 1

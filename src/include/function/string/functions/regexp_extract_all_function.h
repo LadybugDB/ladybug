@@ -10,9 +10,10 @@ namespace function {
 
 struct RegexpExtractAll : BaseRegexpOperation {
     static inline void operation(common::string_t& value, common::string_t& pattern,
-        std::int64_t& group, common::list_entry_t& result, common::ValueVector& resultVector) {
+        std::int64_t& group, common::list_entry_t& result, common::ValueVector& resultVector,
+        void* dataPtr) {
         std::vector<std::string> matches =
-            regexExtractAll(value.getAsString(), pattern.getAsString(), group);
+            regexExtractAll(value.getAsString(), RegexpBindData::getRegex(dataPtr, pattern), group);
         result = common::ListVector::addList(&resultVector, matches.size());
         auto resultValues = common::ListVector::getListValues(&resultVector, result);
         auto resultDataVector = common::ListVector::getDataVector(&resultVector);
@@ -27,16 +28,17 @@ struct RegexpExtractAll : BaseRegexpOperation {
     }
 
     static inline void operation(common::string_t& value, common::string_t& pattern,
-        common::list_entry_t& result, common::ValueVector& resultVector) {
+        common::list_entry_t& result, common::ValueVector& /*leftValueVector*/,
+        common::ValueVector& /*rightValueVector*/, common::ValueVector& resultVector,
+        void* dataPtr) {
         int64_t defaultGroup = 0;
-        operation(value, pattern, defaultGroup, result, resultVector);
+        operation(value, pattern, defaultGroup, result, resultVector, dataPtr);
     }
 
-    static std::vector<std::string> regexExtractAll(const std::string& value,
-        const std::string& pattern, std::int64_t& group) {
-        RE2 regex(parseCypherPattern(pattern));
+    static std::vector<std::string> regexExtractAll(const std::string& value, const RE2& regex,
+        std::int64_t& group) {
         auto submatchCount = regex.NumberOfCapturingGroups() + 1;
-        if (group >= submatchCount) {
+        if (group < 0 || group >= submatchCount) {
             throw common::RuntimeException("Regex match group index is out of range");
         }
 
