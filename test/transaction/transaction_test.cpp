@@ -5,6 +5,7 @@
 #include "common/exception/runtime.h"
 #include "graph_test/private_graph_test.h"
 #include "storage/buffer_manager/buffer_manager.h"
+#include "storage/buffer_manager/memory_manager.h"
 #include "storage/storage_utils.h"
 #include "storage/wal/wal.h"
 #include "transaction/transaction.h"
@@ -831,6 +832,8 @@ TEST_F(FailedCommitTest, KeepsCheckpointedRels) {
     // relationship append.
     ASSERT_TRUE(conn->query("MATCH (a:A {id: 0}) SET a.b = 1")->isSuccess());
     ASSERT_TRUE(conn->query(insert)->isSuccess());
+    // A buffer kept for reuse would be released to retry the failed reservation.
+    getMemoryManager(*database)->releaseReusableBuffers();
     bm->failNextCommit = true;
     auto commit = conn->query("COMMIT");
     ASSERT_FALSE(commit->isSuccess());

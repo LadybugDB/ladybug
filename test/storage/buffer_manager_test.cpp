@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <atomic>
 #include <cstdint>
 #include <thread>
@@ -35,6 +36,8 @@ public:
         // Can't use UINT64_MAX since it will overflow the usedMemory
         ASSERT_FALSE(bm->reserve(UINT64_MAX / 2));
     }
+    bool reserve(uint64_t size) { return getBufferManager(*database)->reserve(size); }
+    void freeUsedMemory(uint64_t size) { getBufferManager(*database)->freeUsedMemory(size); }
     VMRegion& getVMRegion(PageSizeClass pageSizeClass) {
         return *getBufferManager(*database)->vmRegions[pageSizeClass];
     }
@@ -221,13 +224,126 @@ TEST_F(EmptyBufferManagerTest, CSRScanStateHeaderIsTwoPlainUInt64Buffers) {
         ASSERT_EQ(header.length->getNumValues(), 0u);
         ASSERT_EQ(bm->getUsedMemory(), initialUsedMemory + headerBytes);
     }
-    ASSERT_EQ(bm->getUsedMemory(), initialUsedMemory);
+    // Both buffers are REUSABLE_BUFFER_SIZE; those kept for reuse stay counted.
+    const auto numKept = std::min<uint64_t>(2, mm->getMaxReusableBuffers());
+    ASSERT_EQ(mm->getNumReusableBuffers(), numKept);
+    const auto usedMemoryWithKeptBuffers =
+        initialUsedMemory + numKept * MemoryManager::REUSABLE_BUFFER_SIZE;
+    ASSERT_EQ(bm->getUsedMemory(), usedMemoryWithKeptBuffers);
     {
         CSRNodeGroupScanState lookupState(*mm, true /*randomLookup*/);
         ASSERT_EQ(lookupState.header->offset->getCapacity(), 1u);
         ASSERT_FALSE(lookupState.header->offset->hasNullData());
-        ASSERT_EQ(bm->getUsedMemory(), initialUsedMemory + 2 * sizeof(uint64_t));
+        ASSERT_EQ(bm->getUsedMemory(), usedMemoryWithKeptBuffers + 2 * sizeof(uint64_t));
     }
+}
+
+// Node-group-sized buffers are the only malloc'd size every rel scan allocates and frees; a freed
+// one is kept for the next allocation of that size and stays counted as used memory.
+TEST_F(EmptyBufferManagerTest, FreedNodeGroupSizedBufferIsReused) {
+    auto* bm = getBufferManager(*database);
+    auto* mm = getMemoryManager(*database);
+    if (MemoryManager::REUSABLE_BUFFER_SIZE == TEMP_PAGE_SIZE || mm->getMaxReusableBuffers() == 0) {
+        GTEST_SKIP();
+    }
+    constexpr auto size = MemoryManager::REUSABLE_BUFFER_SIZE;
+    ASSERT_EQ(mm->getNumReusableBuffers(), 0u);
+    const auto initialUsedMemory = bm->getUsedMemory();
+    uint8_t* data = nullptr;
+    {
+        auto buffer = mm->allocateBuffer(false, size);
+        data = buffer->getData();
+        memset(data, 0xff, size);
+    }
+    ASSERT_EQ(mm->getNumReusableBuffers(), 1u);
+    ASSERT_EQ(bm->getUsedMemory(), initialUsedMemory + size);
+    {
+        auto buffer = mm->allocateBuffer(false, size);
+        ASSERT_EQ(buffer->getData(), data);
+        ASSERT_EQ(mm->getNumReusableBuffers(), 0u);
+        ASSERT_EQ(bm->getUsedMemory(), initialUsedMemory + size);
+    }
+    {
+        auto buffer = mm->allocateBuffer(true /*initializeToZero*/, size);
+        ASSERT_EQ(buffer->getData(), data);
+        ASSERT_TRUE(std::all_of(data, data + size, [](uint8_t byte) { return byte == 0; }));
+    }
+    { auto buffer = mm->allocateBuffer(false, size / 2); }
+    ASSERT_EQ(mm->getNumReusableBuffers(), 1u);
+    ASSERT_EQ(bm->getUsedMemory(), initialUsedMemory + size);
+}
+
+TEST_F(EmptyBufferManagerTest, ReusableBuffersAreCapped) {
+    // A larger pool than the test default, so that several buffers are kept.
+    systemConfig->bufferPoolSize = 1ull << 30;
+    conn.reset();
+    database.reset();
+    createDBAndConn();
+    auto* bm = getBufferManager(*database);
+    auto* mm = getMemoryManager(*database);
+    if (MemoryManager::REUSABLE_BUFFER_SIZE == TEMP_PAGE_SIZE || mm->getMaxReusableBuffers() < 2) {
+        GTEST_SKIP();
+    }
+    constexpr auto size = MemoryManager::REUSABLE_BUFFER_SIZE;
+    const auto maxReusableBuffers = mm->getMaxReusableBuffers();
+    const auto initialUsedMemory = bm->getUsedMemory();
+    {
+        std::vector<std::unique_ptr<MemoryBuffer>> buffers;
+        for (auto i = 0u; i <= maxReusableBuffers; i++) {
+            buffers.push_back(mm->allocateBuffer(false, size));
+        }
+    }
+    ASSERT_EQ(mm->getNumReusableBuffers(), maxReusableBuffers);
+    ASSERT_EQ(bm->getUsedMemory(), initialUsedMemory + maxReusableBuffers * size);
+}
+
+// A buffer kept for reuse must not make an allocation fail that would succeed without it, whether
+// the allocation is malloc'd or a buffer manager page.
+TEST_F(BufferManagerTest, ReusableBuffersAreReleasedWhenMemoryRunsOut) {
+    auto* mm = getMemoryManager(*database);
+    if (MemoryManager::REUSABLE_BUFFER_SIZE == TEMP_PAGE_SIZE || mm->getMaxReusableBuffers() == 0) {
+        GTEST_SKIP();
+    }
+    for (const auto size : {uint64_t{1024}, TEMP_PAGE_SIZE}) {
+        {
+            auto buffer = mm->allocateBuffer(false, MemoryManager::REUSABLE_BUFFER_SIZE);
+        }
+        ASSERT_GE(mm->getNumReusableBuffers(), 1u);
+        uint64_t reserved = 0;
+        for (const auto step : {TEMP_PAGE_SIZE, uint64_t{1024}}) {
+            while (reserve(step)) {
+                reserved += step;
+            }
+        }
+        {
+            auto buffer = mm->allocateBuffer(false, size);
+            ASSERT_NE(buffer->getData(), nullptr);
+            ASSERT_EQ(mm->getNumReusableBuffers(), 0u);
+        }
+        freeUsedMemory(reserved);
+    }
+}
+
+// Spilling frees a buffer to report the memory to the spiller, so it must not keep it.
+TEST_F(EmptyBufferManagerTest, SpilledBufferIsNotKeptForReuse) {
+    if (inMemMode ||
+        StorageConfig::NODE_GROUP_SIZE_LOG2 != TestParser::STANDARD_NODE_GROUP_SIZE_LOG_2) {
+        GTEST_SKIP();
+    }
+    auto* bm = getBufferManager(*database);
+    auto* mm = getMemoryManager(*database);
+    std::vector<std::unique_ptr<ColumnChunkData>> chunks;
+    chunks.push_back(std::make_unique<ColumnChunkData>(*mm, LogicalType(LogicalTypeID::INT64),
+        StorageConfig::NODE_GROUP_SIZE, false, ResidencyState::IN_MEMORY, false));
+    auto chunkedNodeGroup = InMemChunkedNodeGroup(std::move(chunks), 0);
+    chunkedNodeGroup.setUnused(*mm);
+    SpillResult memorySpilled{};
+    bm->getSpillerOrSkip([&](auto& spiller) {
+        spiller.addUnusedChunk(&chunkedNodeGroup);
+        memorySpilled = spiller.claimNextGroup();
+    });
+    ASSERT_EQ(memorySpilled.memoryFreed, MemoryManager::REUSABLE_BUFFER_SIZE);
+    ASSERT_EQ(mm->getNumReusableBuffers(), 0u);
 }
 
 } // namespace testing
