@@ -78,7 +78,7 @@ std::unique_ptr<ArrowSchema> PreparedStatement::getArrowSchema() const {
 
 bool PreparedStatement::canReuseCachedPlanWith(
     const std::unordered_map<std::string, std::unique_ptr<Value>>& inputParams) const {
-    if (!unknownParameters.empty()) {
+    if (!unknownParameters.empty() && !unknownParametersBound) {
         return false;
     }
     for (auto& [key, value] : inputParams) {

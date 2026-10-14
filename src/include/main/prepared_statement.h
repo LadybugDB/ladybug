@@ -151,6 +151,8 @@ private:
     // (possible through the C API) does not access a freed manager.
     std::weak_ptr<CachedPreparedStatementManager> ownerManager;
     std::unordered_set<std::string> unknownParameters;
+    // Set once an execution has bound the statement with values for its unknown parameters.
+    bool unknownParametersBound = false;
     std::unordered_map<std::string, std::shared_ptr<common::Value>> parameterMap;
 };
 

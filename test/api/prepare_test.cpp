@@ -768,6 +768,69 @@ static bool cachedPlanExists(Connection* conn, const PreparedStatement& ps) {
     return manager.getCachedStatement(ps.getName())->physicalPlanCache != nullptr;
 }
 
+// A statement prepared without parameter values, as the C API prepares, is bound on its first
+// execution. Later executions with the same parameter types reuse that plan.
+TEST_F(ApiTest, PrepareWithoutParamsReusesPlan) {
+    auto preparedStatement = conn->prepare("MATCH (a:person) WHERE a.ID = $id RETURN a.fName");
+    ASSERT_TRUE(preparedStatement->isSuccess());
+    auto execute = [&](auto id) {
+        auto result = conn->execute(preparedStatement.get(), std::make_pair(std::string("id"), id));
+        EXPECT_TRUE(result->isSuccess()) << result->getErrorMessage();
+        return TestHelper::convertResultToString(*result);
+    };
+    const std::vector<std::string> alice{"Alice"}, bob{"Bob"}, carol{"Carol"};
+    ASSERT_FALSE(cachedPlanExists(conn.get(), *preparedStatement));
+    ASSERT_EQ(execute(int64_t{0}), alice);
+    ASSERT_TRUE(cachedPlanExists(conn.get(), *preparedStatement));
+    ASSERT_EQ(execute(int64_t{2}), bob);
+    ASSERT_EQ(execute(int64_t{0}), alice);
+    // A new parameter type rebinds, and the plan bound for it is the one reused next.
+    ASSERT_EQ(execute(int32_t{3}), carol);
+    ASSERT_TRUE(cachedPlanExists(conn.get(), *preparedStatement));
+    ASSERT_EQ(execute(int32_t{3}), carol);
+    ASSERT_EQ(execute(2.0), bob);
+    ASSERT_EQ(execute(2.0), bob);
+    ASSERT_EQ(execute(std::string("2")), bob);
+    ASSERT_EQ(execute(std::string("2")), bob);
+    ASSERT_EQ(execute(int64_t{2}), bob);
+    ASSERT_EQ(execute(int64_t{2}), bob);
+    auto missing = conn->executeWithParams(preparedStatement.get(), {});
+    ASSERT_FALSE(missing->isSuccess());
+    ASSERT_EQ(missing->getErrorMessage(), "Parameter id not found.");
+}
+
+// A statement prepared with values is rebound for a parameter of another type; the next
+// execution with that type must reuse the rebound plan, not the one bound for the old type.
+TEST_F(ApiTest, PrepareWithParamsTypeChangeReusesReboundPlan) {
+    std::unordered_map<std::string, std::unique_ptr<Value>> params;
+    params["id"] = std::make_unique<Value>(int64_t{0});
+    auto preparedStatement = conn->prepareWithParams(
+        "MATCH (a:person) WHERE a.ID = $id RETURN a.fName", std::move(params));
+    ASSERT_TRUE(preparedStatement->isSuccess());
+    auto execute = [&](auto id) {
+        auto result = conn->execute(preparedStatement.get(), std::make_pair(std::string("id"), id));
+        EXPECT_TRUE(result->isSuccess()) << result->getErrorMessage();
+        return TestHelper::convertResultToString(*result);
+    };
+    ASSERT_EQ(execute(int64_t{0}), std::vector<std::string>{"Alice"});
+    ASSERT_EQ(execute(int32_t{3}), std::vector<std::string>{"Carol"});
+    ASSERT_EQ(execute(int32_t{3}), std::vector<std::string>{"Carol"});
+}
+
+// A parameter baked into the plan (here LIMIT) keeps a statement prepared without values off the
+// cached-plan path.
+TEST_F(ApiTest, PrepareWithoutParamsBakedLimitIsNotCached) {
+    auto preparedStatement =
+        conn->prepare("MATCH (a:person) RETURN a.fName ORDER BY a.fName LIMIT $n");
+    ASSERT_TRUE(preparedStatement->isSuccess());
+    for (auto n : {int64_t{1}, int64_t{2}, int64_t{1}}) {
+        auto result = conn->execute(preparedStatement.get(), std::make_pair(std::string("n"), n));
+        ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+        ASSERT_EQ(TestHelper::convertResultToString(*result).size(), static_cast<size_t>(n));
+        ASSERT_FALSE(cachedPlanExists(conn.get(), *preparedStatement));
+    }
+}
+
 // Regression coverage for the `enable_cached_prepared_statement` setting: a kill switch for
 // latent state-reuse bugs in the cached-physical-plan fast path (see issue #877 and friends).
 TEST_F(ApiTest, EnableCachedPreparedStatementSetting) {
