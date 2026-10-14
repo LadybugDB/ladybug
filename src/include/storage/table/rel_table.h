@@ -176,6 +176,12 @@ struct LBUG_API RelTableDeleteState final : TableDeleteState {
           relIDVector{relIDVector}, detachDeleteDirection{detachDeleteDirection} {}
 };
 
+struct RelDegreeSummary {
+    common::row_idx_t numActiveBoundNodes = 0;
+    common::row_idx_t totalDegree = 0;
+    common::row_idx_t maxDegree = 0;
+};
+
 class LBUG_API RelTable : public Table {
 public:
     using rel_multiplicity_constraint_throw_func_t =
@@ -256,6 +262,8 @@ public:
     virtual std::vector<std::pair<common::offset_t, common::row_idx_t>> getTopKDegrees(
         const transaction::Transaction* transaction, common::RelDataDirection direction,
         common::idx_t k);
+    virtual RelDegreeSummary getDegreeSummary(const transaction::Transaction* transaction,
+        common::RelDataDirection direction);
 
     RelTableData* getDirectedTableData(common::RelDataDirection direction) const;
 
@@ -294,6 +302,10 @@ private:
 
     void checkRelMultiplicityConstraint(transaction::Transaction* transaction,
         const TableInsertState& state) const;
+
+    template<typename FUNC>
+    void forEachDegree(const transaction::Transaction* transaction,
+        common::RelDataDirection direction, FUNC&& func);
 
 private:
     common::table_id_t relGroupID;

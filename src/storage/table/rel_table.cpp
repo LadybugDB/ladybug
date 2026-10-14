@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <map>
 #include <queue>
-#include <unordered_map>
+#include <type_traits>
 
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
 #include "common/exception/message.h"
@@ -751,12 +751,26 @@ row_idx_t RelTable::getNumTotalRows(const Transaction* transaction) {
     return numLocalRows + nextRelOffset;
 }
 
-std::vector<std::pair<offset_t, row_idx_t>> RelTable::getDegreeEntries(
-    const Transaction* transaction, RelDataDirection direction) {
-    std::unordered_map<offset_t, row_idx_t> degrees;
+// Calls func(offset, degree) for every bound node with at least one rel, in ascending offset
+// order. A degree adds up the node's checkpointed CSR length, its committed in-memory rels and,
+// in a write transaction, its uncommitted rels.
+template<typename FUNC>
+void RelTable::forEachDegree(const Transaction* transaction, RelDataDirection direction,
+    FUNC&& func) {
+    static_assert(std::is_same_v<DirectedCSRIndex::index_t, std::map<offset_t, row_idx_vec_t>>,
+        "uncommitted rels are merged in offset order");
+    static const DirectedCSRIndex::index_t noLocalRels;
+    const DirectedCSRIndex::index_t* localRels = &noLocalRels;
+    if (transaction->isWriteTransaction()) {
+        if (auto* localTable = transaction->getLocalStorage()->getLocalTable(*this)) {
+            localRels = &localTable->cast<LocalRelTable>().getCSRIndex(direction);
+        }
+    }
+    auto localIt = localRels->begin();
     auto* memoryManager = this->memoryManager;
     auto* relTableData = getDirectedTableData(direction);
     auto* csrLengthColumn = relTableData->getCSRLengthColumn();
+    std::vector<row_idx_t> nodeGroupDegrees;
     for (node_group_idx_t nodeGroupIdx = 0; nodeGroupIdx < relTableData->getNumNodeGroups();
          nodeGroupIdx++) {
         auto* nodeGroup = relTableData->getNodeGroup(nodeGroupIdx);
@@ -765,7 +779,8 @@ std::vector<std::pair<offset_t, row_idx_t>> RelTable::getDegreeEntries(
         }
         auto& csrNodeGroup = nodeGroup->cast<CSRNodeGroup>();
         auto groupStartOffset = StorageUtils::getStartOffsetOfNodeGroup(nodeGroupIdx);
-        std::vector<row_idx_t> nodeGroupDegrees(StorageConfig::NODE_GROUP_SIZE, 0);
+        auto groupEndOffset = groupStartOffset + StorageConfig::NODE_GROUP_SIZE;
+        nodeGroupDegrees.assign(StorageConfig::NODE_GROUP_SIZE, 0);
         if (auto* persistentGroup = csrNodeGroup.getPersistentChunkedGroup()) {
             auto& csrPersistentGroup = persistentGroup->cast<ChunkedCSRNodeGroup>();
             auto& csrHeader = csrPersistentGroup.getCSRHeader();
@@ -786,28 +801,46 @@ std::vector<std::pair<offset_t, row_idx_t>> RelTable::getDegreeEntries(
                 nodeGroupDegrees[i] += csrIndex->getNumRows(i);
             }
         }
+        for (; localIt != localRels->end() && localIt->first < groupEndOffset; ++localIt) {
+            const auto& [nodeOffset, rowIndices] = *localIt;
+            if (nodeOffset >= groupStartOffset) {
+                nodeGroupDegrees[nodeOffset - groupStartOffset] += rowIndices.size();
+            } else if (!rowIndices.empty()) {
+                // Belongs to a node group skipped above as null, so it has uncommitted rels only.
+                func(nodeOffset, rowIndices.size());
+            }
+        }
         for (offset_t i = 0; i < StorageConfig::NODE_GROUP_SIZE; ++i) {
             if (nodeGroupDegrees[i] > 0) {
-                degrees[groupStartOffset + i] += nodeGroupDegrees[i];
+                func(groupStartOffset + i, nodeGroupDegrees[i]);
             }
         }
     }
-    if (transaction->isWriteTransaction()) {
-        if (auto* localTable = transaction->getLocalStorage()->getLocalTable(*this)) {
-            auto& localRelTable = localTable->cast<LocalRelTable>();
-            for (const auto& [nodeOffset, rowIndices] : localRelTable.getCSRIndex(direction)) {
-                degrees[nodeOffset] += rowIndices.size();
-            }
+    for (; localIt != localRels->end(); ++localIt) {
+        const auto& [nodeOffset, rowIndices] = *localIt;
+        if (!rowIndices.empty()) {
+            func(nodeOffset, rowIndices.size());
         }
     }
+}
+
+std::vector<std::pair<offset_t, row_idx_t>> RelTable::getDegreeEntries(
+    const Transaction* transaction, RelDataDirection direction) {
     std::vector<std::pair<offset_t, row_idx_t>> result;
-    result.reserve(degrees.size());
-    for (auto& [offset, degree] : degrees) {
-        if (degree > 0) {
-            result.emplace_back(offset, degree);
-        }
-    }
+    forEachDegree(transaction, direction,
+        [&](offset_t offset, row_idx_t degree) { result.emplace_back(offset, degree); });
     return result;
+}
+
+RelDegreeSummary RelTable::getDegreeSummary(const Transaction* transaction,
+    RelDataDirection direction) {
+    RelDegreeSummary summary;
+    forEachDegree(transaction, direction, [&](offset_t, row_idx_t degree) {
+        summary.numActiveBoundNodes++;
+        summary.totalDegree += degree;
+        summary.maxDegree = std::max(summary.maxDegree, degree);
+    });
+    return summary;
 }
 
 std::vector<std::pair<offset_t, row_idx_t>> RelTable::getTopKDegrees(const Transaction* transaction,
@@ -825,14 +858,15 @@ std::vector<std::pair<offset_t, row_idx_t>> RelTable::getTopKDegrees(const Trans
     std::priority_queue<degree_entry_t, std::vector<degree_entry_t>, decltype(worseForHeap)> heap{
         worseForHeap};
 
-    for (auto& entry : getDegreeEntries(transaction, direction)) {
+    forEachDegree(transaction, direction, [&](offset_t offset, row_idx_t degree) {
+        const degree_entry_t entry{offset, degree};
         if (heap.size() < k) {
             heap.push(entry);
         } else if (better(entry, heap.top())) {
             heap.pop();
             heap.push(entry);
         }
-    }
+    });
 
     std::vector<degree_entry_t> result;
     while (!heap.empty()) {
@@ -845,7 +879,7 @@ std::vector<std::pair<offset_t, row_idx_t>> RelTable::getTopKDegrees(const Trans
 
 row_idx_t RelTable::getNumActiveBoundNodes(const Transaction* transaction,
     RelDataDirection direction) {
-    return getDegreeEntries(transaction, direction).size();
+    return getDegreeSummary(transaction, direction).numActiveBoundNodes;
 }
 
 row_idx_t RelTable::getDegreeForOffset(const Transaction* transaction, RelDataDirection direction,

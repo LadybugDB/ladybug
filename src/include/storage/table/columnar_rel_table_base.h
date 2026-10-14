@@ -53,6 +53,8 @@ public:
     std::vector<std::pair<common::offset_t, common::row_idx_t>> getTopKDegrees(
         const transaction::Transaction* transaction, common::RelDataDirection direction,
         common::idx_t k) override;
+    RelDegreeSummary getDegreeSummary(const transaction::Transaction* transaction,
+        common::RelDataDirection direction) override;
 
 protected:
     catalog::RelGroupCatalogEntry* relGroupEntry;

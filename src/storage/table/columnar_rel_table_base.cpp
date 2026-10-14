@@ -36,6 +36,18 @@ std::vector<std::pair<offset_t, row_idx_t>> ColumnarRelTableBase::getTopKDegrees
     return getTopKDegreeEntries(transaction, direction, k);
 }
 
+RelDegreeSummary ColumnarRelTableBase::getDegreeSummary(const Transaction* transaction,
+    RelDataDirection direction) {
+    auto entries = getAllDegreeEntries(transaction, direction);
+    RelDegreeSummary summary;
+    summary.numActiveBoundNodes = entries.size();
+    for (const auto& [_, degree] : entries) {
+        summary.totalDegree += degree;
+        summary.maxDegree = std::max(summary.maxDegree, degree);
+    }
+    return summary;
+}
+
 common::offset_t ColumnarRelTableBase::findSourceNodeForRowInternal(offset_t globalRowIdx,
     const std::vector<offset_t>& indptrData) const {
     if (indptrData.empty()) {

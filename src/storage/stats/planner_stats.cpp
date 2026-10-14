@@ -20,20 +20,15 @@ namespace storage {
 
 static PlannerRelDirectionStats computeRelDirectionStats(RelTable& relTable,
     const Transaction* transaction, RelDataDirection direction) {
-    auto degreeEntries = relTable.getDegreeEntries(transaction, direction);
-    cardinality_t totalDegree = 0;
-    cardinality_t maxDegree = 0;
-    for (const auto& [_, degree] : degreeEntries) {
-        totalDegree += degree;
-        maxDegree = std::max<cardinality_t>(maxDegree, degree);
-    }
+    const auto degrees = relTable.getDegreeSummary(transaction, direction);
     auto stats = PlannerRelDirectionStats{};
     stats.numRows = relTable.getNumTotalRows(transaction);
-    stats.numActiveBoundNodes = degreeEntries.size();
-    stats.maxDegree = maxDegree;
-    stats.avgDegree =
-        degreeEntries.empty() ? 0 : static_cast<double>(totalDegree) / degreeEntries.size();
-    stats.boundKeysUnique = maxDegree <= 1;
+    stats.numActiveBoundNodes = degrees.numActiveBoundNodes;
+    stats.maxDegree = degrees.maxDegree;
+    stats.avgDegree = degrees.numActiveBoundNodes == 0 ?
+                          0 :
+                          static_cast<double>(degrees.totalDegree) / degrees.numActiveBoundNodes;
+    stats.boundKeysUnique = degrees.maxDegree <= 1;
     return stats;
 }
 
