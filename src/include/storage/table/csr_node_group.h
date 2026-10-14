@@ -264,11 +264,13 @@ public:
 
     ChunkedNodeGroup* getPersistentChunkedGroup() const { return persistentChunkGroup.get(); }
     const CSRIndex* getCSRIndex() const { return csrIndex.get(); }
+    // The groups a scan by the transaction reads, as initializeScanState pins them.
+    CSRNodeGroupScanPin captureScanPin(const transaction::Transaction* transaction) const;
     // Number of retained pre-checkpoint snapshots (observability and test hook).
     size_t getNumRetainedSnapshots() const;
     void setPersistentChunkedGroup(std::unique_ptr<ChunkedNodeGroup> chunkedNodeGroup) {
         DASSERT(chunkedNodeGroup->getFormat() == NodeGroupDataFormat::CSR);
-        // A scan copies this pointer under the group lock when it starts (captureScanPin).
+        // A scan copies this pointer under the group lock when it starts (captureLiveScanPin).
         const auto lock = chunkedGroups.lock();
         persistentChunkGroup = std::move(chunkedNodeGroup);
     }
@@ -300,12 +302,12 @@ private:
     NodeGroupScanResult scanCommittedInMemRandom(const transaction::Transaction* transaction,
         const RelTableScanState& tableState, CSRNodeGroupScanState& nodeGroupScanState) const;
 
-    void captureScanPin(const common::UniqLock& lock, CSRNodeGroupScanState& scanState) const;
+    void captureLiveScanPin(const common::UniqLock& lock, CSRNodeGroupScanPin& pin) const;
     // Fill the scan pin from the oldest retained snapshot covering the transaction, or from
     // the live group when none does (including a null transaction). Parked readers thus
     // re-resolve their exact pre-checkpoint state after checkpoints they sat out.
     void captureRoutedScanPin(const common::UniqLock& lock,
-        const transaction::Transaction* transaction, CSRNodeGroupScanState& scanState) const;
+        const transaction::Transaction* transaction, CSRNodeGroupScanPin& pin) const;
     void pruneRetainedSnapshotsNoLock(const std::vector<common::transaction_t>& openStartTSs);
     bool needsRetainedSnapshotNoLock(const std::vector<common::transaction_t>& openStartTSs) const;
     void ensureCSRIndex();

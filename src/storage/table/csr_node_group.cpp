@@ -154,11 +154,10 @@ bool CSRNodeGroupScanState::tryScanCachedTuplesPacked(RelTableScanState& tableSc
     return true;
 }
 
-void CSRNodeGroup::captureScanPin(const UniqLock& lock, CSRNodeGroupScanState& scanState) const {
+void CSRNodeGroup::captureLiveScanPin(const UniqLock& lock, CSRNodeGroupScanPin& pin) const {
     if (!scanPagePin) {
         scanPagePin = PageReclaimDeferral::create();
     }
-    auto& pin = scanState.pin;
     pin.pages = scanPagePin;
     pin.index = csrIndex;
     const auto& groups = chunkedGroups.getAllGroups(lock);
@@ -169,12 +168,11 @@ void CSRNodeGroup::captureScanPin(const UniqLock& lock, CSRNodeGroupScanState& s
 }
 
 void CSRNodeGroup::captureRoutedScanPin(const UniqLock& lock, const Transaction* transaction,
-    CSRNodeGroupScanState& scanState) const {
+    CSRNodeGroupScanPin& pin) const {
     if (transaction != nullptr) {
         const auto startTS = transaction->getStartTS();
         for (const auto& entry : retainedSnapshots) {
             if (entry.floorTS <= startTS && startTS <= entry.snapshotTS) {
-                auto& pin = scanState.pin;
                 pin.persistent = entry.persistent;
                 pin.index = entry.index;
                 pin.inMemGroups = entry.inMemGroups;
@@ -183,7 +181,14 @@ void CSRNodeGroup::captureRoutedScanPin(const UniqLock& lock, const Transaction*
             }
         }
     }
-    captureScanPin(lock, scanState);
+    captureLiveScanPin(lock, pin);
+}
+
+CSRNodeGroupScanPin CSRNodeGroup::captureScanPin(const Transaction* transaction) const {
+    CSRNodeGroupScanPin pin;
+    const auto lock = chunkedGroups.lock();
+    captureRoutedScanPin(lock, transaction, pin);
+    return pin;
 }
 
 void CSRNodeGroup::pruneRetainedSnapshotsNoLock(const std::vector<transaction_t>& openStartTSs) {
@@ -237,7 +242,7 @@ void CSRNodeGroup::initializeScanState(const Transaction* transaction,
             // half-rewritten group, and a checkpoint sees every pin taken before it started.
             // Everything after the capture reads the pin, so the lock is not needed for it.
             const auto lock = chunkedGroups.lock();
-            captureRoutedScanPin(lock, transaction, nodeGroupScanState);
+            captureRoutedScanPin(lock, transaction, nodeGroupScanState.pin);
         }
         if (nodeGroupScanState.pin.persistent) {
             initScanForCommittedPersistent(transaction, relScanState, nodeGroupScanState);
@@ -553,7 +558,7 @@ void CSRNodeGroup::append(const Transaction* transaction, const std::vector<colu
 }
 
 void CSRNodeGroup::ensureCSRIndex() {
-    // A scan copies this pointer under the group lock when it starts (captureScanPin).
+    // A scan copies this pointer under the group lock when it starts (captureLiveScanPin).
     const auto lock = chunkedGroups.lock();
     if (!csrIndex) {
         csrIndex = std::make_shared<CSRIndex>();
