@@ -38,3 +38,19 @@
 2|0.708328
 -STATEMENT MATCH (p:person)-[:knows]->(p1:person) RETURN p.id, p1.id, random() as r ORDER BY r LIMIT 3
 ---- ok
+
+-CASE RandomCallsAreIndependent
+-STATEMENT RETURN setseed(0.2)
+---- ok
+-STATEMENT RETURN random() AS a, random() AS b
+---- 1
+0.910543|0.650728
+-STATEMENT WITH random() AS a, random() AS b RETURN a <> b
+---- 1
+True
+-STATEMENT WITH gen_random_uuid() AS u1, gen_random_uuid() AS u2 RETURN u1 <> u2
+---- 1
+True
+-STATEMENT WITH gen_random_uuid() AS u RETURN u = u
+---- 1
+True

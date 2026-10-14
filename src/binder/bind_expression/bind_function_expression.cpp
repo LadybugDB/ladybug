@@ -4,10 +4,12 @@
 #include "binder/expression_binder.h"
 #include "catalog/catalog.h"
 #include "common/exception/binder.h"
+#include "function/arithmetic/vector_arithmetic_functions.h"
 #include "function/built_in_function_utils.h"
 #include "function/cast/vector_cast_functions.h"
 #include "function/rewrite_function.h"
 #include "function/scalar_macro_function.h"
+#include "function/uuid/vector_uuid_functions.h"
 #include "parser/expression/parsed_expression_visitor.h"
 #include "parser/expression/parsed_function_expression.h"
 #include "transaction/transaction.h"
@@ -123,6 +125,12 @@ std::shared_ptr<Expression> ExpressionBinder::bindScalarFunctionExpression(
     }
     auto uniqueExpressionName =
         ScalarFunctionExpression::getUniqueName(function->name, childrenAfterCast);
+    // Each call of a random function produces its own values, so two calls with the same
+    // arguments must not share a name and with it one evaluated column.
+    if (function->name == function::RandFunction::name ||
+        function->name == function::GenRandomUUIDFunction::name) {
+        uniqueExpressionName = binder->getUniqueExpressionName(uniqueExpressionName);
+    }
     return std::make_shared<ScalarFunctionExpression>(ExpressionType::FUNCTION, std::move(function),
         std::move(bindData), std::move(childrenAfterCast), uniqueExpressionName);
 }
