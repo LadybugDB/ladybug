@@ -427,10 +427,15 @@ std::unique_ptr<QueryResult> ClientContext::executeWithParams(PreparedStatement*
         prepareNoLock(cachedStatement->parsedStatement, false /*shouldCommitNewTransaction*/,
             preparedStatement->parameterMap);
     useInternalCatalogEntry_ = false;
-    if (planStale && newPreparedStatement->isSuccess()) {
-        // Refresh the manager entry so later executions reuse the rebound plan instead of
-        // rebinding on every call. The physical-plan cache is cleared; executeNoLock below
-        // rebuilds and repopulates it from the fresh logical plan.
+    if (newPreparedStatement->isSuccess()) {
+        // Refresh the manager entry after every rebind: bindParametersNoLock has already stored
+        // the new parameter values and types, and the cached plan must match them. Later
+        // executions with the same types reuse it instead of rebinding. This includes the first
+        // execution of a statement prepared without parameter values, as the C API prepares, and
+        // a stale plan after a catalog change or a checkpoint that renumbered column IDs. The
+        // physical-plan cache is cleared; executeNoLock below rebuilds and repopulates it from
+        // the fresh logical plan.
+        preparedStatement->unknownParametersBound = true;
         cachedStatement->logicalPlan = std::move(newCachedStatement->logicalPlan);
         cachedStatement->columns = std::move(newCachedStatement->columns);
         cachedStatement->columnNames = std::move(newCachedStatement->columnNames);
