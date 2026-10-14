@@ -69,6 +69,14 @@ struct BoundTableScanInfo;
 // BinderScope keeps track of expressions in scope and their aliases. We maintain the order of
 // expressions in
 
+// The bound items of a RETURN or WITH, with the parsed item each one comes from; null for items
+// expanded from * or a.*.
+struct BoundProjectionList {
+    expression_vector exprs;
+    std::vector<std::string> aliases;
+    std::vector<const parser::ParsedExpression*> parsedItems;
+};
+
 class Binder {
     friend class ExpressionBinder;
 
@@ -260,10 +268,9 @@ public:
     BoundWithClause bindWithClause(const parser::WithClause& withClause);
     BoundReturnClause bindReturnClause(const parser::ReturnClause& returnClause);
 
-    std::pair<expression_vector, std::vector<std::string>> bindProjectionList(
-        const parser::ProjectionBody& projectionBody);
+    BoundProjectionList bindProjectionList(const parser::ProjectionBody& projectionBody);
     BoundProjectionBody bindProjectionBody(const parser::ProjectionBody& projectionBody,
-        const expression_vector& projectionExprs, const std::vector<std::string>& aliases);
+        const BoundProjectionList& projectionList);
 
     expression_vector bindOrderByExpressions(
         const std::vector<std::unique_ptr<parser::ParsedExpression>>& parsedExprs);
@@ -328,6 +335,7 @@ public:
     static bool reservedInPropertyLookup(const std::string& name);
 
     void addToScope(const std::vector<std::string>& names, const expression_vector& exprs);
+    void addOrderByNamesToScope(const BoundProjectionList& projectionList);
     LBUG_API void addToScope(const std::string& name, std::shared_ptr<Expression> expr);
     BinderScope saveScope() const;
     void restoreScope(BinderScope prevScope);

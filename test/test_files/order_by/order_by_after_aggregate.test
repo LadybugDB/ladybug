@@ -1,0 +1,82 @@
+-DATASET CSV empty
+
+--
+
+-CASE OrderByTextOfAliasedItem
+-STATEMENT UNWIND [1, 2, 3, 4, 5] AS x WITH x % 2 AS d RETURN d AS dd, count(*) AS c ORDER BY count(*)
+-CHECK_ORDER
+---- 2
+0|2
+1|3
+-STATEMENT UNWIND [1, 2, 3, 4, 5] AS x WITH x % 2 AS d RETURN d AS dd, count(*) AS c ORDER BY count(*) DESC
+-CHECK_ORDER
+---- 2
+1|3
+0|2
+-STATEMENT UNWIND [3, 1, 2] AS x RETURN x + 10 AS k, count(*) AS c ORDER BY x + 10 DESC
+-CHECK_ORDER
+---- 3
+13|1
+12|1
+11|1
+-STATEMENT UNWIND [3, 1, 2, 3] AS x RETURN DISTINCT x AS y ORDER BY x
+-CHECK_ORDER
+---- 3
+1
+2
+3
+# An alias takes precedence over another item's text.
+-STATEMENT UNWIND [1, 2, 3] AS x RETURN x AS y, -x AS x, count(*) AS c ORDER BY x DESC
+-CHECK_ORDER
+---- 3
+1|-1|1
+2|-2|1
+3|-3|1
+-STATEMENT UNWIND [3, 1, 2] AS x WITH x + 10 AS k, count(*) AS c ORDER BY x + 10 DESC LIMIT 2 RETURN k, c
+---- 2
+13|1
+12|1
+
+-CASE OrderByTextReadingAProjectionAlias
+# In ORDER BY, c is the alias count(*), so c + 1 is count(*) + 1, not the item k.
+-STATEMENT UNWIND [1, 1, 2] AS c RETURN c + 1 AS k, count(*) AS c ORDER BY c + 1
+-CHECK_ORDER
+---- 2
+3|1
+2|2
+
+-CASE OrderByWithStarProjection
+-STATEMENT UNWIND [1, 2] AS x UNWIND [3, 4] AS y RETURN *, count(*) AS c ORDER BY c
+---- 4
+1|3|1
+1|4|1
+2|3|1
+2|4|1
+-STATEMENT UNWIND [1, 2] AS x UNWIND [3, 4] AS y RETURN *, count(*) AS c ORDER BY count(*), x DESC, y DESC
+-CHECK_ORDER
+---- 4
+2|4|1
+2|3|1
+1|4|1
+1|3|1
+-STATEMENT UNWIND [2, 1] AS x UNWIND [3] AS y RETURN DISTINCT * ORDER BY x
+-CHECK_ORDER
+---- 2
+1|3
+2|3
+
+-CASE OrderByPropertyTextOfAliasedItem
+-STATEMENT CREATE NODE TABLE P(name STRING, PRIMARY KEY(name))
+---- ok
+-STATEMENT CREATE (:P {name: 'b'}), (:P {name: 'a'})
+---- ok
+-STATEMENT MATCH (a:P) RETURN a.name AS n, count(*) AS c ORDER BY a.name
+-CHECK_ORDER
+---- 2
+a|1
+b|1
+-STATEMENT MATCH (a:P) RETURN DISTINCT a.* ORDER BY a.name DESC
+-CHECK_ORDER
+---- 2
+b
+a
