@@ -136,3 +136,35 @@ True
 20100422123057947
 20101115072349104
 20111215023443085
+
+-CASE RelCountSubtractsDeletionsBehindCSRGaps
+-STATEMENT CALL auto_checkpoint=false
+---- ok
+-STATEMENT CREATE NODE TABLE P(id INT64, PRIMARY KEY(id));
+---- ok
+-STATEMENT CREATE REL TABLE K(FROM P TO P);
+---- ok
+-STATEMENT UNWIND range(0, 131000) AS i CREATE (:P {id: i});
+---- ok
+-STATEMENT MATCH (a:P {id: 0}), (b:P) WHERE b.id >= 1 AND b.id <= 1000 CREATE (a)-[:K]->(b);
+---- ok
+-STATEMENT MATCH (a:P {id: 0}), (b:P {id: 131000}) CREATE (a)-[:K]->(b);
+---- ok
+-STATEMENT MATCH (a:P {id: 131000}), (b:P {id: 131000}) CREATE (a)-[:K]->(b);
+---- ok
+-STATEMENT CHECKPOINT;
+---- ok
+# The in-edges of node 131000 sit behind the gaps the checkpoint left after nodes 1..1000.
+-STATEMENT MATCH (a:P)-[k:K]->(b:P {id: 131000}) DELETE k;
+---- ok
+-STATEMENT MATCH (a:P)-[k:K]->(b:P) WHERE a.id >= 0 RETURN count(*);
+---- 1
+1000
+-STATEMENT MATCH ()-[k:K]->() RETURN count(*);
+---- 1
+1000
+-STATEMENT CHECKPOINT;
+---- ok
+-STATEMENT MATCH ()-[k:K]->() RETURN count(*);
+---- 1
+1000
