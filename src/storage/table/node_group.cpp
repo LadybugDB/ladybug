@@ -266,17 +266,11 @@ NodeGroupScanResult NodeGroup::scan(const Transaction* transaction, TableScanSta
         numRowsToScan);
     const auto startRow = nodeGroupScanState.nextRowToScan;
     nodeGroupScanState.nextRowToScan += numRowsToScan;
-    if (enableSemiMask) {
-        // The chunk scan above resets the selection (visibility/zonemap), discarding the
-        // pre-check's subset. Intersect the mask with the surviving rows so only masked
-        // rows are materialized instead of the whole chunk. Like the pre-check above,
-        // report an empty chunk as {nextRow, 0} (not EMPTY) so the caller keeps scanning
-        // the rest of the node group.
-        NodeTable::applySemiMaskFilter(state, startNodeOffset, numRowsToScan,
-            state.outState->getSelVectorUnsafe());
-        if (state.outState->getSelVector().getSelSize() == 0) {
-            return NodeGroupScanResult{nodeGroupScanState.nextRowToScan, 0};
-        }
+    // The chunk scan applied the mask to the visible rows. Like the pre-check above, report an
+    // empty chunk as {nextRow, 0} (not EMPTY) so the caller keeps scanning the rest of the
+    // node group.
+    if (enableSemiMask && state.outState->getSelVector().getSelSize() == 0) {
+        return NodeGroupScanResult{nodeGroupScanState.nextRowToScan, 0};
     }
     return NodeGroupScanResult{startRow, numRowsToScan};
 }
@@ -308,12 +302,10 @@ NodeGroupScanResult NodeGroup::scan(Transaction* transaction, TableScanState& st
         scanResult = scanInternal(chunkedGroups.lock(), transaction, state, startOffsetInGroup,
             numRowsToScan);
     }
-    // scanInternal resets the selection (visibility/zonemap), clobbering the pre-check's
-    // subset even when outputVectors is empty (the anchor sel vector is rewritten before
-    // the column loop). Intersect the mask with the surviving rows in all cases so only
-    // masked rows are reported. Only the actually scanned prefix (scanResult.numRows) is
-    // valid: the requested range may span chunked groups while a single call scans the
-    // first one.
+    // The chunk scan applies the mask itself, but scanInternal can return before reaching it
+    // (rows before the group's first row), leaving the pre-check's selection over the whole
+    // requested range. Only the actually scanned prefix (scanResult.numRows) is valid: the
+    // requested range may span chunked groups while a single call scans the first one.
     if (enableSemiMask) {
         NodeTable::applySemiMaskFilter(state, startNodeOffset, scanResult.numRows,
             state.outState->getSelVectorUnsafe());

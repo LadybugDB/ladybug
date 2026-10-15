@@ -9,6 +9,7 @@
 #include "storage/buffer_manager/spiller.h"
 #include "storage/enums/residency_state.h"
 #include "storage/page_allocator.h"
+#include "storage/storage_utils.h"
 #include "storage/table/column.h"
 #include "storage/table/column_chunk.h"
 #include "storage/table/column_chunk_data.h"
@@ -322,6 +323,19 @@ void ChunkedNodeGroup::scan(const Transaction* transaction, const TableScanState
         anchorSelVector.setToUnfiltered(numRowsToScan);
     }
 
+    // A filtered scan reads string and list columns one row at a time, so narrowing the selection
+    // to the semi-mask before reading the columns pays off only when the mask drops most rows. A
+    // denser mask is applied after the columns are read.
+    const bool semiMaskEnabled = scanState.source == TableScanSource::COMMITTED &&
+                                 scanState.semiMask != nullptr && scanState.semiMask->isEnabled();
+    const bool maskBeforeColumns = semiMaskEnabled && scanState.semiMask->getNumMaskedNodes() * 16 <
+                                                          scanState.semiMask->getMaxOffset();
+    const auto startNodeOffset = StorageUtils::getStartOffsetOfNodeGroup(scanState.nodeGroupIdx) +
+                                 startRowIdx + rowIdxInGroup;
+    if (maskBeforeColumns && anchorSelVector.getSelSize() > 0) {
+        NodeTable::applySemiMaskFilter(scanState, startNodeOffset, numRowsToScan, anchorSelVector);
+    }
+
     if (anchorSelVector.getSelSize() > 0) {
         for (auto i = 0u; i < scanState.columnIDs.size(); i++) {
             const auto columnID = scanState.columnIDs[i];
@@ -340,6 +354,9 @@ void ChunkedNodeGroup::scan(const Transaction* transaction, const TableScanState
             chunks[columnID]->scan(transaction, nodeGroupScanState.chunkStates[i],
                 *scanState.outputVectors[i], rowIdxInGroup, numRowsToScan);
         }
+    }
+    if (semiMaskEnabled && !maskBeforeColumns && anchorSelVector.getSelSize() > 0) {
+        NodeTable::applySemiMaskFilter(scanState, startNodeOffset, numRowsToScan, anchorSelVector);
     }
 }
 
