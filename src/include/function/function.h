@@ -61,17 +61,61 @@ using scalar_bind_func =
 struct LBUG_API Function {
     std::string name;
     std::vector<common::LogicalTypeID> parameterTypeIDs;
+    // Optional semantic names for parameters (e.g. {"graph_name"} for GDS functions). When set
+    // and sized to match parameterTypeIDs, signatures render as "(graph_name STRING)" instead
+    // of the bare "(STRING)".
+    std::vector<std::string> parameterNames;
+    // Optional full parameter types for display (e.g. LIST(INT64), which a bare
+    // LogicalTypeID cannot express). When set and sized to match parameterTypeIDs,
+    // signatures render these instead of the bare IDs. Matching and implicit
+    // casting continue to use parameterTypeIDs, so this is display-only.
+    std::vector<common::LogicalType> parameterTypes;
     bool isReadOnly = true;
 
     Function() : isReadOnly{true} {};
     Function(std::string name, std::vector<common::LogicalTypeID> parameterTypeIDs)
         : name{std::move(name)}, parameterTypeIDs{std::move(parameterTypeIDs)} {}
-    Function(const Function&) = default;
+    // LogicalType is explicitly-copyable only, so deep-copy parameterTypes here.
+    Function(const Function& other)
+        : name{other.name}, parameterTypeIDs{other.parameterTypeIDs},
+          parameterNames{other.parameterNames},
+          parameterTypes{common::LogicalType::copy(other.parameterTypes)},
+          isReadOnly{other.isReadOnly} {}
+    Function& operator=(const Function& other) {
+        if (this != &other) {
+            name = other.name;
+            parameterTypeIDs = other.parameterTypeIDs;
+            parameterNames = other.parameterNames;
+            parameterTypes = common::LogicalType::copy(other.parameterTypes);
+            isReadOnly = other.isReadOnly;
+        }
+        return *this;
+    }
+    Function(Function&&) = default;
+    Function& operator=(Function&&) = default;
 
     virtual ~Function() = default;
 
     virtual std::string signatureToString() const {
-        return common::LogicalTypeUtils::toString(parameterTypeIDs);
+        const bool hasNames =
+            !parameterNames.empty() && parameterNames.size() == parameterTypeIDs.size();
+        const bool hasTypes =
+            !parameterTypes.empty() && parameterTypes.size() == parameterTypeIDs.size();
+        if (!hasNames && !hasTypes) {
+            return common::LogicalTypeUtils::toString(parameterTypeIDs);
+        }
+        std::string result = "(";
+        for (auto i = 0u; i < parameterTypeIDs.size(); ++i) {
+            if (i > 0) {
+                result += ",";
+            }
+            if (hasNames) {
+                result += parameterNames[i] + " ";
+            }
+            result += hasTypes ? parameterTypes[i].toString() :
+                                 common::LogicalTypeUtils::toString(parameterTypeIDs[i]);
+        }
+        return result + ")";
     }
 
     template<class TARGET>

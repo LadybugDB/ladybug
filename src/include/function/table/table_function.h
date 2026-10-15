@@ -171,9 +171,7 @@ struct LBUG_API TableFunction final : Function {
     TableFunction& operator=(const TableFunction& other) = default;
     DEFAULT_BOTH_MOVE(TableFunction);
 
-    std::string signatureToString() const override {
-        return common::LogicalTypeUtils::toString(parameterTypeIDs);
-    }
+    std::string signatureToString() const override { return Function::signatureToString(); }
 
     std::unique_ptr<TableFunction> copy() const { return std::make_unique<TableFunction>(*this); }
 
