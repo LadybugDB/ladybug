@@ -401,13 +401,17 @@ void DiskArrayInternal::WriteIterator::pushBack(PageAllocator& pageAllocator,
     auto [apPageIdx, isNewlyAdded] =
         diskArray.getAPPageIdxAndAddAPToPIPIfNecessaryForWriteTrxNoLock(pageAllocator, transaction,
             apCursor.pageIdx);
-    diskArray.lastAPPageIdx = apPageIdx;
-    // Used to calculate the number of APs, so it must be updated after the PIPs are.
-    diskArray.headerForWriteTrx.numElements++;
+    // Pin before publishing the new element: getPage() may throw (e.g. FlakyBM buffer-pool
+    // exhaustion during checkpoint). Publishing header/lastAPPageIdx first would count a
+    // failed element and leave lastAPPageIdx pointing at a leaked page. Global rollback
+    // restores headers/PIPs, but the iterator itself must stay consistent on failure.
     if (isNewlyAdded || shadowPageAndFrame.originalPage == INVALID_PAGE_IDX ||
         apCursor.pageIdx != oldPageIdx) {
         getPage(apPageIdx, isNewlyAdded);
     }
+    diskArray.lastAPPageIdx = apPageIdx;
+    // Used to calculate the number of APs, so it must be updated after the PIPs are.
+    diskArray.headerForWriteTrx.numElements++;
     memcpy(operator*().data(), val.data(), val.size());
 }
 
@@ -416,10 +420,17 @@ void DiskArrayInternal::WriteIterator::unpin() {
         // unpin current page
         diskArray.shadowFile->getShadowingFH().unpinPage(shadowPageAndFrame.shadowPage);
         shadowPageAndFrame.shadowPage = INVALID_PAGE_IDX;
+        // Clear the data-page id as well: after unpinning the shadow page this iterator holds
+        // nothing. Leaving the stale originalPage behind makes a later getPage() failure (or
+        // the destructor) take the direct-pin branch and call setLockedPageDirty() on a data
+        // page that was never pinned.
+        shadowPageAndFrame.originalPage = INVALID_PAGE_IDX;
+        shadowPageAndFrame.frame = nullptr;
     } else if (shadowPageAndFrame.originalPage != INVALID_PAGE_IDX) {
         diskArray.fileHandle.setLockedPageDirty(shadowPageAndFrame.originalPage);
         diskArray.fileHandle.unpinPage(shadowPageAndFrame.originalPage);
         shadowPageAndFrame.originalPage = INVALID_PAGE_IDX;
+        shadowPageAndFrame.frame = nullptr;
     }
 }
 
