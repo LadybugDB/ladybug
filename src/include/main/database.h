@@ -203,6 +203,7 @@ private:
     std::unique_ptr<DBConfig> dbConfig;
     std::unique_ptr<common::VirtualFileSystem> vfs;
     std::unique_ptr<storage::BufferManager> bufferManager;
+    // After bufferManager, so it is destroyed first: ~MemoryManager returns kept buffers to it.
     std::unique_ptr<storage::MemoryManager> memoryManager;
     std::unique_ptr<processor::QueryProcessor> queryProcessor;
     std::unique_ptr<catalog::Catalog> catalog;

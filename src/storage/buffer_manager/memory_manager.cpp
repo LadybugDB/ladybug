@@ -161,6 +161,8 @@ bool MemoryManager::keepForReuse(std::span<uint8_t> buffer) {
     if (reusableBuffers.size() >= maxReusableBuffers) {
         return false;
     }
+    // The constructor reserved room for the most buffers getMaxReusableBuffers allows.
+    DASSERT(reusableBuffers.size() < reusableBuffers.capacity());
     reusableBuffers.push_back(buffer.data());
     return true;
 }
