@@ -224,6 +224,9 @@ if(MSVC)
     # Windows target architecture macros are set above from the detected compiler target.
     # Non-english windows system may use other encodings other than utf-8 (e.g. Chinese use GBK).
     add_compile_options("/utf-8")
+    # Large test objects (e.g. test/transaction/checkpoint_test.cpp) exceed the
+    # default 64k section limit; /bigobj raises it (fatal error C1128 otherwise).
+    add_compile_options("/bigobj")
     # Enables support for custom hardware exception handling
     add_compile_options("/EHa")
     # Reduces the size of the static library by roughly 1/2
