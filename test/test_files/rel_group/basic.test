@@ -125,16 +125,16 @@ likes|personB|5|Dan
 -CASE DMLCreateWithSRCandDEST
 -STATEMENT CREATE (a);
 ---- error
-Binder exception: Create node a with multiple node labels is not supported.
+Binder exception: Create node a requires exactly one label: use CREATE (a:MyLabel {...}).
 -STATEMENT CREATE (a {ID:1145})-[:likes]->(b {ID:1919});
 ---- error
-Binder exception: Create node a with multiple node labels is not supported.
+Binder exception: Create node a requires exactly one label: use CREATE (a:MyLabel {...}).
 -STATEMENT CREATE (a:personA {ID:1145})-[:likes]->(b {ID:1919});
 ---- error
-Binder exception: Create node b with multiple node labels is not supported.
+Binder exception: Create node b requires exactly one label: use CREATE (b:MyLabel {...}).
 -STATEMENT CREATE (a {ID:1145})-[:likes]->(b:personB {ID:1919});
 ---- error
-Binder exception: Create node a with multiple node labels is not supported.
+Binder exception: Create node a requires exactly one label: use CREATE (a:MyLabel {...}).
 -STATEMENT CREATE (a:personA {ID:1145})-[:likes]->(b:personB {ID:1919});
 ---- ok
 -STATEMENT MATCH (a)-[e:likes]-(b) WHERE b.ID = 1919 RETURN a.ID,b.ID,label(a),label(b),label(e);
