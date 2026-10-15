@@ -1212,8 +1212,12 @@ void NodeTable::applySemiMaskFilter(const TableScanState& state, row_idx_t start
     if (!state.semiMask || !state.semiMask->isEnabled()) {
         return;
     }
-    const auto endNodeOffset = startOffset + numRowsToScan;
-    const auto& arr = state.semiMask->range(startOffset, endNodeOffset);
+    applySemiMaskFilter(state.semiMask->range(startOffset, startOffset + numRowsToScan),
+        startOffset, selVector);
+}
+
+void NodeTable::applySemiMaskFilter(const offset_vec_t& arr, row_idx_t startOffset,
+    SelectionVector& selVector) {
     if (arr.empty()) {
         selVector.setSelSize(0);
     } else {
