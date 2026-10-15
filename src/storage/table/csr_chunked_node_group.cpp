@@ -408,7 +408,10 @@ offset_t InMemChunkedCSRHeader::getStartCSROffset(offset_t nodeOffset) const {
     if (randomLookup) {
         return offset->getValue<offset_t>(0);
     }
-    return offset->getValue<offset_t>(nodeOffset >= numValues ? (numValues - 1) : nodeOffset - 1);
+    // A header decoded for a span is only read inside it.
+    DASSERT(indexBase == 0 || (nodeOffset > indexBase && nodeOffset - 1 - indexBase < numValues));
+    const auto stored = nodeOffset - 1 - indexBase;
+    return offset->getValue<offset_t>(stored >= numValues ? (numValues - 1) : stored);
 }
 
 offset_t InMemChunkedCSRHeader::getEndCSROffset(offset_t nodeOffset) const {
@@ -421,12 +424,18 @@ offset_t InMemChunkedCSRHeader::getEndCSROffset(offset_t nodeOffset) const {
     if (randomLookup) {
         return offset->getValue<offset_t>(nodeOffset == 0 ? 0 : 1);
     }
-    return offset->getValue<offset_t>(nodeOffset >= numValues ? (numValues - 1) : nodeOffset);
+    DASSERT(indexBase == 0 || nodeOffset - indexBase < numValues);
+    const auto stored = nodeOffset - indexBase;
+    return offset->getValue<offset_t>(stored >= numValues ? (numValues - 1) : stored);
 }
 
 length_t InMemChunkedCSRHeader::getCSRLength(offset_t nodeOffset) const {
-    const auto offset = randomLookup ? 0 : nodeOffset;
-    return offset >= length->getNumValues() ? 0 : length->getValue<length_t>(offset);
+    if (randomLookup) {
+        return length->getNumValues() == 0 ? 0 : length->getValue<length_t>(0);
+    }
+    DASSERT(indexBase == 0 || nodeOffset - indexBase < length->getNumValues());
+    const auto stored = nodeOffset - indexBase;
+    return stored >= length->getNumValues() ? 0 : length->getValue<length_t>(stored);
 }
 
 length_t InMemChunkedCSRHeader::getGapSize(offset_t nodeOffset) const {

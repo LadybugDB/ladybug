@@ -60,6 +60,8 @@ struct LBUG_API InMemChunkedCSRHeader {
     std::unique_ptr<ColumnChunkData> offset;
     std::unique_ptr<ColumnChunkData> length;
     bool randomLookup = false;
+    // Logical header index stored at position 0. A full-group header uses 0.
+    common::offset_t indexBase = 0;
 
     InMemChunkedCSRHeader(MemoryManager& memoryManager, bool enableCompression, uint64_t capacity);
     InMemChunkedCSRHeader(std::unique_ptr<ColumnChunkData> offset,

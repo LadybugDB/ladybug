@@ -145,6 +145,9 @@ struct CSRNodeGroupScanState final : NodeGroupScanState {
     // The number of rows (i.e., rels) that have been scanned so far in current node group.
     common::row_idx_t numCachedRows;
     common::row_idx_t nextCachedRowToScan;
+    // Entries and spans decoded so far for the current node group's header.
+    common::offset_t numHeaderEntriesDecoded = 0;
+    common::idx_t numHeaderSpansDecoded = 0;
 
     // States at the csr list level. Cached during scan over a single csr list.
     NodeCSRIndex inMemCSRList;
