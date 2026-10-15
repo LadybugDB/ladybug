@@ -239,6 +239,15 @@ public:
     }
     void resetVersion() { lastCheckpointVersion = version.load(std::memory_order_relaxed); }
     void resetVersion(uint64_t checkpointedVersion) { lastCheckpointVersion = checkpointedVersion; }
+    // Bumped when a checkpoint renumbers column IDs: no definition changes, so version stays.
+    void incrementColumnIDsVersion() { columnIDsVersion.fetch_add(1, std::memory_order_relaxed); }
+    // Changes whenever a bound plan may be stale: after a catalog change or a renumbering.
+    // The sum is exact, not a hash: both counters only ever increase (resetVersion touches
+    // lastCheckpointVersion only), so it changes iff either counter does and equality implies
+    // both are unchanged.
+    uint64_t getPlanVersion() const {
+        return getVersion() + columnIDsVersion.load(std::memory_order_relaxed);
+    }
 
     void setCatalogName(const std::string& name) { catalogName = name; }
     std::string getCatalogName() const { return catalogName; }
@@ -308,6 +317,7 @@ private:
     // reset to lastCheckpointVersion at the end of each checkpoint
     std::atomic<uint64_t> version;
     uint64_t lastCheckpointVersion = 0;
+    std::atomic<uint64_t> columnIDsVersion{0};
     std::string catalogName;
     std::unique_ptr<storage::StorageManager> storageManager;
     // Main catalog for function lookup (nullptr for the main catalog itself).

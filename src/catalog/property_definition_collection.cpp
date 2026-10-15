@@ -45,7 +45,7 @@ column_id_t PropertyDefinitionCollection::getColumnID(property_id_t propertyID) 
     return columnIDs.at(propertyID);
 }
 
-void PropertyDefinitionCollection::vacuumColumnIDs(column_id_t nextColumnID) {
+bool PropertyDefinitionCollection::vacuumColumnIDs(column_id_t nextColumnID) {
     std::unique_lock lck{*columnIDsMtx};
     // Checkpoint calls vacuum unconditionally, even when no columns were dropped.
     // Avoid mutating columnIDs when already compact so concurrent planning reads
@@ -62,7 +62,7 @@ void PropertyDefinitionCollection::vacuumColumnIDs(column_id_t nextColumnID) {
                 }
             }
             if (alreadyCompact && this->nextColumnID == expected) {
-                return;
+                return false;
             }
         }
     }
@@ -71,6 +71,7 @@ void PropertyDefinitionCollection::vacuumColumnIDs(column_id_t nextColumnID) {
     for (auto& [propertyID, definition] : definitions) {
         columnIDs.emplace(propertyID, this->nextColumnID++);
     }
+    return true;
 }
 
 void PropertyDefinitionCollection::add(const PropertyDefinition& definition) {

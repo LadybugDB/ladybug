@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "api_test/api_test.h"
+#include "catalog/catalog.h"
 #include "common/vector/value_vector.h"
 #include "function/gds/gds.h"
 #include "processor/result/factorized_table.h"
@@ -1275,4 +1276,52 @@ TEST_F(ApiTest, ConcurrentCheckpointRead1160) {
         t.join();
     }
     EXPECT_EQ(0, failures.load());
+}
+
+static std::unordered_map<std::string, std::unique_ptr<Value>> paramMap(const std::string& name,
+    int64_t value) {
+    std::unordered_map<std::string, std::unique_ptr<Value>> params;
+    params[name] = std::make_unique<Value>(value);
+    return params;
+}
+
+TEST_F(ApiTest, PreparedNodeScanAfterCheckpointRenumbersColumns) {
+    // CHECKPOINT vacuums the dropped column, so score moves from column 2 to column 1.
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE P1220(id INT64 PRIMARY KEY)")->isSuccess());
+    ASSERT_TRUE(conn->query("ALTER TABLE P1220 ADD tmp INT64")->isSuccess());
+    ASSERT_TRUE(conn->query("ALTER TABLE P1220 DROP tmp")->isSuccess());
+    ASSERT_TRUE(conn->query("UNWIND range(1, 5) AS i CREATE (:P1220 {id: i})")->isSuccess());
+    ASSERT_TRUE(conn->query("ALTER TABLE P1220 ADD score INT64 DEFAULT 7")->isSuccess());
+    auto count = conn->prepareWithParams("MATCH (p:P1220) WHERE p.score = $s RETURN count(*)",
+        paramMap("s", 7));
+    ASSERT_TRUE(count->isSuccess()) << count->getErrorMessage();
+    auto* catalog = database->getCatalog();
+    const auto planVersion = catalog->getPlanVersion();
+    for (auto i = 0; i < 3; i++) {
+        auto result = conn->executeWithParams(count.get(), paramMap("s", 7));
+        ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+        ASSERT_EQ(std::vector<std::string>{"5"}, TestHelper::convertResultToString(*result));
+        ASSERT_TRUE(conn->query("CHECKPOINT")->isSuccess());
+        // Only the first CHECKPOINT renumbers; later ones must not force a rebind.
+        ASSERT_EQ(planVersion + 1, catalog->getPlanVersion());
+    }
+}
+
+TEST_F(ApiTest, PreparedRelScanAfterCheckpointRenumbersColumns) {
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE N1220(id INT64 PRIMARY KEY)")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE REL TABLE R1220(FROM N1220 TO N1220, tmp INT64)")->isSuccess());
+    ASSERT_TRUE(conn->query("ALTER TABLE R1220 DROP tmp")->isSuccess());
+    ASSERT_TRUE(conn->query("UNWIND range(1, 5) AS i CREATE (:N1220 {id: i})")->isSuccess());
+    ASSERT_TRUE(conn->query("MATCH (a:N1220), (b:N1220) WHERE a.id = b.id CREATE (a)-[:R1220]->(b)")
+                    ->isSuccess());
+    ASSERT_TRUE(conn->query("ALTER TABLE R1220 ADD w INT64 DEFAULT 7")->isSuccess());
+    auto count = conn->prepareWithParams(
+        "MATCH (:N1220)-[r:R1220]->(:N1220) WHERE r.w = $w RETURN count(*)", paramMap("w", 7));
+    ASSERT_TRUE(count->isSuccess()) << count->getErrorMessage();
+    for (auto i = 0; i < 2; i++) {
+        auto result = conn->executeWithParams(count.get(), paramMap("w", 7));
+        ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+        ASSERT_EQ(std::vector<std::string>{"5"}, TestHelper::convertResultToString(*result));
+        ASSERT_TRUE(conn->query("CHECKPOINT")->isSuccess());
+    }
 }

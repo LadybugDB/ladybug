@@ -11,6 +11,7 @@
 #include "common/type_utils.h"
 #include "common/types/types.h"
 #include "main/client_context.h"
+#include "main/database.h"
 #include "storage/local_storage/local_node_table.h"
 #include "storage/local_storage/local_storage.h"
 #include "storage/local_storage/local_table.h"
@@ -807,7 +808,9 @@ bool NodeTable::checkpoint(main::ClientContext* context, TableCatalogEntry* tabl
             checkpointColumns.push_back(std::move(columns[columnID]));
         }
         columns = std::move(checkpointColumns);
-        tableEntry->vacuumColumnIDs(0 /*nextColumnID*/);
+        if (tableEntry->vacuumColumnIDs(0 /*nextColumnID*/)) {
+            context->getDatabase()->getCatalog()->incrementColumnIDsVersion();
+        }
     }
     lastCheckpointedEpoch = effectiveEpoch;
     return true;
