@@ -143,6 +143,9 @@ void Intersect::intersectLists(const std::vector<overflow_value_t>& listsToInter
     for (auto i = 0u; i < listsToIntersect.size() - 1; i++) {
         const auto& rightList = listsToIntersect[i + 1];
         DASSERT(rightList.numElements <= DEFAULT_VECTOR_CAPACITY);
+        if (rightList.numElements > alignedRightList.size()) {
+            alignedRightList.resize(rightList.numElements);
+        }
         intersectSelVectors[i + 1]->setToUnfiltered(rightList.numElements);
         if (rightList.numElements > 0) {
             memcpy(alignedRightList.data(), rightList.value,
