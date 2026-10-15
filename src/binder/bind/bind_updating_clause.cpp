@@ -186,6 +186,22 @@ void Binder::bindInsertNode(std::shared_ptr<NodeExpression> node,
         throw BinderException(
             "Create node " + node->toString() + " with empty node labels is not supported.");
     }
+    if (node->getOriginalLabels().empty() && node->isMultiLabeled()) {
+        // A bare identifier (e.g. CREATE (docs {id: 1})) parses as a variable name with zero
+        // labels and binds against every node table. With more than one table this used to
+        // fail with a misleading "multiple node labels" error even though no labels were
+        // written; require an explicit label instead. A single table keeps the legacy
+        // behavior of inserting into that table, which label-optional Cypher (e.g. the TCK
+        // suite, where bare CREATE creates an unlabeled node) depends on.
+        auto varName = node->getVariableName();
+        if (varName.empty()) {
+            throw BinderException("Create node requires exactly one label: use CREATE "
+                                  "(:MyLabel {...}).");
+        }
+        throw BinderException("Create node " + varName +
+                              " requires exactly one label: use CREATE (" + varName +
+                              ":MyLabel {...}).");
+    }
     if (node->isMultiLabeled()) {
         // A partitioned parent is resolved into its partition subgraphs for scanning. A write to
         // the parent therefore arrives here as a multi-labeled node whose entries are exactly the
