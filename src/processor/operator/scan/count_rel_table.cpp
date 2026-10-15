@@ -101,10 +101,11 @@ bool CountRelTable::getNextTuplesInternal(ExecutionContext* context) {
                 }
                 totalCount += groupRelCount;
 
-                // Subtract deletions from persistent data
+                // Deletions are recorded at CSR rows, which gaps can push past groupRelCount, so
+                // check every row; gap rows are never deleted.
                 if (persistentGroup->hasVersionInfo()) {
-                    auto numDeletions =
-                        persistentGroup->getNumDeletions(transaction, 0, groupRelCount);
+                    auto numDeletions = persistentGroup->getNumDeletions(transaction, 0,
+                        persistentGroup->getNumRows());
                     totalCount -= numDeletions;
                 }
             }
