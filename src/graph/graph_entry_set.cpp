@@ -17,7 +17,7 @@ void GraphEntrySet::validateGraphNotExist(const std::string& name) const {
 
 void GraphEntrySet::validateGraphExist(const std::string& name) const {
     if (!hasGraph(name)) {
-        throw RuntimeException(std::format("Projected graph {} does not exists.", name));
+        throw RuntimeException(std::format("Projected graph {} does not exist.", name));
     }
 }
 
