@@ -860,6 +860,9 @@ TEST_F(CopyTest, GracefulBMExceptionHandlingManyThreads) {
     // This test runs too slowly with TSAN enabled since it uses 32 threads and is already slow
     GTEST_SKIP();
 #endif
+#elif defined(__SANITIZE_THREAD__)
+    // GCC TSan: __has_feature is clang-only, so check the GCC sanitizer macro instead.
+    GTEST_SKIP();
 #endif
     systemConfig->maxNumThreads = 32;
     resetDB(TestHelper::DEFAULT_BUFFER_POOL_SIZE_FOR_TESTING);

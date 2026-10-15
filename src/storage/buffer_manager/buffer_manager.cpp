@@ -249,6 +249,28 @@ void BufferManager::optimisticRead(FileHandle& fileHandle, page_idx_t pageIdx,
         auto currStateAndVersion = pageState->getStateAndVersion();
         switch (PageState::getState(currStateAndVersion)) {
         case PageState::UNLOCKED: {
+#if BM_MALLOC
+            // Increment the reader count before reading the page pointer: tryEvictPage
+            // aborts when readerCount > 0, so this ordering (plus the version
+            // re-check) prevents it from freeing the page between our pointer read
+            // and use. Reading the pointer first races with resetToEvicted's
+            // page.reset() and trips TSan.
+            pageState->addReader();
+            if (pageState->getStateAndVersion() != currStateAndVersion) {
+                pageState->removeReader();
+                continue;
+            }
+            uint8_t* frame = getFrame(fileHandle, pageIdx);
+            if (frame == nullptr) {
+                pageState->removeReader();
+                continue;
+            }
+            func(frame);
+            pageState->removeReader();
+            if (pageState->getStateAndVersion() == currStateAndVersion) {
+                return;
+            }
+#else
             if (!try_func(func, getFrame(fileHandle, pageIdx), vmRegions,
                     fileHandle.getPageSizeClass(), pageState)) {
                 continue;
@@ -256,6 +278,7 @@ void BufferManager::optimisticRead(FileHandle& fileHandle, page_idx_t pageIdx,
             if (pageState->getStateAndVersion() == currStateAndVersion) {
                 return;
             }
+#endif
         } break;
         case PageState::MARKED: {
             // If the page is marked, we try to switch to unlocked.

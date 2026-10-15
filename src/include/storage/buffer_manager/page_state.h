@@ -26,7 +26,12 @@ public:
     static constexpr uint64_t MARKED = 2;
     static constexpr uint64_t EVICTED = 3;
 
-    PageState() { stateAndVersion.store(EVICTED << NUM_BITS_TO_SHIFT_FOR_STATE); }
+    PageState() {
+        stateAndVersion.store(EVICTED << NUM_BITS_TO_SHIFT_FOR_STATE);
+#if BM_MALLOC
+        readerCount.store(0);
+#endif
+    }
 
     uint64_t getState() const { return getState(stateAndVersion.load()); }
     static uint64_t getState(uint64_t stateAndVersion) {
@@ -87,10 +92,13 @@ public:
     uint64_t getStateAndVersion() const { return stateAndVersion.load(); }
 
     void resetToEvicted() {
-        stateAndVersion.store(updateStateAndIncrementVersion(stateAndVersion.load(), EVICTED));
 #if BM_MALLOC
+        // Clear the page while still holding LOCKED: storing EVICTED first would let
+        // another thread pin (EVICTED->LOCKED) and allocate a new page concurrently
+        // with this reset, racing on the unique_ptr and tripping TSan.
         page.reset();
 #endif
+        stateAndVersion.store(updateStateAndIncrementVersion(stateAndVersion.load(), EVICTED));
     }
 
 #if BM_MALLOC
