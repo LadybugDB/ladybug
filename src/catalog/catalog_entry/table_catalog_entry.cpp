@@ -82,8 +82,8 @@ column_id_t TableCatalogEntry::getMaxColumnID() const {
     return propertyCollection.getMaxColumnID();
 }
 
-void TableCatalogEntry::vacuumColumnIDs(column_id_t nextColumnID) {
-    propertyCollection.vacuumColumnIDs(nextColumnID);
+bool TableCatalogEntry::vacuumColumnIDs(column_id_t nextColumnID) {
+    return propertyCollection.vacuumColumnIDs(nextColumnID);
 }
 
 bool TableCatalogEntry::containsProperty(const std::string& propertyName) const {

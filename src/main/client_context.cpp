@@ -412,14 +412,14 @@ std::unique_ptr<QueryResult> ClientContext::executeWithParams(PreparedStatement*
     }
     // LCOV_EXCL_STOP
     auto cachedStatement = cachedPreparedStatementManager->getCachedStatement(name);
-    const auto currentCatalogVersion = localDatabase->getCatalog()->getVersion();
-    const bool catalogChanged = cachedStatement->catalogVersion != currentCatalogVersion;
+    const bool planStale =
+        cachedStatement->planVersion != localDatabase->getCatalog()->getPlanVersion();
     // Statements with parameters baked into a plan (e.g. parameter-valued SKIP/LIMIT
     // frozen to uint64_t) must rebind/replan on every execution instead of reusing any
     // cached plan (https://github.com/LadybugDB/ladybug/issues/985).
-    // Likewise, a catalog change (e.g. ALTER TABLE ADD) invalidates the bound logical
-    // plan (https://github.com/LadybugDB/ladybug/issues/1158).
-    if (useCachedPlan && !cachedStatement->hasBakedParameters && !catalogChanged) {
+    // Likewise, a catalog change (e.g. ALTER TABLE ADD) or a checkpoint that renumbered column
+    // IDs invalidates the bound logical plan (https://github.com/LadybugDB/ladybug/issues/1158).
+    if (useCachedPlan && !cachedStatement->hasBakedParameters && !planStale) {
         return executeNoLock(preparedStatement, cachedStatement, queryID, {}, true);
     }
     // rebind
@@ -427,7 +427,7 @@ std::unique_ptr<QueryResult> ClientContext::executeWithParams(PreparedStatement*
         prepareNoLock(cachedStatement->parsedStatement, false /*shouldCommitNewTransaction*/,
             preparedStatement->parameterMap);
     useInternalCatalogEntry_ = false;
-    if (catalogChanged && newPreparedStatement->isSuccess()) {
+    if (planStale && newPreparedStatement->isSuccess()) {
         // Refresh the manager entry so later executions reuse the rebound plan instead of
         // rebinding on every call. The physical-plan cache is cleared; executeNoLock below
         // rebuilds and repopulates it from the fresh logical plan.
@@ -436,7 +436,7 @@ std::unique_ptr<QueryResult> ClientContext::executeWithParams(PreparedStatement*
         cachedStatement->columnNames = std::move(newCachedStatement->columnNames);
         cachedStatement->boundParameters = std::move(newCachedStatement->boundParameters);
         cachedStatement->hasBakedParameters = newCachedStatement->hasBakedParameters;
-        cachedStatement->catalogVersion = newCachedStatement->catalogVersion;
+        cachedStatement->planVersion = newCachedStatement->planVersion;
         cachedStatement->physicalPlanCache.reset();
         cachedStatement->sinkResultSetDescriptors.clear();
         return executeNoLock(newPreparedStatement.get(), cachedStatement, queryID, {}, true);
@@ -610,7 +610,7 @@ ClientContext::PrepareResult ClientContext::prepareNoLock(
         preparedStatement->success = false;
         preparedStatement->errMsg = exception.what();
     }
-    cachedStatement->catalogVersion = localDatabase->getCatalog()->getVersion();
+    cachedStatement->planVersion = localDatabase->getCatalog()->getPlanVersion();
     prepareTimer.stop();
     preparedStatement->preparedSummary.compilingTime =
         parsedStatement->getParsingTime() + prepareTimer.getElapsedTimeMS();

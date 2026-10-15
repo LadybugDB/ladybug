@@ -431,7 +431,9 @@ bool StorageManager::checkpoint(main::ClientContext* context, const Catalog& cat
             hasChanges =
                 tables.at(info.oid)->checkpoint(context, entry, pageAllocator) || hasChanges;
         }
-        entry->vacuumColumnIDs(1);
+        if (entry->vacuumColumnIDs(1)) {
+            context->getDatabase()->getCatalog()->incrementColumnIDsVersion();
+        }
     }
     lck.unlock();
     reclaimDroppedIndexes();
@@ -494,7 +496,9 @@ bool StorageManager::checkpoint(main::ClientContext* context, const Catalog& cat
                              &snapshotTxn, watermark, retentionHorizon, openStartTSs) ||
                          hasChanges;
         }
-        entry->vacuumColumnIDs(1);
+        if (entry->vacuumColumnIDs(1)) {
+            context->getDatabase()->getCatalog()->incrementColumnIDsVersion();
+        }
     }
     lck.unlock();
     reclaimDroppedIndexes();

@@ -27,7 +27,8 @@ public:
     common::column_id_t getColumnID(const std::string& name) const;
     common::column_id_t getColumnID(common::property_id_t propertyID) const;
     common::property_id_t getPropertyID(const std::string& name) const;
-    void vacuumColumnIDs(common::column_id_t nextColumnID);
+    // Returns false if the column IDs were already compact and stay unchanged.
+    bool vacuumColumnIDs(common::column_id_t nextColumnID);
 
     void add(const binder::PropertyDefinition& definition);
     void drop(const std::string& name);
