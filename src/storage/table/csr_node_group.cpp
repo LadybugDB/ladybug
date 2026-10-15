@@ -21,6 +21,15 @@ using namespace lbug::transaction;
 namespace lbug {
 namespace storage {
 
+// Span decodes per node group before a scan decodes the group's whole CSR header. Each decode also
+// re-initializes the column scan states, so batches that keep missing the span are cheaper with
+// the whole header.
+static constexpr idx_t MAX_HEADER_SPANS_PER_GROUP = 16;
+// After the first decode in a group, a batch with more bound nodes that are not spread thinly over
+// their span decodes the whole header: such batches come from scans that walk the whole group,
+// where one decode costs less than a span per batch.
+static constexpr idx_t MAX_SPAN_BATCH_SIZE = DEFAULT_VECTOR_CAPACITY / 16;
+
 bool CSRNodeGroupScanState::tryScanCachedTuples(RelTableScanState& tableScanState) {
     if (numCachedRows == 0 ||
         tableScanState.currBoundNodeIdx >= tableScanState.cachedBoundNodeSelVector.getSelSize()) {
@@ -230,6 +239,36 @@ size_t CSRNodeGroup::getNumRetainedSnapshots() const {
     return retainedSnapshots.size();
 }
 
+static bool isWholeGroupHeader(const InMemChunkedCSRHeader& header, offset_t numGroupEntries) {
+    return header.indexBase == 0 && header.offset->getNumValues() == numGroupEntries;
+}
+
+// A node's list starts at the offset stored for the node before it, so a span of the header
+// covers the bound nodes when it holds that entry and the entry of the last bound node.
+static bool spanCoversBoundNodes(const InMemChunkedCSRHeader& header, offset_t minNode,
+    offset_t maxNode) {
+    const auto firstNeeded = minNode == 0 ? offset_t{0} : minNode - 1;
+    return header.indexBase <= firstNeeded &&
+           maxNode < header.indexBase + header.offset->getNumValues();
+}
+
+static std::pair<offset_t, offset_t> boundNodeOffsetRange(const RelTableScanState& relScanState) {
+    offset_t minNode = StorageConfig::NODE_GROUP_SIZE;
+    offset_t maxNode = 0;
+    const auto& boundSel = relScanState.cachedBoundNodeSelVector;
+    for (sel_t i = 0; i < boundSel.getSelSize(); i++) {
+        const auto nodeOffset = relScanState.nodeIDVector->readNodeOffset(boundSel[i]);
+        const auto offsetInGroup = nodeOffset % StorageConfig::NODE_GROUP_SIZE;
+        if (offsetInGroup < minNode) {
+            minNode = offsetInGroup;
+        }
+        if (offsetInGroup > maxNode) {
+            maxNode = offsetInGroup;
+        }
+    }
+    return {minNode, maxNode};
+}
+
 void CSRNodeGroup::initializeScanState(const Transaction* transaction,
     TableScanState& state) const {
     auto& relScanState = state.cast<RelTableScanState>();
@@ -245,12 +284,29 @@ void CSRNodeGroup::initializeScanState(const Transaction* transaction,
             captureRoutedScanPin(lock, transaction, nodeGroupScanState.pin);
         }
         if (nodeGroupScanState.pin.persistent) {
+            nodeGroupScanState.numHeaderEntriesDecoded = 0;
+            nodeGroupScanState.numHeaderSpansDecoded = 0;
             initScanForCommittedPersistent(transaction, relScanState, nodeGroupScanState);
         }
     } else if (relScanState.randomLookup && nodeGroupScanState.pin.persistent) {
         // Same node group, new bound node: only the cached CSR header entry is stale. Read it
         // from the group this scan already pinned.
         initScanForCommittedPersistent(transaction, relScanState, nodeGroupScanState);
+    } else if (nodeGroupScanState.pin.persistent &&
+               relScanState.cachedBoundNodeSelVector.getSelSize() > 0) {
+        // A later batch of bound nodes can fall outside the header span decoded for an earlier
+        // one; decode again for it.
+        const auto numGroupEntries = nodeGroupScanState.pin.persistent->cast<ChunkedCSRNodeGroup>()
+                                         .getCSRHeader()
+                                         .offset->getNumValues();
+        const auto& header = *nodeGroupScanState.header;
+        if (!isWholeGroupHeader(header, numGroupEntries)) {
+            const auto [minNode, maxNode] = boundNodeOffsetRange(relScanState);
+            const bool covered = spanCoversBoundNodes(header, minNode, maxNode);
+            if (!covered) {
+                initScanForCommittedPersistent(transaction, relScanState, nodeGroupScanState);
+            }
+        }
     }
     // Switch to a new Vector of bound nodes (i.e., new csr lists) in the node group.
     // Use the pin, not the live group: a checkpoint may have replaced it since this scan
@@ -292,6 +348,7 @@ void CSRNodeGroup::initScanForCommittedPersistent(const Transaction* transaction
         chunk.initializeScanState(nodeGroupScanState.chunkStates[i], relScanState.columns[i]);
     }
     DASSERT(csrHeader.offset->getNumValues() == csrHeader.length->getNumValues());
+    nodeGroupScanState.header->indexBase = 0;
     if (relScanState.randomLookup) {
         auto pos = relScanState.nodeIDVector->state->getSelVector()[0];
         auto nodeOffset = relScanState.nodeIDVector->readNodeOffset(pos);
@@ -302,13 +359,43 @@ void CSRNodeGroup::initScanForCommittedPersistent(const Transaction* transaction
         csrHeader.length->scanCommitted<ResidencyState::ON_DISK>(transaction, lengthState,
             *nodeGroupScanState.header->length, offsetInGroup, 1);
     } else {
-        auto numBoundNodes = csrHeader.offset->getNumValues();
-        csrHeader.offset->scanCommitted<ResidencyState::ON_DISK>(transaction, offsetState,
-            *nodeGroupScanState.header->offset);
-        csrHeader.length->scanCommitted<ResidencyState::ON_DISK>(transaction, lengthState,
-            *nodeGroupScanState.header->length);
-        nodeGroupScanState.numTotalRows =
-            nodeGroupScanState.header->getStartCSROffset(numBoundNodes);
+        const auto numBoundNodes = csrHeader.offset->getNumValues();
+        const auto numBatchNodes = relScanState.cachedBoundNodeSelVector.getSelSize();
+        // Decode only the span of the header the batch's bound nodes need, while the group has had
+        // fewer than MAX_HEADER_SPANS_PER_GROUP spans and their entries stay below the whole
+        // header. Bound nodes past the header have no lists in this group.
+        bool decodeSpan = false;
+        offset_t indexBase = 0;
+        offset_t maxNode = 0;
+        if (numBatchNodes > 0 &&
+            nodeGroupScanState.numHeaderSpansDecoded < MAX_HEADER_SPANS_PER_GROUP) {
+            const auto [minNode, lastNode] = boundNodeOffsetRange(relScanState);
+            indexBase = minNode == 0 ? 0 : minNode - 1;
+            maxNode = lastNode;
+            const auto span = maxNode - indexBase + 1;
+            decodeSpan = (nodeGroupScanState.numHeaderSpansDecoded == 0 ||
+                             numBatchNodes <= MAX_SPAN_BATCH_SIZE || numBatchNodes * 4 <= span) &&
+                         maxNode < numBoundNodes &&
+                         nodeGroupScanState.numHeaderEntriesDecoded + span < numBoundNodes;
+        }
+        if (!decodeSpan) {
+            csrHeader.offset->scanCommitted<ResidencyState::ON_DISK>(transaction, offsetState,
+                *nodeGroupScanState.header->offset);
+            csrHeader.length->scanCommitted<ResidencyState::ON_DISK>(transaction, lengthState,
+                *nodeGroupScanState.header->length);
+            nodeGroupScanState.numTotalRows =
+                nodeGroupScanState.header->getStartCSROffset(numBoundNodes);
+        } else {
+            const auto span = maxNode - indexBase + 1;
+            nodeGroupScanState.numHeaderEntriesDecoded += span;
+            nodeGroupScanState.numHeaderSpansDecoded++;
+            nodeGroupScanState.header->indexBase = indexBase;
+            csrHeader.offset->scanCommitted<ResidencyState::ON_DISK>(transaction, offsetState,
+                *nodeGroupScanState.header->offset, indexBase, span);
+            csrHeader.length->scanCommitted<ResidencyState::ON_DISK>(transaction, lengthState,
+                *nodeGroupScanState.header->length, indexBase, span);
+            nodeGroupScanState.numTotalRows = nodeGroupScanState.header->getEndCSROffset(maxNode);
+        }
     }
     nodeGroupScanState.header->randomLookup = relScanState.randomLookup;
 }

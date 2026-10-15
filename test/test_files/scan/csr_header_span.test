@@ -1,0 +1,259 @@
+-DATASET CSV empty
+--
+
+-CASE CSRHeaderSpan
+# One thread keeps each hub's list a separate batch of bound nodes for the E scan.
+-STATEMENT CALL threads=1;
+---- ok
+-STATEMENT CREATE NODE TABLE N(id INT64, PRIMARY KEY(id));
+---- ok
+-STATEMENT CREATE REL TABLE E(FROM N TO N);
+---- ok
+-STATEMENT CREATE REL TABLE F(FROM N TO N);
+---- ok
+-STATEMENT UNWIND range(0, 5999) AS i CREATE (:N {id: i});
+---- ok
+-STATEMENT MATCH (a:N) WHERE a.id % 3 <> 0 UNWIND [(a.id * 7 + 1) % 6000, (a.id * 13 + 5) % 6000] AS t MATCH (b:N {id: t}) CREATE (a)-[:E]->(b);
+---- ok
+-STATEMENT MATCH (h:N), (a:N) WHERE h.id = 0 AND a.id >= 100 AND a.id < 200 AND a.id < 6000 CREATE (h)-[:F]->(a);
+---- ok
+-STATEMENT MATCH (h:N), (a:N) WHERE h.id = 1 AND a.id >= 150 AND a.id < 160 AND a.id < 6000 CREATE (h)-[:F]->(a);
+---- ok
+-STATEMENT MATCH (h:N), (a:N) WHERE h.id = 2 AND a.id >= 4000 AND a.id < 4100 AND a.id < 6000 CREATE (h)-[:F]->(a);
+---- ok
+-STATEMENT MATCH (h:N), (a:N) WHERE h.id = 3 AND a.id IN [0, 5999] CREATE (h)-[:F]->(a);
+---- ok
+-STATEMENT MATCH (h:N), (a:N) WHERE h.id = 4 AND a.id >= 5950 AND a.id < 6050 AND a.id < 6000 CREATE (h)-[:F]->(a);
+---- ok
+-STATEMENT MATCH (h:N), (a:N) WHERE h.id = 5 AND a.id >= 1000 AND a.id < 2000 AND a.id < 6000 CREATE (h)-[:F]->(a);
+---- ok
+-STATEMENT MATCH (h:N), (a:N) WHERE h.id = 10 AND a.id >= 2500 AND a.id < 2510 AND a.id < 6000 CREATE (h)-[:F]->(a);
+---- ok
+-STATEMENT MATCH (h:N), (a:N) WHERE h.id = 11 AND a.id >= 2700 AND a.id < 2710 AND a.id < 6000 CREATE (h)-[:F]->(a);
+---- ok
+-STATEMENT MATCH (h:N), (a:N) WHERE h.id = 12 AND a.id >= 2900 AND a.id < 2910 AND a.id < 6000 CREATE (h)-[:F]->(a);
+---- ok
+-STATEMENT MATCH (h:N), (a:N) WHERE h.id = 13 AND a.id >= 3100 AND a.id < 3110 AND a.id < 6000 CREATE (h)-[:F]->(a);
+---- ok
+-STATEMENT MATCH (h:N), (a:N) WHERE h.id = 14 AND a.id >= 3300 AND a.id < 3310 AND a.id < 6000 CREATE (h)-[:F]->(a);
+---- ok
+-STATEMENT MATCH (h:N), (a:N) WHERE h.id = 15 AND a.id >= 3500 AND a.id < 3510 AND a.id < 6000 CREATE (h)-[:F]->(a);
+---- ok
+-STATEMENT MATCH (h:N), (a:N) WHERE h.id = 16 AND a.id >= 3700 AND a.id < 3710 AND a.id < 6000 CREATE (h)-[:F]->(a);
+---- ok
+-STATEMENT MATCH (h:N), (a:N) WHERE h.id = 17 AND a.id >= 3900 AND a.id < 3910 AND a.id < 6000 CREATE (h)-[:F]->(a);
+---- ok
+-STATEMENT MATCH (h:N), (a:N) WHERE h.id = 18 AND a.id >= 4100 AND a.id < 4110 AND a.id < 6000 CREATE (h)-[:F]->(a);
+---- ok
+-STATEMENT MATCH (h:N), (a:N) WHERE h.id = 19 AND a.id >= 4300 AND a.id < 4310 AND a.id < 6000 CREATE (h)-[:F]->(a);
+---- ok
+-STATEMENT MATCH (h:N), (a:N) WHERE h.id = 20 AND a.id >= 4500 AND a.id < 4510 AND a.id < 6000 CREATE (h)-[:F]->(a);
+---- ok
+-STATEMENT MATCH (h:N), (a:N) WHERE h.id = 21 AND a.id >= 4700 AND a.id < 4710 AND a.id < 6000 CREATE (h)-[:F]->(a);
+---- ok
+-STATEMENT MATCH (h:N), (a:N) WHERE h.id = 22 AND a.id >= 4900 AND a.id < 4910 AND a.id < 6000 CREATE (h)-[:F]->(a);
+---- ok
+-STATEMENT MATCH (h:N), (a:N) WHERE h.id = 23 AND a.id >= 5100 AND a.id < 5110 AND a.id < 6000 CREATE (h)-[:F]->(a);
+---- ok
+-STATEMENT MATCH (h:N), (a:N) WHERE h.id = 24 AND a.id >= 5300 AND a.id < 5310 AND a.id < 6000 CREATE (h)-[:F]->(a);
+---- ok
+-STATEMENT MATCH (h:N), (a:N) WHERE h.id = 25 AND a.id >= 5500 AND a.id < 5510 AND a.id < 6000 CREATE (h)-[:F]->(a);
+---- ok
+-STATEMENT MATCH (h:N), (a:N) WHERE h.id = 26 AND a.id >= 5700 AND a.id < 5710 AND a.id < 6000 CREATE (h)-[:F]->(a);
+---- ok
+-STATEMENT CHECKPOINT;
+---- ok
+-STATEMENT MATCH (h:N)-[:F]->(a:N)-[:E]->(b:N) WHERE h.id = 0 RETURN count(*), sum(b.id);
+---- 1
+134|200402
+-STATEMENT MATCH (h:N)-[:F]->(a:N)-[:E]->(b:N) WHERE h.id = 1 RETURN count(*), sum(b.id);
+---- 1
+12|18576
+-STATEMENT MATCH (h:N)-[:F]->(a:N)-[:E]->(b:N) WHERE h.id = 2 RETURN count(*), sum(b.id);
+---- 1
+134|602402
+-STATEMENT MATCH (h:N)-[:F]->(a:N)-[:E]->(b:N) WHERE h.id = 3 RETURN count(*), sum(b.id);
+---- 1
+2|11986
+-STATEMENT MATCH (h:N)-[:F]->(a:N)-[:E]->(b:N) WHERE h.id = 4 RETURN count(*), sum(b.id);
+---- 1
+68|390864
+-STATEMENT MATCH (h:N)-[:F]->(a:N)-[:E]->(b:N) WHERE h.id = 5 RETURN count(*), sum(b.id);
+---- 1
+1334|3780002
+-STATEMENT MATCH (h:N)-[:F]->(a:N)-[:E]->(b:N) WHERE h.id < 27 RETURN h.id, count(*), sum(b.id) ORDER BY h.id;
+---- 23
+0|134|200402
+1|12|18576
+2|134|602402
+3|2|11986
+4|68|390864
+5|1334|3780002
+10|14|56642
+11|12|36576
+12|14|28702
+13|14|56642
+14|12|36576
+15|14|28702
+16|14|14642
+17|12|36576
+18|14|70702
+19|14|14642
+20|12|36576
+21|14|28702
+22|14|56642
+23|12|36576
+24|14|28702
+25|14|56642
+26|12|36576
+-STATEMENT MATCH (h:N)-[:F]->(a:N)-[:E]->(b:N) RETURN count(*);
+---- 1
+1910
+-STATEMENT UNWIND range(6000, 6099) AS i CREATE (:N {id: i});
+---- ok
+-STATEMENT MATCH (a:N) WHERE a.id >= 6000 MATCH (b:N {id: a.id - 6000}) CREATE (a)-[:E]->(b);
+---- ok
+-STATEMENT MATCH (h:N), (a:N) WHERE h.id = 4 AND a.id >= 6000 AND a.id < 6050 CREATE (h)-[:F]->(a);
+---- ok
+-STATEMENT MATCH (h:N)-[:F]->(a:N)-[:E]->(b:N) WHERE h.id = 0 RETURN count(*), sum(b.id);
+---- 1
+134|200402
+-STATEMENT MATCH (h:N)-[:F]->(a:N)-[:E]->(b:N) WHERE h.id = 1 RETURN count(*), sum(b.id);
+---- 1
+12|18576
+-STATEMENT MATCH (h:N)-[:F]->(a:N)-[:E]->(b:N) WHERE h.id = 2 RETURN count(*), sum(b.id);
+---- 1
+134|602402
+-STATEMENT MATCH (h:N)-[:F]->(a:N)-[:E]->(b:N) WHERE h.id = 3 RETURN count(*), sum(b.id);
+---- 1
+2|11986
+-STATEMENT MATCH (h:N)-[:F]->(a:N)-[:E]->(b:N) WHERE h.id = 4 RETURN count(*), sum(b.id);
+---- 1
+118|392089
+-STATEMENT MATCH (h:N)-[:F]->(a:N)-[:E]->(b:N) WHERE h.id = 5 RETURN count(*), sum(b.id);
+---- 1
+1334|3780002
+-STATEMENT MATCH (h:N)-[:F]->(a:N)-[:E]->(b:N) WHERE h.id < 27 RETURN h.id, count(*), sum(b.id) ORDER BY h.id;
+---- 23
+0|134|200402
+1|12|18576
+2|134|602402
+3|2|11986
+4|118|392089
+5|1334|3780002
+10|14|56642
+11|12|36576
+12|14|28702
+13|14|56642
+14|12|36576
+15|14|28702
+16|14|14642
+17|12|36576
+18|14|70702
+19|14|14642
+20|12|36576
+21|14|28702
+22|14|56642
+23|12|36576
+24|14|28702
+25|14|56642
+26|12|36576
+-STATEMENT MATCH (h:N)-[:F]->(a:N)-[:E]->(b:N) RETURN count(*);
+---- 1
+1960
+-STATEMENT MATCH (a:N)-[e:E]->(b:N) WHERE b.id % 10 = 1 DELETE e;
+---- ok
+-STATEMENT MATCH (h:N)-[:F]->(a:N)-[:E]->(b:N) WHERE h.id = 0 RETURN count(*), sum(b.id);
+---- 1
+121|181899
+-STATEMENT MATCH (h:N)-[:F]->(a:N)-[:E]->(b:N) WHERE h.id = 1 RETURN count(*), sum(b.id);
+---- 1
+11|16595
+-STATEMENT MATCH (h:N)-[:F]->(a:N)-[:E]->(b:N) WHERE h.id = 2 RETURN count(*), sum(b.id);
+---- 1
+121|544599
+-STATEMENT MATCH (h:N)-[:F]->(a:N)-[:E]->(b:N) WHERE h.id = 3 RETURN count(*), sum(b.id);
+---- 1
+2|11986
+-STATEMENT MATCH (h:N)-[:F]->(a:N)-[:E]->(b:N) WHERE h.id = 4 RETURN count(*), sum(b.id);
+---- 1
+106|351767
+-STATEMENT MATCH (h:N)-[:F]->(a:N)-[:E]->(b:N) WHERE h.id = 5 RETURN count(*), sum(b.id);
+---- 1
+1201|3403179
+-STATEMENT MATCH (h:N)-[:F]->(a:N)-[:E]->(b:N) WHERE h.id < 27 RETURN h.id, count(*), sum(b.id) ORDER BY h.id;
+---- 23
+0|121|181899
+1|11|16595
+2|121|544599
+3|2|11986
+4|106|351767
+5|1201|3403179
+10|13|51141
+11|11|31445
+12|12|24670
+13|13|52941
+14|11|35645
+15|12|24670
+16|13|12741
+17|11|33845
+18|12|60670
+19|13|14541
+20|11|32045
+21|12|24670
+22|13|52341
+23|11|36245
+24|12|24670
+25|13|54141
+26|11|34445
+-STATEMENT MATCH (h:N)-[:F]->(a:N)-[:E]->(b:N) RETURN count(*);
+---- 1
+1766
+-STATEMENT CHECKPOINT;
+---- ok
+-STATEMENT MATCH (h:N)-[:F]->(a:N)-[:E]->(b:N) WHERE h.id = 0 RETURN count(*), sum(b.id);
+---- 1
+121|181899
+-STATEMENT MATCH (h:N)-[:F]->(a:N)-[:E]->(b:N) WHERE h.id = 1 RETURN count(*), sum(b.id);
+---- 1
+11|16595
+-STATEMENT MATCH (h:N)-[:F]->(a:N)-[:E]->(b:N) WHERE h.id = 2 RETURN count(*), sum(b.id);
+---- 1
+121|544599
+-STATEMENT MATCH (h:N)-[:F]->(a:N)-[:E]->(b:N) WHERE h.id = 3 RETURN count(*), sum(b.id);
+---- 1
+2|11986
+-STATEMENT MATCH (h:N)-[:F]->(a:N)-[:E]->(b:N) WHERE h.id = 4 RETURN count(*), sum(b.id);
+---- 1
+106|351767
+-STATEMENT MATCH (h:N)-[:F]->(a:N)-[:E]->(b:N) WHERE h.id = 5 RETURN count(*), sum(b.id);
+---- 1
+1201|3403179
+-STATEMENT MATCH (h:N)-[:F]->(a:N)-[:E]->(b:N) WHERE h.id < 27 RETURN h.id, count(*), sum(b.id) ORDER BY h.id;
+---- 23
+0|121|181899
+1|11|16595
+2|121|544599
+3|2|11986
+4|106|351767
+5|1201|3403179
+10|13|51141
+11|11|31445
+12|12|24670
+13|13|52941
+14|11|35645
+15|12|24670
+16|13|12741
+17|11|33845
+18|12|60670
+19|13|14541
+20|11|32045
+21|12|24670
+22|13|52341
+23|11|36245
+24|12|24670
+25|13|54141
+26|11|34445
+-STATEMENT MATCH (h:N)-[:F]->(a:N)-[:E]->(b:N) RETURN count(*);
+---- 1
+1766
