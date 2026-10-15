@@ -27,8 +27,22 @@ bool ArrowNullMaskTree::copyFromBuffer(const void* buffer, uint64_t srcOffset, u
         mask->setAllNonNull();
         return false;
     }
-    mask->copyFromNullBits((const uint64_t*)buffer, srcOffset, 0, count, true);
-    return true;
+    // Arrow validity bitmaps are packed bytes (1 bit per row, 1=valid) sized to
+    // ceil((offset+length)/8) bytes. Reading them as uint64_t (as
+    // NullMask::copyFromNullBits does) over-reads for small arrays (e.g. 2 rows
+    // -> 1 byte) and is UB when unaligned, so copy bit-by-bit without
+    // over-reading. Validity polarity is inverted (1=valid vs 1=null).
+    const auto* bytes = static_cast<const uint8_t*>(buffer);
+    bool hasNull = false;
+    for (uint64_t i = 0; i < count; ++i) {
+        const uint64_t srcPos = srcOffset + i;
+        const bool valid = ((bytes[srcPos >> 3] >> (srcPos & 7)) & 1) != 0;
+        if (!valid) {
+            mask->setNullFromRange(i, 1, true);
+            hasNull = true;
+        }
+    }
+    return hasNull;
 }
 
 bool ArrowNullMaskTree::applyParentBitmap(const NullMask* parent) {
@@ -194,8 +208,7 @@ ArrowNullMaskTree::ArrowNullMaskTree(const ArrowSchema* schema, const ArrowArray
             if (array->buffers[0] == nullptr) {
                 mask->setAllNonNull();
             } else {
-                mask->copyFromNullBits((const uint64_t*)array->buffers[0], srcOffset, 0, count,
-                    true);
+                copyFromBuffer(array->buffers[0], srcOffset, count);
             }
             if (parentBitmap != nullptr) {
                 *mask |= *parentBitmap;

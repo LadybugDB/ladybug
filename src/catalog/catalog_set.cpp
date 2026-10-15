@@ -180,46 +180,61 @@ CatalogEntry* CatalogSet::dropEntryNoLock(const Transaction* transaction, const 
 
 void CatalogSet::alterTableEntry(Transaction* transaction, const binder::BoundAlterInfo& alterInfo,
     bool skipLoggingToWAL) {
-    std::unique_lock lck{mtx};
-    // LCOV_EXCL_START
-    validateExistNoLock(transaction, alterInfo.tableName);
-    // LCOV_EXCL_STOP
-    auto entry = getEntryNoLock(transaction, alterInfo.tableName);
-    DASSERT(entry->getType() == CatalogEntryType::NODE_TABLE_ENTRY ||
-            entry->getType() == CatalogEntryType::REL_GROUP_ENTRY);
-    const auto tableEntry = entry->ptrCast<TableCatalogEntry>();
-    auto newEntry = tableEntry->alter(transaction->getID(), alterInfo, this);
-    switch (alterInfo.alterType) {
-    case AlterType::RENAME: {
-        // We treat rename table as drop and create.
-        dropEntryNoLock(transaction, alterInfo.tableName, entry->getOID());
-        auto createdEntry = createEntryNoLock(transaction, std::move(newEntry));
-        if (transaction->shouldAppendToUndoBuffer()) {
-            transaction->pushAlterCatalogEntry(*this, *entry, alterInfo, skipLoggingToWAL);
-            transaction->pushCreateDropCatalogEntry(*this, *createdEntry, isInternal(),
-                true /* skipLoggingToWAL */);
+    // Record the work that needs undo-buffer pushes after releasing mtx. Holding mtx while
+    // acquiring the transaction's changedCatalogsMutex (inside pushAlterCatalogEntry) inverts
+    // the lock order vs Transaction::publishCommit (-> graphs) vs withGraphCatalog (-> mtx)
+    // and trips TSan lock-order warnings, so never push while holding mtx.
+    CatalogEntry* alterOldEntry = nullptr;
+    CatalogEntry* renameCreatedEntry = nullptr;
+    bool isRename = false;
+    auto addedRelTableOID = common::INVALID_TABLE_ID;
+    {
+        std::unique_lock lck{mtx};
+        // LCOV_EXCL_START
+        validateExistNoLock(transaction, alterInfo.tableName);
+        // LCOV_EXCL_STOP
+        auto entry = getEntryNoLock(transaction, alterInfo.tableName);
+        DASSERT(entry->getType() == CatalogEntryType::NODE_TABLE_ENTRY ||
+                entry->getType() == CatalogEntryType::REL_GROUP_ENTRY);
+        const auto tableEntry = entry->ptrCast<TableCatalogEntry>();
+        auto newEntry = tableEntry->alter(transaction->getID(), alterInfo, this);
+        switch (alterInfo.alterType) {
+        case AlterType::RENAME: {
+            // We treat rename table as drop and create.
+            dropEntryNoLock(transaction, alterInfo.tableName, entry->getOID());
+            auto createdEntry = createEntryNoLock(transaction, std::move(newEntry));
+            isRename = true;
+            alterOldEntry = entry;
+            renameCreatedEntry = createdEntry;
+        } break;
+        case AlterType::COMMENT:
+        case AlterType::ADD_PROPERTY:
+        case AlterType::DROP_PROPERTY:
+        case AlterType::RENAME_PROPERTY:
+        case AlterType::SET_SORTED_BY:
+        case AlterType::ADD_FROM_TO_CONNECTION:
+        case AlterType::DROP_FROM_TO_CONNECTION: {
+            if (alterInfo.alterType == AlterType::ADD_FROM_TO_CONNECTION) {
+                addedRelTableOID =
+                    newEntry->ptrCast<RelGroupCatalogEntry>()->getRelEntryInfos().back().oid;
+            }
+            emplaceNoLock(std::move(newEntry));
+            alterOldEntry = entry;
+        } break;
+        default: {
+            UNREACHABLE_CODE;
         }
-    } break;
-    case AlterType::COMMENT:
-    case AlterType::ADD_PROPERTY:
-    case AlterType::DROP_PROPERTY:
-    case AlterType::RENAME_PROPERTY:
-    case AlterType::SET_SORTED_BY:
-    case AlterType::ADD_FROM_TO_CONNECTION:
-    case AlterType::DROP_FROM_TO_CONNECTION: {
-        auto addedRelTableOID = common::INVALID_TABLE_ID;
-        if (alterInfo.alterType == AlterType::ADD_FROM_TO_CONNECTION) {
-            addedRelTableOID =
-                newEntry->ptrCast<RelGroupCatalogEntry>()->getRelEntryInfos().back().oid;
         }
-        emplaceNoLock(std::move(newEntry));
-        if (transaction->shouldAppendToUndoBuffer()) {
-            transaction->pushAlterCatalogEntry(*this, *entry, alterInfo, false, addedRelTableOID);
-        }
-    } break;
-    default: {
-        UNREACHABLE_CODE;
     }
+    if (transaction->shouldAppendToUndoBuffer()) {
+        if (isRename) {
+            transaction->pushAlterCatalogEntry(*this, *alterOldEntry, alterInfo, skipLoggingToWAL);
+            transaction->pushCreateDropCatalogEntry(*this, *renameCreatedEntry, isInternal(),
+                true /* skipLoggingToWAL */);
+        } else {
+            transaction->pushAlterCatalogEntry(*this, *alterOldEntry, alterInfo, false,
+                addedRelTableOID);
+        }
     }
 }
 

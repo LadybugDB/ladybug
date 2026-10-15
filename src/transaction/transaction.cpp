@@ -90,31 +90,39 @@ void Transaction::publishCommit() {
     }
     localStorage->commit();
     undoBuffer->commit(clientContext, commitTS);
+    std::unordered_set<catalog::Catalog*> graphCatalogsToBump;
+    catalog::Catalog* mainCatalogToBump = nullptr;
     {
         std::lock_guard lck{changedCatalogsMutex};
         if (!changedCatalogs.empty()) {
             auto* mainCatalog = clientContext->getDatabase()->getCatalog();
-            for (auto it = changedCatalogs.begin(); it != changedCatalogs.end();) {
-                if (*it == mainCatalog) {
-                    mainCatalog->incrementVersion();
-                    it = changedCatalogs.erase(it);
+            for (auto* catalog : changedCatalogs) {
+                if (catalog == mainCatalog) {
+                    mainCatalogToBump = mainCatalog;
                 } else {
-                    ++it;
+                    graphCatalogsToBump.insert(catalog);
                 }
             }
-            // A graph dropped after its change was recorded - in this or a concurrent
-            // transaction - destroys its catalog. Route the graph bumps through the
-            // database manager: under its registry lock, only catalogs it currently
-            // owns are advanced, so a catalog being dropped concurrently is either
-            // still owned (bumped before removal) or already gone (never touched).
-            if (!changedCatalogs.empty()) {
-                auto* dbManager = main::DatabaseManager::Get(*clientContext);
-                if (dbManager != nullptr) {
-                    dbManager->bumpGraphCatalogVersions(changedCatalogs);
-                }
-            }
+            changedCatalogs.clear();
         }
-        changedCatalogs.clear();
+    }
+    // Bump versions without holding changedCatalogsMutex: holding it while acquiring the
+    // database-manager graphs lock inverts the lock order vs CatalogSet::alterTableEntry
+    // (-> changedCatalogsMutex) vs withGraphCatalog (-> CatalogSet) and trips TSan
+    // lock-order warnings.
+    if (mainCatalogToBump != nullptr) {
+        mainCatalogToBump->incrementVersion();
+    }
+    // A graph dropped after its change was recorded - in this or a concurrent
+    // transaction - destroys its catalog. Route the graph bumps through the
+    // database manager: under its registry lock, only catalogs it currently
+    // owns are advanced, so a catalog being dropped concurrently is either
+    // still owned (bumped before removal) or already gone (never touched).
+    if (!graphCatalogsToBump.empty()) {
+        auto* dbManager = main::DatabaseManager::Get(*clientContext);
+        if (dbManager != nullptr) {
+            dbManager->bumpGraphCatalogVersions(graphCatalogsToBump);
+        }
     }
     for (auto& callback : commitCallbacks) {
         callback(*this);

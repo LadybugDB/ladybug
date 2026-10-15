@@ -136,8 +136,12 @@ void scanArrowArrayFixedSizePrimitive<bool>(const ArrowArray* array, ValueVector
     mask->copyToValueVector(&outputVector, dstOffset, count);
 
     rowIter(outputVector, count, [&](auto i) {
-        outputVector.setValue<bool>(i + dstOffset,
-            NullMask::isNull((const uint64_t*)arrayBuffer, i + srcOffset));
+        // Arrow booleans are bit-packed bytes sized to ceil((offset+length)/8).
+        // Reading them as uint64_t via NullMask::isNull over-reads for small
+        // arrays, so read the single bit without over-reading.
+        const uint64_t srcPos = i + srcOffset;
+        const bool value = ((arrayBuffer[srcPos >> 3] >> (srcPos & 7)) & 1) != 0;
+        outputVector.setValue<bool>(i + dstOffset, value);
     });
 }
 
