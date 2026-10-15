@@ -255,6 +255,10 @@ public:
     // numRowsToScan: number of rows being scanned
     static void applySemiMaskFilter(const TableScanState& state, common::row_idx_t startOffset,
         common::row_idx_t numRowsToScan, common::SelectionVector& selVector);
+    // Intersects the selection with masked node offsets, as returned by SemiMask::range for the
+    // rows starting at startOffset.
+    static void applySemiMaskFilter(const common::offset_vec_t& maskedOffsets,
+        common::row_idx_t startOffset, common::SelectionVector& selVector);
 
 private:
     void validatePkNotExists(const transaction::Transaction* transaction,

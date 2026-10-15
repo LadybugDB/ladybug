@@ -324,16 +324,20 @@ void ChunkedNodeGroup::scan(const Transaction* transaction, const TableScanState
     }
 
     // A filtered scan reads string and list columns one row at a time, so narrowing the selection
-    // to the semi-mask before reading the columns pays off only when the mask drops most rows. A
-    // denser mask is applied after the columns are read.
+    // to the semi-mask before reading the columns pays off only when the mask drops most of this
+    // batch's rows. A denser mask is applied after the columns are read.
     const bool semiMaskEnabled = scanState.source == TableScanSource::COMMITTED &&
                                  scanState.semiMask != nullptr && scanState.semiMask->isEnabled();
-    const bool maskBeforeColumns = semiMaskEnabled && scanState.semiMask->getNumMaskedNodes() * 16 <
-                                                          scanState.semiMask->getMaxOffset();
     const auto startNodeOffset = StorageUtils::getStartOffsetOfNodeGroup(scanState.nodeGroupIdx) +
                                  startRowIdx + rowIdxInGroup;
-    if (maskBeforeColumns && anchorSelVector.getSelSize() > 0) {
-        NodeTable::applySemiMaskFilter(scanState, startNodeOffset, numRowsToScan, anchorSelVector);
+    offset_vec_t maskedOffsets;
+    bool maskBeforeColumns = false;
+    if (semiMaskEnabled && anchorSelVector.getSelSize() > 0) {
+        maskedOffsets = scanState.semiMask->range(startNodeOffset, startNodeOffset + numRowsToScan);
+        maskBeforeColumns = maskedOffsets.size() * 16 < numRowsToScan;
+        if (maskBeforeColumns) {
+            NodeTable::applySemiMaskFilter(maskedOffsets, startNodeOffset, anchorSelVector);
+        }
     }
 
     if (anchorSelVector.getSelSize() > 0) {
@@ -356,7 +360,7 @@ void ChunkedNodeGroup::scan(const Transaction* transaction, const TableScanState
         }
     }
     if (semiMaskEnabled && !maskBeforeColumns && anchorSelVector.getSelSize() > 0) {
-        NodeTable::applySemiMaskFilter(scanState, startNodeOffset, numRowsToScan, anchorSelVector);
+        NodeTable::applySemiMaskFilter(maskedOffsets, startNodeOffset, anchorSelVector);
     }
 }
 
