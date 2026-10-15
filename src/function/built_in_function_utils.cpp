@@ -603,6 +603,9 @@ std::string BuiltInFunctionsUtils::getFunctionMatchFailureMsg(const std::string 
         inputTypes.empty() ? "()" : LogicalTypeUtils::toString(inputTypes));
     result += std::format("Expected: {}\n",
         supportedInputs.empty() ? "()" : alignedString(supportedInputs));
+    if (supportedInputs.find("graph_name") != std::string::npos) {
+        result += "Hint: pass a projected graph name created by CALL PROJECT_GRAPH(...).\n";
+    }
     return result;
 }
 
