@@ -80,7 +80,7 @@ NODE|person|
 REL|knows|
 -STATEMENT CALL drop_projected_graph('dummy')
 ---- error
-Runtime exception: Projected graph dummy does not exists.
+Runtime exception: Projected graph dummy does not exist.
 -STATEMENT CALL drop_projected_graph('PK')
 ---- ok
 -STATEMENT CALL PROJECT_GRAPH('PK', ['person'], ['knows'])
