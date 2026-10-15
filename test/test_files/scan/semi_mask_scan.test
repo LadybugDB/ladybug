@@ -1,0 +1,94 @@
+-DATASET CSV empty
+--
+
+-CASE SemiMaskScanAcrossNodeGroupsWithDeletions
+-STATEMENT CREATE NODE TABLE P(id INT64, name STRING, tags STRING[], PRIMARY KEY(id));
+---- ok
+-STATEMENT CREATE REL TABLE K(FROM P TO P);
+---- ok
+-STATEMENT CREATE REL TABLE D(FROM P TO P);
+---- ok
+-STATEMENT UNWIND range(0, 139999) AS i CREATE (:P {id: i, name: 'p' + string(i), tags: ['t' + string(i % 7)]});
+---- ok
+-STATEMENT MATCH (a:P), (b:P) WHERE a.id = 0 AND b.id % 997 = 0 CREATE (a)-[:K]->(b);
+---- ok
+-STATEMENT MATCH (a:P), (b:P) WHERE a.id = 0 AND b.id % 10 <> 0 CREATE (a)-[:D]->(b);
+---- ok
+-STATEMENT MATCH (b:P) WHERE b.id % 1994 = 0 AND b.id > 0 DETACH DELETE b;
+---- ok
+-STATEMENT MATCH (a:P)-[:K]->(b:P) WHERE a.id = 0 RETURN count(*), sum(b.id), count(b.name), sum(size(b.tags)), min(b.name), max(b.name);
+---- 1
+71|4885300|71|71|p0|p997
+-STATEMENT MATCH (a:P)-[:D]->(b:P) WHERE a.id = 0 RETURN count(*), sum(b.id), count(b.name), sum(size(b.tags)), min(b.name), max(b.name);
+---- 1
+125944|8816091760|125944|125944|p1|p99999
+-STATEMENT CHECKPOINT;
+---- ok
+-STATEMENT MATCH (a:P)-[:K]->(b:P) WHERE a.id = 0 RETURN count(*), sum(b.id), count(b.name), sum(size(b.tags)), min(b.name), max(b.name);
+---- 1
+71|4885300|71|71|p0|p997
+-STATEMENT MATCH (a:P)-[:D]->(b:P) WHERE a.id = 0 RETURN count(*), sum(b.id), count(b.name), sum(size(b.tags)), min(b.name), max(b.name);
+---- 1
+125944|8816091760|125944|125944|p1|p99999
+-STATEMENT MATCH (b:P) WHERE b.id = 997 DETACH DELETE b;
+---- ok
+-STATEMENT MATCH (a:P)-[:K]->(b:P) WHERE a.id = 0 RETURN count(*), sum(b.id), count(b.name), sum(size(b.tags)), min(b.name), max(b.name);
+---- 1
+70|4884303|70|70|p0|p98703
+-STATEMENT MATCH (a:P)-[:D]->(b:P) WHERE a.id = 0 RETURN count(*), sum(b.id), count(b.name), sum(size(b.tags)), min(b.name), max(b.name);
+---- 1
+125943|8816090763|125943|125943|p1|p99999
+-STATEMENT CALL enable_semi_mask=false;
+---- ok
+-STATEMENT MATCH (a:P)-[:K]->(b:P) WHERE a.id = 0 RETURN count(*), sum(b.id), count(b.name), sum(size(b.tags)), min(b.name), max(b.name);
+---- 1
+70|4884303|70|70|p0|p98703
+-STATEMENT MATCH (a:P)-[:D]->(b:P) WHERE a.id = 0 RETURN count(*), sum(b.id), count(b.name), sum(size(b.tags)), min(b.name), max(b.name);
+---- 1
+125943|8816090763|125943|125943|p1|p99999
+
+-CASE SemiMaskScanAfterLeadingRowsDeleted
+-STATEMENT CREATE NODE TABLE T(id INT64, name STRING, PRIMARY KEY(id));
+---- ok
+-STATEMENT CREATE REL TABLE E(FROM T TO T);
+---- ok
+-STATEMENT CREATE REL TABLE ES(FROM T TO T);
+---- ok
+-STATEMENT CREATE REL TABLE ED(FROM T TO T);
+---- ok
+-STATEMENT UNWIND range(0, 4999) AS i CREATE (:T {id: i, name: 't' + string(i)});
+---- ok
+-STATEMENT CHECKPOINT;
+---- ok
+-STATEMENT MATCH (t:T) DELETE t;
+---- ok
+-STATEMENT CHECKPOINT;
+---- ok
+-STATEMENT UNWIND range(5000, 7999) AS i CREATE (:T {id: i, name: 't' + string(i)});
+---- ok
+-STATEMENT MATCH (a:T), (b:T) WHERE a.id = 5000 AND b.id % 10 = 0 CREATE (a)-[:E]->(b);
+---- ok
+-STATEMENT MATCH (a:T), (b:T) WHERE a.id = 5000 AND b.id % 100 = 0 CREATE (a)-[:ES]->(b);
+---- ok
+-STATEMENT MATCH (a:T), (b:T) WHERE a.id = 5000 CREATE (a)-[:ED]->(b);
+---- ok
+-STATEMENT MATCH (a:T)-[:E]->(b:T) WHERE a.id = 5000 RETURN count(*), sum(b.id), min(b.name), max(b.name);
+---- 1
+300|1948500|t5000|t7990
+-STATEMENT MATCH (a:T)-[:ES]->(b:T) WHERE a.id = 5000 RETURN count(*), sum(b.id), min(b.name), max(b.name);
+---- 1
+30|193500|t5000|t7900
+-STATEMENT MATCH (a:T)-[:ED]->(b:T) WHERE a.id = 5000 RETURN count(*), sum(b.id), min(b.name), max(b.name);
+---- 1
+3000|19498500|t5000|t7999
+-STATEMENT CHECKPOINT;
+---- ok
+-STATEMENT MATCH (a:T)-[:E]->(b:T) WHERE a.id = 5000 RETURN count(*), sum(b.id), min(b.name), max(b.name);
+---- 1
+300|1948500|t5000|t7990
+-STATEMENT MATCH (a:T)-[:ES]->(b:T) WHERE a.id = 5000 RETURN count(*), sum(b.id), min(b.name), max(b.name);
+---- 1
+30|193500|t5000|t7900
+-STATEMENT MATCH (a:T)-[:ED]->(b:T) WHERE a.id = 5000 RETURN count(*), sum(b.id), min(b.name), max(b.name);
+---- 1
+3000|19498500|t5000|t7999
