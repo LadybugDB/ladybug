@@ -200,6 +200,14 @@ jobs:
           python3 update-nightly-build-version.py
         working-directory: scripts
 
+      - name: Install OpenSSL 3 (macOS)
+        run: |
+          # Pin to OpenSSL 3: Homebrew now also ships openssl@4, which CMake
+          # would otherwise prefer. The top-level CMakeLists enforces OpenSSL 3
+          # via a version guard, so point CMake at openssl@3 explicitly.
+          brew list openssl@3 >/dev/null 2>&1 || brew install openssl@3
+          echo "OPENSSL_ROOT_DIR=$(brew --prefix openssl@3)" >> "$GITHUB_ENV"
+
       - name: Build Java lib for Apple Silicon
         env:
           EXTRA_CMAKE_FLAGS: -DBUILD_LBUG=FALSE -DBUILD_SHELL=FALSE -DLBUG_API_USE_PRECOMPILED_LIB=TRUE -DLBUG_API_PRECOMPILED_LIB_PATH=${{ env.LBUG_JAVA_PRECOMPILED_LIB_PATH }}
