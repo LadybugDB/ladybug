@@ -1,0 +1,68 @@
+-DATASET CSV empty
+
+--
+
+-CASE ArithmeticIdentityOverVariableKeepsAlias
+-STATEMENT UNWIND [1, 2] AS x WITH x + 0 AS y, x RETURN y, x
+-CHECK_COLUMN_NAMES
+---- 3
+y|x
+1|1
+2|2
+-STATEMENT UNWIND [1, 2] AS x WITH x * 1 AS y, x RETURN y, x
+-CHECK_COLUMN_NAMES
+---- 3
+y|x
+1|1
+2|2
+-STATEMENT UNWIND [3] AS x WITH count(*) AS n WITH n + 0 AS m RETURN m, m * 1
+-CHECK_COLUMN_NAMES
+---- 2
+m|*(m,1)
+1|1
+-STATEMENT UNWIND [1] AS x RETURN x, x + 0
+-CHECK_COLUMN_NAMES
+---- 2
+x|+(x,0)
+1|1
+-STATEMENT UNWIND [1, 2, 3] AS x WITH count(*) AS n WITH n + 0 AS m RETURN m
+---- 1
+3
+
+-CASE SimplifiedNodeStaysPattern
+-STATEMENT CREATE NODE TABLE P(id INT64 PRIMARY KEY)
+---- ok
+-STATEMENT CREATE REL TABLE R(FROM P TO P)
+---- ok
+-STATEMENT CREATE (:P {id: 1})-[:R]->(:P {id: 2})
+---- ok
+-STATEMENT MATCH (n:P) WITH CASE WHEN true THEN n END AS m MATCH (m)-[:R]->(o) RETURN m.id, o.id
+---- 1
+1|2
+
+-CASE SimplifiedScopeExpressionReferencedLater
+-STATEMENT UNWIND [1, 2, 3] AS x WITH count(*) AS n WITH n + 0 AS m RETURN m, CASE WHEN true THEN m END AS k
+---- 1
+3|3
+-STATEMENT UNWIND [1, 2] AS x WITH x + 0 AS y RETURN CASE WHEN true THEN y END AS z
+---- 2
+1
+2
+-STATEMENT UNWIND [true, false] AS b WITH b AND true AS y RETURN y AND true AS r
+---- 2
+True
+False
+-STATEMENT UNWIND [true, false] AS b WITH NOT b AS z RETURN NOT z AS r
+---- 2
+True
+False
+-STATEMENT UNWIND [1, 2] AS x RETURN x + 0 AS y, count(*) AS c ORDER BY y * 1
+-CHECK_ORDER
+---- 2
+1|1
+2|1
+-STATEMENT UNWIND [1, 2] AS x RETURN x + 0 AS y, count(*) AS c ORDER BY x + 0
+-CHECK_ORDER
+---- 2
+1|1
+2|1
