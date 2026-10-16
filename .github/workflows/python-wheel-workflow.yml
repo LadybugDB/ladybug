@@ -277,15 +277,6 @@ jobs:
         if: matrix.os == 'macos'
         run: brew install ccache
 
-      - name: Install OpenSSL 3 (macOS)
-        if: matrix.os == 'macos'
-        run: |
-          # Pin to OpenSSL 3: Homebrew now also ships openssl@4, which CMake
-          # would otherwise prefer. The top-level CMakeLists enforces OpenSSL 3
-          # via a version guard, so point CMake at openssl@3 explicitly.
-          brew list openssl@3 >/dev/null 2>&1 || brew install openssl@3
-          echo "OPENSSL_ROOT_DIR=$(brew --prefix openssl@3)" >> "$GITHUB_ENV"
-
       - name: Cache ccache directory (Linux/macOS)
         if: matrix.os != 'windows'
         uses: actions/cache@v4
