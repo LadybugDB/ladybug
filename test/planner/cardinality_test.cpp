@@ -465,6 +465,45 @@ TEST_F(CardinalityTest, TestMultiParentPackedScan) {
     conn->query("COMMIT");
 }
 
+// A computed predicate input such as offset(id(b)) has no vector in the packed child's schema, so
+// the PackedFilteredCount mapping must fall back to the regular aggregate instead of looking it up
+// (#868). A plain property input still maps to the packed operator.
+TEST_F(CardinalityTest, TestPackedFilteredCountComputedInputFallsBack) {
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE MPerson(id INT64, PRIMARY KEY(id));")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE REL TABLE MKnows(FROM MPerson TO MPerson);")->isSuccess());
+    ASSERT_TRUE(conn->query("UNWIND range(0, 19) AS i CREATE (:MPerson {id: i});")->isSuccess());
+    ASSERT_TRUE(conn->query("MATCH (a:MPerson), (b:MPerson) WHERE b.id = (a.id + 1) % 20 OR "
+                            "b.id = (a.id + 4) % 20 CREATE (a)-[:MKnows]->(b);")
+                    ->isSuccess());
+    const std::string match = "MATCH (a:MPerson)-[e:MKnows]->(b:MPerson) ";
+    const auto computed = match + "WHERE (a.id + offset(id(b))) % 10 = 0 RETURN a.id, COUNT(*)";
+    const auto plain = match + "WHERE (a.id + b.id) % 10 = 0 RETURN a.id, COUNT(*)";
+    auto explain = [&](const std::string& query) {
+        auto res = conn->query("EXPLAIN " + query);
+        EXPECT_TRUE(res->isSuccess()) << res->getErrorMessage();
+        return res->toString();
+    };
+    auto counts = [&](const std::string& query) {
+        auto res = conn->query(query);
+        EXPECT_TRUE(res->isSuccess()) << res->getErrorMessage();
+        std::map<int64_t, int64_t> result;
+        while (res->hasNext()) {
+            const auto tup = res->getNext();
+            result[tup->getValue(0)->getValue<int64_t>()] = tup->getValue(1)->getValue<int64_t>();
+        }
+        return result;
+    };
+
+    ASSERT_TRUE(conn->query("CALL enable_packed_path_extend=false")->isSuccess());
+    const auto expected = counts(computed);
+    ASSERT_FALSE(expected.empty());
+
+    ASSERT_TRUE(conn->query("CALL enable_packed_path_extend=true")->isSuccess());
+    EXPECT_EQ(std::string::npos, explain(computed).find("PACKED_FILTERED_COUNT"));
+    EXPECT_EQ(expected, counts(computed));
+    EXPECT_NE(std::string::npos, explain(plain).find("PACKED_FILTERED_COUNT"));
+}
+
 TEST_F(CardinalityTest, TestPackedChildSliceState) {
     common::DataChunkState state;
     EXPECT_FALSE(state.hasPackedChildSlices());

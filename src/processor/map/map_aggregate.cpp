@@ -216,6 +216,14 @@ static std::unique_ptr<PhysicalOperator> tryMapPackedFilteredCount(PlanMapper& m
         aggregate->getDataType().getLogicalTypeID() != LogicalTypeID::INT64) {
         return nullptr;
     }
+    // The operator reads the key and both predicate inputs straight from the packed child's
+    // vectors, so each must be in that schema's scope. A computed input such as offset(id(b)) is
+    // only evaluated inside the filter and has no vector there; fall back to the regular plan.
+    if (!packedChildSchema->isExpressionInScope(*key) ||
+        !packedChildSchema->isExpressionInScope(*predicateInputs->first) ||
+        !packedChildSchema->isExpressionInScope(*predicateInputs->second)) {
+        return nullptr;
+    }
     const auto keyGroupPos = packedChildSchema->getGroupPos(*key);
     // The GROUP BY key must live in one of the predicate's groups (the parent/bound group).
     // Otherwise fall back to the regular aggregate plan.
