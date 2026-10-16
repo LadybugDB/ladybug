@@ -8826,13 +8826,31 @@ inline bool SSLClient::verify_host_with_common_name(X509 *server_cert) const {
     const auto subject_name = X509_get_subject_name(server_cert);
 
     if (subject_name != nullptr) {
-        char name[BUFSIZ];
-        auto name_len = X509_NAME_get_text_by_NID(subject_name, NID_commonName,
-            name, sizeof(name));
-
-        if (name_len != -1) {
-            return check_host_name(name, static_cast<size_t>(name_len));
+        // NOTE: X509_NAME_get_text_by_NID is deprecated in OpenSSL 4.0 (and
+        // unavailable with OPENSSL_NO_DEPRECATED_4_0), so resolve the
+        // CommonName via X509_NAME_get_entry/X509_NAME_ENTRY_get_data instead.
+        // These APIs exist since OpenSSL 1.1.1 and are not deprecated.
+        const auto idx = X509_NAME_get_index_by_NID(subject_name, NID_commonName, -1);
+        if (idx < 0) {
+            return false;
         }
+        const auto *entry = X509_NAME_get_entry(subject_name, idx);
+        if (entry == nullptr) {
+            return false;
+        }
+        const auto *asn1Str = X509_NAME_ENTRY_get_data(entry);
+        if (asn1Str == nullptr) {
+            return false;
+        }
+        unsigned char *utf8 = nullptr;
+        const auto utf8Len = ASN1_STRING_to_UTF8(&utf8, asn1Str);
+        if (utf8Len < 0 || utf8 == nullptr) {
+            return false;
+        }
+        const auto result = check_host_name(reinterpret_cast<const char *>(utf8),
+            static_cast<size_t>(utf8Len));
+        OPENSSL_free(utf8);
+        return result;
     }
 
     return false;
