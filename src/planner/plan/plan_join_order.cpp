@@ -1,6 +1,8 @@
+#include <algorithm>
 #include <cmath>
 
 #include "binder/bound_scan_source.h"
+#include "binder/expression/property_expression.h"
 #include "binder/expression_visitor.h"
 #include "catalog/catalog_entry/catalog_entry_type.h"
 #include "catalog/catalog_entry/node_table_catalog_entry.h"
@@ -14,8 +16,11 @@
 #include "planner/join_order/join_plan_solver.h"
 #include "planner/join_order/join_tree_constructor.h"
 #include "planner/operator/extend/logical_extend.h"
+#include "planner/operator/scan/logical_query_primary_key_lookup.h"
 #include "planner/operator/scan/logical_scan_node_table.h"
 #include "planner/planner.h"
+#include "storage/storage_manager.h"
+#include "storage/table/node_table.h"
 
 using namespace lbug::binder;
 using namespace lbug::common;
@@ -838,6 +843,82 @@ bool Planner::tryPlanINLJoin(const SubqueryGraph& subgraph, const SubqueryGraph&
     return hasAppliedINLJoin;
 }
 
+// A bare single-node scan of the join node (a leaf SCAN with no filters, i.e. a pure
+// payload fetch) qualifies as the inner side of a lookup join. Filtered scans stay on the
+// hash path: their predicates are cheaper to apply before/within the join build.
+static const LogicalScanNodeTable* getBareSingleNodeScan(const SubqueryGraph& subgraph,
+    const LogicalPlan& plan, const NodeExpression& joinNode) {
+    if (subgraph.getNumQueryRels() != 0 || subgraph.queryNodesSelector.count() != 1) {
+        return nullptr;
+    }
+    auto* op = plan.getLastOperator().get();
+    if (op == nullptr || op->getOperatorType() != LogicalOperatorType::SCAN_NODE_TABLE) {
+        return nullptr;
+    }
+    auto& scan = op->constCast<LogicalScanNodeTable>();
+    if (scan.getScanType() != LogicalScanNodeTableType::SCAN) {
+        return nullptr;
+    }
+    if (!scan.getTableDBMap().empty()) {
+        return nullptr;
+    }
+    if (scan.getNodeID()->getUniqueName() != joinNode.getInternalID()->getUniqueName()) {
+        return nullptr;
+    }
+    if (scan.getTableIDs().size() != 1) {
+        return nullptr;
+    }
+    return &scan;
+}
+
+bool Planner::tryPlanLookupJoin(const SubqueryGraph& innerSubgraph, const LogicalPlan& innerPlan,
+    const LogicalPlan& outerPlan, const std::shared_ptr<NodeExpression>& joinNode,
+    const expression_vector& predicates, const SubqueryGraph& newSubgraph) {
+    if (!clientContext->getClientConfig()->enablePlanOptimizer) {
+        return false;
+    }
+    auto* scan = getBareSingleNodeScan(innerSubgraph, innerPlan, *joinNode);
+    if (scan == nullptr) {
+        return false;
+    }
+    if (joinNode->getTableIDs().size() != 1) {
+        return false;
+    }
+    auto tableID = scan->getTableIDs()[0];
+    auto table = storage::StorageManager::Get(*clientContext)
+                     ->getTable(tableID)
+                     ->ptrCast<storage::NodeTable>();
+    if (table->tryGetPrimaryKeyIndex() == nullptr) {
+        return false;
+    }
+    const auto outerCard = outerPlan.getCardinality();
+    if (outerCard > PlannerKnobs::LOOKUP_JOIN_MAX_OUTER_CARDINALITY) {
+        return false;
+    }
+    auto key = joinNode->getInternalID();
+    if (!outerPlan.getSchema()->evaluable(*key)) {
+        return false;
+    }
+    auto plan = outerPlan.copy();
+    appendFlattens(plan.getSchema()->getGroupsPosInScope(), plan);
+    const auto outputGroupPos = plan.getSchema()->getGroupPos(*key);
+    auto properties = getProperties(*joinNode);
+    properties.erase(std::remove_if(properties.begin(), properties.end(),
+                         [](const std::shared_ptr<Expression>& expression) {
+                             return expression->constCast<PropertyExpression>().isInternalID();
+                         }),
+        properties.end());
+    auto lookup = std::make_shared<LogicalQueryPrimaryKeyLookup>(tableID, joinNode->getInternalID(),
+        properties, key, outputGroupPos, plan.getLastOperator());
+    lookup->computeFactorizedSchema();
+    lookup->setCardinality(outerCard);
+    plan.setLastOperator(std::move(lookup));
+    appendFilters(predicates, plan);
+    plan.setCost(outerPlan.getCost() + outerCard);
+    context.addPlan(newSubgraph, std::move(plan));
+    return true;
+}
+
 void Planner::planInnerHashJoin(const SubqueryGraph& subgraph, const SubqueryGraph& otherSubgraph,
     const std::vector<std::shared_ptr<NodeExpression>>& joinNodes, bool flipPlan) {
     auto newSubgraph = subgraph;
@@ -851,6 +932,16 @@ void Planner::planInnerHashJoin(const SubqueryGraph& subgraph, const SubqueryGra
         getNewlyMatchedExprs(subgraph, otherSubgraph, newSubgraph, context.getWhereExpressions());
     for (auto& leftPlan : context.getPlans(subgraph)) {
         for (auto& rightPlan : context.getPlans(otherSubgraph)) {
+            // Lookup join replaces the hash join for this pair when one side is a bare
+            // single-node scan of the join node and the other side is small (e.g. Q1's
+            // Person payload fetch). Like INL joins, it prunes the hash alternatives.
+            if (joinNodes.size() == 1 &&
+                (tryPlanLookupJoin(subgraph, leftPlan, rightPlan, joinNodes[0], predicates,
+                     newSubgraph) ||
+                    tryPlanLookupJoin(otherSubgraph, rightPlan, leftPlan, joinNodes[0],
+                        predicates, newSubgraph))) {
+                continue;
+            }
             const auto leftProbeCardinality = cardinalityEstimator.estimateHashJoin(joinNodeIDs,
                 leftPlan.getLastOperatorRef(), rightPlan.getLastOperatorRef());
             if (CostModel::computeHashJoinCost(joinNodeIDs, leftPlan, rightPlan,

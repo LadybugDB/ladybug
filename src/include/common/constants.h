@@ -177,6 +177,10 @@ struct PlannerKnobs {
     // Recursive extend runs one graph search per bound source node. Measured per-source setup
     // cost vs per-output-pair cost is ~1000:1, so seed cardinality dominates direction choice.
     static constexpr uint64_t RECURSIVE_EXTEND_SOURCE_COST = 1000;
+    // Lookup join (per-tuple PK lookup instead of scan + hash join) pays off only when the
+    // outer side is small: each outer row costs one index probe/payload fetch, so cap the
+    // estimated outer cardinality this rewrite applies to (Q1's Person fetch: ~9 rows).
+    static constexpr uint64_t LOOKUP_JOIN_MAX_OUTER_CARDINALITY = 1024;
 };
 
 struct OrderByConstants {
