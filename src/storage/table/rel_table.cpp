@@ -887,30 +887,53 @@ row_idx_t RelTable::getDegreeForOffset(const Transaction* transaction, RelDataDi
     const auto nodeGroupIdx = StorageUtils::getNodeGroupIdx(nodeOffset);
     const auto offsetInGroup = nodeOffset - StorageUtils::getStartOffsetOfNodeGroup(nodeGroupIdx);
     auto* relTableData = getDirectedTableData(direction);
-    if (nodeGroupIdx >= relTableData->getNumNodeGroups()) {
-        return 0;
-    }
-    auto* nodeGroup = relTableData->getNodeGroup(nodeGroupIdx);
-    if (!nodeGroup) {
-        return 0;
-    }
-    auto& csrNodeGroup = nodeGroup->cast<CSRNodeGroup>();
-    row_idx_t count = 0;
-    if (auto* persistentGroup = csrNodeGroup.getPersistentChunkedGroup()) {
-        count +=
-            persistentGroup->cast<ChunkedCSRNodeGroup>().getCSRHeader().getCSRLength(offsetInGroup);
-    }
-    if (const auto* csrIndex = csrNodeGroup.getCSRIndex()) {
-        count += csrIndex->getNumRows(offsetInGroup);
-    }
+    // Uncommitted rels may target node groups with no committed CSR node group yet
+    // (see forEachDegree's handling of local-only groups): resolve them first so the
+    // early returns below don't drop them.
+    row_idx_t localCount = 0;
     if (transaction->isWriteTransaction()) {
         if (auto* localTable = transaction->getLocalStorage()->getLocalTable(*this)) {
             auto& localCSRIndex = localTable->cast<LocalRelTable>().getCSRIndex(direction);
             if (auto it = localCSRIndex.find(nodeOffset); it != localCSRIndex.end()) {
-                count += it->second.size();
+                localCount += it->second.size();
             }
         }
     }
+    if (nodeGroupIdx >= relTableData->getNumNodeGroups()) {
+        return localCount;
+    }
+    auto* nodeGroup = relTableData->getNodeGroup(nodeGroupIdx);
+    if (!nodeGroup) {
+        return localCount;
+    }
+    auto& csrNodeGroup = nodeGroup->cast<CSRNodeGroup>();
+    row_idx_t count = 0;
+    // The persistent CSR header chunks are ON_DISK: their in-memory buffers are not
+    // positionally valid. Reading them directly via ChunkedCSRHeader::getCSRLength (i.e.
+    // ColumnChunk::getValue) returns uninitialized memory (see #1292). Scan the length
+    // through its Column like every other reader (forEachDegree, CountRelTable) instead.
+    // Pin under the group lock so parked readers resolve their retained snapshot.
+    const auto pin = csrNodeGroup.captureScanPin(transaction);
+    if (auto* persistentGroup = pin.persistent.get()) {
+        auto& csrHeader = persistentGroup->cast<ChunkedCSRNodeGroup>().getCSRHeader();
+        const auto numNodes = csrHeader.length->getNumValues();
+        if (offsetInGroup < numNodes) {
+            auto lengthChunk = ColumnChunkFactory::createColumnChunkData(*memoryManager,
+                common::LogicalType::UINT64(), false /*enableCompression*/, 1,
+                ResidencyState::IN_MEMORY, false /*hasNullData*/, false /*initializeToZero*/);
+            ChunkState chunkState;
+            auto* csrLengthColumn = relTableData->getCSRLengthColumn();
+            csrHeader.length->initializeScanState(chunkState, csrLengthColumn);
+            csrLengthColumn->scan(chunkState, lengthChunk.get(), offsetInGroup, 1);
+            if (lengthChunk->getNumValues() == 1) {
+                count += lengthChunk->getValue<common::length_t>(0);
+            }
+        }
+    }
+    if (pin.index) {
+        count += pin.index->getNumRows(offsetInGroup);
+    }
+    count += localCount;
     return count;
 }
 

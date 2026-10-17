@@ -67,6 +67,12 @@ protected:
         auto entries = table.getDegreeEntries(transaction, direction);
         EXPECT_TRUE(std::is_sorted(entries.begin(), entries.end()));
         EXPECT_EQ(entries, expected);
+        // getDegreeForOffset must agree with the entries, including for checkpointed
+        // (on-disk CSR header) data read before any scan pins the pages (#1292).
+        for (const auto& [offset, degree] : expected) {
+            EXPECT_EQ(table.getDegreeForOffset(transaction, direction, offset), degree)
+                << "offset " << offset;
+        }
 
         EXPECT_EQ(table.getNumActiveBoundNodes(transaction, direction), expected.size());
 
