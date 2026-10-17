@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <unordered_set>
+#include <utility>
 
 #include "binder/binder.h"
 #include "binder/expression/expression_util.h"
@@ -124,6 +125,9 @@ static expression_vector getAggregateExpressions(const std::shared_ptr<Expressio
 }
 
 BoundProjectionList Binder::bindProjectionList(const ProjectionBody& projectionBody) {
+    auto& config = expressionBinder.config;
+    auto outerAggregateNames = std::exchange(config.projectionAggregateNames, {});
+    auto outerBindingProjectionList = std::exchange(config.bindingProjectionList, true);
     expression_vector projectionExprs;
     std::vector<std::string> aliases;
     std::vector<const ParsedExpression*> parsedItems;
@@ -162,6 +166,8 @@ BoundProjectionList Binder::bindProjectionList(const ProjectionBody& projectionB
             parsedItems.push_back(parsedExpr.get());
         }
     }
+    config.bindingProjectionList = outerBindingProjectionList;
+    config.projectionAggregateNames = std::move(outerAggregateNames);
     return {std::move(projectionExprs), std::move(aliases), std::move(parsedItems)};
 }
 
