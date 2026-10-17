@@ -1,7 +1,9 @@
 #pragma once
 
 #include <memory>
+#include <mutex>
 #include <string>
+#include <thread>
 #include <unordered_map>
 #include <vector>
 
@@ -72,6 +74,17 @@ struct CachedPreparedStatement {
     // logical/physical plan is stale and must be rebound (see
     // https://github.com/LadybugDB/ladybug/issues/1158).
     uint64_t planVersion = 0;
+
+    // Pool of cloned physical plans ready for reuse, keyed by executing thread.
+    // Cloning the cached template per execution costs hundreds of small allocations
+    // (operators, evaluators, print infos, schemas); pooled plans are reset via
+    // prepareForReuse() and reused instead. Capped per thread: deeper reentrancy
+    // (nested same-statement execution) falls back to fresh clones. Guarded by
+    // physicalPlanPoolMutex; entries are dropped with the statement.
+    static constexpr size_t PHYSICAL_PLAN_POOL_PER_THREAD = 10;
+    std::mutex physicalPlanPoolMutex;
+    std::unordered_map<std::thread::id, std::vector<std::unique_ptr<processor::PhysicalPlan>>>
+        physicalPlanPool;
 
     CachedPreparedStatement();
     ~CachedPreparedStatement();
