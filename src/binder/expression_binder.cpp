@@ -183,13 +183,7 @@ std::shared_ptr<Expression> ExpressionBinder::bindExpression(
         throw NotImplementedException(
             "bindExpression(" + ExpressionTypeUtil::toString(expressionType) + ").");
     }
-    // A direct reference to a variable returns an expression of an earlier clause, simplified when
-    // it was bound; it is not simplified again, as a new object would escape the binder's identity
-    // check for expressions an earlier clause computed. References nested in a larger expression
-    // rely on each simplifier returning an already simplified input unchanged.
-    if (expressionType != ExpressionType::VARIABLE) {
-        expression = simplifyExpression(expression);
-    }
+    expression = simplifyExpression(expression);
     if (ConstantExpressionVisitor::needFold(*expression)) {
         return tryFoldExpression(expression);
     }
@@ -198,6 +192,11 @@ std::shared_ptr<Expression> ExpressionBinder::bindExpression(
 
 std::shared_ptr<Expression> ExpressionBinder::simplifyExpression(
     const std::shared_ptr<Expression>& expression) {
+    // Earlier clauses' expressions are recognised by identity, so a scope expression is never
+    // simplified again, and no simplifier returns a part of one in place of its parent.
+    if (binder->scope.contains(*expression)) {
+        return expression;
+    }
     switch (expression->expressionType) {
     case ExpressionType::AND:
     case ExpressionType::OR:
@@ -263,6 +262,12 @@ std::shared_ptr<Expression> ExpressionBinder::simplifyArithmeticExpression(
     if (expression->dataType != survivor->dataType) {
         return expression;
     }
+    // A projection names its item by setting the alias on the expression, so an identity over a
+    // scope expression stays as written: returning the operand would let the alias rename the
+    // variable, e.g. x in WITH x + 0 AS y, x.
+    if (binder->scope.contains(*survivor)) {
+        return expression;
+    }
     // Preserve the original expression name, mirroring foldExpression: without this,
     // e.g. RETURN t.age, t.age + 0 would produce two identically-named columns.
     if (expression->hasAlias()) {
@@ -286,7 +291,7 @@ std::shared_ptr<Expression> ExpressionBinder::simplifyBooleanExpression(
         if (isBoolLiteral(*child, false)) {
             return createLiteralExpression(Value(true));
         }
-        if (child->expressionType == ExpressionType::NOT) {
+        if (child->expressionType == ExpressionType::NOT && !binder->scope.contains(*child)) {
             return child->getChild(0);
         }
         if (child != expression->getChild(0)) {

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <algorithm>
+
 #include "binder/expression/expression.h"
 #include "binder/expression/node_expression.h"
 #include "common/case_insensitive_map.h"
@@ -14,6 +16,10 @@ public:
 
     bool empty() const { return expressions.empty(); }
     bool contains(const std::string& varName) const { return nameToExprIdx.contains(varName); }
+    bool contains(const Expression& expression) const {
+        return std::ranges::any_of(expressions,
+            [&](const auto& scopeExpr) { return scopeExpr.get() == &expression; });
+    }
     std::shared_ptr<Expression> getExpression(const std::string& varName) const {
         DASSERT(nameToExprIdx.contains(varName));
         return expressions[nameToExprIdx.at(varName)];
