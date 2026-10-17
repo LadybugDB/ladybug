@@ -954,6 +954,45 @@ Index* NodeTable::tryGetPrimaryKeyIndex() const {
 
 bool NodeTable::lookupPK(const Transaction* transaction, ValueVector* keyVector, uint64_t vectorPos,
     offset_t& result) const {
+    // Lookup joins on node internal IDs (e.g. fetching Person payloads for already-bound
+    // `p._ID`s) resolve directly to offsets: the offset is embedded in the ID, so no
+    // primary-key index probe (HASH or ART) is needed -- only table-ID, bounds and
+    // visibility checks. Uncommitted rows live in local storage past the committed bound
+    // (`LocalNodeTable::getStartOffset`), with visibility tracked locally.
+    if (keyVector->dataType.getLogicalTypeID() == LogicalTypeID::INTERNAL_ID) {
+        if (keyVector->isNull(vectorPos)) {
+            return false;
+        }
+        const auto nodeID = keyVector->getValue<nodeID_t>(vectorPos);
+        if (nodeID.tableID != tableID || nodeID.offset == INVALID_OFFSET) {
+            return false;
+        }
+        if (transaction->getLocalStorage()) {
+            if (const auto localTable = transaction->getLocalStorage()->getLocalTable(*this)) {
+                auto& localNodeTable = localTable->cast<LocalNodeTable>();
+                if (nodeID.offset >= localNodeTable.getStartOffset()) {
+                    if (nodeID.offset >=
+                        localNodeTable.getStartOffset() + localNodeTable.getNumTotalRows()) {
+                        return false;
+                    }
+                    if (!localNodeTable.isVisible(transaction, nodeID.offset)) {
+                        return false;
+                    }
+                    result = nodeID.offset;
+                    return true;
+                }
+            }
+        }
+        if (nodeID.offset >= nodeGroups->getNumTotalRows()) {
+            return false;
+        }
+        // Handles locally-deleted committed rows via the local-visibility branch.
+        if (!isVisibleNoLock(transaction, nodeID.offset)) {
+            return false;
+        }
+        result = nodeID.offset;
+        return true;
+    }
     if (transaction->getLocalStorage()) {
         if (const auto localTable = transaction->getLocalStorage()->getLocalTable(*this);
             localTable && localTable->cast<LocalNodeTable>().lookupPK(transaction, keyVector,
