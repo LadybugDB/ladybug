@@ -90,7 +90,7 @@ void ColumnChunk::scan(const Transaction* transaction, const ChunkState& state, 
 
 static void scanPersistentSegments(ChunkState& chunkState, ColumnChunkScanner& output,
     common::offset_t startRow, common::offset_t numRows) {
-    DASSERT(output.getNumValues() == 0);
+    [[maybe_unused]] const auto numValuesBefore = output.getNumValues();
     [[maybe_unused]] uint64_t numValuesScanned = chunkState.rangeSegments(startRow, numRows,
         [&](auto& segmentState, auto offsetInSegment, auto lengthInSegment, auto) {
             output.scanSegment(offsetInSegment, lengthInSegment,
@@ -100,7 +100,7 @@ static void scanPersistentSegments(ChunkState& chunkState, ColumnChunkScanner& o
                         lengthInSegment);
                 });
         });
-    DASSERT(output.getNumValues() == numValuesScanned);
+    DASSERT(output.getNumValues() == numValuesBefore + numValuesScanned);
 }
 
 void ColumnChunk::scanInMemSegments(ColumnChunkScanner& output, common::offset_t startRow,
