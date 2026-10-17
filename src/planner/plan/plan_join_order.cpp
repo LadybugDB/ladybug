@@ -904,8 +904,13 @@ bool Planner::tryPlanLookupJoin(const SubqueryGraph& innerSubgraph, const Logica
     const auto outputGroupPos = plan.getSchema()->getGroupPos(*key);
     auto properties = getProperties(*joinNode);
     properties.erase(std::remove_if(properties.begin(), properties.end(),
-                         [](const std::shared_ptr<Expression>& expression) {
-                             return expression->constCast<PropertyExpression>().isInternalID();
+                         [&](const std::shared_ptr<Expression>& expression) {
+                             if (expression->constCast<PropertyExpression>().isInternalID()) {
+                                 return true;
+                             }
+                             // Skip properties already bound by the outer plan: the lookup
+                             // only needs to fetch the missing payload columns.
+                             return plan.getSchema()->isExpressionInScope(*expression);
                          }),
         properties.end());
     auto lookup = std::make_shared<LogicalQueryPrimaryKeyLookup>(tableID, joinNode->getInternalID(),
@@ -935,11 +940,10 @@ void Planner::planInnerHashJoin(const SubqueryGraph& subgraph, const SubqueryGra
             // Lookup join replaces the hash join for this pair when one side is a bare
             // single-node scan of the join node and the other side is small (e.g. Q1's
             // Person payload fetch). Like INL joins, it prunes the hash alternatives.
-            if (joinNodes.size() == 1 &&
-                (tryPlanLookupJoin(subgraph, leftPlan, rightPlan, joinNodes[0], predicates,
-                     newSubgraph) ||
-                    tryPlanLookupJoin(otherSubgraph, rightPlan, leftPlan, joinNodes[0],
-                        predicates, newSubgraph))) {
+            if (joinNodes.size() == 1 && (tryPlanLookupJoin(subgraph, leftPlan, rightPlan,
+                                              joinNodes[0], predicates, newSubgraph) ||
+                                             tryPlanLookupJoin(otherSubgraph, rightPlan, leftPlan,
+                                                 joinNodes[0], predicates, newSubgraph))) {
                 continue;
             }
             const auto leftProbeCardinality = cardinalityEstimator.estimateHashJoin(joinNodeIDs,
