@@ -363,18 +363,17 @@ void Optimizer::optimize(planner::LogicalPlan* plan, main::ClientContext* contex
         // Degree top-k rewrites need the LIMIT to be folded into ORDER_BY first.
         countRelTableOptimizer.rewrite(plan);
 
-        auto factorizationRewriter = FactorizationRewriter();
-        factorizationRewriter.rewrite(plan);
-
-        // AggKeyDependencyOptimizer doesn't change factorization structure and thus can be put
-        // after FactorizationRewriter.
         auto aggKeyDependencyOptimizer = AggKeyDependencyOptimizer();
         aggKeyDependencyOptimizer.rewrite(plan);
 
         // RemoveUnnecessaryDistinctOptimizer should run after AggKeyDependencyOptimizer
-        // so that dependent-key resolution has already happened.
+        // so that dependent-key resolution has already happened, and before
+        // FactorizationRewriter so that no flatten is placed for a DISTINCT it removes.
         auto removeUnnecessaryDistinctOptimizer = RemoveUnnecessaryDistinctOptimizer();
         removeUnnecessaryDistinctOptimizer.rewrite(plan);
+
+        auto factorizationRewriter = FactorizationRewriter();
+        factorizationRewriter.rewrite(plan);
 
         // RemoveUnnecessaryOrderByOptimizer removes ORDER BY nodes that do not
         // affect the result (e.g., before a GROUP BY-less aggregate like COUNT(*)).
