@@ -26,17 +26,20 @@ f_group_pos LogicalQueryPrimaryKeyLookup::resolveOutputGroupPos() const {
 void LogicalQueryPrimaryKeyLookup::computeFactorizedSchema() {
     copyChildSchema(0);
     const auto groupPos = resolveOutputGroupPos();
-    schema->insertToGroupAndScope(nodeID, groupPos);
+    // Lookup joins reuse an already-bound node ID as the key (key and nodeID share the
+    // same unique name), and properties may already be bound by the outer plan. Like hash
+    // joins on node IDs, allow repeats and keep the existing group in that case.
+    schema->insertToGroupAndScopeMayRepeat(nodeID, groupPos);
     for (auto& property : properties) {
-        schema->insertToGroupAndScope(property, groupPos);
+        schema->insertToGroupAndScopeMayRepeat(property, groupPos);
     }
 }
 
 void LogicalQueryPrimaryKeyLookup::computeFlatSchema() {
     copyChildSchema(0);
-    schema->insertToGroupAndScope(nodeID, 0);
+    schema->insertToGroupAndScopeMayRepeat(nodeID, 0);
     for (auto& property : properties) {
-        schema->insertToGroupAndScope(property, 0);
+        schema->insertToGroupAndScopeMayRepeat(property, 0);
     }
 }
 
