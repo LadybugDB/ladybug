@@ -1,3 +1,5 @@
+#include <utility>
+
 #include "binder/binder.h"
 #include "binder/expression/expression_util.h"
 #include "binder/expression/lambda_expression.h"
@@ -20,8 +22,13 @@ void ExpressionBinder::bindLambdaExpression(const Expression& lambdaInput,
     for (auto& varName : parsedLambdaExpr.getVarNames()) {
         binder->createVariable(varName, listChildType);
     }
+    // The projection does not compute aggregates inside a lambda body, so they keep their
+    // structural names and read the earlier clause's column, as before.
+    auto& config = binder->getExpressionBinder()->config;
+    auto bindingProjectionList = std::exchange(config.bindingProjectionList, false);
     auto funcExpr =
         binder->getExpressionBinder()->bindExpression(*parsedLambdaExpr.getFunctionExpr());
+    config.bindingProjectionList = bindingProjectionList;
     binder->restoreScope(std::move(prevScope));
     boundLambdaExpr.cast(funcExpr->getDataType().copy());
     boundLambdaExpr.setFunctionExpr(std::move(funcExpr));
