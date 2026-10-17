@@ -306,8 +306,13 @@ protected:
 private:
     using flush_buffer_func_t = std::function<ColumnChunkMetadata(const std::span<uint8_t>,
         FileHandle*, const PageRange&, const ColumnChunkMetadata&)>;
-    flush_buffer_func_t initializeFlushBufferFunction(
-        std::shared_ptr<CompressionAlg> compression) const;
+    // Stack-only functor dispatch for flushBufferFunction: constructs the (small)
+    // compression functor on the stack per call instead of heap-allocating it inside
+    // the std::function at chunk-construction time.
+    ColumnChunkMetadata flushBufferImpl(std::span<uint8_t> buffer, FileHandle* dataFH,
+        const PageRange& entry, const ColumnChunkMetadata& otherMetadata) const;
+    ColumnChunkMetadata getMetadataImpl(std::span<const uint8_t> buffer, uint64_t numValues,
+        StorageValue minValue, StorageValue maxValue) const;
     uint64_t getBufferSize(uint64_t capacity_) const;
 
 protected:
@@ -319,6 +324,10 @@ protected:
     ResidencyState residencyState;
     common::LogicalType dataType;
     bool enableCompression;
+    // Owned compression algorithm, shared by the flush/metadata functors. Keeping it here
+    // lets both std::function members capture only `this` (8 bytes, fits small-function
+    // optimization) instead of heap-allocating 24-byte bound functors per chunk.
+    std::shared_ptr<CompressionAlg> compressionAlg;
     uint32_t numBytesPerValue;
     uint64_t capacity;
     std::unique_ptr<MemoryBuffer> buffer;

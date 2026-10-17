@@ -7,6 +7,7 @@ namespace processor {
 
 void HashAggregateScan::initLocalStateInternal(ResultSet* resultSet, ExecutionContext* context) {
     BaseAggregateScan::initLocalStateInternal(resultSet, context);
+    groupByKeyVectors.clear();
     for (auto& dataPos : groupByKeyVectorsPos) {
         auto valueVector = resultSet->getValueVector(dataPos);
         groupByKeyVectors.push_back(valueVector.get());

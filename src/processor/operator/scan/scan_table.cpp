@@ -139,6 +139,7 @@ common::sel_t ScanTable::applyNbrMaskFilter(common::SelectionVector& selVector,
 }
 
 void ScanTable::initLocalStateInternal(ResultSet*, ExecutionContext*) {
+    outVectors.clear();
     for (auto& pos : opInfo.outVectorsPos) {
         outVectors.push_back(resultSet->getValueVector(pos).get());
     }

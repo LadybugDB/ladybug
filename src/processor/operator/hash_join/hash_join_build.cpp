@@ -26,6 +26,11 @@ void HashJoinSharedState::mergeLocalHashTable(JoinHashTable& localHashTable) {
 }
 
 void HashJoinBuild::initLocalStateInternal(ResultSet* resultSet, ExecutionContext* context) {
+    // Clear member vectors so re-execution on a reused operator (e.g. pooled task roots)
+    // starts clean; fresh operators are unaffected (vectors start empty).
+    keyState = nullptr;
+    keyVectors.clear();
+    payloadVectors.clear();
     std::vector<LogicalType> keyTypes;
     for (auto i = 0u; i < info.keysPos.size(); ++i) {
         auto vector = resultSet->getValueVector(info.keysPos[i]).get();
