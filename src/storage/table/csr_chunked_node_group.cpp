@@ -398,6 +398,26 @@ InMemChunkedCSRHeader::InMemChunkedCSRHeader(MemoryManager& memoryManager, bool 
         false /*initializeToZero*/);
 }
 
+bool InMemChunkedCSRHeader::coversNode(offset_t nodeOffset) const {
+    if (randomLookup || wholeHeader || decodedRanges.empty()) {
+        return true;
+    }
+    if (headerLimit > 0 && nodeOffset >= headerLimit) {
+        return true;
+    }
+    const auto first = nodeOffset == 0 ? offset_t{0} : nodeOffset - 1;
+    const auto lastEx = nodeOffset + 1;
+    for (const auto& [start, end] : decodedRanges) {
+        if (start <= first && end >= lastEx) {
+            return true;
+        }
+        if (start > first) {
+            break;
+        }
+    }
+    return false;
+}
+
 offset_t InMemChunkedCSRHeader::getStartCSROffset(offset_t nodeOffset) const {
     // TODO(Guodong): I think we can simplify the check here by getting rid of some of the
     // conditions.
@@ -408,8 +428,7 @@ offset_t InMemChunkedCSRHeader::getStartCSROffset(offset_t nodeOffset) const {
     if (randomLookup) {
         return offset->getValue<offset_t>(0);
     }
-    // A header decoded for a span is only read inside it.
-    DASSERT(indexBase == 0 || (nodeOffset > indexBase && nodeOffset - 1 - indexBase < numValues));
+    DASSERT(coversNode(nodeOffset));
     const auto stored = nodeOffset - 1 - indexBase;
     return offset->getValue<offset_t>(stored >= numValues ? (numValues - 1) : stored);
 }
@@ -424,7 +443,7 @@ offset_t InMemChunkedCSRHeader::getEndCSROffset(offset_t nodeOffset) const {
     if (randomLookup) {
         return offset->getValue<offset_t>(nodeOffset == 0 ? 0 : 1);
     }
-    DASSERT(indexBase == 0 || nodeOffset - indexBase < numValues);
+    DASSERT(coversNode(nodeOffset));
     const auto stored = nodeOffset - indexBase;
     return offset->getValue<offset_t>(stored >= numValues ? (numValues - 1) : stored);
 }
@@ -433,7 +452,7 @@ length_t InMemChunkedCSRHeader::getCSRLength(offset_t nodeOffset) const {
     if (randomLookup) {
         return length->getNumValues() == 0 ? 0 : length->getValue<length_t>(0);
     }
-    DASSERT(indexBase == 0 || nodeOffset - indexBase < length->getNumValues());
+    DASSERT(coversNode(nodeOffset));
     const auto stored = nodeOffset - indexBase;
     return stored >= length->getNumValues() ? 0 : length->getValue<length_t>(stored);
 }

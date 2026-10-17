@@ -145,7 +145,8 @@ struct CSRNodeGroupScanState final : NodeGroupScanState {
     // The number of rows (i.e., rels) that have been scanned so far in current node group.
     common::row_idx_t numCachedRows;
     common::row_idx_t nextCachedRowToScan;
-    // Entries and spans decoded so far for the current node group's header.
+    // Entries decoded and partial decodes (spans or cluster sets) so far for the current node
+    // group's header.
     common::offset_t numHeaderEntriesDecoded = 0;
     common::idx_t numHeaderSpansDecoded = 0;
 
@@ -178,6 +179,12 @@ struct CSRNodeGroupScanState final : NodeGroupScanState {
     // node vector's chunk state, which holds the served parents in its selection vector. See
     // docs/multi_parent_lifetime.md.
     bool tryScanCachedTuplesPacked(RelTableScanState& tableScanState);
+
+    // Copies rows into the cache starting in the current bound node's list and running through
+    // the next lists up to a gap (see refillEnd), or moves past that node when its list is empty
+    // or already scanned. False once the batch has no rows left.
+    bool refillCache(const transaction::Transaction* transaction,
+        RelTableScanState& tableScanState);
 };
 
 struct CSRNodeGroupCheckpointState final : NodeGroupCheckpointState {

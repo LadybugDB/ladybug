@@ -1,5 +1,9 @@
 #include "storage/table/csr_node_group.h"
 
+#include <algorithm>
+#include <limits>
+#include <vector>
+
 #include "common/constants.h"
 #include "common/serializer/buffer_reader.h"
 #include "common/serializer/buffer_writer.h"
@@ -21,14 +25,21 @@ using namespace lbug::transaction;
 namespace lbug {
 namespace storage {
 
-// Span decodes per node group before a scan decodes the group's whole CSR header. Each decode also
-// re-initializes the column scan states, so batches that keep missing the span are cheaper with
-// the whole header.
+// Partial header decodes per node group before a scan decodes the group's whole CSR header.
 static constexpr idx_t MAX_HEADER_SPANS_PER_GROUP = 16;
 // After the first decode in a group, a batch with more bound nodes that are not spread thinly over
 // their span decodes the whole header: such batches come from scans that walk the whole group,
 // where one decode costs less than a span per batch.
 static constexpr idx_t MAX_SPAN_BATCH_SIZE = DEFAULT_VECTOR_CAPACITY / 16;
+// Bound nodes whose header entries are less than CLUSTER_GAP apart share one decode: starting a
+// cluster costs more than decoding the entries in between.
+static constexpr offset_t CLUSTER_GAP = 256;
+static constexpr idx_t MAX_CLUSTERS_PER_BATCH = 256;
+// A neighbour-cache refill stops before a bound node whose list starts REFILL_GAP or more rows
+// past the lists before it: copying those rows costs more than another refill. Only the next
+// REFILL_LOOKAHEAD bound nodes are checked, so dense batches don't pay a header read per node.
+static constexpr row_idx_t REFILL_GAP = 256;
+static constexpr idx_t REFILL_LOOKAHEAD = 4;
 
 bool CSRNodeGroupScanState::tryScanCachedTuples(RelTableScanState& tableScanState) {
     if (numCachedRows == 0 ||
@@ -239,19 +250,6 @@ size_t CSRNodeGroup::getNumRetainedSnapshots() const {
     return retainedSnapshots.size();
 }
 
-static bool isWholeGroupHeader(const InMemChunkedCSRHeader& header, offset_t numGroupEntries) {
-    return header.indexBase == 0 && header.offset->getNumValues() == numGroupEntries;
-}
-
-// A node's list starts at the offset stored for the node before it, so a span of the header
-// covers the bound nodes when it holds that entry and the entry of the last bound node.
-static bool spanCoversBoundNodes(const InMemChunkedCSRHeader& header, offset_t minNode,
-    offset_t maxNode) {
-    const auto firstNeeded = minNode == 0 ? offset_t{0} : minNode - 1;
-    return header.indexBase <= firstNeeded &&
-           maxNode < header.indexBase + header.offset->getNumValues();
-}
-
 static std::pair<offset_t, offset_t> boundNodeOffsetRange(const RelTableScanState& relScanState) {
     offset_t minNode = StorageConfig::NODE_GROUP_SIZE;
     offset_t maxNode = 0;
@@ -268,6 +266,97 @@ static std::pair<offset_t, offset_t> boundNodeOffsetRange(const RelTableScanStat
     }
     return {minNode, maxNode};
 }
+
+// One [start, end) of header indices per run of bound nodes whose needed entries sit within
+// CLUSTER_GAP of each other. RelTable::initScanState sorts bound nodes by offset; a batch out of
+// order or past MAX_CLUSTERS_PER_BATCH clusters gets none and decodes a span instead. Fills the
+// caller's vector so its capacity carries over between decodes.
+static void clustersForBoundNodes(const RelTableScanState& relScanState, offset_t headerSize,
+    std::vector<std::pair<offset_t, offset_t>>& clusters) {
+    clusters.clear();
+    const auto& boundSel = relScanState.cachedBoundNodeSelVector;
+    for (sel_t i = 0; i < boundSel.getSelSize(); i++) {
+        const auto n =
+            relScanState.nodeIDVector->readNodeOffset(boundSel[i]) % StorageConfig::NODE_GROUP_SIZE;
+        if (n >= headerSize) {
+            continue;
+        }
+        const auto start = n == 0 ? offset_t{0} : n - 1;
+        const auto end = n + 1;
+        if (!clusters.empty() && start < clusters.back().first) {
+            clusters.clear();
+            return;
+        }
+        if (!clusters.empty() && start < clusters.back().second + CLUSTER_GAP) {
+            clusters.back().second = std::max(clusters.back().second, end);
+        } else if (clusters.size() < MAX_CLUSTERS_PER_BATCH) {
+            clusters.emplace_back(start, end);
+        } else {
+            clusters.clear();
+            return;
+        }
+    }
+}
+
+static offset_t clusterEntryCount(const std::vector<std::pair<offset_t, offset_t>>& clusters) {
+    offset_t entries = 0;
+    for (const auto& [start, end] : clusters) {
+        entries += end - start;
+    }
+    return entries;
+}
+
+static bool headerCoversBatch(const InMemChunkedCSRHeader& header,
+    const RelTableScanState& relScanState, offset_t numGroupEntries) {
+    if (header.wholeHeader) {
+        return true;
+    }
+    const auto& ranges = header.decodedRanges;
+    if (ranges.empty()) {
+        return false;
+    }
+    idx_t r = 0;
+    const auto& boundSel = relScanState.cachedBoundNodeSelVector;
+    for (sel_t i = 0; i < boundSel.getSelSize(); i++) {
+        const auto n =
+            relScanState.nodeIDVector->readNodeOffset(boundSel[i]) % StorageConfig::NODE_GROUP_SIZE;
+        if (n >= numGroupEntries) {
+            continue;
+        }
+        const auto first = n == 0 ? offset_t{0} : n - 1;
+        const auto lastEx = n + 1;
+        while (r < ranges.size() && ranges[r].second <= first) {
+            r++;
+        }
+        if (r >= ranges.size() || ranges[r].first > first || ranges[r].second < lastEx) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static void initDataColumnScanStates(const RelTableScanState& relScanState,
+    CSRNodeGroupScanState& nodeGroupScanState, ChunkedNodeGroup& persistent) {
+    for (auto i = 0u; i < relScanState.columnIDs.size(); i++) {
+        if (relScanState.columnIDs[i] == INVALID_COLUMN_ID ||
+            relScanState.columnIDs[i] == ROW_IDX_COLUMN_ID) {
+            continue;
+        }
+        auto& chunk = persistent.getColumnChunk(relScanState.columnIDs[i]);
+        chunk.initializeScanState(nodeGroupScanState.chunkStates[i], relScanState.columns[i]);
+    }
+}
+
+#if defined(RUNTIME_CHECKS) || !defined(NDEBUG)
+// Reads past numEntries clamp to the last entry, so only the first numEntries can be stale.
+static void poisonHeaderCache(InMemChunkedCSRHeader& header, offset_t numEntries) {
+    const auto num = std::min<offset_t>(numEntries, header.offset->getCapacity());
+    std::fill(header.offset->getData<offset_t>(), header.offset->getData<offset_t>() + num,
+        std::numeric_limits<offset_t>::max());
+    std::fill(header.length->getData<length_t>(), header.length->getData<length_t>() + num,
+        std::numeric_limits<length_t>::max());
+}
+#endif
 
 void CSRNodeGroup::initializeScanState(const Transaction* transaction,
     TableScanState& state) const {
@@ -287,6 +376,16 @@ void CSRNodeGroup::initializeScanState(const Transaction* transaction,
         if (nodeGroupScanState.pin.persistent) {
             nodeGroupScanState.numHeaderEntriesDecoded = 0;
             nodeGroupScanState.numHeaderSpansDecoded = 0;
+            initDataColumnScanStates(relScanState, nodeGroupScanState,
+                *nodeGroupScanState.pin.persistent);
+#if defined(RUNTIME_CHECKS) || !defined(NDEBUG)
+            if (nodeGroupScanState.header) {
+                poisonHeaderCache(*nodeGroupScanState.header,
+                    nodeGroupScanState.pin.persistent->cast<ChunkedCSRNodeGroup>()
+                        .getCSRHeader()
+                        .offset->getNumValues());
+            }
+#endif
             initScanForCommittedPersistent(transaction, relScanState, nodeGroupScanState);
         }
     } else if (relScanState.randomLookup && nodeGroupScanState.pin.persistent) {
@@ -295,18 +394,14 @@ void CSRNodeGroup::initializeScanState(const Transaction* transaction,
         initScanForCommittedPersistent(transaction, relScanState, nodeGroupScanState);
     } else if (nodeGroupScanState.pin.persistent &&
                relScanState.cachedBoundNodeSelVector.getSelSize() > 0) {
-        // A later batch of bound nodes can fall outside the header span decoded for an earlier
-        // one; decode again for it.
+        // A later batch of bound nodes can fall outside the header ranges decoded for an
+        // earlier one; decode again for it.
         const auto numGroupEntries = nodeGroupScanState.pin.persistent->cast<ChunkedCSRNodeGroup>()
                                          .getCSRHeader()
                                          .offset->getNumValues();
         const auto& header = *nodeGroupScanState.header;
-        if (!isWholeGroupHeader(header, numGroupEntries)) {
-            const auto [minNode, maxNode] = boundNodeOffsetRange(relScanState);
-            const bool covered = spanCoversBoundNodes(header, minNode, maxNode);
-            if (!covered) {
-                initScanForCommittedPersistent(transaction, relScanState, nodeGroupScanState);
-            }
+        if (!headerCoversBatch(header, relScanState, numGroupEntries)) {
+            initScanForCommittedPersistent(transaction, relScanState, nodeGroupScanState);
         }
     }
     // Switch to a new Vector of bound nodes (i.e., new csr lists) in the node group.
@@ -333,72 +428,89 @@ void CSRNodeGroup::initScanForCommittedPersistent(const Transaction* transaction
     auto& persistent = *nodeGroupScanState.pin.persistent;
     auto& csrChunkGroup = persistent.cast<ChunkedCSRNodeGroup>();
     const auto& csrHeader = csrChunkGroup.getCSRHeader();
-    // We are switching to a new node group.
-    // Initialize the scan states of a new node group for the csr header.
     csrHeader.offset->initializeScanState(offsetState, relScanState.csrOffsetColumn);
     csrHeader.length->initializeScanState(lengthState, relScanState.csrLengthColumn);
-    nodeGroupScanState.header->offset->setNumValues(0);
-    nodeGroupScanState.header->length->setNumValues(0);
-    // Initialize the scan states of a new node group for data columns.
-    for (auto i = 0u; i < relScanState.columnIDs.size(); i++) {
-        if (relScanState.columnIDs[i] == INVALID_COLUMN_ID ||
-            relScanState.columnIDs[i] == ROW_IDX_COLUMN_ID) {
-            continue;
-        }
-        auto& chunk = persistent.getColumnChunk(relScanState.columnIDs[i]);
-        chunk.initializeScanState(nodeGroupScanState.chunkStates[i], relScanState.columns[i]);
-    }
+    auto& outHeader = *nodeGroupScanState.header;
+    outHeader.offset->setNumValues(0);
+    outHeader.length->setNumValues(0);
+    outHeader.indexBase = 0;
+    outHeader.wholeHeader = false;
+    outHeader.decodedRanges.clear();
     DASSERT(csrHeader.offset->getNumValues() == csrHeader.length->getNumValues());
-    nodeGroupScanState.header->indexBase = 0;
+    const auto numGroupEntries = csrHeader.offset->getNumValues();
+    outHeader.headerLimit = numGroupEntries;
     if (relScanState.randomLookup) {
         auto pos = relScanState.nodeIDVector->state->getSelVector()[0];
         auto nodeOffset = relScanState.nodeIDVector->readNodeOffset(pos);
         auto offsetInGroup = nodeOffset % StorageConfig::NODE_GROUP_SIZE;
         auto offsetToScanFrom = offsetInGroup == 0 ? 0 : offsetInGroup - 1;
         csrHeader.offset->scanCommitted<ResidencyState::ON_DISK>(transaction, offsetState,
-            *nodeGroupScanState.header->offset, offsetToScanFrom, 1);
+            *outHeader.offset, offsetToScanFrom, 1);
         csrHeader.length->scanCommitted<ResidencyState::ON_DISK>(transaction, lengthState,
-            *nodeGroupScanState.header->length, offsetInGroup, 1);
-    } else {
-        const auto numBoundNodes = csrHeader.offset->getNumValues();
-        const auto numBatchNodes = relScanState.cachedBoundNodeSelVector.getSelSize();
-        // Decode only the span of the header the batch's bound nodes need, while the group has had
-        // fewer than MAX_HEADER_SPANS_PER_GROUP spans and their entries stay below the whole
-        // header. Bound nodes past the header have no lists in this group.
-        bool decodeSpan = false;
-        offset_t indexBase = 0;
-        offset_t maxNode = 0;
-        if (numBatchNodes > 0 &&
-            nodeGroupScanState.numHeaderSpansDecoded < MAX_HEADER_SPANS_PER_GROUP) {
-            const auto [minNode, lastNode] = boundNodeOffsetRange(relScanState);
-            indexBase = minNode == 0 ? 0 : minNode - 1;
-            maxNode = lastNode;
-            const auto span = maxNode - indexBase + 1;
-            decodeSpan = (nodeGroupScanState.numHeaderSpansDecoded == 0 ||
-                             numBatchNodes <= MAX_SPAN_BATCH_SIZE || numBatchNodes * 4 <= span) &&
-                         maxNode < numBoundNodes &&
-                         nodeGroupScanState.numHeaderEntriesDecoded + span < numBoundNodes;
-        }
-        if (!decodeSpan) {
-            csrHeader.offset->scanCommitted<ResidencyState::ON_DISK>(transaction, offsetState,
-                *nodeGroupScanState.header->offset);
-            csrHeader.length->scanCommitted<ResidencyState::ON_DISK>(transaction, lengthState,
-                *nodeGroupScanState.header->length);
-            nodeGroupScanState.numTotalRows =
-                nodeGroupScanState.header->getStartCSROffset(numBoundNodes);
-        } else {
-            const auto span = maxNode - indexBase + 1;
-            nodeGroupScanState.numHeaderEntriesDecoded += span;
-            nodeGroupScanState.numHeaderSpansDecoded++;
-            nodeGroupScanState.header->indexBase = indexBase;
-            csrHeader.offset->scanCommitted<ResidencyState::ON_DISK>(transaction, offsetState,
-                *nodeGroupScanState.header->offset, indexBase, span);
-            csrHeader.length->scanCommitted<ResidencyState::ON_DISK>(transaction, lengthState,
-                *nodeGroupScanState.header->length, indexBase, span);
-            nodeGroupScanState.numTotalRows = nodeGroupScanState.header->getEndCSROffset(maxNode);
-        }
+            *outHeader.length, offsetInGroup, 1);
+        outHeader.randomLookup = true;
+        return;
     }
-    nodeGroupScanState.header->randomLookup = relScanState.randomLookup;
+    outHeader.randomLookup = false;
+    const auto numBatchNodes = relScanState.cachedBoundNodeSelVector.getSelSize();
+    const auto [minNode, lastNode] = numBatchNodes > 0 ? boundNodeOffsetRange(relScanState) :
+                                                         std::pair<offset_t, offset_t>{0, 0};
+    const auto indexBase = minNode == 0 ? offset_t{0} : minNode - 1;
+    const auto span = (numBatchNodes == 0 || lastNode >= numGroupEntries) ?
+                          numGroupEntries :
+                          lastNode - indexBase + 1;
+    const bool sparse = numBatchNodes * 4 <= span;
+    const bool laterOk = nodeGroupScanState.numHeaderSpansDecoded == 0 ||
+                         numBatchNodes <= MAX_SPAN_BATCH_SIZE || sparse;
+    const bool canPartial = numBatchNodes > 0 && lastNode < numGroupEntries &&
+                            nodeGroupScanState.numHeaderSpansDecoded < MAX_HEADER_SPANS_PER_GROUP &&
+                            laterOk;
+    // Clusters beat the span only for bound nodes spread thinly over it.
+    auto& clusters = outHeader.decodedRanges;
+    if (canPartial && sparse) {
+        clustersForBoundNodes(relScanState, numGroupEntries, clusters);
+    }
+    const auto clusterEntries = clusterEntryCount(clusters);
+    const bool decodeClusters =
+        canPartial && !clusters.empty() && clusters.size() * CLUSTER_GAP < span &&
+        nodeGroupScanState.numHeaderEntriesDecoded + clusterEntries < numGroupEntries;
+    if (!decodeClusters) {
+        clusters.clear();
+    }
+    const bool decodeSpan = canPartial && !decodeClusters &&
+                            nodeGroupScanState.numHeaderEntriesDecoded + span < numGroupEntries;
+    if (decodeClusters) {
+        nodeGroupScanState.numHeaderEntriesDecoded += clusterEntries;
+        nodeGroupScanState.numHeaderSpansDecoded++;
+        for (const auto& [start, end] : clusters) {
+            outHeader.offset->setNumValues(start);
+            outHeader.length->setNumValues(start);
+            csrHeader.offset->scanCommitted<ResidencyState::ON_DISK>(transaction, offsetState,
+                *outHeader.offset, start, end - start);
+            csrHeader.length->scanCommitted<ResidencyState::ON_DISK>(transaction, lengthState,
+                *outHeader.length, start, end - start);
+        }
+        outHeader.offset->setNumValues(outHeader.decodedRanges.back().second);
+        outHeader.length->setNumValues(outHeader.decodedRanges.back().second);
+        nodeGroupScanState.numTotalRows = outHeader.getEndCSROffset(lastNode);
+    } else if (decodeSpan) {
+        nodeGroupScanState.numHeaderEntriesDecoded += span;
+        nodeGroupScanState.numHeaderSpansDecoded++;
+        outHeader.indexBase = indexBase;
+        outHeader.decodedRanges.emplace_back(indexBase, indexBase + span);
+        csrHeader.offset->scanCommitted<ResidencyState::ON_DISK>(transaction, offsetState,
+            *outHeader.offset, indexBase, span);
+        csrHeader.length->scanCommitted<ResidencyState::ON_DISK>(transaction, lengthState,
+            *outHeader.length, indexBase, span);
+        nodeGroupScanState.numTotalRows = outHeader.getEndCSROffset(lastNode);
+    } else {
+        outHeader.wholeHeader = true;
+        csrHeader.offset->scanCommitted<ResidencyState::ON_DISK>(transaction, offsetState,
+            *outHeader.offset);
+        csrHeader.length->scanCommitted<ResidencyState::ON_DISK>(transaction, lengthState,
+            *outHeader.length);
+        nodeGroupScanState.numTotalRows = outHeader.getStartCSROffset(numGroupEntries);
+    }
 }
 
 void CSRNodeGroup::initScanForCommittedInMem(RelTableScanState& relScanState,
@@ -453,6 +565,37 @@ NodeGroupScanResult CSRNodeGroup::scanCommittedPersistent(const Transaction* tra
     return scanCommittedPersistentWithCache(transaction, tableState, nodeGroupScanState);
 }
 
+// End of a refill that starts in the current bound node's list. Without a gap among the next
+// REFILL_LOOKAHEAD lists it fills the window, but never past the batch's last list.
+static row_idx_t refillEnd(const RelTableScanState& tableState, const InMemChunkedCSRHeader& header,
+    row_idx_t listEnd, row_idx_t windowEnd) {
+    if (listEnd >= windowEnd) {
+        return windowEnd;
+    }
+    const auto& boundSel = tableState.cachedBoundNodeSelVector;
+    const auto offsetInGroup = [&](idx_t i) {
+        return tableState.nodeIDVector->readNodeOffset(boundSel[i]) %
+               StorageConfig::NODE_GROUP_SIZE;
+    };
+    const idx_t numBound = boundSel.getSelSize();
+    auto end = listEnd;
+    auto i = tableState.currBoundNodeIdx + 1;
+    for (; i < numBound && i <= tableState.currBoundNodeIdx + REFILL_LOOKAHEAD; i++) {
+        const auto node = offsetInGroup(i);
+        const auto start = header.getStartCSROffset(node);
+        if (start >= std::min(windowEnd, end + REFILL_GAP)) {
+            return std::min(end, windowEnd);
+        }
+        end = std::max(end, start + header.getCSRLength(node));
+    }
+    if (i >= numBound) {
+        return std::min(end, windowEnd);
+    }
+    const auto lastNode = offsetInGroup(numBound - 1);
+    const auto lastEnd = header.getStartCSROffset(lastNode) + header.getCSRLength(lastNode);
+    return std::min(windowEnd, std::max(end, lastEnd));
+}
+
 NodeGroupScanResult CSRNodeGroup::scanCommittedPersistentWithCache(const Transaction* transaction,
     RelTableScanState& tableState, CSRNodeGroupScanState& nodeGroupScanState) const {
     while (true) {
@@ -465,36 +608,51 @@ NodeGroupScanResult CSRNodeGroup::scanCommittedPersistentWithCache(const Transac
                     tableState.outState->getSelVector().getSelSize()};
             }
         }
-        if (nodeGroupScanState.nextRowToScan == nodeGroupScanState.numTotalRows ||
-            tableState.currBoundNodeIdx >= tableState.cachedBoundNodeSelVector.getSelSize()) {
+        if (!nodeGroupScanState.refillCache(transaction, tableState)) {
             return NODE_GROUP_SCAN_EMPTY_RESULT;
         }
-        const auto currNodeOffset = tableState.nodeIDVector->readNodeOffset(
-            tableState.cachedBoundNodeSelVector[tableState.currBoundNodeIdx]);
-        const auto offsetInGroup = currNodeOffset % StorageConfig::NODE_GROUP_SIZE;
-        const auto startCSROffset = nodeGroupScanState.header->getStartCSROffset(offsetInGroup);
-        if (startCSROffset > nodeGroupScanState.nextRowToScan) {
-            nodeGroupScanState.nextRowToScan = startCSROffset;
-        }
-        DASSERT(nodeGroupScanState.nextRowToScan <= nodeGroupScanState.numTotalRows);
-        const auto numToScan =
-            std::min(nodeGroupScanState.numTotalRows - nodeGroupScanState.nextRowToScan,
-                DEFAULT_VECTOR_CAPACITY);
-        nodeGroupScanState.pin.persistent->scan(transaction, tableState, nodeGroupScanState,
-            nodeGroupScanState.nextRowToScan, numToScan);
-        nodeGroupScanState.numCachedRows = numToScan;
-        nodeGroupScanState.nextRowToScan += numToScan;
-        if (tableState.outState->getSelVector().isUnfiltered()) {
-            nodeGroupScanState.cachedScannedVectorsSelBitset.reset();
-        } else {
-            nodeGroupScanState.cachedScannedVectorsSelBitset =
-                std::bitset<DEFAULT_VECTOR_CAPACITY>();
-            for (auto i = 0u; i < tableState.outState->getSelVector().getSelSize(); i++) {
-                nodeGroupScanState.cachedScannedVectorsSelBitset->set(
-                    tableState.outState->getSelVector()[i], true);
-            }
+    }
+}
+
+bool CSRNodeGroupScanState::refillCache(const Transaction* transaction,
+    RelTableScanState& tableScanState) {
+    if (nextRowToScan == numTotalRows ||
+        tableScanState.currBoundNodeIdx >= tableScanState.cachedBoundNodeSelVector.getSelSize()) {
+        return false;
+    }
+    const auto currNodeOffset = tableScanState.nodeIDVector->readNodeOffset(
+        tableScanState.cachedBoundNodeSelVector[tableScanState.currBoundNodeIdx]);
+    const auto offsetInGroup = currNodeOffset % StorageConfig::NODE_GROUP_SIZE;
+    const auto csrLength = header->getCSRLength(offsetInGroup);
+    if (csrLength == 0) {
+        tableScanState.currBoundNodeIdx++;
+        return true;
+    }
+    const auto startCSROffset = header->getStartCSROffset(offsetInGroup);
+    if (startCSROffset > nextRowToScan) {
+        nextRowToScan = startCSROffset;
+    }
+    DASSERT(nextRowToScan <= numTotalRows);
+    const auto listEnd = startCSROffset + csrLength;
+    if (listEnd <= nextRowToScan) {
+        tableScanState.currBoundNodeIdx++;
+        return true;
+    }
+    const auto windowEnd =
+        nextRowToScan + std::min(numTotalRows - nextRowToScan, DEFAULT_VECTOR_CAPACITY);
+    const auto numToScan = refillEnd(tableScanState, *header, listEnd, windowEnd) - nextRowToScan;
+    pin.persistent->scan(transaction, tableScanState, *this, nextRowToScan, numToScan);
+    numCachedRows = numToScan;
+    nextRowToScan += numToScan;
+    if (tableScanState.outState->getSelVector().isUnfiltered()) {
+        cachedScannedVectorsSelBitset.reset();
+    } else {
+        cachedScannedVectorsSelBitset = std::bitset<DEFAULT_VECTOR_CAPACITY>();
+        for (auto i = 0u; i < tableScanState.outState->getSelVector().getSelSize(); i++) {
+            cachedScannedVectorsSelBitset->set(tableScanState.outState->getSelVector()[i], true);
         }
     }
+    return true;
 }
 
 NodeGroupScanResult CSRNodeGroup::scanCommittedPersistentWithoutCache(
