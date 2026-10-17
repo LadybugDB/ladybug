@@ -198,7 +198,11 @@ def test_prev_history_multiline(test) -> None:
     )
     test.send_control_statement(KEY_ACTION.CTRL_P.value)  # move up in history
     test.send_control_statement(KEY_ACTION.CTRL_P.value)  # move up in history
-    test.send_control_statement(KEY_ACTION.CTRL_P.value)  # move up line
+    # Move up a row within the recalled multiline entry. This must be an up-arrow
+    # (row movement on all platforms): CTRL_P only moves a row on Windows and
+    # navigates history on Linux, which overshoots past the entry when history
+    # holds just this test's statements and leaves an empty line behind.
+    test.send_statement("\x1b[A")  # move up line
     test.send_statement("\x1b[B")
     test.send_statement("\x1b[B")
     test.send_finished_statement(KEY_ACTION.ENTER.value)
