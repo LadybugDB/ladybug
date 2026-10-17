@@ -38,8 +38,10 @@ public:
     double getMultiplier() const { return cardinalityMultiplier; }
 
     void insertExpression(const std::shared_ptr<binder::Expression>& expression) {
-        DASSERT(!expressionNameToPos.contains(expression->getUniqueName()));
-        expressionNameToPos.insert({expression->getUniqueName(), expressions.size()});
+        // A projection keeps out-of-scope expressions in their groups, so one with the same unique
+        // name may already be here, e.g. an ORDER BY key a WITH dropped. The new expression gets
+        // its own position: the old one's is still written by the operator that produced it.
+        expressionNameToPos.insert_or_assign(expression->getUniqueName(), expressions.size());
         expressions.push_back(expression);
     }
     binder::expression_vector getExpressions() const { return expressions; }

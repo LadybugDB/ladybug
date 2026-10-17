@@ -1,0 +1,21 @@
+-DATASET CSV empty
+
+--
+
+-CASE ProjectionRepeatsDiscardedOrderByKey
+-LOOP i 1 2000
+-STATEMENT UNWIND [10, 20, NULL, 5] AS x WITH x ORDER BY x + x SKIP 0 RETURN x + x AS y
+-CHECK_ORDER
+---- 4
+10
+20
+40
+
+-STATEMENT UNWIND [10, 20, NULL, 5] AS x WITH x ORDER BY x * x SKIP 0 RETURN x * x AS y
+-CHECK_ORDER
+---- 4
+25
+100
+400
+
+-ENDLOOP
