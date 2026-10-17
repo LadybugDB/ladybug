@@ -36,12 +36,43 @@ static bool isColumnRef(ExpressionType type) {
     return type == ExpressionType::PROPERTY || type == ExpressionType::VARIABLE;
 }
 
+static bool isIntegerUpTo64Bits(LogicalTypeID type) {
+    return LogicalTypeUtils::isIntegral(type) && type != LogicalTypeID::INT128 &&
+           type != LogicalTypeID::UINT128;
+}
+
+// The pushed-down predicate compares the column's stats, read as the cast's target type, with
+// the literal. That is only right when the cast keeps every value and its order in the same
+// stats slot: the same type, integer widening up to 64 bits (an unsigned value reads the same
+// from the signed slot of a wider type) and FLOAT to DOUBLE. 128-bit targets are excluded because
+// a negative 64-bit value is stored without sign extension into the high half.
+static bool castKeepsStats(const LogicalType& from, const LogicalType& to) {
+    if (from == to) {
+        return true;
+    }
+    if (from.getLogicalTypeID() == LogicalTypeID::FLOAT) {
+        return to.getLogicalTypeID() == LogicalTypeID::DOUBLE;
+    }
+    if (!isIntegerUpTo64Bits(from.getLogicalTypeID()) ||
+        !isIntegerUpTo64Bits(to.getLogicalTypeID())) {
+        return false;
+    }
+    auto fromSize = PhysicalTypeUtils::getFixedTypeSize(from.getPhysicalType());
+    auto toSize = PhysicalTypeUtils::getFixedTypeSize(to.getPhysicalType());
+    if (LogicalTypeUtils::isUnsigned(to)) {
+        return LogicalTypeUtils::isUnsigned(from) && fromSize <= toSize;
+    }
+    return LogicalTypeUtils::isUnsigned(from) ? fromSize < toSize : fromSize <= toSize;
+}
+
 static bool isCastedColumnRef(const Expression& expr) {
     if (expr.expressionType == ExpressionType::FUNCTION) {
         const auto& funcExpr = expr.constCast<ScalarFunctionExpression>();
         if (funcExpr.getFunction().name.starts_with("CAST")) {
             DASSERT(funcExpr.getNumChildren() > 0);
-            return isColumnRef(funcExpr.getChild(0)->expressionType);
+            const auto& child = *funcExpr.getChild(0);
+            return isColumnRef(child.expressionType) &&
+                   castKeepsStats(child.getDataType(), expr.getDataType());
         }
     }
     return false;
