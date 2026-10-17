@@ -10,3 +10,121 @@
 -STATEMENT match (c:Comment) where c.id = 687194777181 return c.browserUsed, c.content;
 ---- 1
 Chrome|right
+
+-CASE ZoneMapCastedColumnNumericLiteral
+-STATEMENT CREATE NODE TABLE T(id INT64 PRIMARY KEY, i INT64, i32 INT32, u32 UINT32, f DOUBLE, fl FLOAT, d DECIMAL(18,2), dt DATE, tms TIMESTAMP_MS);
+---- ok
+-STATEMENT CREATE (:T {id: 1, i: 30, i32: 30, u32: 30, f: 30.7, fl: 30.5, d: 5.00, dt: date('2020-01-01'), tms: CAST('2020-01-01 00:00:00' AS TIMESTAMP_MS)});
+---- ok
+-STATEMENT CREATE (:T {id: 2, i: 40, i32: 40, u32: 4000000000, f: 40.2, fl: 40.5, d: 7.00, dt: date('2021-01-01'), tms: CAST('2021-01-01 00:00:00' AS TIMESTAMP_MS)});
+---- ok
+-STATEMENT CREATE NODE TABLE N(id INT64 PRIMARY KEY, i INT64, i32 INT32);
+---- ok
+-STATEMENT CREATE (:N {id: 1, i: -5, i32: -20});
+---- ok
+-STATEMENT CREATE (:N {id: 2, i: 40, i32: 40});
+---- ok
+-LOG InMemory
+-STATEMENT MATCH (n:T) WHERE n.i > 30.5 RETURN n.id;
+---- 1
+2
+-STATEMENT MATCH (n:T) WHERE n.i = 40.0 RETURN n.id;
+---- 1
+2
+-STATEMENT MATCH (n:T) WHERE n.i32 > 35.5 RETURN n.id;
+---- 1
+2
+-STATEMENT MATCH (n:T) WHERE CAST(n.f AS INT64) = 31 RETURN n.id;
+---- 1
+1
+-STATEMENT MATCH (n:T) WHERE CAST(n.d AS INT64) = 5 RETURN n.id;
+---- 1
+1
+-STATEMENT MATCH (n:T) WHERE n.dt > timestamp('2020-06-01 00:00:00') RETURN n.id;
+---- 1
+2
+-STATEMENT MATCH (n:T) WHERE n.tms > timestamp('2020-06-01 00:00:00') RETURN n.id;
+---- 1
+2
+-STATEMENT MATCH (n:T) WHERE CAST(n.i32 AS INT64) = 40 RETURN n.id;
+---- 1
+2
+-STATEMENT MATCH (n:T) WHERE n.u32 > -1 RETURN n.id ORDER BY n.id;
+-CHECK_ORDER
+---- 2
+1
+2
+-STATEMENT MATCH (n:T) WHERE n.u32 < 5000000000 RETURN n.id ORDER BY n.id;
+-CHECK_ORDER
+---- 2
+1
+2
+-STATEMENT MATCH (n:T) WHERE n.u32 > 5000000000 RETURN n.id;
+---- 0
+-STATEMENT MATCH (n:T) WHERE n.fl > 40.25 RETURN n.id;
+---- 1
+2
+-STATEMENT MATCH (n:N) WHERE n.i < 9223372036854775808 RETURN n.id ORDER BY n.id;
+-CHECK_ORDER
+---- 2
+1
+2
+-STATEMENT MATCH (n:N) WHERE CAST(n.i32 AS INT64) = -20 RETURN n.id;
+---- 1
+1
+-STATEMENT MATCH (n:N) WHERE CAST(n.i32 AS INT64) <> 40 RETURN n.id;
+---- 1
+1
+-STATEMENT CHECKPOINT;
+---- ok
+-LOG Checkpointed
+-STATEMENT MATCH (n:T) WHERE n.i > 30.5 RETURN n.id;
+---- 1
+2
+-STATEMENT MATCH (n:T) WHERE n.i = 40.0 RETURN n.id;
+---- 1
+2
+-STATEMENT MATCH (n:T) WHERE n.i32 > 35.5 RETURN n.id;
+---- 1
+2
+-STATEMENT MATCH (n:T) WHERE CAST(n.f AS INT64) = 31 RETURN n.id;
+---- 1
+1
+-STATEMENT MATCH (n:T) WHERE CAST(n.d AS INT64) = 5 RETURN n.id;
+---- 1
+1
+-STATEMENT MATCH (n:T) WHERE n.dt > timestamp('2020-06-01 00:00:00') RETURN n.id;
+---- 1
+2
+-STATEMENT MATCH (n:T) WHERE n.tms > timestamp('2020-06-01 00:00:00') RETURN n.id;
+---- 1
+2
+-STATEMENT MATCH (n:T) WHERE CAST(n.i32 AS INT64) = 40 RETURN n.id;
+---- 1
+2
+-STATEMENT MATCH (n:T) WHERE n.u32 > -1 RETURN n.id ORDER BY n.id;
+-CHECK_ORDER
+---- 2
+1
+2
+-STATEMENT MATCH (n:T) WHERE n.u32 < 5000000000 RETURN n.id ORDER BY n.id;
+-CHECK_ORDER
+---- 2
+1
+2
+-STATEMENT MATCH (n:T) WHERE n.u32 > 5000000000 RETURN n.id;
+---- 0
+-STATEMENT MATCH (n:T) WHERE n.fl > 40.25 RETURN n.id;
+---- 1
+2
+-STATEMENT MATCH (n:N) WHERE n.i < 9223372036854775808 RETURN n.id ORDER BY n.id;
+-CHECK_ORDER
+---- 2
+1
+2
+-STATEMENT MATCH (n:N) WHERE CAST(n.i32 AS INT64) = -20 RETURN n.id;
+---- 1
+1
+-STATEMENT MATCH (n:N) WHERE CAST(n.i32 AS INT64) <> 40 RETURN n.id;
+---- 1
+1
