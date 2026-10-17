@@ -181,18 +181,32 @@ void ColumnChunkData::initializeBuffer(PhysicalTypeID physicalType, MemoryManage
 }
 
 void ColumnChunkData::initializeFunction() {
-    const auto compression = getCompression(dataType, enableCompression);
-    getMetadataFunction = GetCompressionMetadata(compression, dataType);
-    flushBufferFunction = initializeFlushBufferFunction(compression);
+    compressionAlg = getCompression(dataType, enableCompression);
+    // Capture only `this` so both closures fit std::function's inline storage (no heap
+    // allocation); the compression algorithm is owned by the chunk, and the small
+    // dispatch functors are constructed on the stack per call in the Impl helpers.
+    flushBufferFunction = [this](const std::span<uint8_t> buffer, FileHandle* dataFH,
+                              const PageRange& entry, const ColumnChunkMetadata& otherMetadata) {
+        return flushBufferImpl(buffer, dataFH, entry, otherMetadata);
+    };
+    getMetadataFunction = [this](const std::span<uint8_t> buffer, uint64_t numValues,
+                              StorageValue minValue, StorageValue maxValue) {
+        return getMetadataImpl(buffer, numValues, minValue, maxValue);
+    };
 }
 
-ColumnChunkData::flush_buffer_func_t ColumnChunkData::initializeFlushBufferFunction(
-    std::shared_ptr<CompressionAlg> compression) const {
+ColumnChunkMetadata ColumnChunkData::getMetadataImpl(std::span<const uint8_t> buffer,
+    uint64_t numValues, StorageValue minValue, StorageValue maxValue) const {
+    return GetCompressionMetadata(compressionAlg, dataType)(buffer, numValues, minValue, maxValue);
+}
+
+ColumnChunkMetadata ColumnChunkData::flushBufferImpl(std::span<uint8_t> buffer, FileHandle* dataFH,
+    const PageRange& entry, const ColumnChunkMetadata& otherMetadata) const {
     switch (dataType.getPhysicalType()) {
     case PhysicalTypeID::BOOL: {
         // Since we compress into memory, storage is the same as fixed-sized
         // values, but we need to mark it as being boolean compressed.
-        return uncompressedFlushBuffer;
+        return uncompressedFlushBuffer(buffer, dataFH, entry, otherMetadata);
     }
     case PhysicalTypeID::STRING:
     case PhysicalTypeID::JSON:
@@ -208,16 +222,19 @@ ColumnChunkData::flush_buffer_func_t ColumnChunkData::initializeFlushBufferFunct
     case PhysicalTypeID::UINT16:
     case PhysicalTypeID::UINT8:
     case PhysicalTypeID::INT128: {
-        return CompressedFlushBuffer(compression, dataType);
+        return CompressedFlushBuffer(compressionAlg, dataType)(buffer, dataFH, entry,
+            otherMetadata);
     }
     case PhysicalTypeID::DOUBLE: {
-        return CompressedFloatFlushBuffer<double>(compression, dataType);
+        return CompressedFloatFlushBuffer<double>(compressionAlg, dataType)(buffer, dataFH, entry,
+            otherMetadata);
     }
     case PhysicalTypeID::FLOAT: {
-        return CompressedFloatFlushBuffer<float>(compression, dataType);
+        return CompressedFloatFlushBuffer<float>(compressionAlg, dataType)(buffer, dataFH, entry,
+            otherMetadata);
     }
     default: {
-        return uncompressedFlushBuffer;
+        return uncompressedFlushBuffer(buffer, dataFH, entry, otherMetadata);
     }
     }
 }

@@ -19,6 +19,12 @@ std::string IntersectPrintInfo::toString() const {
 }
 
 void Intersect::initLocalStateInternal(ResultSet* resultSet, ExecutionContext* /*context*/) {
+    // Clear member vectors so re-execution on a reused operator starts clean.
+    probeKeyVectors.clear();
+    payloadColumnIdxesToScanFrom.clear();
+    payloadVectorsToScanInto.clear();
+    intersectSelVectors.clear();
+    isIntersectListAFlatValue.clear();
     outKeyVector = resultSet->getValueVector(outputDataPos);
     for (auto& dataInfo : intersectDataInfos) {
         probeKeyVectors.push_back(resultSet->getValueVector(dataInfo.keyDataPos));

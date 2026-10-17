@@ -242,6 +242,8 @@ void SimpleAggregateSharedState::finalizePartitions(storage::MemoryManager* memo
 }
 
 void SimpleAggregate::initLocalStateInternal(ResultSet* resultSet, ExecutionContext* context) {
+    localAggregateStates.clear();
+    distinctHashTables.clear();
     BaseAggregate::initLocalStateInternal(resultSet, context);
     for (auto i = 0u; i < aggregateFunctions.size(); ++i) {
         auto& func = aggregateFunctions[i];
