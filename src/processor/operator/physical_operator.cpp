@@ -244,6 +244,16 @@ void PhysicalOperator::finalize(ExecutionContext* context) {
 }
 
 void PhysicalOperator::registerProfilingMetrics(Profiler* profiler) {
+    if (!profiler->enabled) {
+        // Fast path for normal (non-PROFILE) execution: bind to thread-local dummies
+        // instead of registering into the profiler's metric map. Registration allocates
+        // map nodes, strings and metric objects per operator per task and serializes on
+        // the profiler mutex -- pure overhead when nobody reads the metrics.
+        thread_local TimeMetric dummyTime{false};
+        thread_local NumericMetric dummyNum{false};
+        metrics = std::make_unique<OperatorMetrics>(dummyTime, dummyNum);
+        return;
+    }
     auto executionTime = profiler->registerTimeMetric(getTimeMetricKey());
     auto numOutputTuple = profiler->registerNumericMetric(getNumTupleMetricKey());
     metrics = std::make_unique<OperatorMetrics>(*executionTime, *numOutputTuple);
