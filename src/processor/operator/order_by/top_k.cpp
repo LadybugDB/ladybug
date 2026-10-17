@@ -259,6 +259,8 @@ void TopKLocalState::append(const std::vector<common::ValueVector*>& keyVectors,
 }
 
 void TopK::initLocalStateInternal(ResultSet* resultSet, ExecutionContext* context) {
+    payloadVectors.clear();
+    orderByVectors.clear();
     localState = TopKLocalState();
     localState.init(info, storage::MemoryManager::Get(*context->clientContext), *resultSet,
         skipNumber, limitNumber);

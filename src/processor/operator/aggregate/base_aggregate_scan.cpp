@@ -8,6 +8,7 @@ namespace processor {
 
 void BaseAggregateScan::initLocalStateInternal(ResultSet* resultSet,
     ExecutionContext* /*context*/) {
+    aggregateVectors.clear();
     for (auto& dataPos : scanInfo.aggregatesPos) {
         auto valueVector = resultSet->getValueVector(dataPos);
         aggregateVectors.push_back(valueVector);
