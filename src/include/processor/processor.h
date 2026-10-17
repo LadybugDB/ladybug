@@ -39,8 +39,13 @@ public:
 
 private:
     struct Entry {
-        uint64_t descriptorID = UINT64_MAX;
-        std::shared_ptr<ResultSet> resultSet;
+        // MRU-first cache of (descriptor id, ResultSet). A single slot thrashed when
+        // worker threads ran different pipelines on consecutive executions (each pipeline
+        // sink has its own descriptor id), so every execution reallocated all vectors.
+        // A small per-thread cache covers the working set; the cap bounds memory to
+        // MAX_CACHED_PER_THREAD ResultSets per thread.
+        static constexpr size_t MAX_CACHED_PER_THREAD = 8;
+        std::vector<std::pair<uint64_t, std::shared_ptr<ResultSet>>> cached;
     };
     std::mutex mtx;
     std::unordered_map<std::thread::id, Entry> entries;

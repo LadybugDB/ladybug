@@ -220,13 +220,24 @@ void RelTable::initScanState(Transaction* transaction, TableScanState& scanState
     // Collect the positions of this batch's bound nodes. On a fresh batch they come from
     // the input sel vector; when resuming a batch (e.g. a multi rel table scan moving to
     // the next rel table over the same bound nodes) they were cached by the previous init.
-    std::vector<common::sel_t> positions;
+    // Reusable workspace (no per-batch allocation): the batch's bound-node positions.
+    auto& positions = relScanState.positionsBuffer;
     const auto& sel = resetCachedBoundNodeSelVec ?
                           relScanState.nodeIDVector->state->getSelVector() :
                           relScanState.cachedBoundNodeSelVector;
     positions.resize(sel.getSelSize());
+    if (positions.empty()) {
+        return;
+    }
+    bool alreadySorted = true;
+    common::offset_t prevOffset = 0;
     for (auto i = 0u; i < sel.getSelSize(); i++) {
         positions[i] = sel[i];
+        const auto offset = relScanState.nodeIDVector->readNodeOffset(sel[i]);
+        if (i > 0 && offset < prevOffset) {
+            alreadySorted = false;
+        }
+        prevOffset = offset;
     }
     // The CSR scan processes the bound nodes of a batch in a single forward pass over the
     // CSR lists, which are laid out in ascending bound-node-offset order within each node
@@ -235,21 +246,24 @@ void RelTable::initScanState(Transaction* transaction, TableScanState& scanState
     // (a)->(b)->(c) as scan(a) -> extend(a->b) -> extend(b->c)), the bound nodes are the
     // children of a single parent and come in arbitrary order, so sort them by offset.
     // Parents whose CSR list lies before the current scan position would otherwise be
-    // silently skipped by CSRNodeGroup::scanCommittedPersistentWithCache.
-    std::sort(positions.begin(), positions.end(), [&](common::sel_t a, common::sel_t b) {
-        return relScanState.nodeIDVector->readNodeOffset(a) <
-               relScanState.nodeIDVector->readNodeOffset(b);
-    });
-    // Partition the bound nodes by node group. They form a contiguous sequence within a
-    // single node group when the input is a node table scan. However, the children of a
-    // single parent can span multiple node groups, in which case the batch is scanned one
-    // node group at a time; see RelTableScanState::boundNodeGroupPlan.
-    std::map<node_group_idx_t, std::vector<common::sel_t>> groups;
-    for (const auto pos : positions) {
-        const auto boundNodeID = relScanState.nodeIDVector->getValue<nodeID_t>(pos);
-        groups[StorageUtils::getNodeGroupIdx(boundNodeID.offset)].push_back(pos);
+    // silently skipped by CSRNodeGroup::scanCommittedPersistentWithCache. Batches that
+    // already arrive in ascending offset order skip the sort.
+    if (!alreadySorted) {
+        std::sort(positions.begin(), positions.end(), [&](common::sel_t a, common::sel_t b) {
+            return relScanState.nodeIDVector->readNodeOffset(a) <
+                   relScanState.nodeIDVector->readNodeOffset(b);
+        });
     }
-    if (groups.size() <= 1) {
+    // Partition the bound nodes by node group. Offsets are ascending now, so node groups
+    // form contiguous runs: comparing the first/last group detects the common
+    // single-group case without a tree or per-group vectors. The children of a single
+    // parent can still span multiple node groups, in which case the batch is scanned one
+    // node group at a time; see RelTableScanState::boundNodeGroupPlan.
+    const auto firstGroupIdx =
+        StorageUtils::getNodeGroupIdx(relScanState.nodeIDVector->readNodeOffset(positions.front()));
+    const auto lastGroupIdx =
+        StorageUtils::getNodeGroupIdx(relScanState.nodeIDVector->readNodeOffset(positions.back()));
+    if (firstGroupIdx == lastGroupIdx) {
         // Single node group (the common case): historical fast path.
         relScanState.boundNodeGroupPlan.clear();
         relScanState.allBoundNodePositions.clear();
@@ -291,13 +305,32 @@ void RelTable::initScanState(Transaction* transaction, TableScanState& scanState
         }
         return;
     }
-    // Multi-group batch: scan one node group at a time.
-    relScanState.allBoundNodePositions = std::move(positions);
+    // Multi-group batch: scan one node group at a time. Offsets are ascending, so node
+    // groups form contiguous runs over the sorted positions: linear run partition, no map.
+    // allBoundNodePositions keeps a copy (reusing its capacity across batches); the
+    // workspace buffer stays intact for the next batch.
+    relScanState.allBoundNodePositions = positions;
     relScanState.boundNodeGroupPlan.clear();
-    for (auto& [groupIdx, groupPositions] : groups) {
-        relScanState.boundNodeGroupPlan.emplace_back(
-            getDirectedTableData(relScanState.direction)->getNodeGroup(groupIdx),
-            std::move(groupPositions));
+    auto runStart = 0u;
+    auto runGroupIdx = firstGroupIdx;
+    for (auto k = 1u;; ++k) {
+        const auto runEnds = (k == positions.size());
+        const auto groupIdx = runEnds ?
+                                  runGroupIdx :
+                                  StorageUtils::getNodeGroupIdx(
+                                      relScanState.nodeIDVector->readNodeOffset(positions[k]));
+        if (runEnds || groupIdx != runGroupIdx) {
+            std::vector<common::sel_t> runPositions(positions.begin() + runStart,
+                positions.begin() + k);
+            relScanState.boundNodeGroupPlan.emplace_back(
+                getDirectedTableData(relScanState.direction)->getNodeGroup(runGroupIdx),
+                std::move(runPositions));
+            if (runEnds) {
+                break;
+            }
+            runStart = k;
+            runGroupIdx = groupIdx;
+        }
     }
     relScanState.startNextBoundNodeGroup(transaction);
 }
