@@ -22,10 +22,8 @@ std::shared_ptr<planner::LogicalOperator> RemoveUnnecessaryDistinctOptimizer::vi
         op->setChild(i, visitOperator(op->getChild(i)));
     }
     auto result = visitOperatorReplaceSwitch(op);
-    // This optimizer runs after FactorizationRewriter, so the plan is in
-    // factorized form. Recompute the factorized schema (computeFlatSchema would
-    // be incorrect here and would also throw on FLATTEN nodes).
-    result->computeFactorizedSchema();
+    // This optimizer runs before FactorizationRewriter, so the plan is flat.
+    result->computeFlatSchema();
     return result;
 }
 
@@ -38,8 +36,8 @@ RemoveUnnecessaryDistinctOptimizer::visitOperatorReplaceSwitch(
     auto& distinct = op->cast<LogicalDistinct>();
     if (isRedundantDistinct(distinct)) {
         // Bypass the DISTINCT: return its (already-rewritten) child. The caller
-        // recomputes the factorized schema for the parent, so the parent picks
-        // up the child's schema cleanly.
+        // recomputes the flat schema for the parent, so the parent picks up the
+        // child's schema cleanly.
         return op->getChild(0);
     }
     return op;
@@ -89,7 +87,6 @@ bool RemoveUnnecessaryDistinctOptimizer::isChildMultiplicityOne(
         case LogicalOperatorType::FILTER:
         case LogicalOperatorType::MULTIPLICITY_REDUCER:
         case LogicalOperatorType::LIMIT:
-        case LogicalOperatorType::FLATTEN:
         case LogicalOperatorType::NODE_LABEL_FILTER:
         case LogicalOperatorType::NOOP:
             if (cur->getNumChildren() != 1) {
