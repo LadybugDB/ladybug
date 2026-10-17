@@ -1,0 +1,120 @@
+-DATASET CSV empty
+--
+
+-CASE CSRHeaderClusters
+# One thread keeps each hub's F-neighbours as one bound-node batch for the E scan.
+-STATEMENT CALL threads=1;
+---- ok
+-STATEMENT CREATE NODE TABLE N(id INT64, PRIMARY KEY(id));
+---- ok
+-STATEMENT CREATE REL TABLE E(FROM N TO N);
+---- ok
+-STATEMENT CREATE REL TABLE F(FROM N TO N);
+---- ok
+-STATEMENT UNWIND range(0, 7999) AS i CREATE (:N {id: i});
+---- ok
+-STATEMENT MATCH (a:N), (b:N) WHERE b.id = (a.id + 1) % 8000 CREATE (a)-[:E]->(b);
+---- ok
+# Hub 0: three clusters: node 0 with node 100, a middle node, and the last node.
+-STATEMENT MATCH (h:N), (a:N) WHERE h.id = 0 AND a.id IN [0, 100, 4000, 7999] CREATE (h)-[:F]->(a);
+---- ok
+# Hub 1: one tight cluster, decoded as a packed span.
+-STATEMENT MATCH (h:N), (a:N) WHERE h.id = 1 AND a.id IN [50, 51, 52] CREATE (h)-[:F]->(a);
+---- ok
+# Hub 2: two clusters with a large gap (nodes in the gap must not be read).
+-STATEMENT MATCH (h:N), (a:N) WHERE h.id = 2 AND a.id IN [10, 5000] CREATE (h)-[:F]->(a);
+---- ok
+-STATEMENT MATCH (h:N), (a:N) WHERE h.id = 3 AND a.id = 0 CREATE (h)-[:F]->(a);
+---- ok
+-STATEMENT MATCH (h:N), (a:N) WHERE h.id = 4 AND a.id = 7999 CREATE (h)-[:F]->(a);
+---- ok
+# Hub 5: a dense run, decoded as a packed span.
+-STATEMENT MATCH (h:N), (a:N) WHERE h.id = 5 AND a.id >= 1000 AND a.id < 1100 CREATE (h)-[:F]->(a);
+---- ok
+-STATEMENT MATCH (h:N), (a:N) WHERE h.id = 6 AND a.id IN [10, 11, 5000, 5001] CREATE (h)-[:F]->(a);
+---- ok
+-STATEMENT CHECKPOINT;
+---- ok
+-STATEMENT MATCH (h:N)-[:F]->(a:N)-[:E]->(b:N) WHERE h.id = 0 RETURN count(*), sum(b.id);
+---- 1
+4|4103
+-STATEMENT MATCH (h:N)-[:F]->(a:N)-[:E]->(b:N) WHERE h.id = 1 RETURN count(*), sum(b.id);
+---- 1
+3|156
+-STATEMENT MATCH (h:N)-[:F]->(a:N)-[:E]->(b:N) WHERE h.id = 2 RETURN count(*), sum(b.id);
+---- 1
+2|5012
+-STATEMENT MATCH (h:N)-[:F]->(a:N)-[:E]->(b:N) WHERE h.id = 3 RETURN count(*), sum(b.id);
+---- 1
+1|1
+-STATEMENT MATCH (h:N)-[:F]->(a:N)-[:E]->(b:N) WHERE h.id = 4 RETURN count(*), sum(b.id);
+---- 1
+1|0
+-STATEMENT MATCH (h:N)-[:F]->(a:N)-[:E]->(b:N) WHERE h.id = 5 RETURN count(*), sum(b.id);
+---- 1
+100|105050
+-STATEMENT MATCH (h:N)-[:F]->(a:N)-[:E]->(b:N) WHERE h.id = 6 RETURN count(*), sum(b.id);
+---- 1
+4|10026
+-STATEMENT MATCH (h:N)-[:F]->(a:N)-[:E]->(b:N) WHERE h.id <= 6 RETURN h.id, count(*), sum(b.id) ORDER BY h.id;
+---- 7
+0|4|4103
+1|3|156
+2|2|5012
+3|1|1
+4|1|0
+5|100|105050
+6|4|10026
+# Insert inside a cluster after checkpoint.
+-STATEMENT MATCH (a:N), (b:N) WHERE a.id = 50 AND b.id = 99 CREATE (a)-[:E]->(b);
+---- ok
+-STATEMENT MATCH (h:N)-[:F]->(a:N)-[:E]->(b:N) WHERE h.id = 1 RETURN count(*), sum(b.id);
+---- 1
+4|255
+# Delete a rel whose bound node sits in a cluster.
+-STATEMENT MATCH (a:N)-[e:E]->(b:N) WHERE a.id = 10 AND b.id = 11 DELETE e;
+---- ok
+-STATEMENT MATCH (h:N)-[:F]->(a:N)-[:E]->(b:N) WHERE h.id = 2 RETURN count(*), sum(b.id);
+---- 1
+1|5001
+-STATEMENT MATCH (h:N)-[:F]->(a:N)-[:E]->(b:N) WHERE h.id = 6 RETURN count(*), sum(b.id);
+---- 1
+3|10015
+# Bound nodes past the persistent header have no lists in this group.
+-STATEMENT UNWIND range(8000, 8099) AS i CREATE (:N {id: i});
+---- ok
+-STATEMENT MATCH (a:N) WHERE a.id >= 8000 MATCH (b:N {id: a.id - 8000}) CREATE (a)-[:E]->(b);
+---- ok
+-STATEMENT MATCH (h:N), (a:N) WHERE h.id = 2 AND a.id = 8000 CREATE (h)-[:F]->(a);
+---- ok
+-STATEMENT MATCH (h:N)-[:F]->(a:N)-[:E]->(b:N) WHERE h.id = 2 RETURN count(*), sum(b.id);
+---- 1
+2|5001
+# Hub 7's batch decodes two clusters; hub 8's batch, in the same scan, is covered by them except
+# for node 8001 past the persistent header, which must read as an empty persistent list.
+-STATEMENT MATCH (h:N), (a:N) WHERE h.id = 7 AND a.id IN [20, 5000] CREATE (h)-[:F]->(a);
+---- ok
+-STATEMENT MATCH (h:N), (a:N) WHERE h.id = 8 AND a.id IN [20, 8001] CREATE (h)-[:F]->(a);
+---- ok
+-STATEMENT MATCH (h:N)-[:F]->(a:N)-[:E]->(b:N) WHERE h.id IN [7, 8] RETURN h.id, count(*), sum(b.id) ORDER BY h.id;
+---- 2
+7|2|5022
+8|2|22
+-STATEMENT CHECKPOINT;
+---- ok
+-STATEMENT MATCH (h:N)-[:F]->(a:N)-[:E]->(b:N) WHERE h.id = 0 RETURN count(*), sum(b.id);
+---- 1
+4|4103
+-STATEMENT MATCH (h:N)-[:F]->(a:N)-[:E]->(b:N) WHERE h.id = 1 RETURN count(*), sum(b.id);
+---- 1
+4|255
+-STATEMENT MATCH (h:N)-[:F]->(a:N)-[:E]->(b:N) WHERE h.id = 2 RETURN count(*), sum(b.id);
+---- 1
+2|5001
+-STATEMENT MATCH (h:N)-[:F]->(a:N)-[:E]->(b:N) WHERE h.id = 6 RETURN count(*), sum(b.id);
+---- 1
+3|10015
+-STATEMENT MATCH (h:N)-[:F]->(a:N)-[:E]->(b:N) WHERE h.id IN [7, 8] RETURN h.id, count(*), sum(b.id) ORDER BY h.id;
+---- 2
+7|2|5022
+8|2|22
