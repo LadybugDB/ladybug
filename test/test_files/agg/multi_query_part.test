@@ -96,3 +96,35 @@ Bob|Dan|3
 Dan|Alice|3
 Dan|Bob|3
 Dan|Carol|3
+
+-CASE RepeatedAggregateAfterWithGroupKey
+-STATEMENT UNWIND [1, 1, 2] AS x WITH x, count(x) AS c RETURN c, count(x) AS n
+---- 2
+2|1
+1|1
+-STATEMENT UNWIND [1, 1, 2] AS x WITH x, sum(x) AS s RETURN s, sum(x) AS t
+---- 1
+2|3
+-STATEMENT UNWIND [1, 1, 2] AS x WITH x, count(DISTINCT x) AS c RETURN c, count(DISTINCT x) AS n
+---- 1
+1|2
+-STATEMENT UNWIND [1, 1, 2] AS x WITH x, count(x) AS c RETURN c, count(x) AS n, count(x) + 1 AS m
+---- 2
+2|1|2
+1|1|2
+-STATEMENT UNWIND [1, 1, 2] AS x WITH x, count(x) + x AS c RETURN x, c, count(x) + x AS d
+---- 2
+1|3|2
+2|3|3
+-STATEMENT UNWIND [1, 1, 2] AS x WITH x, count(x) AS c WHERE count(x) > 1 RETURN x, c
+---- 1
+1|2
+-STATEMENT UNWIND [1, 1, 2] AS x WITH x, count(x) AS c RETURN c ORDER BY count(x)
+-CHECK_ORDER
+---- 2
+1
+2
+-STATEMENT UNWIND [1, 1, 2] AS x WITH x, count(x) AS c RETURN c, all(i IN [1] WHERE i < count(x)) AS a
+---- 2
+1|False
+2|True
