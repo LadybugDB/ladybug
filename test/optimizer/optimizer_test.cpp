@@ -6,6 +6,7 @@
 #include <utility>
 #include <vector>
 
+#include "binder/expression/property_expression.h"
 #include "catalog/catalog.h"
 #include "catalog/catalog_entry/node_table_catalog_entry.h"
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
@@ -16,6 +17,7 @@
 #include "planner/operator/logical_plan_util.h"
 #include "planner/operator/scan/logical_count_rel_table.h"
 #include "planner/operator/scan/logical_dummy_scan.h"
+#include "planner/operator/scan/logical_scan_node_table.h"
 #include "test_runner/test_runner.h"
 #include "transaction/transaction.h"
 #include <format>
@@ -63,6 +65,25 @@ public:
         }
         for (auto i = 0u; i < op->getNumChildren(); ++i) {
             if (hasOperatorType(op->getChild(i).get(), type)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    static bool scansNodeProperty(planner::LogicalOperator* op, const std::string& variable,
+        const std::string& property) {
+        if (op->getOperatorType() == planner::LogicalOperatorType::SCAN_NODE_TABLE) {
+            for (auto& expr : op->constCast<planner::LogicalScanNodeTable>().getProperties()) {
+                auto& scanned = expr->constCast<binder::PropertyExpression>();
+                if (scanned.getRawVariableName() == variable &&
+                    scanned.getPropertyName() == property) {
+                    return true;
+                }
+            }
+        }
+        for (auto i = 0u; i < op->getNumChildren(); ++i) {
+            if (scansNodeProperty(op->getChild(i).get(), variable, property)) {
                 return true;
             }
         }
@@ -664,6 +685,13 @@ TEST_F(OptimizerTest, CountRelTableOptimizer) {
     auto result8 = conn->query(q8);
     ASSERT_TRUE(result8->isSuccess());
     ASSERT_EQ(result8->getNext()->getValue(0)->getValue<int64_t>(), 2);
+    auto q8InternalID =
+        "MATCH (u:opt_degree_user)-[:opt_degree_follows]->(v) RETURN count(DISTINCT id(u));";
+    ASSERT_TRUE(hasOperatorType(getRoot(q8InternalID)->getLastOperator().get(),
+        planner::LogicalOperatorType::REL_DEGREE_TABLE));
+    auto result8InternalID = conn->query(q8InternalID);
+    ASSERT_TRUE(result8InternalID->isSuccess());
+    ASSERT_EQ(result8InternalID->getNext()->getValue(0)->getValue<int64_t>(), 2);
 
     auto q9 = "MATCH (u:opt_degree_user)-[:opt_degree_follows]->(v) "
               "RETURN u.id, count(v) AS deg ORDER BY deg DESC LIMIT 2;";
@@ -861,6 +889,63 @@ TEST_F(StatsOptimizerTest, FilterPushDownOrdersMostSelectivePredicateFirst2) {
     ASSERT_NE(std::string::npos, deepestFilter->getPredicate()->toString().find("rare"));
 }
 
+// The rewrite trusts only a loaded primary-key index, and follows it being dropped or created.
+TEST_F(StatsOptimizerTest, CountPrimaryKeyNeedsPrimaryKeyIndex) {
+    for (const auto* statement : {"CREATE NODE TABLE indexed(id INT64, PRIMARY KEY(id));",
+             "CALL enable_default_hash_index=false;",
+             "CREATE NODE TABLE unindexed(id INT64, PRIMARY KEY(id));",
+             "CALL enable_default_hash_index=true;",
+             "CREATE REL TABLE link(FROM indexed TO indexed, FROM unindexed TO unindexed);"}) {
+        auto result = conn->query(statement);
+        ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    }
+    auto scansKey = [&](const std::string& table) {
+        auto plan = getRoot(
+            "MATCH (a:" + table + ")-[:link]->(b:" + table + ") RETURN COUNT(DISTINCT b.id);");
+        return OptimizerTest::scansNodeProperty(plan->getLastOperator().get(), "b", "id");
+    };
+    ASSERT_FALSE(scansKey("indexed"));
+    ASSERT_TRUE(scansKey("unindexed"));
+
+    for (const auto* statement : {"DROP INDEX indexed._PK;",
+             "CREATE HASH INDEX unindexed_pk FOR (n:unindexed) ON (n.id);"}) {
+        auto result = conn->query(statement);
+        ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    }
+    ASSERT_TRUE(scansKey("indexed"));
+    ASSERT_FALSE(scansKey("unindexed"));
+}
+
+// Table IDs repeat across databases: the attached Person shares ID 0 with the main table Local,
+// whose primary-key index must not approve counting Person's internal IDs.
+TEST_F(StatsOptimizerTest, CountPrimaryKeyKeepsAttachedTableKey) {
+    auto attachedPath = TestHelper::getTempDBPathStr("CountPrimaryKeyKeepsAttachedTableKey.Src");
+    {
+        auto attachedDB = std::make_unique<main::Database>(attachedPath, main::SystemConfig());
+        auto attachedConn = std::make_unique<main::Connection>(attachedDB.get());
+        for (const auto* statement : {"CREATE NODE TABLE Person(name STRING, PRIMARY KEY(name));",
+                 "CREATE REL TABLE Knows(FROM Person TO Person);"}) {
+            auto result = attachedConn->query(statement);
+            ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+        }
+    }
+    auto run = [&](const std::string& statement) {
+        auto result = conn->query(statement);
+        ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    };
+    auto scansKey = [&](const std::string& pattern) {
+        auto plan = getRoot("MATCH " + pattern + " RETURN COUNT(DISTINCT b.name);");
+        return OptimizerTest::scansNodeProperty(plan->getLastOperator().get(), "b", "name");
+    };
+    run("CREATE NODE TABLE Local(name STRING, PRIMARY KEY(name));");
+    run("CREATE REL TABLE LocalKnows(FROM Local TO Local);");
+    ASSERT_FALSE(scansKey("(a:Local)-[:LocalKnows]->(b:Local)"));
+    run(std::format("ATTACH '{}' AS db1 (DBTYPE lbug);", attachedPath));
+    ASSERT_TRUE(scansKey("(a:db1.Person)-[:db1.Knows]->(b:db1.Person)"));
+    run("USE db1;");
+    ASSERT_TRUE(scansKey("(a:Person)-[:Knows]->(b:Person)"));
+}
+
 TEST_F(StatsOptimizerTest, HashJoinCostIncludesEstimatedOutputCardinality) {
     auto leftOp = std::make_shared<planner::LogicalDummyScan>();
     leftOp->setCardinality(10);
@@ -935,6 +1020,22 @@ TEST_F(OptimizerTest, RemoveUnnecessaryDistinctOnPrimaryKey) {
     auto q3 = "MATCH (n:person) RETURN DISTINCT n.ID, n.age";
     auto plan3 = getRoot(q3);
     ASSERT_TRUE(plan3 != nullptr);
+}
+
+TEST_F(OptimizerTest, CountPrimaryKeyReadsInternalID) {
+    auto scansKey = [&](const std::string& aggregate) {
+        auto plan = getRoot(
+            "MATCH (p:person)-[:workAt]->(o:organisation) RETURN o.name, " + aggregate + ";");
+        return scansNodeProperty(plan->getLastOperator().get(), "p", "ID");
+    };
+    // The control shows the helper sees p.ID when a scan reads it.
+    ASSERT_TRUE(scansKey("MIN(p.ID)"));
+    ASSERT_FALSE(scansKey("COUNT(DISTINCT p.ID)"));
+    ASSERT_FALSE(scansKey("COUNT(p.ID)"));
+
+    // Two labels can store the same key value as different nodes.
+    auto multiLabel = getRoot("MATCH (n:person:organisation) RETURN COUNT(DISTINCT n.ID);");
+    ASSERT_TRUE(scansNodeProperty(multiLabel->getLastOperator().get(), "n", "ID"));
 }
 
 TEST_F(OptimizerTest, CountReachableDistinctNodes) {
@@ -1467,6 +1568,15 @@ TEST_F(AntiEdgeChainStorageGateTest, SkipsIcebugDiskTables) {
     auto plan = getRoot(kAntiEdgeChainQuery);
     ASSERT_FALSE(OptimizerTest::hasOperatorType(plan->getLastOperator().get(),
         planner::LogicalOperatorType::COUNT_ANTI_EDGE_CHAIN));
+}
+
+// Icebug-disk tables carry a default hash index that does not enforce the key of their files, so
+// their key column may repeat a value.
+TEST_F(AntiEdgeChainStorageGateTest, CountPrimaryKeyKeepsIcebugDiskKey) {
+    createIcebugDiskTables();
+    assertNonNativeEntries();
+    auto plan = getRoot("MATCH (u:user)-[:follows]->(v:user) RETURN COUNT(DISTINCT v.id);");
+    ASSERT_TRUE(OptimizerTest::scansNodeProperty(plan->getLastOperator().get(), "v", "id"));
 }
 
 TEST_F(OptimizerTest, BoolFoldingCancelsDoubleNegationItProduces) {
