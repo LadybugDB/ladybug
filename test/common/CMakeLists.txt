@@ -15,4 +15,5 @@ add_lbug_test(types_test
         vfs_test.cpp
         boolean_filter_test.cpp
         simd_filter_test.cpp
+        antlr_interval_set_test.cpp
 )
