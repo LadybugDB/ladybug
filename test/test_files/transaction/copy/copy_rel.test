@@ -425,3 +425,28 @@
 -STATEMENT MATCH (a:A)-[t:T]->(b:A) RETURN a.id, b.id;
 ---- 1
 0|7
+
+-CASE CopyRelRollbackAfterAutocommitCopy
+-STATEMENT CREATE NODE TABLE A(id INT64 PRIMARY KEY);
+---- ok
+-STATEMENT CREATE REL TABLE T(FROM A TO A);
+---- ok
+-STATEMENT UNWIND range(0, 99) AS i CREATE (:A {id: i});
+---- ok
+-STATEMENT COPY T FROM (UNWIND range(0, 499) AS i RETURN i, (i + 1) % 100);
+---- ok
+-STATEMENT MATCH ()-[t:T]->() RETURN count(*);
+---- 1
+500
+-STATEMENT BEGIN TRANSACTION;
+---- ok
+-STATEMENT COPY T FROM (UNWIND range(0, 29) AS i RETURN i, (i + 50) % 100);
+---- ok
+-STATEMENT MATCH ()-[t:T]->() RETURN count(*);
+---- 1
+530
+-STATEMENT ROLLBACK;
+---- ok
+-STATEMENT MATCH ()-[t:T]->() RETURN count(*);
+---- 1
+500
