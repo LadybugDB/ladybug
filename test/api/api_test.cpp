@@ -594,6 +594,48 @@ TEST_F(ApiTest, MissingParam) {
     ASSERT_STREQ("2.200000\n", result->getNext()->toString().c_str());
 }
 
+TEST_F(ApiTest, ImportDatabaseWithOneThreadTimesOut) {
+    // With a timeout the import runs on the pool's only worker, which must run the nested
+    // statement itself while the caller watches the clock.
+    auto systemConfig = SystemConfig();
+    systemConfig.maxNumThreads = 1;
+    auto tempDir = TestHelper::getTempDir(getTestGroupAndName());
+    auto importDir = tempDir + "/import";
+    std::filesystem::create_directories(importDir);
+    std::ofstream{importDir + "/schema.cypher"}
+        << "UNWIND range(1, 100000) AS x UNWIND range(1, 100000) AS y RETURN count(x + y);";
+    auto database = std::make_unique<Database>(tempDir + "/one_thread", systemConfig);
+    auto oneThread = std::make_unique<Connection>(database.get());
+    oneThread->setQueryTimeOut(1000);
+    auto result = oneThread->query("IMPORT DATABASE '" + importDir + "'");
+    ASSERT_FALSE(result->isSuccess());
+    ASSERT_EQ(result->getErrorMessage(), "Runtime exception: Import database failed: Interrupted.");
+}
+
+TEST_F(ApiTest, ImportDatabaseWithOneThreadAndThreadsSetToTwo) {
+    // Statements of the import that can use two threads are queued while the caller holds the
+    // only slot, so the caller has to run them.
+    auto tempDir = TestHelper::getTempDir(getTestGroupAndName());
+    auto exportDir = tempDir + "/export";
+    {
+        Database source(tempDir + "/source");
+        Connection conn(&source);
+        ASSERT_TRUE(conn.query("CREATE NODE TABLE P(id INT64 PRIMARY KEY)")->isSuccess());
+        ASSERT_TRUE(conn.query("UNWIND range(1, 3) AS i CREATE (:P {id: i})")->isSuccess());
+        auto result = conn.query("EXPORT DATABASE '" + exportDir + "'");
+        ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    }
+    auto systemConfig = SystemConfig();
+    systemConfig.maxNumThreads = 1;
+    Database imported(tempDir + "/imported", systemConfig);
+    Connection conn(&imported);
+    ASSERT_TRUE(conn.query("CALL threads=2")->isSuccess());
+    auto result = conn.query("IMPORT DATABASE '" + exportDir + "'");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    result = conn.query("MATCH (p:P) RETURN count(*)");
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 3);
+}
+
 TEST_F(ApiTest, CloseDatabaseBeforeQueryResultAndConnection) {
     auto systemConfig = SystemConfig();
     systemConfig.bufferPoolSize = 10 * 1024 * 1024; // 10MB
