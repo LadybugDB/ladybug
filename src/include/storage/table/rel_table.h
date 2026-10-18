@@ -253,6 +253,9 @@ public:
     void reclaimStorage(PageAllocator& pageAllocator) const override;
 
     common::row_idx_t getNumTotalRows(const transaction::Transaction* transaction) override;
+    // Rels of a native rel table that the transaction can see, as count(*) counts them.
+    common::row_idx_t getNumVisibleRels(const transaction::Transaction* transaction,
+        common::RelDataDirection direction);
     virtual common::row_idx_t getNumActiveBoundNodes(const transaction::Transaction* transaction,
         common::RelDataDirection direction);
     virtual std::vector<std::pair<common::offset_t, common::row_idx_t>> getDegreeEntries(

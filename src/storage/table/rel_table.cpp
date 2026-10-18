@@ -751,6 +751,38 @@ row_idx_t RelTable::getNumTotalRows(const Transaction* transaction) {
     return numLocalRows + nextRelOffset;
 }
 
+// COPY and checkpoint flush a persistent group before publishing it, so its CSR header chunks are
+// on disk: read them through their columns.
+static std::unique_ptr<ColumnChunkData> scanCSRHeaderColumn(MemoryManager& memoryManager,
+    ColumnChunk& chunk, Column& column, offset_t numValues) {
+    auto result = ColumnChunkFactory::createColumnChunkData(memoryManager, LogicalType::UINT64(),
+        false /*enableCompression*/, StorageConfig::NODE_GROUP_SIZE, ResidencyState::IN_MEMORY,
+        false /*hasNullData*/, false /*initializeToZero*/);
+    ChunkState chunkState;
+    chunk.initializeScanState(chunkState, &column);
+    column.scan(chunkState, result.get(), 0 /*offsetInChunk*/, numValues);
+    return result;
+}
+
+// The rels in a persistent group that the transaction can see.
+static row_idx_t countVisiblePersistentRels(MemoryManager& memoryManager,
+    const RelTableData& relTableData, ChunkedNodeGroup& group, const Transaction* transaction) {
+    auto& csrHeader = group.cast<ChunkedCSRNodeGroup>().getCSRHeader();
+    const auto numNodes = csrHeader.length->getNumValues();
+    const auto lengths = scanCSRHeaderColumn(memoryManager, *csrHeader.length,
+        *relTableData.getCSRLengthColumn(), numNodes);
+    const auto* lengthData = reinterpret_cast<const uint64_t*>(lengths->getData());
+    row_idx_t numRels = 0;
+    for (offset_t i = 0; i < numNodes; ++i) {
+        numRels += lengthData[i];
+    }
+    if (!group.hasVersionInfo()) {
+        return numRels;
+    }
+    // Gap rows are never deleted, so every deletion is one of the rels.
+    return numRels - group.getVersionInfo()->getNumDeletions(transaction, 0, group.getNumRows());
+}
+
 // Calls func(offset, degree) for every bound node with at least one rel, in ascending offset
 // order. A degree adds up the node's checkpointed CSR length, its committed in-memory rels and,
 // in a write transaction, its uncommitted rels.
@@ -875,6 +907,35 @@ std::vector<std::pair<offset_t, row_idx_t>> RelTable::getTopKDegrees(const Trans
     }
     std::sort(result.begin(), result.end(), better);
     return result;
+}
+
+row_idx_t RelTable::getNumVisibleRels(const Transaction* transaction, RelDataDirection direction) {
+    auto* relTableData = getDirectedTableData(direction);
+    row_idx_t numRels = 0;
+    for (node_group_idx_t nodeGroupIdx = 0; nodeGroupIdx < relTableData->getNumNodeGroups();
+         nodeGroupIdx++) {
+        auto* nodeGroup = relTableData->getNodeGroup(nodeGroupIdx);
+        if (!nodeGroup) {
+            continue;
+        }
+        const auto pin = nodeGroup->cast<CSRNodeGroup>().captureScanPin(transaction);
+        if (pin.persistent) {
+            numRels += countVisiblePersistentRels(*memoryManager, *relTableData, *pin.persistent,
+                transaction);
+        }
+        for (const auto& inMemGroup : pin.inMemGroups) {
+            numRels += inMemGroup->getNumVisibleRows(transaction);
+        }
+    }
+    if (transaction->isWriteTransaction()) {
+        if (auto* localTable = transaction->getLocalStorage()->getLocalTable(*this)) {
+            for (const auto& [_, rowIndices] :
+                localTable->cast<LocalRelTable>().getCSRIndex(direction)) {
+                numRels += rowIndices.size();
+            }
+        }
+    }
+    return numRels;
 }
 
 row_idx_t RelTable::getNumActiveBoundNodes(const Transaction* transaction,
