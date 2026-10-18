@@ -36,6 +36,12 @@ public:
         common::row_idx_t startRow, common::length_t numRows) const;
     common::row_idx_t getNumVisibleRows(const transaction::Transaction* transaction,
         common::row_idx_t startRow, common::length_t numRows) const;
+    // Rows whose insert the transaction can see, deleted or not.
+    common::row_idx_t getNumInsertedRows(const transaction::Transaction* transaction,
+        common::row_idx_t startRow, common::length_t numRows) const;
+    // Appends the rows in [startRow, startRow + numRows) whose delete the transaction can see.
+    void getDeletedRows(const transaction::Transaction* transaction, common::row_idx_t startRow,
+        common::length_t numRows, std::vector<common::row_idx_t>& rows) const;
     bool hasInsertions() const;
     bool isDeleted(const transaction::Transaction* transaction, common::row_idx_t rowInChunk) const;
     bool isInserted(const transaction::Transaction* transaction,
