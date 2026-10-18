@@ -356,18 +356,18 @@ TEST_F(OptimizerTest, SingleNodeTwoHopJoins) {
     // TODO(Guodong/Xiyang): We should make sure the plan is consistent on all platforms.
     GTEST_SKIP();
 #else
+    // The payload-fetch joins below are small-outer (a single bound row fanning out to a
+    // few neighbours) over a larger node table, so the lookup join wins the cost
+    // competition against the hash join and the bare scans disappear into LKP ops.
     auto q1 =
         "MATCH (a:person)-[e:knows]->(b:person)-[e2:knows]->(c:person) WHERE b.ID=0 RETURN a,b,c;";
-    ASSERT_STREQ(getEncodedPlan(q1).c_str(),
-        "HJ(c._ID){S(c)}{HJ(a._ID){S(a)}{E(c)E(a)IndexScan(b)}}");
+    ASSERT_STREQ(getEncodedPlan(q1).c_str(), "LKP(c._ID)LKP(a._ID)E(c)E(a)IndexScan(b)");
     auto q2 = "MATCH (a:person)-[e:knows]->(b:person)-[e2:knows]->(c:person) WHERE a.ID=0 "
               "RETURN a,b,c;";
-    ASSERT_STREQ(getEncodedPlan(q2).c_str(),
-        "HJ(b._ID){S(b)}{HJ(c._ID){S(c)}{E(c)E(b)IndexScan(a)}}");
+    ASSERT_STREQ(getEncodedPlan(q2).c_str(), "LKP(b._ID)LKP(c._ID)E(c)E(b)IndexScan(a)");
     auto q3 = "MATCH (a:person)-[e:knows]->(b:person)-[e2:knows]->(c:person) WHERE c.ID=0 "
               "RETURN a,b,c;";
-    ASSERT_STREQ(getEncodedPlan(q3).c_str(),
-        "HJ(a._ID){S(a)}{HJ(b._ID){S(b)}{E(a)E(b)IndexScan(c)}}");
+    ASSERT_STREQ(getEncodedPlan(q3).c_str(), "LKP(b._ID)LKP(a._ID)E(a)E(b)IndexScan(c)");
 #endif
 }
 

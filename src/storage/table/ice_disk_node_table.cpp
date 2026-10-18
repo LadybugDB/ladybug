@@ -331,5 +331,27 @@ bool IceDiskNodeTable::isVisibleNoLock(const transaction::Transaction* transacti
     return offset < getTotalRowCount(transaction);
 }
 
+bool IceDiskNodeTable::lookupPK(const transaction::Transaction* transaction,
+    common::ValueVector* keyVector, uint64_t vectorPos, common::offset_t& result) const {
+    // Lookup joins resolve INTERNAL_ID keys directly to offsets (same fast path as
+    // NodeTable::lookupPK). The base implementation checks in-memory node groups,
+    // which are empty for disk-resident tables, so handle it here via total row count.
+    if (keyVector->dataType.getLogicalTypeID() == common::LogicalTypeID::INTERNAL_ID) {
+        if (keyVector->isNull(vectorPos)) {
+            return false;
+        }
+        const auto nodeID = keyVector->getValue<common::nodeID_t>(vectorPos);
+        if (nodeID.tableID != tableID || nodeID.offset == common::INVALID_OFFSET) {
+            return false;
+        }
+        if (!isVisibleNoLock(transaction, nodeID.offset)) {
+            return false;
+        }
+        result = nodeID.offset;
+        return true;
+    }
+    return NodeTable::lookupPK(transaction, keyVector, vectorPos, result);
+}
+
 } // namespace storage
 } // namespace lbug
