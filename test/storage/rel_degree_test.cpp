@@ -73,6 +73,12 @@ protected:
             EXPECT_EQ(table.getDegreeForOffset(transaction, direction, offset), degree)
                 << "offset " << offset;
         }
+        for (offset_t offset = 0; offset < 64; ++offset) {
+            if (!std::binary_search(expected.begin(), expected.end(), std::make_pair(offset, 0ul),
+                    [](const auto& a, const auto& b) { return a.first < b.first; })) {
+                EXPECT_EQ(table.getDegreeForOffset(transaction, direction, offset), 0u) << offset;
+            }
+        }
 
         EXPECT_EQ(table.getNumActiveBoundNodes(transaction, direction), expected.size());
 
@@ -150,6 +156,67 @@ TEST_F(RelDegreeTest, MatchesCypherAcrossNodeGroupsAndStorageStates) {
     run("BEGIN TRANSACTION;");
     run("UNWIND [0, 5, 131072, 135000] AS i "
         "MATCH (a:N {id: i}), (b:N {id: 135001}) CREATE (a)-[:R]->(b);");
+    checkDegrees();
+    run("COMMIT;");
+    checkDegrees();
+}
+
+// Deleted rels leave their CSR lengths until a checkpoint compacts them.
+TEST_F(RelDegreeTest, DeletedRelsAreNotCounted) {
+    run("CREATE NODE TABLE N(id INT64, PRIMARY KEY(id));");
+    run("CREATE REL TABLE R(FROM N TO N);");
+    run("UNWIND range(0, 999) AS i CREATE (:N {id: i});");
+    run("COPY R FROM (UNWIND range(0, 999) AS i UNWIND range(1, 1 + i % 4) AS k "
+        "RETURN i, (i * 7 + k) % 1000);");
+    // Persistent rels deleted before and after a checkpoint, every rel of some nodes included.
+    run("MATCH (a:N)-[r:R]->() WHERE a.id % 10 = 0 DELETE r;");
+    checkDegrees();
+    run("CHECKPOINT;");
+    run("MATCH (a:N)-[r:R]->(b:N) WHERE a.id % 10 = 1 AND b.id % 2 = 0 DELETE r;");
+    checkDegrees();
+    // Committed in-memory rels, then some of them deleted.
+    run("UNWIND range(0, 999, 3) AS i MATCH (a:N {id: i}), (b:N {id: 999 - i}) "
+        "CREATE (a)-[:R]->(b);");
+    run("MATCH (a:N)-[r:R]->(b:N) WHERE a.id % 9 = 0 AND b.id = 999 - a.id DELETE r;");
+    checkDegrees();
+    // The transaction's own deletes, before they commit.
+    run("BEGIN TRANSACTION;");
+    run("MATCH (a:N)-[r:R]->() WHERE a.id % 7 = 0 DELETE r;");
+    checkDegrees();
+    run("COMMIT;");
+    checkDegrees();
+}
+
+// A reader that began before a COPY must not count it. Into an empty rel table the copied rels
+// become each node group's persistent group; into a non-empty one they are appended in memory.
+TEST_F(RelDegreeTest, ReaderBeforeCopyDoesNotCountIt) {
+    run("CREATE NODE TABLE N(id INT64, PRIMARY KEY(id));");
+    run("CREATE REL TABLE R(FROM N TO N);");
+    run("UNWIND range(0, 139999) AS i CREATE (:N {id: i});");
+    run("CHECKPOINT;");
+    auto writer = std::make_unique<main::Connection>(database.get());
+    auto copy = [&](const std::string& source) {
+        auto result = writer->query("COPY R FROM (" + source + ");");
+        ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    };
+
+    run("BEGIN TRANSACTION READ ONLY;");
+    copy("UNWIND range(0, 139999, 97) AS i UNWIND range(1, 1 + i % 3) AS k "
+         "RETURN i, (i * 13 + k) % 140000");
+    auto transaction = transaction::Transaction::Get(*getClientContext(*conn));
+    for (auto direction : relEntry().getRelDataDirections()) {
+        EXPECT_TRUE(relTable().getDegreeEntries(transaction, direction).empty());
+        EXPECT_EQ(relTable().getNumActiveBoundNodes(transaction, direction), 0u);
+        EXPECT_TRUE(relTable().getTopKDegrees(transaction, direction, 3).empty());
+    }
+    auto count = conn->query("MATCH ()-[:R]->() RETURN count(*);");
+    ASSERT_TRUE(count->isSuccess()) << count->getErrorMessage();
+    EXPECT_EQ(count->getNext()->getValue(0)->getValue<int64_t>(), 0);
+    run("COMMIT;");
+    checkDegrees();
+
+    run("BEGIN TRANSACTION READ ONLY;");
+    copy("UNWIND range(5, 139999, 89) AS i RETURN i, (i * 3) % 140000");
     checkDegrees();
     run("COMMIT;");
     checkDegrees();

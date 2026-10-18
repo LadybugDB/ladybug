@@ -72,6 +72,8 @@ struct VectorVersionInfo {
 
     row_idx_t getNumDeletions(transaction_t startTS, transaction_t transactionID,
         row_idx_t startRow, length_t numRows) const;
+    row_idx_t getNumInsertedRows(transaction_t startTS, transaction_t transactionID,
+        row_idx_t startRow, length_t numRows) const;
     row_idx_t getNumVisibleRows(transaction_t startTS, transaction_t transactionID,
         row_idx_t startRow, length_t numRows) const;
 
@@ -350,28 +352,36 @@ row_idx_t VectorVersionInfo::getNumDeletions(transaction_t startTS, transaction_
     return numDeletions;
 }
 
+row_idx_t VectorVersionInfo::getNumInsertedRows(transaction_t startTS, transaction_t transactionID,
+    row_idx_t startRow, length_t numRows) const {
+    if (insertionStatus == InsertionStatus::NO_INSERTED) {
+        return 0;
+    }
+    if (insertionStatus == InsertionStatus::ALWAYS_INSERTED || isSameInsertionVersion()) {
+        return isInserted(startTS, transactionID, startRow) ? numRows : 0;
+    }
+    // Rows are appended in commit order by one writer at a time and rolled back from the end,
+    // so committed rows form a prefix: if they number numRows, they are [0, numRows). The count
+    // is read first, so the timestamp read after it covers every row it counts.
+    if (startRow == 0 && numCommittedInsertions.load(std::memory_order_acquire) == numRows &&
+        maxCommittedInsertion.load(std::memory_order_relaxed) <= startTS) {
+        return numRows;
+    }
+    row_idx_t numInserted = 0u;
+    for (auto i = 0u; i < numRows; i++) {
+        const auto insertion = insertedVersions->operator[](startRow + i);
+        numInserted += insertion == transactionID || insertion <= startTS;
+    }
+    return numInserted;
+}
+
 row_idx_t VectorVersionInfo::getNumVisibleRows(transaction_t startTS, transaction_t transactionID,
     row_idx_t startRow, length_t numRows) const {
     if (insertionStatus == InsertionStatus::NO_INSERTED) {
         return 0;
     }
     if (deletionStatus == DeletionStatus::NO_DELETED) {
-        if (insertionStatus == InsertionStatus::ALWAYS_INSERTED || isSameInsertionVersion()) {
-            return isInserted(startTS, transactionID, startRow) ? numRows : 0;
-        }
-        // Rows are appended in commit order by one writer at a time and rolled back from the end,
-        // so committed rows form a prefix: if they number numRows, they are [0, numRows). The count
-        // is read first, so the timestamp read after it covers every row it counts.
-        if (startRow == 0 && numCommittedInsertions.load(std::memory_order_acquire) == numRows &&
-            maxCommittedInsertion.load(std::memory_order_relaxed) <= startTS) {
-            return numRows;
-        }
-        row_idx_t numVisible = 0u;
-        for (auto i = 0u; i < numRows; i++) {
-            const auto insertion = insertedVersions->operator[](startRow + i);
-            numVisible += insertion == transactionID || insertion <= startTS;
-        }
-        return numVisible;
+        return getNumInsertedRows(startTS, transactionID, startRow, numRows);
     }
     row_idx_t numVisible = 0u;
     for (auto i = 0u; i < numRows; i++) {
@@ -756,6 +766,55 @@ row_idx_t VersionInfo::getNumVisibleRows(const transaction::Transaction* transac
                                       numRowsInVector;
     }
     return numVisible;
+}
+
+row_idx_t VersionInfo::getNumInsertedRows(const transaction::Transaction* transaction,
+    row_idx_t startRow, length_t numRows) const {
+    if (numRows == 0) {
+        return 0;
+    }
+    auto [startVector, startRowInVector] =
+        StorageUtils::getQuotientRemainder(startRow, DEFAULT_VECTOR_CAPACITY);
+    auto [endVectorIdx, endRowInVector] =
+        StorageUtils::getQuotientRemainder(startRow + numRows - 1, DEFAULT_VECTOR_CAPACITY);
+    row_idx_t numInserted = 0u;
+    for (auto vectorIdx = startVector; vectorIdx <= endVectorIdx; vectorIdx++) {
+        const auto rowInVector = vectorIdx == startVector ? startRowInVector : 0;
+        const auto numRowsInVector = vectorIdx == endVectorIdx ?
+                                         endRowInVector - rowInVector + 1 :
+                                         DEFAULT_VECTOR_CAPACITY - rowInVector;
+        const auto vectorVersion = getVectorVersionInfo(vectorIdx);
+        numInserted += vectorVersion ? vectorVersion->getNumInsertedRows(transaction->getStartTS(),
+                                           transaction->getID(), rowInVector, numRowsInVector) :
+                                       numRowsInVector;
+    }
+    return numInserted;
+}
+
+void VersionInfo::getDeletedRows(const transaction::Transaction* transaction, row_idx_t startRow,
+    length_t numRows, std::vector<row_idx_t>& rows) const {
+    if (numRows == 0) {
+        return;
+    }
+    auto [startVector, startRowInVector] =
+        StorageUtils::getQuotientRemainder(startRow, DEFAULT_VECTOR_CAPACITY);
+    auto [endVectorIdx, endRowInVector] =
+        StorageUtils::getQuotientRemainder(startRow + numRows - 1, DEFAULT_VECTOR_CAPACITY);
+    for (auto vectorIdx = startVector; vectorIdx <= endVectorIdx; vectorIdx++) {
+        const auto vectorVersion = getVectorVersionInfo(vectorIdx);
+        if (!vectorVersion ||
+            vectorVersion->deletionStatus == VectorVersionInfo::DeletionStatus::NO_DELETED) {
+            continue;
+        }
+        const auto rowInVector = vectorIdx == startVector ? startRowInVector : 0;
+        const auto endRow =
+            vectorIdx == endVectorIdx ? endRowInVector + 1 : DEFAULT_VECTOR_CAPACITY;
+        for (auto row = rowInVector; row < endRow; row++) {
+            if (vectorVersion->isDeleted(transaction->getStartTS(), transaction->getID(), row)) {
+                rows.push_back(vectorIdx * DEFAULT_VECTOR_CAPACITY + row);
+            }
+        }
+    }
 }
 
 bool VersionInfo::hasInsertions() const {
