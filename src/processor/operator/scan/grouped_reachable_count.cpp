@@ -21,6 +21,9 @@ namespace processor {
 
 void GroupedReachableCount::initLocalStateInternal(ResultSet* resultSet,
     ExecutionContext* context) {
+    // Clear for pooled-plan reuse (fresh operators start empty).
+    keyVectors.clear();
+    scanStates.clear();
     for (auto& pos : keyOutputPoss) {
         keyVectors.push_back(resultSet->getValueVector(pos).get());
     }

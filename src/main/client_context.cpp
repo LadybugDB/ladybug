@@ -444,6 +444,13 @@ std::unique_ptr<QueryResult> ClientContext::executeWithParams(PreparedStatement*
         cachedStatement->planVersion = newCachedStatement->planVersion;
         cachedStatement->physicalPlanCache.reset();
         cachedStatement->sinkResultSetDescriptors.clear();
+        // The pool holds operator trees cloned from the previous template (bound for the
+        // previous parameter types / catalog version). They reference stale evaluators and
+        // descriptors and must not be served for the rebound plan.
+        {
+            std::lock_guard poolLock{cachedStatement->physicalPlanPoolMutex};
+            cachedStatement->physicalPlanPool.clear();
+        }
         return executeNoLock(newPreparedStatement.get(), cachedStatement, queryID, {}, true);
     }
     return executeNoLock(newPreparedStatement.get(), newCachedStatement.get(), queryID, {}, true);

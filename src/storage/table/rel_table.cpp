@@ -227,6 +227,11 @@ void RelTable::initScanState(Transaction* transaction, TableScanState& scanState
                           relScanState.cachedBoundNodeSelVector;
     positions.resize(sel.getSelSize());
     if (positions.empty()) {
+        // No bound nodes in this batch: drop any stale multi-group plan from the previous
+        // batch so scanNext() observes an exhausted batch instead of rescanning it.
+        relScanState.boundNodeGroupPlan.clear();
+        relScanState.allBoundNodePositions.clear();
+        scanState.source = TableScanSource::NONE;
         return;
     }
     bool alreadySorted = true;

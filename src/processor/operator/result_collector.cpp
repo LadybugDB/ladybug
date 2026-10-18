@@ -22,6 +22,11 @@ std::string ResultCollectorPrintInfo::toString() const {
 }
 
 void ResultCollector::initNecessaryLocalState(ResultSet* resultSet, ExecutionContext* context) {
+    // Pooled physical plans reuse this operator across executions: reset the vectors first
+    // (fresh operators start empty, so this is a no-op for them). finalizeInternal() also
+    // calls this on a different ResultSet, so without clearing each call would accumulate.
+    payloadVectors.clear();
+    payloadAndMarkVectors.clear();
     payloadVectors.reserve(info.payloadPositions.size());
     for (auto& pos : info.payloadPositions) {
         auto vec = resultSet->getValueVector(pos).get();

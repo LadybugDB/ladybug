@@ -20,19 +20,9 @@ std::shared_ptr<ResultSet> ResultSetPool::getOrCreate(ResultSetDescriptor* descr
     std::shared_ptr<ResultSet> reusable;
     {
         std::lock_guard lock{mtx};
-        auto& cached = entries[threadID].cached;
-        for (auto it = cached.begin(); it != cached.end(); ++it) {
-            if (it->first == descriptor->id && it->second != nullptr) {
-                // Move-to-front: the just-used descriptor is the most likely next hit.
-                // (Rotate first, then copy out: moving the pair after pilfering its
-                // shared_ptr would leave a null entry that matches forever but never hits.)
-                if (it != cached.begin()) {
-                    std::rotate(cached.begin(), it, it + 1);
-                    it = cached.begin();
-                }
-                reusable = it->second;
-                break;
-            }
+        auto& entry = entries[threadID];
+        if (entry.resultSet && entry.descriptorID == descriptor->id) {
+            reusable = entry.resultSet;
         }
     }
     if (reusable) {
@@ -41,19 +31,16 @@ std::shared_ptr<ResultSet> ResultSetPool::getOrCreate(ResultSetDescriptor* descr
         reusable->resetForReuse();
         return reusable;
     }
-    // First time on this thread, or an uncached descriptor: allocate fresh outside the
-    // lock, then install it (evicting the LRU entry past the cap) and release evicted
-    // ResultSets after unlocking.
+    // First time on this thread, or a different prepared statement: allocate fresh outside the
+    // lock, then swap it in and release the previous ResultSet after unlocking.
     auto resultSet = std::make_shared<ResultSet>(descriptor, memoryManager);
-    std::shared_ptr<ResultSet> evicted;
+    std::shared_ptr<ResultSet> previous;
     {
         std::lock_guard lock{mtx};
-        auto& cached = entries[threadID].cached;
-        cached.insert(cached.begin(), {descriptor->id, resultSet});
-        if (cached.size() > Entry::MAX_CACHED_PER_THREAD) {
-            evicted = std::move(cached.back().second);
-            cached.pop_back();
-        }
+        auto& entry = entries[threadID];
+        previous = std::move(entry.resultSet);
+        entry.resultSet = resultSet;
+        entry.descriptorID = descriptor->id;
     }
     return resultSet;
 }

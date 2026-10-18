@@ -61,6 +61,10 @@ void PackedFilteredCount::initLocalStateInternal(ResultSet* resultSet, Execution
     rhsValueVector = resultSet->getValueVector(info.rhsValuePos).get();
     selectState = resultSet->getDataChunk(info.selectChunkPos)->state.get();
     flatState = resultSet->getDataChunk(info.flatChunkPos)->state.get();
+    // Clear for pooled-plan reuse (fresh operators start empty). localCounts is moved out in
+    // executeInternal, but clear defensively in case of partial execution.
+    multiplicityStates.clear();
+    localCounts.clear();
     for (auto dataChunkPos : info.multiplicityChunkPos) {
         multiplicityStates.push_back(resultSet->getDataChunk(dataChunkPos)->state.get());
     }

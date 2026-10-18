@@ -18,6 +18,8 @@ std::string CopyToPrintInfo::toString() const {
 void CopyTo::initLocalStateInternal(ResultSet* resultSet, ExecutionContext* context) {
     localState.exportFuncLocalState =
         info.exportFunc.initLocalState(*context->clientContext, *info.bindData, info.isFlatVec);
+    // Clear for pooled-plan reuse (fresh operators start empty).
+    localState.inputVectors.clear();
     localState.inputVectors.reserve(info.inputVectorPoses.size());
     for (auto& inputVectorPos : info.inputVectorPoses) {
         localState.inputVectors.push_back(resultSet->getValueVector(inputVectorPos));
