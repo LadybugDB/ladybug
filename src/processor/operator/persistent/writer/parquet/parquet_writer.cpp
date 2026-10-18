@@ -287,10 +287,14 @@ void ParquetWriter::flushRowGroup(PreparedRowGroup& rowGroup) {
 
 void ParquetWriter::readFromFT(FactorizedTable& ft, std::vector<ValueVector*> vectorsToRead,
     uint64_t& numTuplesRead) {
-    auto numTuplesToRead =
-        ft.getTableSchema()->getNumUnFlatColumns() != 0 ?
-            1 :
-            std::min<uint64_t>(ft.getNumTuples() - numTuplesRead, DEFAULT_VECTOR_CAPACITY);
+    // Destination vectors are freshly allocated with a flat single-value state, so they can
+    // only ever hold one tuple: FactorizedTable::lookup asserts
+    // !(vector->state->isFlat() && numTuplesToRead > 1), and in release builds a wider read
+    // silently keeps just the first tuple while numTuplesRead still advances past the rest,
+    // producing pages that disagree with the footer (unreadable files). Multi-row all-flat
+    // tables are the norm, not the exception (e.g. flat single-row morsels accumulated over
+    // many batches), so always read one tuple at a time here.
+    auto numTuplesToRead = uint64_t{1};
     ft.scan(vectorsToRead, numTuplesRead, numTuplesToRead);
     numTuplesRead += numTuplesToRead;
 }

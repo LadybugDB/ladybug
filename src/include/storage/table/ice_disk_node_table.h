@@ -74,6 +74,8 @@ public:
         common::offset_t offset) const override;
     bool isVisibleNoLock(const transaction::Transaction* transaction,
         common::offset_t offset) const override;
+    bool lookupPK(const transaction::Transaction* transaction, common::ValueVector* keyVector,
+        uint64_t vectorPos, common::offset_t& result) const override;
 
     const std::string& getParquetFilePath() const { return parquetFilePath; }
 

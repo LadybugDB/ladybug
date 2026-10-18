@@ -240,12 +240,16 @@ public:
         const std::vector<std::shared_ptr<binder::NodeExpression>>& joinNodes);
     // Lookup join: when one side of an inner equi-join on a single node ID is a bare
     // single-node table scan of that node (pure payload fetch, e.g. Q1's Person scan) and the
-    // other side already binds the node ID with a small estimated cardinality, replace the
-    // full scan + hash join with per-tuple primary-key lookups (inner semantics).
-    // Returns true when a lookup plan was added (hash plans for the pair are then skipped).
+    // other side already binds the node ID with a small estimated cardinality, add a
+    // per-tuple primary-key lookup plan (inner semantics) alongside the hash join
+    // candidates. The lookup participates in cost competition like every other plan:
+    // it is only added when cheaper than the current max cost, and the cheapest plan
+    // wins, so hash alternatives are never pruned.
+    // Returns true when a lookup plan was added.
     bool tryPlanLookupJoin(const binder::SubqueryGraph& innerSubgraph, const LogicalPlan& innerPlan,
         const LogicalPlan& outerPlan, const std::shared_ptr<binder::NodeExpression>& joinNode,
-        const binder::expression_vector& predicates, const binder::SubqueryGraph& newSubgraph);
+        const binder::expression_vector& predicates, const binder::SubqueryGraph& newSubgraph,
+        uint64_t maxCost);
     void planInnerHashJoin(const binder::SubqueryGraph& subgraph,
         const binder::SubqueryGraph& otherSubgraph,
         const std::vector<std::shared_ptr<binder::NodeExpression>>& joinNodes, bool flipPlan);

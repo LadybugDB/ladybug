@@ -18,6 +18,8 @@ private:
     static void encodeHashJoin(LogicalOperator* logicalOperator, std::string& encodeString);
     static void encodeExtend(LogicalOperator* logicalOperator, std::string& encodeString);
     static void encodeScanNodeTable(LogicalOperator* logicalOperator, std::string& encodeString);
+    static void encodeQueryPrimaryKeyLookup(LogicalOperator* logicalOperator,
+        std::string& encodeString);
     // Encode filter
     static void encodeFilter(LogicalOperator* logicalOperator, std::string& encodedString);
 };

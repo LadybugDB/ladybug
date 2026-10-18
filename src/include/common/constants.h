@@ -181,6 +181,12 @@ struct PlannerKnobs {
     // outer side is small: each outer row costs one index probe/payload fetch, so cap the
     // estimated outer cardinality this rewrite applies to (Q1's Person fetch: ~9 rows).
     static constexpr uint64_t LOOKUP_JOIN_MAX_OUTER_CARDINALITY = 1024;
+    // Lookup join eligibility additionally requires the outer plan to be free of
+    // unmodeled fan-out (no recursion/aggregation/etc.) and caps the extend chain
+    // depth: fan-out estimation error compounds multiplicatively per hop while the
+    // estimator has no skew model, so beyond two chained extends the estimate is no
+    // longer a credible probe budget.
+    static constexpr uint32_t LOOKUP_JOIN_MAX_OUTER_EXTEND_DEPTH = 2;
 };
 
 struct OrderByConstants {

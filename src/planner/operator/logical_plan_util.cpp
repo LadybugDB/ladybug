@@ -4,6 +4,7 @@
 #include "planner/operator/extend/logical_extend.h"
 #include "planner/operator/logical_hash_join.h"
 #include "planner/operator/logical_intersect.h"
+#include "planner/operator/scan/logical_query_primary_key_lookup.h"
 #include "planner/operator/scan/logical_scan_node_table.h"
 
 using namespace lbug::binder;
@@ -58,6 +59,10 @@ void LogicalPlanUtil::encodeRecursive(LogicalOperator* logicalOperator, std::str
     case LogicalOperatorType::SCAN_NODE_TABLE: {
         encodeScanNodeTable(logicalOperator, encodeString);
     } break;
+    case LogicalOperatorType::QUERY_PRIMARY_KEY_LOOKUP: {
+        encodeQueryPrimaryKeyLookup(logicalOperator, encodeString);
+        encodeRecursive(logicalOperator->getChild(0).get(), encodeString);
+    } break;
     case LogicalOperatorType::FILTER: {
         encodeFilter(logicalOperator, encodeString);
         encodeRecursive(logicalOperator->getChild(0).get(), encodeString);
@@ -100,6 +105,12 @@ void LogicalPlanUtil::encodeScanNodeTable(LogicalOperator* logicalOperator,
     }
     encodeString +=
         "(" + scan.getNodeID()->constCast<PropertyExpression>().getRawVariableName() + ")";
+}
+
+void LogicalPlanUtil::encodeQueryPrimaryKeyLookup(LogicalOperator* logicalOperator,
+    std::string& encodeString) {
+    auto& lookup = logicalOperator->constCast<LogicalQueryPrimaryKeyLookup>();
+    encodeString += "LKP(" + lookup.getExpressionsForPrinting() + ")";
 }
 
 void LogicalPlanUtil::encodeFilter(LogicalOperator*, std::string& encodedString) {

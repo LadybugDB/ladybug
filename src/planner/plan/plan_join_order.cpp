@@ -4,8 +4,10 @@
 #include "binder/bound_scan_source.h"
 #include "binder/expression/property_expression.h"
 #include "binder/expression_visitor.h"
+#include "catalog/catalog.h"
 #include "catalog/catalog_entry/catalog_entry_type.h"
 #include "catalog/catalog_entry/node_table_catalog_entry.h"
+#include "common/enums/extend_direction_util.h"
 #include "common/enums/join_type.h"
 #include "common/enums/rel_direction.h"
 #include "common/enums/table_type.h"
@@ -15,12 +17,15 @@
 #include "planner/join_order/cost_model.h"
 #include "planner/join_order/join_plan_solver.h"
 #include "planner/join_order/join_tree_constructor.h"
+#include "planner/operator/extend/base_logical_extend.h"
 #include "planner/operator/extend/logical_extend.h"
+#include "planner/operator/logical_hash_join.h"
 #include "planner/operator/scan/logical_query_primary_key_lookup.h"
 #include "planner/operator/scan/logical_scan_node_table.h"
 #include "planner/planner.h"
 #include "storage/storage_manager.h"
 #include "storage/table/node_table.h"
+#include "transaction/transaction.h"
 
 using namespace lbug::binder;
 using namespace lbug::common;
@@ -871,9 +876,135 @@ static const LogicalScanNodeTable* getBareSingleNodeScan(const SubqueryGraph& su
     return &scan;
 }
 
+// Credibility + bounded-fan-out analysis of a lookup-join outer plan.
+//
+// A lookup join replaces a full scan + hash join with per-tuple probes, so it must only
+// fire when the outer side is provably small. The outer cardinality estimate alone is not
+// sufficient: it compounds mean fan-outs and NDV guesses that can be off by orders of
+// magnitude on skewed multi-hop patterns (observed: 112K-1.5M actual probes behind a
+// <=1024 estimate on LDBC IC4/IC5-style shapes).
+//
+// (b2) Only operators with well-modeled cardinalities may appear in the outer plan:
+// scans (exact counts / PK lookups / HLL-NDV equality / min-max ranges), row-preserving
+// or row-reducing ops, and inner joins/cross products/unions of trusted children.
+// Anything that guesses row counts wholesale (recursion, grouping/aggregation,
+// mark/outer joins, unwinds, intersects, misc optimizer/executor ops) disqualifies the
+// outer: fail closed. Extend chains are additionally capped at depth 2, since fan-out
+// estimation error compounds multiplicatively per hop while the estimate itself has no
+// skew model.
+// (b3) Each non-recursive extend multiplies the estimate's uncertainty by the observed
+// worst/mean fan-out ratio (ANALYZE CSR degree stats). The lookup fires only if the
+// uncertainty-discounted estimate still fits comfortably inside the eliminated scan:
+// outerCard * uncertainty < innerCard. Missing degree stats fail closed.
+struct LookupOuterAnalysis {
+    bool trusted = true;
+    double uncertainty = 1.0;
+    uint32_t maxExtendDepth = 0;
+};
+
+static double getExtendFanoutUncertainty(const binder::RelExpression& rel,
+    common::ExtendDirection direction, const CardinalityEstimator& estimator, bool& ok) {
+    ok = false;
+    const auto dirs = direction == common::ExtendDirection::BOTH ?
+                          std::vector<common::RelDataDirection>{common::RelDataDirection::FWD,
+                              common::RelDataDirection::BWD} :
+                          std::vector<common::RelDataDirection>{
+                              common::ExtendDirectionUtil::getRelDataDirection(direction)};
+    // Fail closed on unknown fan-out: without ANALYZE CSR degree stats there is no
+    // bound on how many rows one outer row can fan out to. (A ONE-multiplicity rel
+    // records maxDegree 1, so functional edges contribute a factor of exactly 1.)
+    auto worstRatio = 1.0;
+    auto sawStats = false;
+    for (auto tableID : rel.getInnerRelTableIDs()) {
+        for (auto relDir : dirs) {
+            const auto* stats = estimator.getRelDirectionStats(tableID, relDir);
+            if (stats == nullptr || stats->maxDegree == 0) {
+                return 1.0;
+            }
+            sawStats = true;
+            worstRatio = std::max(worstRatio,
+                static_cast<double>(stats->maxDegree) / std::max<double>(stats->avgDegree, 1.0));
+        }
+    }
+    if (!sawStats) {
+        return 1.0;
+    }
+    ok = true;
+    return worstRatio;
+}
+
+static void analyzeLookupOuterPlan(const LogicalOperator* op, const CardinalityEstimator& estimator,
+    uint32_t extendDepth, LookupOuterAnalysis& analysis) {
+    if (!analysis.trusted) {
+        return;
+    }
+    using T = LogicalOperatorType;
+    const auto type = op->getOperatorType();
+    switch (type) {
+    case T::EXTEND:
+    case T::PACKED_EXTEND: {
+        analysis.maxExtendDepth = std::max(analysis.maxExtendDepth, extendDepth + 1);
+        const auto& extend = op->constCast<BaseLogicalExtend>();
+        bool ok = false;
+        const auto factor =
+            getExtendFanoutUncertainty(*extend.getRel(), extend.getDirection(), estimator, ok);
+        if (!ok) {
+            analysis.trusted = false;
+            return;
+        }
+        analysis.uncertainty *= factor;
+        extendDepth += 1;
+        break;
+    }
+    case T::HASH_JOIN: {
+        if (op->constCast<LogicalHashJoin>().getJoinType() != common::JoinType::INNER) {
+            analysis.trusted = false;
+            return;
+        }
+        break;
+    }
+    case T::UNION_ALL: {
+        // Additive branches: the worst branch uncertainty dominates.
+        auto worst = 1.0;
+        for (auto i = 0u; i < op->getNumChildren(); ++i) {
+            LookupOuterAnalysis branch{true, 1.0, extendDepth};
+            analyzeLookupOuterPlan(op->getChild(i).get(), estimator, extendDepth, branch);
+            if (!branch.trusted) {
+                analysis.trusted = false;
+                return;
+            }
+            worst = std::max(worst, branch.uncertainty);
+            analysis.maxExtendDepth = std::max(analysis.maxExtendDepth, branch.maxExtendDepth);
+        }
+        analysis.uncertainty *= worst;
+        return;
+    }
+    // NOTE: rel scans have no logical operator of their own; rel traversal always
+    // appears as EXTEND / PACKED_EXTEND, which is handled above.
+    // A nested lookup preserves row count up to inner-join drops, so reusing its
+    // cardinality as an upper bound is conservative (it can only make us fire less).
+    case T::QUERY_PRIMARY_KEY_LOOKUP:
+    case T::SCAN_NODE_TABLE:
+    case T::FILTER:
+    case T::PROJECTION:
+    case T::FLATTEN:
+    case T::ORDER_BY:
+    case T::LIMIT:
+    case T::CROSS_PRODUCT:
+    case T::NODE_LABEL_FILTER:
+        break;
+    default:
+        analysis.trusted = false;
+        return;
+    }
+    for (auto i = 0u; i < op->getNumChildren(); ++i) {
+        analyzeLookupOuterPlan(op->getChild(i).get(), estimator, extendDepth, analysis);
+    }
+}
+
 bool Planner::tryPlanLookupJoin(const SubqueryGraph& innerSubgraph, const LogicalPlan& innerPlan,
     const LogicalPlan& outerPlan, const std::shared_ptr<NodeExpression>& joinNode,
-    const expression_vector& predicates, const SubqueryGraph& newSubgraph) {
+    const expression_vector& predicates, const SubqueryGraph& newSubgraph, uint64_t maxCost) {
     if (!clientContext->getClientConfig()->enablePlanOptimizer) {
         return false;
     }
@@ -885,14 +1016,25 @@ bool Planner::tryPlanLookupJoin(const SubqueryGraph& innerSubgraph, const Logica
         return false;
     }
     auto tableID = scan->getTableIDs()[0];
-    auto table = storage::StorageManager::Get(*clientContext)
-                     ->getTable(tableID)
-                     ->ptrCast<storage::NodeTable>();
-    if (table->tryGetPrimaryKeyIndex() == nullptr) {
+    if (tableID != joinNode->getTableIDs()[0]) {
         return false;
     }
+    // Per-tuple probes only pay off for small outer cardinalities (INLJ precedent).
+    // Checked before touching storage, so virtual/partition table IDs without a
+    // storage entry never throw here.
     const auto outerCard = outerPlan.getCardinality();
     if (outerCard > PlannerKnobs::LOOKUP_JOIN_MAX_OUTER_CARDINALITY) {
+        return false;
+    }
+    storage::NodeTable* table = nullptr;
+    try {
+        table = storage::StorageManager::Get(*clientContext)
+                    ->getTable(tableID)
+                    ->ptrCast<storage::NodeTable>();
+    } catch (const std::exception&) {
+        return false;
+    }
+    if (table == nullptr || table->tryGetPrimaryKeyIndex() == nullptr) {
         return false;
     }
     auto key = joinNode->getInternalID();
@@ -913,13 +1055,53 @@ bool Planner::tryPlanLookupJoin(const SubqueryGraph& innerSubgraph, const Logica
                              return plan.getSchema()->isExpressionInScope(*expression);
                          }),
         properties.end());
+    // The lookup exists to fetch payload. With no unfetched properties it adds an
+    // operator for zero benefit while hiding the equi-join from rewrites that match
+    // on HASH_JOIN (e.g. COUNT_REL_TABLE over COUNT(*)), so stay on the hash path.
+    if (properties.empty()) {
+        return false;
+    }
+    // All fetched properties must exist in the inner table; otherwise fall back to
+    // the hash join (the mapper would assert on a missing column).
+    {
+        auto* catalog = catalog::Catalog::Get(*clientContext);
+        auto* tx = transaction::Transaction::Get(*clientContext);
+        auto* tableEntry = catalog->getTableCatalogEntry(tx, tableID);
+        for (auto& expression : properties) {
+            auto& prop = expression->constCast<PropertyExpression>();
+            const auto& propName = prop.getPropertyName();
+            if (!tableEntry->containsProperty(propName) && !tableEntry->containsProperty("data")) {
+                return false;
+            }
+        }
+    }
+    // (b2/b3) credibility + bounded fan-out: the outer estimate must come from
+    // well-modeled operators, and probing must still win after discounting it by the
+    // observed worst/mean fan-out of every extend in the outer plan. Failing either
+    // means the outer side is not provably small -- fall back to the hash join.
+    {
+        LookupOuterAnalysis analysis;
+        analyzeLookupOuterPlan(plan.getLastOperator().get(), cardinalityEstimator, 0, analysis);
+        if (!analysis.trusted ||
+            analysis.maxExtendDepth > PlannerKnobs::LOOKUP_JOIN_MAX_OUTER_EXTEND_DEPTH) {
+            return false;
+        }
+        const auto discountedOuter = static_cast<double>(outerCard) * analysis.uncertainty;
+        if (!(discountedOuter < static_cast<double>(innerPlan.getCardinality()))) {
+            return false;
+        }
+    }
+    const auto lookupCost = CostModel::computeLookupJoinCost(outerPlan, outerCard);
+    if (lookupCost >= maxCost) {
+        return false;
+    }
     auto lookup = std::make_shared<LogicalQueryPrimaryKeyLookup>(tableID, joinNode->getInternalID(),
         properties, key, outputGroupPos, plan.getLastOperator());
     lookup->computeFactorizedSchema();
     lookup->setCardinality(outerCard);
     plan.setLastOperator(std::move(lookup));
     appendFilters(predicates, plan);
-    plan.setCost(outerPlan.getCost() + outerCard);
+    plan.setCost(lookupCost);
     context.addPlan(newSubgraph, std::move(plan));
     return true;
 }
@@ -937,14 +1119,16 @@ void Planner::planInnerHashJoin(const SubqueryGraph& subgraph, const SubqueryGra
         getNewlyMatchedExprs(subgraph, otherSubgraph, newSubgraph, context.getWhereExpressions());
     for (auto& leftPlan : context.getPlans(subgraph)) {
         for (auto& rightPlan : context.getPlans(otherSubgraph)) {
-            // Lookup join replaces the hash join for this pair when one side is a bare
-            // single-node scan of the join node and the other side is small (e.g. Q1's
-            // Person payload fetch). Like INL joins, it prunes the hash alternatives.
-            if (joinNodes.size() == 1 && (tryPlanLookupJoin(subgraph, leftPlan, rightPlan,
-                                              joinNodes[0], predicates, newSubgraph) ||
-                                             tryPlanLookupJoin(otherSubgraph, rightPlan, leftPlan,
-                                                 joinNodes[0], predicates, newSubgraph))) {
-                continue;
+            // Lookup join competes with hash join: when one side is a bare single-node
+            // scan of the join node and the other side is small (e.g. Q1's Person
+            // payload fetch), add the per-tuple PK lookup plan alongside the hash
+            // candidates below. Each candidate is maxCost-gated and the cheapest plan
+            // wins, so hash alternatives are never pruned.
+            if (joinNodes.size() == 1) {
+                tryPlanLookupJoin(subgraph, leftPlan, rightPlan, joinNodes[0], predicates,
+                    newSubgraph, maxCost);
+                tryPlanLookupJoin(otherSubgraph, rightPlan, leftPlan, joinNodes[0], predicates,
+                    newSubgraph, maxCost);
             }
             const auto leftProbeCardinality = cardinalityEstimator.estimateHashJoin(joinNodeIDs,
                 leftPlan.getLastOperatorRef(), rightPlan.getLastOperatorRef());
