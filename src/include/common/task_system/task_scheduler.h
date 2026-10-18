@@ -20,6 +20,10 @@ struct ScheduledTask {
     uint64_t ID;
 };
 
+// Invoked after a task's dependencies finish and before it is launched. Used to
+// lower the thread limit once produced input is visible.
+using TaskBeforeRunFn = void (*)(Task*);
+
 /**
  * TaskScheduler is a library that manages a set of worker threads that can execute tasks that are
  * put into a task queue. Each task accepts a maximum number of threads. Users of TaskScheduler
@@ -64,6 +68,11 @@ public:
         processor::ExecutionContext* context, bool launchNewWorkerThread = false);
     void scheduleTaskAndWaitOrError(const std::shared_ptr<Task>& task,
         main::ClientContext* clientContext, bool launchNewWorkerThread = false);
+    void scheduleTaskAndWaitOrError(const std::shared_ptr<Task>& task,
+        processor::ExecutionContext* context, bool launchNewWorkerThread,
+        TaskBeforeRunFn beforeRun);
+    void scheduleTaskAndWaitOrError(const std::shared_ptr<Task>& task,
+        main::ClientContext* clientContext, bool launchNewWorkerThread, TaskBeforeRunFn beforeRun);
 
     static TaskScheduler* Get(const main::ClientContext& context);
 
@@ -78,6 +87,8 @@ private:
     std::shared_ptr<ScheduledTask> getTaskAndRegister();
     static void runTask(Task* task);
 
+    bool runOnCallingThread(Task* task);
+
 private:
     std::deque<std::shared_ptr<ScheduledTask>> taskQueue;
     bool stopWorkerThreads;
@@ -88,6 +99,10 @@ private:
 #if defined(__APPLE__)
     uint32_t threadQos; // Thread quality of service for worker threads.
 #endif
+    // Workers and callers running a task inline share numWorkerThreads slots, so inline
+    // execution does not raise the database-wide thread cap. Guarded by taskSchedulerMtx.
+    uint64_t maxNumBusyThreads;
+    uint64_t numBusyThreads;
 };
 #else
 // Single-threaded version of TaskScheduler
@@ -102,6 +117,11 @@ public:
         processor::ExecutionContext* context, bool launchNewWorkerThread = false);
     void scheduleTaskAndWaitOrError(const std::shared_ptr<Task>& task,
         main::ClientContext* clientContext, bool launchNewWorkerThread = false);
+    void scheduleTaskAndWaitOrError(const std::shared_ptr<Task>& task,
+        processor::ExecutionContext* context, bool launchNewWorkerThread,
+        TaskBeforeRunFn beforeRun);
+    void scheduleTaskAndWaitOrError(const std::shared_ptr<Task>& task,
+        main::ClientContext* clientContext, bool launchNewWorkerThread, TaskBeforeRunFn beforeRun);
 
     static TaskScheduler* Get(const main::ClientContext& context);
 

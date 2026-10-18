@@ -5,6 +5,8 @@
 #include "main/database.h"
 #include "main/settings.h"
 #include "processor/execution_context.h"
+#include "processor/operator/table_function_call.h"
+#include "processor/operator/table_scan/ftable_scan_function.h"
 #include "processor/processor.h"
 #include "processor/result/result_set.h"
 #include "storage/buffer_manager/memory_manager.h"
@@ -18,6 +20,24 @@ ProcessorTask::ProcessorTask(Sink* sink, ExecutionContext* executionContext)
     : Task{executionContext->clientContext->getCurrentSetting(main::ThreadsSetting::name)
                .getValue<uint64_t>()},
       sharedStateInitialized{false}, sink{sink}, executionContext{executionContext} {}
+
+void ProcessorTask::narrowToSingleMorselSource() {
+    PhysicalOperator* op = sink;
+    while (!op->isSource()) {
+        op = op->getChild(0);
+    }
+    if (op->getOperatorType() != PhysicalOperatorType::TABLE_FUNCTION_CALL) {
+        return;
+    }
+    auto* call = op->ptrCast<TableFunctionCall>();
+    if (call->getInfo().function.name != FTableScan::name || call->getInfo().bindData == nullptr) {
+        return;
+    }
+    auto* bindData = call->getInfo().bindData->constPtrCast<FTableScanBindData>();
+    if (bindData->table->getNumTuples() <= bindData->morselSize) {
+        setSingleThreadedTask();
+    }
+}
 
 void ProcessorTask::run() {
     // We need the lock when cloning because multiple threads can be accessing to clone,
