@@ -182,17 +182,6 @@ void ColumnChunkData::initializeBuffer(PhysicalTypeID physicalType, MemoryManage
 
 void ColumnChunkData::initializeFunction() {
     compressionAlg = getCompression(dataType, enableCompression);
-    // Capture only `this` so both closures fit std::function's inline storage (no heap
-    // allocation); the compression algorithm is owned by the chunk, and the small
-    // dispatch functors are constructed on the stack per call in the Impl helpers.
-    flushBufferFunction = [this](const std::span<uint8_t> buffer, FileHandle* dataFH,
-                              const PageRange& entry, const ColumnChunkMetadata& otherMetadata) {
-        return flushBufferImpl(buffer, dataFH, entry, otherMetadata);
-    };
-    getMetadataFunction = [this](const std::span<uint8_t> buffer, uint64_t numValues,
-                              StorageValue minValue, StorageValue maxValue) {
-        return getMetadataImpl(buffer, numValues, minValue, maxValue);
-    };
 }
 
 ColumnChunkMetadata ColumnChunkData::getMetadataImpl(std::span<const uint8_t> buffer,
@@ -380,7 +369,7 @@ ColumnChunkMetadata ColumnChunkData::getMetadataToFlush() const {
         maxValue = max.value_or(StorageValue());
     }
     DASSERT(getBufferSize() == getBufferSize(capacity));
-    return getMetadataFunction(buffer->getBuffer(), numValues, minValue, maxValue);
+    return getMetadataImpl(buffer->getBuffer(), numValues, minValue, maxValue);
 }
 
 void ColumnChunkData::append(ValueVector* vector, const SelectionView& selView) {
@@ -432,7 +421,7 @@ ColumnChunkMetadata ColumnChunkData::flushBuffer(PageAllocator& pageAllocator,
     if (!otherMetadata.compMeta.isConstant() && bufferSizeToFlush != 0) {
         DASSERT(bufferSizeToFlush <= buffer->getBuffer().size_bytes());
         const auto bufferToFlush = buffer->getBuffer().subspan(0, bufferSizeToFlush);
-        return flushBufferFunction(bufferToFlush, pageAllocator.getDataFH(), entry, otherMetadata);
+        return flushBufferImpl(bufferToFlush, pageAllocator.getDataFH(), entry, otherMetadata);
     }
     DASSERT(otherMetadata.getNumPages() == 0);
     return otherMetadata;
@@ -1159,7 +1148,7 @@ uint64_t ColumnChunkData::getSizeOnDiskInMemoryStats() const {
     if (nullData) {
         nullSize = nullData->getSizeOnDiskInMemoryStats();
     }
-    auto metadata = getMetadataFunction(buffer->getBuffer(), numValues,
+    auto metadata = getMetadataImpl(buffer->getBuffer(), numValues,
         inMemoryStats.min.value_or(StorageValue{}), inMemoryStats.max.value_or(StorageValue{}));
     return metadata.getNumDataPages(dataType.getPhysicalType()) * common::LBUG_PAGE_SIZE + nullSize;
 }

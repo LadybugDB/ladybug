@@ -27,6 +27,8 @@ std::string QueryPrimaryKeyLookupPrintInfo::toString() const {
 void QueryPrimaryKeyLookup::initLocalStateInternal(ResultSet* resultSet,
     ExecutionContext* context) {
     nodeIDVector = resultSet->getValueVector(opInfo.nodeIDPos).get();
+    // Clear for pooled-plan reuse (fresh operators start empty).
+    outVectors.clear();
     for (auto& pos : opInfo.outVectorsPos) {
         outVectors.push_back(resultSet->getValueVector(pos).get());
     }
