@@ -86,6 +86,11 @@ protected:
         EXPECT_EQ(summary.numActiveBoundNodes, expected.size());
         EXPECT_EQ(summary.totalDegree, totalDegree);
         EXPECT_EQ(summary.maxDegree, maxDegree);
+        if (direction == RelDataDirection::FWD) {
+            auto count = conn->query("MATCH ()-[:R]->() RETURN count(*);");
+            ASSERT_TRUE(count->isSuccess()) << count->getErrorMessage();
+            EXPECT_EQ(count->getNext()->getValue(0)->getValue<int64_t>(), totalDegree);
+        }
 
         auto topK = expected;
         std::sort(topK.begin(), topK.end(), [](const auto& a, const auto& b) {
