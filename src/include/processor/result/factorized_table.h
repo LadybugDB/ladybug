@@ -28,12 +28,23 @@ struct BlockAppendingInfo {
 // released when this struct goes out of scope.
 class DataBlock {
 public:
-    DataBlock(storage::MemoryManager* mm, uint64_t size);
+    // With zeroOnClaim the buffer is not zeroed up front; claim() zeroes bytes as they are
+    // handed out, so a one-tuple table does not clear a whole page.
+    DataBlock(storage::MemoryManager* mm, uint64_t size, bool zeroOnClaim = false);
     ~DataBlock();
 
     uint8_t* getData() const;
     std::span<uint8_t> getSizedData() const;
     uint8_t* getWritableData() const;
+    // Takes numBytes from the free part of the block and returns their start.
+    uint8_t* claim(uint64_t numBytes) {
+        auto data = getWritableData();
+        freeSize -= numBytes;
+        if (freeSize < numUninitializedBytes) [[unlikely]] {
+            zeroClaimedBytes();
+        }
+        return data;
+    }
     void resetNumTuplesAndFreeSize();
     void resetToZero();
 
@@ -49,7 +60,12 @@ public:
     uint64_t freeSize;
 
 private:
+    void zeroClaimedBytes();
+
     std::unique_ptr<storage::MemoryBuffer> block;
+    // Bytes at the end of the block that have been neither zeroed nor written. Never more
+    // than freeSize: claimed bytes are always initialized.
+    uint64_t numUninitializedBytes;
 };
 
 class DataBlockCollection {
