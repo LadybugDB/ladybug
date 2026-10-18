@@ -2,11 +2,17 @@
 
 #include "binder/binder.h"
 #include "binder/expression/aggregate_function_expression.h"
+#include "binder/expression/expression_util.h"
+#include "binder/expression/node_expression.h"
+#include "binder/expression/property_expression.h"
 #include "binder/expression/scalar_function_expression.h"
 #include "binder/expression_binder.h"
 #include "binder/expression_visitor.h"
 #include "catalog/catalog.h"
+#include "catalog/catalog_entry/node_table_catalog_entry.h"
+#include "common/enums/storage_format.h"
 #include "common/exception/binder.h"
+#include "function/aggregate/count.h"
 #include "function/arithmetic/vector_arithmetic_functions.h"
 #include "function/built_in_function_utils.h"
 #include "function/cast/vector_cast_functions.h"
@@ -15,6 +21,8 @@
 #include "function/uuid/vector_uuid_functions.h"
 #include "parser/expression/parsed_expression_visitor.h"
 #include "parser/expression/parsed_function_expression.h"
+#include "storage/storage_manager.h"
+#include "storage/table/node_table.h"
 #include "transaction/transaction.h"
 #include <format>
 
@@ -165,12 +173,76 @@ std::shared_ptr<Expression> ExpressionBinder::bindRewriteFunctionExpression(
     return function->rewriteFunc(input);
 }
 
+// A primary key enforced by the table's primary-key index is unique, never null, and null exactly
+// when the node is unbound, so COUNT over it equals COUNT over the internal ID. Counting the
+// internal ID keeps the planner from scanning the node table only to read the key.
+static std::shared_ptr<Expression> rewritePrimaryKeyToInternalID(const Expression& expr,
+    const BinderScope& scope, main::ClientContext* context) {
+    if (expr.expressionType != ExpressionType::PROPERTY) {
+        return nullptr;
+    }
+    auto& property = expr.constCast<PropertyExpression>();
+    if (!property.isSingleLabel() || !property.isPrimaryKey() ||
+        !scope.contains(property.getRawVariableName())) {
+        return nullptr;
+    }
+    auto variable = scope.getExpression(property.getRawVariableName());
+    if (!ExpressionUtil::isNodePattern(*variable) ||
+        variable->getUniqueName() != property.getVariableName()) {
+        return nullptr;
+    }
+    auto& node = variable->constCast<NodeExpression>();
+    if (node.getNumEntries() != 1) {
+        return nullptr;
+    }
+    auto* entry = node.getEntry(0);
+    const auto tableID = entry->getTableID();
+    if (entry->getType() != CatalogEntryType::NODE_TABLE_ENTRY ||
+        tableID != property.getSingleTableID()) {
+        return nullptr;
+    }
+    // Storage is found by table ID, and IDs repeat across attached databases, so only an entry
+    // of the active catalog backed by the active storage manager can be checked. Attached tables
+    // and partition children keep the property.
+    auto transaction = transaction::Transaction::Get(*context);
+    auto catalog = Catalog::Get(*context);
+    if (!catalog->containsTable(transaction, tableID) ||
+        catalog->getTableCatalogEntry(transaction, tableID) != entry) {
+        return nullptr;
+    }
+    // Icebug-disk and Arrow tables carry a default hash index that does not enforce the key of
+    // their files.
+    auto* nodeEntry = entry->ptrCast<NodeTableCatalogEntry>();
+    if (nodeEntry->getScanFunction().has_value() || nodeEntry->getReferencedEntry() != nullptr ||
+        !nodeEntry->getForeignDatabaseName().empty() || !nodeEntry->getStorage().empty() ||
+        nodeEntry->getStorageFormat() != StorageFormat::NONE) {
+        return nullptr;
+    }
+    auto* storageManager = storage::StorageManager::Get(*context);
+    if (!storageManager->containsTable(tableID)) {
+        return nullptr;
+    }
+    auto* table = dynamic_cast<storage::NodeTable*>(storageManager->getTable(tableID));
+    if (table == nullptr || table->tryGetPrimaryKeyIndex() == nullptr) {
+        return nullptr;
+    }
+    // The alias keeps the key in the aggregate's text, which names an unaliased result column.
+    std::shared_ptr<Expression> internalID = node.getInternalID()->copy();
+    internalID->setAlias(property.toString());
+    return internalID;
+}
+
 std::shared_ptr<Expression> ExpressionBinder::bindAggregateFunctionExpression(
     const ParsedExpression& parsedExpression, const std::string& functionName, bool isDistinct) {
     std::vector<LogicalType> childrenTypes;
     expression_vector children;
     for (auto i = 0u; i < parsedExpression.getNumChildren(); ++i) {
         auto child = bindExpression(*parsedExpression.getChild(i));
+        if (functionName == CountFunction::name) {
+            if (auto internalID = rewritePrimaryKeyToInternalID(*child, binder->scope, context)) {
+                child = std::move(internalID);
+            }
+        }
         childrenTypes.push_back(child->dataType.copy());
         children.push_back(std::move(child));
     }

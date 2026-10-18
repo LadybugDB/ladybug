@@ -1,0 +1,63 @@
+-DATASET CSV tinysnb
+--
+
+-CASE CountPrimaryKey
+
+-LOG DistinctKeepsRepeatedNodesApart
+-STATEMENT MATCH (a:person)-[:knows]->(b:person)-[:knows]->(c:person) RETURN COUNT(DISTINCT c.ID), COUNT(c.ID), COUNT(DISTINCT c.ID + 0)
+---- 1
+4|36|4
+
+-LOG GroupedDistinct
+-STATEMENT MATCH (a:person)-[:knows]->(b:person)-[:knows]->(c:person) RETURN a.ID, COUNT(DISTINCT c.ID), COUNT(c.ID) ORDER BY a.ID
+---- 4
+0|4|9
+2|4|9
+3|4|9
+5|4|9
+
+-LOG OptionalMatchCountsOnlyBoundNodes
+-STATEMENT MATCH (a:person) OPTIONAL MATCH (a)-[:knows]->(b:person) RETURN a.ID, COUNT(b.ID), COUNT(DISTINCT b.ID) ORDER BY a.ID
+---- 8
+0|3|3
+2|3|3
+3|3|3
+5|3|3
+7|2|2
+8|0|0
+9|0|0
+10|0|0
+
+-LOG ThroughWith
+-STATEMENT MATCH (a:person)-[:knows]->(b:person) WITH b RETURN COUNT(DISTINCT b.ID)
+---- 1
+6
+
+-LOG RenamedVariable
+-STATEMENT MATCH (a:person)-[:knows]->(b:person) WITH a AS b RETURN COUNT(DISTINCT b.ID), COUNT(b.ID)
+---- 1
+5|14
+
+-LOG OtherAggregatesReadTheKey
+-STATEMENT MATCH (a:person)-[:knows]->(b:person) RETURN MIN(b.ID), MAX(b.ID), SUM(b.ID)
+---- 1
+0|9|47
+
+-LOG ColumnNames
+-CHECK_COLUMN_NAMES
+-STATEMENT MATCH (a:person)-[:knows]->(b:person) RETURN COUNT(DISTINCT b.ID), COUNT(DISTINCT id(b)), COUNT(b.ID)
+---- 2
+COUNT(DISTINCT b.ID)|COUNT(DISTINCT b._ID)|COUNT(b.ID)
+6|6|14
+
+-CASE CountPrimaryKeyMultiLabel
+-STATEMENT CREATE NODE TABLE A(id INT64, PRIMARY KEY(id))
+---- ok
+-STATEMENT CREATE NODE TABLE B(id INT64, PRIMARY KEY(id))
+---- ok
+-STATEMENT CREATE (:A {id: 1}), (:B {id: 1}), (:B {id: 2})
+---- ok
+-LOG SameKeyOnTwoLabels
+-STATEMENT MATCH (n:A:B) RETURN COUNT(DISTINCT n.id), COUNT(DISTINCT id(n)), COUNT(n.id)
+---- 1
+2|3|3

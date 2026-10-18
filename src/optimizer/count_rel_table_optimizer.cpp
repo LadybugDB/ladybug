@@ -1985,7 +1985,9 @@ std::shared_ptr<LogicalOperator> CountRelTableOptimizer::tryRewriteActiveBoundCo
         return op;
     }
     auto boundKey = boundNode->getPrimaryKey(boundNode->getTableIDs()[0]);
-    if (!boundKey || !isDistinctCountNodeKey(op.get(), boundKey)) {
+    // The binder turns COUNT(DISTINCT u.key) into COUNT(DISTINCT u._ID) when the key is indexed.
+    if (!boundKey || !(isDistinctCountNodeKey(op.get(), boundKey) ||
+                         isDistinctCountNodeKey(op.get(), boundNode->getInternalID()))) {
         return op;
     }
     if (!extend.getProperties().empty()) {
