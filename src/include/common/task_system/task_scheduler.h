@@ -40,7 +40,8 @@ using TaskBeforeRunFn = void (*)(Task*);
  * one of the threads working on T that errored. This is simply done by the call:
  *      scheduleTaskAndWaitOrError(T);
  *
- * TaskScheduler guarantees that workers will register themselves to tasks in FIFO order. However
+ * TaskScheduler guarantees that idle workers will register themselves to tasks in FIFO order; a
+ * thread holding a slot that queues a task works on that task first. However
  * this does not guarantee that the tasks will be completed in FIFO order: a long running task
  * that is not accepting more registration can stay in the queue for an unlimited time until
  * completion.

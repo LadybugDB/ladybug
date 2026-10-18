@@ -18,8 +18,9 @@ namespace common {
 namespace {
 
 // The scheduler whose slot this thread holds while it runs a task: set for a worker's whole life
-// (it runs tasks only while counted), and on a caller while it runs a task inline. A nested
-// inline run on such a thread reuses its slot.
+// (it runs tasks only while counted), on a caller while it runs a task inline, and on a
+// launchNewWorkerThread thread that takes over its caller's slot. A nested inline run on such a
+// thread reuses its slot.
 // Never outlives the scheduler: workers and launchNewWorkerThread threads are joined before
 // it is destroyed, and SlotGuard restores a caller's previous value.
 thread_local const TaskScheduler* busySlotOwner = nullptr;
@@ -77,6 +78,12 @@ void TaskScheduler::scheduleTaskAndWaitOrError(const std::shared_ptr<Task>& task
         }
         return;
     }
+    // A thread that holds a slot (a worker, a caller running a task inline, or a launched thread
+    // that took over its caller's slot) is blocked until this task finishes, so it works on the
+    // task too: when such threads hold every slot, no one else can. With launchNewWorkerThread,
+    // the new thread works on the task in this thread's place.
+    const bool runOnThisThread =
+        !launchNewWorkerThread && busySlotOwner == this && task->registerThread();
     std::thread newWorkerThread;
     if (launchNewWorkerThread) {
         // Note that newWorkerThread is not executing yet. However, we still call
@@ -94,6 +101,9 @@ void TaskScheduler::scheduleTaskAndWaitOrError(const std::shared_ptr<Task>& task
     }
     auto scheduledTask = pushTaskIntoQueue(task);
     cv.notify_all();
+    if (runOnThisThread) {
+        runTask(task.get());
+    }
     std::unique_lock<std::mutex> taskLck{task->taskMtx, std::defer_lock};
     while (true) {
         taskLck.lock();
