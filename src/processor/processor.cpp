@@ -14,6 +14,16 @@ using namespace lbug::storage;
 namespace lbug {
 namespace processor {
 
+namespace {
+
+void narrowSingleMorselScan(Task* task) {
+    if (auto* processorTask = dynamic_cast<ProcessorTask*>(task)) {
+        processorTask->narrowToSingleMorselSource();
+    }
+}
+
+} // namespace
+
 std::shared_ptr<ResultSet> ResultSetPool::getOrCreate(ResultSetDescriptor* descriptor,
     MemoryManager* memoryManager) {
     const auto threadID = std::this_thread::get_id();
@@ -75,7 +85,7 @@ std::unique_ptr<main::QueryResult> QueryProcessor::execute(PhysicalPlan* physica
     initTask(task.get());
     auto progressBar = ProgressBar::Get(*context->clientContext);
     progressBar->startProgress(context->queryID);
-    taskScheduler->scheduleTaskAndWaitOrError(task, context);
+    taskScheduler->scheduleTaskAndWaitOrError(task, context, false, narrowSingleMorselScan);
     progressBar->endProgress(context->queryID);
     return sink->getQueryResult();
 }
