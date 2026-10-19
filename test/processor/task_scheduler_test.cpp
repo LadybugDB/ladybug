@@ -56,19 +56,23 @@ private:
 
 class NestingTask final : public common::Task {
 public:
-    NestingTask(main::ClientContext* context, std::shared_ptr<CountingTask> child)
-        : Task{1}, context{context}, child{std::move(child)} {}
+    NestingTask(main::ClientContext* context, std::shared_ptr<common::Task> child,
+        bool launchNewWorkerThread = false)
+        : Task{1}, context{context}, child{std::move(child)},
+          launchNewWorkerThread{launchNewWorkerThread} {}
 
     void run() override {
         threadID = std::this_thread::get_id();
-        common::TaskScheduler::Get(*context)->scheduleTaskAndWaitOrError(child, context);
+        common::TaskScheduler::Get(*context)->scheduleTaskAndWaitOrError(child, context,
+            launchNewWorkerThread);
     }
 
     std::thread::id threadID;
 
 private:
     main::ClientContext* context;
-    std::shared_ptr<CountingTask> child;
+    std::shared_ptr<common::Task> child;
+    bool launchNewWorkerThread;
 };
 
 void schedule(main::Connection& conn, const std::shared_ptr<common::Task>& task) {
@@ -156,4 +160,49 @@ TEST(TaskSchedulerTest, NestedOneThreadTaskReusesCallerSlot) {
     schedule(conn, outer);
     EXPECT_EQ(outer->threadID, std::this_thread::get_id());
     EXPECT_EQ(child->threadID, std::this_thread::get_id());
+}
+
+// A launchNewWorkerThread caller that holds the only slot blocks until its task completes, so a
+// nested one-thread task can only finish on the new thread by taking over that slot.
+TEST(TaskSchedulerTest, NewWorkerThreadTakesOverCallerSlot) {
+    main::Database db(":memory:", main::SystemConfig(-1u, 1));
+    main::Connection conn(&db);
+    std::atomic<uint64_t> active{0}, peak{0};
+    auto child = std::make_shared<CountingTask>(active, peak);
+    auto inner = std::make_shared<NestingTask>(conn.getClientContext(), child);
+    auto outer = std::make_shared<NestingTask>(conn.getClientContext(), inner,
+        true /* launchNewWorkerThread */);
+    schedule(conn, outer);
+    EXPECT_EQ(outer->threadID, std::this_thread::get_id());
+    EXPECT_NE(inner->threadID, std::this_thread::get_id());
+    EXPECT_EQ(child->threadID, inner->threadID);
+}
+
+// A launchNewWorkerThread caller without a slot gives the new thread none, so a nested one-thread
+// task waits while another caller holds the only slot.
+TEST(TaskSchedulerTest, NewWorkerThreadOfSlotlessCallerHoldsNoSlot) {
+    main::Database db(":memory:", main::SystemConfig(-1u, 1));
+    main::Connection blockerConn(&db);
+    main::Connection conn(&db);
+    std::atomic<uint64_t> running{0};
+    std::atomic<bool> release{false};
+    std::thread blocker{
+        [&] { schedule(blockerConn, std::make_shared<BlockingTask>(running, release)); }};
+    while (running.load() < 1) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    std::atomic<uint64_t> active{0}, peak{0};
+    auto child = std::make_shared<CountingTask>(active, peak);
+    auto inner = std::make_shared<NestingTask>(conn.getClientContext(), child);
+    std::thread launcher{[&] {
+        auto* context = conn.getClientContext();
+        common::TaskScheduler::Get(*context)->scheduleTaskAndWaitOrError(inner, context,
+            true /* launchNewWorkerThread */);
+    }};
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    EXPECT_EQ(peak.load(), 0u);
+    release = true;
+    blocker.join();
+    launcher.join();
+    EXPECT_EQ(peak.load(), 1u);
 }

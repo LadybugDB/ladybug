@@ -22,6 +22,8 @@ ProcessorTask::ProcessorTask(Sink* sink, ExecutionContext* executionContext)
       sharedStateInitialized{false}, sink{sink}, executionContext{executionContext} {}
 
 void ProcessorTask::narrowToSingleMorselSource() {
+    // A pipeline is the child-0 chain from its sink to its source, as in initLocalState. Every
+    // other child, e.g. a hash join's build side, is a sink that runs as a child task.
     PhysicalOperator* op = sink;
     while (!op->isSource()) {
         op = op->getChild(0);
