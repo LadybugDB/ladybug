@@ -27,7 +27,8 @@ static ConfigurationOption options[] = { // NOLINT(cert-err58-cpp):
     GET_CONFIGURATION(EnableInternalCatalogSetting),
     GET_CONFIGURATION(EnablePackedPathExtendSetting),
     GET_CONFIGURATION(EnableCachedPreparedStatementSetting),
-    GET_CONFIGURATION(EnableSubNodeGroupMorselsSetting)};
+    GET_CONFIGURATION(EnableSubNodeGroupMorselsSetting),
+    GET_CONFIGURATION(PhysicalPlanPoolPerThreadSetting)};
 
 DBConfig::DBConfig(const SystemConfig& systemConfig)
     : bufferPoolSize{systemConfig.bufferPoolSize}, maxNumThreads{systemConfig.maxNumThreads},
@@ -38,7 +39,8 @@ DBConfig::DBConfig(const SystemConfig& systemConfig)
       forceCheckpointOnClose{systemConfig.forceCheckpointOnClose},
       throwOnWalReplayFailure(systemConfig.throwOnWalReplayFailure),
       enableChecksums(systemConfig.enableChecksums),
-      enableDefaultHashIndex{systemConfig.enableDefaultHashIndex}, enableSpillingToDisk{true} {
+      enableDefaultHashIndex{systemConfig.enableDefaultHashIndex}, enableSpillingToDisk{true},
+      physicalPlanPoolPerThread{systemConfig.physicalPlanPoolPerThread} {
 #if defined(__APPLE__)
     this->threadQos = systemConfig.threadQos;
 #endif

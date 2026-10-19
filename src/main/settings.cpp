@@ -337,6 +337,21 @@ common::Value EnableSubNodeGroupMorselsSetting::getSetting(const ClientContext* 
         context->getClientConfig()->subNodeGroupMorselScope));
 }
 
+void PhysicalPlanPoolPerThreadSetting::setContext(ClientContext* context,
+    const common::Value& parameter) {
+    parameter.validateType(inputType);
+    const auto value = parameter.getValue<int64_t>();
+    if (value < 0) {
+        throw common::RuntimeException(
+            std::format("physical_plan_pool_per_thread must be >= 0, got {}.", value));
+    }
+    context->getDBConfigUnsafe()->physicalPlanPoolPerThread = static_cast<uint64_t>(value);
+}
+
+common::Value PhysicalPlanPoolPerThreadSetting::getSetting(const ClientContext* context) {
+    return common::Value(static_cast<int64_t>(context->getDBConfig()->physicalPlanPoolPerThread));
+}
+
 void SpillToDiskSetting::setContext(ClientContext* context, const common::Value& parameter) {
     parameter.validateType(inputType);
     context->getDBConfigUnsafe()->enableSpillingToDisk = parameter.getValue<bool>();

@@ -672,25 +672,38 @@ void attachSinkDescriptors(processor::PhysicalOperator* op,
 // template. Either way the returned plan is reset for reuse and carries sink descriptors.
 // Empty per-thread vectors are pruned here so threads that have exited (or returned their
 // plans) do not leave the map growing unboundedly over a long-lived connection.
+// maxPerThread is the live `physical_plan_pool_per_thread` setting; 0 disables pooling.
 std::unique_ptr<processor::PhysicalPlan> checkoutPooledPhysicalPlan(
-    CachedPreparedStatement* cachedStatement) {
+    CachedPreparedStatement* cachedStatement, uint64_t maxPerThread) {
     {
         std::lock_guard lock{cachedStatement->physicalPlanPoolMutex};
-        auto it = cachedStatement->physicalPlanPool.find(std::this_thread::get_id());
-        if (it != cachedStatement->physicalPlanPool.end() && !it->second.empty()) {
-            auto plan = std::move(it->second.back());
-            it->second.pop_back();
-            return plan;
-        }
-        // Opportunistic prune: drop empty per-thread entries left behind by exited
-        // threads or fully checked-out pools. Keeps the map proportional to the number
-        // of threads currently retaining plans.
-        for (auto pit = cachedStatement->physicalPlanPool.begin();
-             pit != cachedStatement->physicalPlanPool.end();) {
-            if (pit->second.empty()) {
-                pit = cachedStatement->physicalPlanPool.erase(pit);
-            } else {
-                ++pit;
+        if (maxPerThread == 0) {
+            // Pooling disabled: drop any retained plans so memory is released promptly
+            // and later executions cannot serve stale pooled state.
+            cachedStatement->physicalPlanPool.clear();
+        } else {
+            auto it = cachedStatement->physicalPlanPool.find(std::this_thread::get_id());
+            if (it != cachedStatement->physicalPlanPool.end() && !it->second.empty()) {
+                // Eagerly trim entries that exceed a recently lowered limit.
+                while (it->second.size() > maxPerThread) {
+                    it->second.pop_back();
+                }
+                if (!it->second.empty()) {
+                    auto plan = std::move(it->second.back());
+                    it->second.pop_back();
+                    return plan;
+                }
+            }
+            // Opportunistic prune: drop empty per-thread entries left behind by exited
+            // threads or fully checked-out pools. Keeps the map proportional to the number
+            // of threads currently retaining plans.
+            for (auto pit = cachedStatement->physicalPlanPool.begin();
+                 pit != cachedStatement->physicalPlanPool.end();) {
+                if (pit->second.empty()) {
+                    pit = cachedStatement->physicalPlanPool.erase(pit);
+                } else {
+                    ++pit;
+                }
             }
         }
     }
@@ -699,12 +712,15 @@ std::unique_ptr<processor::PhysicalPlan> checkoutPooledPhysicalPlan(
 }
 
 void recyclePooledPhysicalPlan(CachedPreparedStatement* cachedStatement,
-    std::unique_ptr<processor::PhysicalPlan> plan) {
+    std::unique_ptr<processor::PhysicalPlan> plan, uint64_t maxPerThread) {
+    if (maxPerThread == 0) {
+        return;
+    }
     std::lock_guard lock{cachedStatement->physicalPlanPoolMutex};
     auto tid = std::this_thread::get_id();
     auto it = cachedStatement->physicalPlanPool.find(tid);
     if (it != cachedStatement->physicalPlanPool.end()) {
-        if (it->second.size() < CachedPreparedStatement::PHYSICAL_PLAN_POOL_PER_THREAD) {
+        if (it->second.size() < maxPerThread) {
             it->second.push_back(std::move(plan));
         }
         return;
@@ -796,8 +812,10 @@ std::unique_ptr<QueryResult> ClientContext::executeNoLock(PreparedStatement* pre
                 if (cachedPlanAllowed && cachedStatement->physicalPlanCache) {
                     // Fast path: reuse a pooled plan when available, else clone the cached
                     // operator tree template. Avoids the PlanMapper::mapOperator recursion
-                    // and, on reuse, the per-execution clone entirely.
-                    physicalPlan = checkoutPooledPhysicalPlan(cachedStatement);
+                    // and, on reuse, the per-execution clone entirely. The pool depth is
+                    // the live `physical_plan_pool_per_thread` setting (0 disables reuse).
+                    const auto poolPerThread = getDBConfig()->physicalPlanPoolPerThread;
+                    physicalPlan = checkoutPooledPhysicalPlan(cachedStatement, poolPerThread);
                     physicalPlan->lastOperator->prepareForReuse(storage::MemoryManager::Get(*this));
                     // Re-attach the ResultSetDescriptors (not propagated by copy()) of every
                     // pipeline-head sink, so each sub-task can build its ResultSet.
@@ -846,8 +864,10 @@ std::unique_ptr<QueryResult> ClientContext::executeNoLock(PreparedStatement* pre
                 // Mapper-built plans are always fresh (and may carry baked parameters),
                 // so only pooled/template-cloned plans go back. Skipped on exception:
                 // the plan is then destroyed, and the next execution clones afresh.
+                // A zero `physical_plan_pool_per_thread` drops the plan instead.
                 if (pooledPlan) {
-                    recyclePooledPhysicalPlan(cachedStatement, std::move(physicalPlan));
+                    recyclePooledPhysicalPlan(cachedStatement, std::move(physicalPlan),
+                        getDBConfig()->physicalPlanPoolPerThread);
                 }
             },
             preparedStatement->isReadOnly(), isTransactionStatement,

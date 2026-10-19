@@ -98,7 +98,7 @@ uint64_t getAvailableSystemMemory() {
 SystemConfig::SystemConfig(uint64_t bufferPoolSize_, uint64_t maxNumThreads, bool enableCompression,
     bool readOnly, uint64_t maxDBSize, bool autoCheckpoint, uint64_t checkpointThreshold,
     bool forceCheckpointOnClose, bool throwOnWalReplayFailure, bool enableChecksums,
-    bool enableMultiWrites, bool enableDefaultHashIndex
+    bool enableMultiWrites, bool enableDefaultHashIndex, uint64_t physicalPlanPoolPerThread
 #if defined(__APPLE__)
     ,
     uint32_t threadQos
@@ -108,7 +108,8 @@ SystemConfig::SystemConfig(uint64_t bufferPoolSize_, uint64_t maxNumThreads, boo
       autoCheckpoint{autoCheckpoint}, checkpointThreshold{checkpointThreshold},
       forceCheckpointOnClose{forceCheckpointOnClose},
       throwOnWalReplayFailure(throwOnWalReplayFailure), enableChecksums(enableChecksums),
-      enableMultiWrites{enableMultiWrites}, enableDefaultHashIndex{enableDefaultHashIndex} {
+      enableMultiWrites{enableMultiWrites}, enableDefaultHashIndex{enableDefaultHashIndex},
+      physicalPlanPoolPerThread{physicalPlanPoolPerThread} {
 #if defined(__APPLE__)
     this->threadQos = threadQos;
 #endif
