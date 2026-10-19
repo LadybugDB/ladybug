@@ -71,6 +71,10 @@ struct LBUG_API InMemChunkedCSRHeader {
     common::offset_t headerLimit = 0;
     std::vector<std::pair<common::offset_t, common::offset_t>> decodedRanges;
 
+    // Scans read the header only for nodes of the current bound-node batch (plus the group's end
+    // after a whole-header decode), and CSRNodeGroup::initializeScanState covers each batch by
+    // the decode it runs for it or by checking these ranges. The getters assert it; an uncovered
+    // read returns stale bytes from a gap, or the last entry at or past numValues.
     bool coversNode(common::offset_t nodeOffset) const;
 
     InMemChunkedCSRHeader(MemoryManager& memoryManager, bool enableCompression, uint64_t capacity);

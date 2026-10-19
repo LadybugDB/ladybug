@@ -394,7 +394,8 @@ void CSRNodeGroup::initializeScanState(const Transaction* transaction,
     } else if (nodeGroupScanState.pin.persistent &&
                relScanState.cachedBoundNodeSelVector.getSelSize() > 0) {
         // A later batch of bound nodes can fall outside the header ranges decoded for an
-        // earlier one; decode again for it.
+        // earlier one; decode again for it. Each batch is covered by this check or by the decode
+        // run for it.
         const auto numGroupEntries = nodeGroupScanState.pin.persistent->cast<ChunkedCSRNodeGroup>()
                                          .getCSRHeader()
                                          .offset->getNumValues();
@@ -491,7 +492,17 @@ void CSRNodeGroup::initScanForCommittedPersistent(const Transaction* transaction
         }
         outHeader.offset->setNumValues(outHeader.decodedRanges.back().second);
         outHeader.length->setNumValues(outHeader.decodedRanges.back().second);
-        nodeGroupScanState.numTotalRows = outHeader.getEndCSROffset(lastNode);
+        // Release builds check the clusters too, since an uncovered read returns stale bytes
+        // instead of failing. If they miss a bound node, decode the whole header instead.
+        const bool covered = headerCoversBatch(outHeader, relScanState, numGroupEntries);
+        DASSERT(covered);
+        if (covered) {
+            nodeGroupScanState.numTotalRows = outHeader.getEndCSROffset(lastNode);
+            return;
+        }
+        outHeader.decodedRanges.clear();
+        outHeader.offset->setNumValues(0);
+        outHeader.length->setNumValues(0);
     } else if (decodeSpan) {
         nodeGroupScanState.numHeaderEntriesDecoded += span;
         nodeGroupScanState.numHeaderSpansDecoded++;
@@ -502,14 +513,14 @@ void CSRNodeGroup::initScanForCommittedPersistent(const Transaction* transaction
         csrHeader.length->scanCommitted<ResidencyState::ON_DISK>(transaction, lengthState,
             *outHeader.length, indexBase, span);
         nodeGroupScanState.numTotalRows = outHeader.getEndCSROffset(lastNode);
-    } else {
-        outHeader.wholeHeader = true;
-        csrHeader.offset->scanCommitted<ResidencyState::ON_DISK>(transaction, offsetState,
-            *outHeader.offset);
-        csrHeader.length->scanCommitted<ResidencyState::ON_DISK>(transaction, lengthState,
-            *outHeader.length);
-        nodeGroupScanState.numTotalRows = outHeader.getStartCSROffset(numGroupEntries);
+        return;
     }
+    outHeader.wholeHeader = true;
+    csrHeader.offset->scanCommitted<ResidencyState::ON_DISK>(transaction, offsetState,
+        *outHeader.offset);
+    csrHeader.length->scanCommitted<ResidencyState::ON_DISK>(transaction, lengthState,
+        *outHeader.length);
+    nodeGroupScanState.numTotalRows = outHeader.getStartCSROffset(numGroupEntries);
 }
 
 void CSRNodeGroup::initScanForCommittedInMem(RelTableScanState& relScanState,
