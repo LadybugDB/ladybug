@@ -86,8 +86,12 @@ struct CachedPreparedStatement {
     // whose std::thread::id happens to compare equal, and empty per-thread vectors
     // are pruned on checkout so short-lived-thread churn cannot grow the map
     // unboundedly (see checkoutPooledPhysicalPlan / recyclePooledPhysicalPlan).
-    // Total retained plans are bounded by MAX_POOLED_THREADS * PER_THREAD.
-    static constexpr size_t PHYSICAL_PLAN_POOL_PER_THREAD = 2;
+    // Total retained plans are bounded by MAX_POOLED_THREADS * per-thread limit.
+    // The per-thread limit is runtime-configurable via the
+    // `physical_plan_pool_per_thread` setting (DBConfig); 0 disables pooling.
+    // Defaults below mirror the setting's default; the pool code reads the live
+    // setting rather than these constants.
+    static constexpr size_t PHYSICAL_PLAN_POOL_PER_THREAD_DEFAULT = 5;
     static constexpr size_t PHYSICAL_PLAN_POOL_MAX_THREADS = 32;
     std::mutex physicalPlanPoolMutex;
     std::unordered_map<std::thread::id, std::vector<std::unique_ptr<processor::PhysicalPlan>>>
