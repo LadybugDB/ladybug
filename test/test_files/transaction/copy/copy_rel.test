@@ -433,14 +433,14 @@
 ---- ok
 -STATEMENT UNWIND range(0, 99) AS i CREATE (:A {id: i});
 ---- ok
--STATEMENT COPY T FROM (UNWIND range(0, 499) AS i RETURN i, (i + 1) % 100);
+-STATEMENT COPY T FROM (UNWIND range(0, 499) AS i RETURN (i % 100), ((i + 1) % 100));
 ---- ok
 -STATEMENT MATCH ()-[t:T]->() RETURN count(*);
 ---- 1
 500
 -STATEMENT BEGIN TRANSACTION;
 ---- ok
--STATEMENT COPY T FROM (UNWIND range(0, 29) AS i RETURN i, (i + 50) % 100);
+-STATEMENT COPY T FROM (UNWIND range(0, 29) AS i RETURN (i % 100), ((i + 50) % 100));
 ---- ok
 -STATEMENT MATCH ()-[t:T]->() RETURN count(*);
 ---- 1
