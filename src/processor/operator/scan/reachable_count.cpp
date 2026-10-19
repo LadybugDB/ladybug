@@ -25,6 +25,8 @@ void ReachableCount::initLocalStateInternal(ResultSet* resultSet, ExecutionConte
     // Pre-compute the forward rel surfaces leaving from the bound node table and prepare one
     // scan state per physical rel table so they can be reused across all frontier nodes.
     relInfos = graph->getRelInfos(boundTableID);
+    // Clear for pooled-plan reuse (fresh operators start empty).
+    scanStates.clear();
     for (auto& relInfo : relInfos) {
         auto scanState = graph->prepareRelScan(*relInfo.relGroupEntry, relInfo.relTableID,
             relInfo.dstTableID, /*relProperties=*/std::vector<std::string>{});

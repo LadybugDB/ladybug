@@ -5,6 +5,8 @@ namespace processor {
 
 void TopKLocalScanState::init(std::vector<DataPos>& outVectorPos, TopKSharedState& sharedState,
     ResultSet& resultSet) {
+    // Clear for pooled-plan reuse (fresh states start empty).
+    vectorsToScan.clear();
     for (auto& pos : outVectorPos) {
         vectorsToScan.push_back(resultSet.getValueVector(pos).get());
     }
