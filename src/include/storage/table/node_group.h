@@ -24,6 +24,10 @@ class NodeGroup;
 struct NodeGroupScanState {
     // Index of committed but not yet checkpointed chunked group to scan.
     common::idx_t chunkedGroupIdx = 0;
+    // Batches to scan without filtering on predicates first, after a batch where that kept too
+    // many rows, and the length of the last such pause.
+    uint8_t numBatchesWithoutEarlyFilter = 0;
+    uint8_t earlyFilterBackoff = 0;
     common::row_idx_t nextRowToScan = 0;
     // State of each chunk in the checkpointed chunked group.
     std::vector<ChunkState> chunkStates;

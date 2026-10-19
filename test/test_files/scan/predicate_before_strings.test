@@ -1,0 +1,294 @@
+-DATASET CSV empty
+--
+
+-CASE ScanPredicatesBeforeStrings
+-STATEMENT CALL threads=1;
+---- ok
+-STATEMENT CREATE NODE TABLE P(id INT64, k INT64, x INT64, y INT64, d DECIMAL(18,2), s STRING, PRIMARY KEY(id));
+---- ok
+-STATEMENT CREATE REL TABLE R(FROM P TO P, w INT64, note STRING);
+---- ok
+-STATEMENT UNWIND range(0, 4095) AS i CREATE (:P {id: i, k: CASE WHEN i IN [3, 5, 2048, 2055] THEN 1 ELSE 0 END, x: CASE WHEN i = 0 OR i = 2049 THEN 0 ELSE 1 END, y: CASE WHEN i % 5 = 0 THEN NULL ELSE i % 100 END, d: CAST(i % 10 AS DECIMAL(18,2)), s: 'v' + string(i)});
+---- ok
+-STATEMENT MATCH (a:P), (b:P) WHERE a.id = 1 AND b.id % 3 = 0 CREATE (a)-[:R {w: b.id % 50, note: 'n' + string(b.id)}]->(b);
+---- ok
+-STATEMENT MATCH (n:P) WHERE n.k = 1 RETURN count(n.s), sum(n.id);
+---- 1
+4|4111
+-STATEMENT MATCH (n:P) WHERE n.x > 0 RETURN count(n.s), sum(n.id);
+---- 1
+4094|8384511
+-STATEMENT MATCH (n:P) WHERE n.y = 7 RETURN count(n.s), min(n.s), max(n.s);
+---- 1
+41|v1007|v907
+-STATEMENT MATCH (n:P) WHERE n.y <> 7 RETURN count(n.s), sum(n.id);
+---- 1
+3235|6625323
+-STATEMENT MATCH (n:P) WHERE n.y IS NULL RETURN count(n.s), sum(n.id);
+---- 1
+820|1678950
+-STATEMENT MATCH (n:P) WHERE n.y > 95 AND n.x = 1 RETURN count(n.s), sum(n.id);
+---- 1
+160|327600
+-STATEMENT MATCH (n:P) WHERE CAST(n.d AS INT64) = 3 RETURN count(n.s);
+---- 1
+410
+-STATEMENT MATCH (a:P)-[e:R]->(b:P) WHERE a.id = 1 AND e.w = 6 RETURN count(e.note), min(e.note), max(e.note);
+---- 1
+28|n1056|n906
+-STATEMENT MATCH (a:P)-[e:R]->(b:P) WHERE a.id = 1 AND e.w < 40 RETURN count(e.note), sum(e.w);
+---- 1
+1094|21333
+-STATEMENT CHECKPOINT;
+---- ok
+-STATEMENT MATCH (n:P) WHERE n.k = 1 RETURN count(n.s), sum(n.id);
+---- 1
+4|4111
+-STATEMENT MATCH (n:P) WHERE n.x > 0 RETURN count(n.s), sum(n.id);
+---- 1
+4094|8384511
+-STATEMENT MATCH (n:P) WHERE n.y = 7 RETURN count(n.s), min(n.s), max(n.s);
+---- 1
+41|v1007|v907
+-STATEMENT MATCH (n:P) WHERE n.y <> 7 RETURN count(n.s), sum(n.id);
+---- 1
+3235|6625323
+-STATEMENT MATCH (n:P) WHERE n.y IS NULL RETURN count(n.s), sum(n.id);
+---- 1
+820|1678950
+-STATEMENT MATCH (n:P) WHERE n.y > 95 AND n.x = 1 RETURN count(n.s), sum(n.id);
+---- 1
+160|327600
+-STATEMENT MATCH (n:P) WHERE CAST(n.d AS INT64) = 3 RETURN count(n.s);
+---- 1
+410
+-STATEMENT MATCH (a:P)-[e:R]->(b:P) WHERE a.id = 1 AND e.w = 6 RETURN count(e.note), min(e.note), max(e.note);
+---- 1
+28|n1056|n906
+-STATEMENT MATCH (a:P)-[e:R]->(b:P) WHERE a.id = 1 AND e.w < 40 RETURN count(e.note), sum(e.w);
+---- 1
+1094|21333
+-STATEMENT MATCH (n:P) WHERE n.id % 7 = 2 DETACH DELETE n;
+---- ok
+-STATEMENT MATCH (n:P) WHERE n.k = 1 RETURN count(n.s), sum(n.id);
+---- 1
+4|4111
+-STATEMENT MATCH (n:P) WHERE n.x > 0 RETURN count(n.s), sum(n.id);
+---- 1
+3509|7187601
+-STATEMENT MATCH (n:P) WHERE n.y = 7 RETURN count(n.s), min(n.s), max(n.s);
+---- 1
+35|v1007|v907
+-STATEMENT MATCH (n:P) WHERE n.y <> 7 RETURN count(n.s), sum(n.id);
+---- 1
+2773|5680575
+-STATEMENT MATCH (n:P) WHERE n.y IS NULL RETURN count(n.s), sum(n.id);
+---- 1
+703|1437930
+-STATEMENT MATCH (n:P) WHERE n.y > 95 AND n.x = 1 RETURN count(n.s), sum(n.id);
+---- 1
+137|280157
+-STATEMENT MATCH (n:P) WHERE CAST(n.d AS INT64) = 3 RETURN count(n.s);
+---- 1
+351
+-STATEMENT MATCH (a:P)-[e:R]->(b:P) WHERE a.id = 1 AND e.w = 6 RETURN count(e.note), min(e.note), max(e.note);
+---- 1
+24|n1056|n906
+-STATEMENT MATCH (a:P)-[e:R]->(b:P) WHERE a.id = 1 AND e.w < 40 RETURN count(e.note), sum(e.w);
+---- 1
+938|18297
+-STATEMENT CHECKPOINT;
+---- ok
+-STATEMENT MATCH (n:P) WHERE n.k = 1 RETURN count(n.s), sum(n.id);
+---- 1
+4|4111
+-STATEMENT MATCH (n:P) WHERE n.x > 0 RETURN count(n.s), sum(n.id);
+---- 1
+3509|7187601
+-STATEMENT MATCH (n:P) WHERE n.y = 7 RETURN count(n.s), min(n.s), max(n.s);
+---- 1
+35|v1007|v907
+-STATEMENT MATCH (n:P) WHERE n.y <> 7 RETURN count(n.s), sum(n.id);
+---- 1
+2773|5680575
+-STATEMENT MATCH (n:P) WHERE n.y IS NULL RETURN count(n.s), sum(n.id);
+---- 1
+703|1437930
+-STATEMENT MATCH (n:P) WHERE n.y > 95 AND n.x = 1 RETURN count(n.s), sum(n.id);
+---- 1
+137|280157
+-STATEMENT MATCH (n:P) WHERE CAST(n.d AS INT64) = 3 RETURN count(n.s);
+---- 1
+351
+-STATEMENT MATCH (a:P)-[e:R]->(b:P) WHERE a.id = 1 AND e.w = 6 RETURN count(e.note), min(e.note), max(e.note);
+---- 1
+24|n1056|n906
+-STATEMENT MATCH (a:P)-[e:R]->(b:P) WHERE a.id = 1 AND e.w < 40 RETURN count(e.note), sum(e.w);
+---- 1
+938|18297
+
+-CASE ScanPredicatesBeforeStringsTypesAndUpdates
+-STATEMENT CALL threads=1;
+---- ok
+-STATEMENT CREATE NODE TABLE Q(id INT64, f DOUBLE, b BOOL, s STRING, PRIMARY KEY(id));
+---- ok
+-STATEMENT UNWIND range(0, 2999) AS i CREATE (:Q {id: i, f: CAST(i AS DOUBLE) * 0.5, b: i % 4 = 0, s: 'q' + string(i)});
+---- ok
+-STATEMENT CREATE NODE TABLE A(id INT64, v INT32, s STRING, PRIMARY KEY(id));
+---- ok
+-STATEMENT CREATE NODE TABLE B(id INT64, v INT64, s STRING, PRIMARY KEY(id));
+---- ok
+-STATEMENT UNWIND range(0, 99) AS i CREATE (:A {id: i, v: CAST(i % 10 AS INT32), s: 'a' + string(i)});
+---- ok
+-STATEMENT UNWIND range(0, 99) AS i CREATE (:B {id: i, v: i % 10, s: 'b' + string(i)});
+---- ok
+-STATEMENT MATCH (n:Q) WHERE n.f < 10.0 RETURN count(n.s), sum(n.id);
+---- 1
+20|190
+-STATEMENT MATCH (n:Q) WHERE n.f >= 100.0 RETURN count(n.s), sum(n.id);
+---- 1
+2800|4478600
+-STATEMENT MATCH (n:Q) WHERE n.b = true RETURN count(n.s), sum(n.id);
+---- 1
+750|1123500
+-STATEMENT MATCH (n:A:B) WHERE n.v = 5 RETURN count(n.s), min(n.s), max(n.s);
+---- 1
+20|a15|b95
+-STATEMENT MATCH (n:Q) WHERE n.id = 10 SET n.f = 1000.5;
+---- ok
+-STATEMENT MATCH (n:Q) WHERE n.f > 1000.0 RETURN count(n.s), sum(n.id);
+---- 1
+1000|2497510
+-STATEMENT MATCH (n:Q) WHERE n.f < 10.0 RETURN count(n.s), sum(n.id);
+---- 1
+19|180
+-STATEMENT CHECKPOINT;
+---- ok
+-STATEMENT MATCH (n:Q) WHERE n.f < 10.0 RETURN count(n.s), sum(n.id);
+---- 1
+19|180
+-STATEMENT MATCH (n:Q) WHERE n.f >= 100.0 RETURN count(n.s), sum(n.id);
+---- 1
+2801|4478610
+-STATEMENT MATCH (n:Q) WHERE n.b = true RETURN count(n.s), sum(n.id);
+---- 1
+750|1123500
+-STATEMENT MATCH (n:A:B) WHERE n.v = 5 RETURN count(n.s), min(n.s), max(n.s);
+---- 1
+20|a15|b95
+-STATEMENT MATCH (n:Q) WHERE n.f > 1000.0 RETURN count(n.s), sum(n.id);
+---- 1
+1000|2497510
+-STATEMENT CALL enable_zone_map=false;
+---- ok
+-STATEMENT MATCH (n:Q) WHERE n.f > 1000.0 RETURN count(n.s), sum(n.id);
+---- 1
+1000|2497510
+-STATEMENT MATCH (n:A:B) WHERE n.v = 5 RETURN count(n.s), min(n.s), max(n.s);
+---- 1
+20|a15|b95
+
+-CASE ScanPredicatesBeforeListsAndBackoff
+-STATEMENT CALL threads=1;
+---- ok
+-STATEMENT CREATE NODE TABLE L(id INT64, k INT64, l INT64[], a INT64[2], s STRING, PRIMARY KEY(id));
+---- ok
+-STATEMENT UNWIND range(0, 4095) AS i CREATE (:L {id: i, k: CASE WHEN i IN [3, 5, 2048, 2055] THEN 1 ELSE 0 END, l: [i, i + 1], a: [i, 2 * i], s: 'l' + string(i)});
+---- ok
+-STATEMENT CREATE NODE TABLE D(id INT64, x INT64, s STRING, PRIMARY KEY(id));
+---- ok
+-STATEMENT UNWIND range(0, 40959) AS i CREATE (:D {id: i, x: CASE WHEN i < 2048 OR i % 100 = 0 OR (i >= 36864 AND i < 38912) THEN 1 ELSE 0 END, s: 'd' + string(i)});
+---- ok
+-STATEMENT MATCH (n:L) WHERE n.k = 1 RETURN count(n.l), sum(size(n.l)), sum(n.l[2]), sum(n.a[2]), count(n.s);
+---- 1
+4|8|4115|8222|4
+-STATEMENT MATCH (n:L) WHERE n.k = 0 RETURN count(n.l), sum(size(n.l)), sum(n.l[2]), sum(n.a[2]), count(n.s);
+---- 1
+4092|8184|8386541|16764898|4092
+-STATEMENT MATCH (n:L) WHERE n.k = 1 RETURN sum(n.l[1]), sum(n.a[1]);
+---- 1
+4111|4111
+-STATEMENT MATCH (n:L) WHERE n.k = 1 RETURN sum(n.a[1]), sum(n.a[2]);
+---- 1
+4111|8222
+-STATEMENT MATCH (n:L) WHERE n.k = 0 RETURN sum(n.a[1]), sum(n.a[2]);
+---- 1
+8382449|16764898
+-STATEMENT MATCH (n:D) WHERE n.x = 1 RETURN count(n.s), sum(n.id), min(n.s), max(n.s);
+---- 1
+4464|87257328|d0|d999
+-STATEMENT MATCH (n:D) WHERE n.x = 0 RETURN count(n.s), sum(n.id), min(n.s), max(n.s);
+---- 1
+36496|751582992|d10001|d9999
+-STATEMENT CHECKPOINT;
+---- ok
+-STATEMENT MATCH (n:L) WHERE n.k = 1 RETURN count(n.l), sum(size(n.l)), sum(n.l[2]), sum(n.a[2]), count(n.s);
+---- 1
+4|8|4115|8222|4
+-STATEMENT MATCH (n:L) WHERE n.k = 0 RETURN count(n.l), sum(size(n.l)), sum(n.l[2]), sum(n.a[2]), count(n.s);
+---- 1
+4092|8184|8386541|16764898|4092
+-STATEMENT MATCH (n:L) WHERE n.k = 1 RETURN sum(n.l[1]), sum(n.a[1]);
+---- 1
+4111|4111
+-STATEMENT MATCH (n:L) WHERE n.k = 1 RETURN sum(n.a[1]), sum(n.a[2]);
+---- 1
+4111|8222
+-STATEMENT MATCH (n:L) WHERE n.k = 0 RETURN sum(n.a[1]), sum(n.a[2]);
+---- 1
+8382449|16764898
+-STATEMENT MATCH (n:D) WHERE n.x = 1 RETURN count(n.s), sum(n.id), min(n.s), max(n.s);
+---- 1
+4464|87257328|d0|d999
+-STATEMENT MATCH (n:D) WHERE n.x = 0 RETURN count(n.s), sum(n.id), min(n.s), max(n.s);
+---- 1
+36496|751582992|d10001|d9999
+-STATEMENT MATCH (n:L) WHERE n.id % 7 = 2 DELETE n;
+---- ok
+-STATEMENT MATCH (n:D) WHERE n.id % 7 = 2 DELETE n;
+---- ok
+-STATEMENT MATCH (n:L) WHERE n.k = 1 RETURN count(n.l), sum(size(n.l)), sum(n.l[2]), sum(n.a[2]), count(n.s);
+---- 1
+4|8|4115|8222|4
+-STATEMENT MATCH (n:L) WHERE n.k = 0 RETURN count(n.l), sum(size(n.l)), sum(n.l[2]), sum(n.a[2]), count(n.s);
+---- 1
+3507|7014|7189046|14371078|3507
+-STATEMENT MATCH (n:L) WHERE n.k = 1 RETURN sum(n.l[1]), sum(n.a[1]);
+---- 1
+4111|4111
+-STATEMENT MATCH (n:L) WHERE n.k = 1 RETURN sum(n.a[1]), sum(n.a[2]);
+---- 1
+4111|8222
+-STATEMENT MATCH (n:L) WHERE n.k = 0 RETURN sum(n.a[1]), sum(n.a[2]);
+---- 1
+7185539|14371078
+-STATEMENT MATCH (n:D) WHERE n.x = 1 RETURN count(n.s), sum(n.id), min(n.s), max(n.s);
+---- 1
+3825|74769198|d0|d999
+-STATEMENT MATCH (n:D) WHERE n.x = 0 RETURN count(n.s), sum(n.id), min(n.s), max(n.s);
+---- 1
+31283|644219236|d10001|d9999
+-STATEMENT CHECKPOINT;
+---- ok
+-STATEMENT MATCH (n:L) WHERE n.k = 1 RETURN count(n.l), sum(size(n.l)), sum(n.l[2]), sum(n.a[2]), count(n.s);
+---- 1
+4|8|4115|8222|4
+-STATEMENT MATCH (n:L) WHERE n.k = 0 RETURN count(n.l), sum(size(n.l)), sum(n.l[2]), sum(n.a[2]), count(n.s);
+---- 1
+3507|7014|7189046|14371078|3507
+-STATEMENT MATCH (n:L) WHERE n.k = 1 RETURN sum(n.l[1]), sum(n.a[1]);
+---- 1
+4111|4111
+-STATEMENT MATCH (n:L) WHERE n.k = 1 RETURN sum(n.a[1]), sum(n.a[2]);
+---- 1
+4111|8222
+-STATEMENT MATCH (n:L) WHERE n.k = 0 RETURN sum(n.a[1]), sum(n.a[2]);
+---- 1
+7185539|14371078
+-STATEMENT MATCH (n:D) WHERE n.x = 1 RETURN count(n.s), sum(n.id), min(n.s), max(n.s);
+---- 1
+3825|74769198|d0|d999
+-STATEMENT MATCH (n:D) WHERE n.x = 0 RETURN count(n.s), sum(n.id), min(n.s), max(n.s);
+---- 1
+31283|644219236|d10001|d9999
+
