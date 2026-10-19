@@ -81,7 +81,14 @@ struct CachedPreparedStatement {
     // prepareForReuse() and reused instead. Capped per thread: deeper reentrancy
     // (nested same-statement execution) falls back to fresh clones. Guarded by
     // physicalPlanPoolMutex; entries are dropped with the statement.
-    static constexpr size_t PHYSICAL_PLAN_POOL_PER_THREAD = 10;
+    // Thread affinity is a perf hint only: plans are interchangeable across threads.
+    // A stale entry from an exited thread is therefore safe to hand to a new thread
+    // whose std::thread::id happens to compare equal, and empty per-thread vectors
+    // are pruned on checkout so short-lived-thread churn cannot grow the map
+    // unboundedly (see checkoutPooledPhysicalPlan / recyclePooledPhysicalPlan).
+    // Total retained plans are bounded by MAX_POOLED_THREADS * PER_THREAD.
+    static constexpr size_t PHYSICAL_PLAN_POOL_PER_THREAD = 2;
+    static constexpr size_t PHYSICAL_PLAN_POOL_MAX_THREADS = 32;
     std::mutex physicalPlanPoolMutex;
     std::unordered_map<std::thread::id, std::vector<std::unique_ptr<processor::PhysicalPlan>>>
         physicalPlanPool;

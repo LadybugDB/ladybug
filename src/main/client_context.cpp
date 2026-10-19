@@ -653,7 +653,12 @@ void attachSinkDescriptors(processor::PhysicalOperator* op,
         auto& desc = sinks[pos];
         if (desc != nullptr && sink->getDescriptor() == nullptr) {
             // Only attach when missing: pooled plans reused across executions keep
-            // the descriptors attached on first use (same ids, content-identical).
+            // the descriptors attached on first use.
+            // Invariant: descriptors are content-identical across executions of the same
+            // cached plan. This holds because (a) statements with parameters baked into
+            // the plan never populate the pool (hasBakedParameters gate in executeNoLock),
+            // and (b) any rebind (new parameter types / catalog version bump) clears the
+            // pool in executeWithParams before the new template can be served.
             sink->setDescriptor(desc->copy());
         }
     }
@@ -665,6 +670,8 @@ void attachSinkDescriptors(processor::PhysicalOperator* op,
 
 // Pooled physical-plan checkout: pop a same-thread reusable plan, else clone the cached
 // template. Either way the returned plan is reset for reuse and carries sink descriptors.
+// Empty per-thread vectors are pruned here so threads that have exited (or returned their
+// plans) do not leave the map growing unboundedly over a long-lived connection.
 std::unique_ptr<processor::PhysicalPlan> checkoutPooledPhysicalPlan(
     CachedPreparedStatement* cachedStatement) {
     {
@@ -673,14 +680,18 @@ std::unique_ptr<processor::PhysicalPlan> checkoutPooledPhysicalPlan(
         if (it != cachedStatement->physicalPlanPool.end() && !it->second.empty()) {
             auto plan = std::move(it->second.back());
             it->second.pop_back();
-            if (std::getenv("POOL_DEBUG")) {
-                std::fprintf(stderr, "[planpool] HIT depth=%lu\n",
-                    (unsigned long)it->second.size());
-            }
             return plan;
         }
-        if (std::getenv("POOL_DEBUG")) {
-            std::fprintf(stderr, "[planpool] MISS\n");
+        // Opportunistic prune: drop empty per-thread entries left behind by exited
+        // threads or fully checked-out pools. Keeps the map proportional to the number
+        // of threads currently retaining plans.
+        for (auto pit = cachedStatement->physicalPlanPool.begin();
+             pit != cachedStatement->physicalPlanPool.end();) {
+            if (pit->second.empty()) {
+                pit = cachedStatement->physicalPlanPool.erase(pit);
+            } else {
+                ++pit;
+            }
         }
     }
     return std::make_unique<processor::PhysicalPlan>(
@@ -690,10 +701,24 @@ std::unique_ptr<processor::PhysicalPlan> checkoutPooledPhysicalPlan(
 void recyclePooledPhysicalPlan(CachedPreparedStatement* cachedStatement,
     std::unique_ptr<processor::PhysicalPlan> plan) {
     std::lock_guard lock{cachedStatement->physicalPlanPoolMutex};
-    auto& pool = cachedStatement->physicalPlanPool[std::this_thread::get_id()];
-    if (pool.size() < CachedPreparedStatement::PHYSICAL_PLAN_POOL_PER_THREAD) {
-        pool.push_back(std::move(plan));
+    auto tid = std::this_thread::get_id();
+    auto it = cachedStatement->physicalPlanPool.find(tid);
+    if (it != cachedStatement->physicalPlanPool.end()) {
+        if (it->second.size() < CachedPreparedStatement::PHYSICAL_PLAN_POOL_PER_THREAD) {
+            it->second.push_back(std::move(plan));
+        }
+        return;
     }
+    // New thread entry: refuse to grow the map past MAX_THREADS and drop the plan
+    // instead, so short-lived-thread churn cannot accumulate unbounded entries.
+    // Dropping is always safe (falls back to fresh clones); thread affinity is only
+    // a locality hint since pooled plans are interchangeable across threads.
+    if (cachedStatement->physicalPlanPool.size() >=
+        CachedPreparedStatement::PHYSICAL_PLAN_POOL_MAX_THREADS) {
+        return;
+    }
+    auto& pool = cachedStatement->physicalPlanPool[tid];
+    pool.push_back(std::move(plan));
 }
 
 } // namespace
