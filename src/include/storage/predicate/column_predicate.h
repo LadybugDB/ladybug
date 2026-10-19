@@ -5,6 +5,11 @@
 #include "common/enums/zone_map_check_result.h"
 
 namespace lbug {
+namespace common {
+class SelectionVector;
+class ValueVector;
+} // namespace common
+
 namespace storage {
 
 struct MergedColumnChunkStats;
@@ -21,6 +26,8 @@ public:
     virtual std::string toString();
 
     virtual std::unique_ptr<ColumnPredicate> copy() const = 0;
+
+    common::ExpressionType getExpressionType() const { return expressionType; }
 
     template<class TARGET>
     const TARGET& constCast() const {
@@ -44,6 +51,9 @@ public:
     bool isEmpty() const { return predicates.empty(); }
 
     common::ZoneMapCheckResult checkZoneMap(const MergedColumnChunkStats& stats) const;
+
+    // Drops the selected rows of a scanned vector that fail a predicate.
+    void filter(const common::ValueVector& vector, common::SelectionVector& sel) const;
 
     std::string toString() const;
 

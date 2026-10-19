@@ -21,6 +21,17 @@ ZoneMapCheckResult ColumnPredicateSet::checkZoneMap(const MergedColumnChunkStats
     return ZoneMapCheckResult::ALWAYS_SCAN;
 }
 
+void ColumnPredicateSet::filter(const ValueVector& vector, SelectionVector& sel) const {
+    for (auto& predicate : predicates) {
+        const auto type = predicate->getExpressionType();
+        if (type == ExpressionType::IS_NULL || type == ExpressionType::IS_NOT_NULL) {
+            predicate->constCast<ColumnNullPredicate>().filter(vector, sel);
+        } else {
+            predicate->constCast<ColumnConstantPredicate>().filter(vector, sel);
+        }
+    }
+}
+
 std::string ColumnPredicateSet::toString() const {
     if (predicates.empty()) {
         return {};

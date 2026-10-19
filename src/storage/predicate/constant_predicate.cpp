@@ -1,8 +1,10 @@
 #include "storage/predicate/constant_predicate.h"
 
 #include "common/type_utils.h"
+#include "common/vector/value_vector.h"
 #include "function/comparison/comparison_functions.h"
 #include "storage/compression/compression.h"
+#include "storage/predicate/filter_selection.h"
 #include "storage/table/column_chunk_stats.h"
 #include <format>
 
@@ -73,6 +75,46 @@ ZoneMapCheckResult ColumnConstantPredicate::checkZoneMap(
         physicalType,
         [&]<StorageValueType T>(T) { return checkZoneMapSwitch<T>(stats, expressionType, value); },
         [&](auto) { return ZoneMapCheckResult::ALWAYS_SCAN; });
+}
+
+template<typename T, typename Op>
+static void filterValues(const ValueVector& vector, SelectionVector& sel, T constant) {
+    const auto* values = reinterpret_cast<const T*>(vector.getData());
+    if (vector.hasNoNullsGuarantee()) {
+        filterSelection(sel, [&](sel_t pos) { return Op::operation(values[pos], constant); });
+        return;
+    }
+    filterSelection(sel,
+        [&](sel_t pos) { return !vector.isNull(pos) && Op::operation(values[pos], constant); });
+}
+
+void ColumnConstantPredicate::filter(const ValueVector& vector, SelectionVector& sel) const {
+    // A predicate on CAST(column) carries the cast's type; its raw values are not comparable.
+    if (vector.dataType != value.getDataType()) {
+        return;
+    }
+    TypeUtils::visit(
+        vector.dataType.getPhysicalType(),
+        [&]<StorageValueType T>(T) {
+            const auto constant = value.getValue<T>();
+            switch (expressionType) {
+            case ExpressionType::EQUALS:
+                return filterValues<T, Equals>(vector, sel, constant);
+            case ExpressionType::NOT_EQUALS:
+                return filterValues<T, NotEquals>(vector, sel, constant);
+            case ExpressionType::GREATER_THAN:
+                return filterValues<T, GreaterThan>(vector, sel, constant);
+            case ExpressionType::GREATER_THAN_EQUALS:
+                return filterValues<T, GreaterThanEquals>(vector, sel, constant);
+            case ExpressionType::LESS_THAN:
+                return filterValues<T, LessThan>(vector, sel, constant);
+            case ExpressionType::LESS_THAN_EQUALS:
+                return filterValues<T, LessThanEquals>(vector, sel, constant);
+            default:
+                UNREACHABLE_CODE;
+            }
+        },
+        [](auto) {});
 }
 
 std::string ColumnConstantPredicate::toString() {
