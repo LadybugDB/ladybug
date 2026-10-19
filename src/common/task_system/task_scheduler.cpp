@@ -17,8 +17,11 @@ namespace common {
 
 namespace {
 
-// The scheduler whose slot this thread occupies: always set on a worker, and on a caller
-// while it runs a task inline. A nested inline run on such a thread reuses its slot.
+// The scheduler whose slot this thread holds while it runs a task: set for a worker's whole life
+// (it runs tasks only while counted), and on a caller while it runs a task inline. A nested
+// inline run on such a thread reuses its slot.
+// Never outlives the scheduler: workers and launchNewWorkerThread threads are joined before
+// it is destroyed, and SlotGuard restores a caller's previous value.
 thread_local const TaskScheduler* busySlotOwner = nullptr;
 
 } // namespace
@@ -49,18 +52,8 @@ TaskScheduler::~TaskScheduler() {
 }
 
 void TaskScheduler::scheduleTaskAndWaitOrError(const std::shared_ptr<Task>& task,
-    processor::ExecutionContext* context, bool launchNewWorkerThread) {
-    scheduleTaskAndWaitOrError(task, context->clientContext, launchNewWorkerThread, nullptr);
-}
-
-void TaskScheduler::scheduleTaskAndWaitOrError(const std::shared_ptr<Task>& task,
     processor::ExecutionContext* context, bool launchNewWorkerThread, TaskBeforeRunFn beforeRun) {
     scheduleTaskAndWaitOrError(task, context->clientContext, launchNewWorkerThread, beforeRun);
-}
-
-void TaskScheduler::scheduleTaskAndWaitOrError(const std::shared_ptr<Task>& task,
-    main::ClientContext* clientContext, bool launchNewWorkerThread) {
-    scheduleTaskAndWaitOrError(task, clientContext, launchNewWorkerThread, nullptr);
 }
 
 void TaskScheduler::scheduleTaskAndWaitOrError(const std::shared_ptr<Task>& task,
@@ -92,10 +85,10 @@ void TaskScheduler::scheduleTaskAndWaitOrError(const std::shared_ptr<Task>& task
         // numThreadsRegistered field of the task, tt does not keep track of the thread ids or
         // anything specific to the thread.
         task->registerThread();
-        // The new thread stands in for the blocked caller, so it reuses the caller's slot for
-        // nested one-thread tasks.
-        newWorkerThread = std::thread([this, taskPtr = task.get()] {
-            busySlotOwner = this;
+        // The caller blocks until the task completes, so the new thread takes over the caller's
+        // slot if it holds one (a GDS call runs inside a task) and holds none otherwise.
+        newWorkerThread = std::thread([taskPtr = task.get(), owner = busySlotOwner] {
+            busySlotOwner = owner;
             runTask(taskPtr);
         });
     }
@@ -237,18 +230,8 @@ TaskScheduler::~TaskScheduler() {
 }
 
 void TaskScheduler::scheduleTaskAndWaitOrError(const std::shared_ptr<Task>& task,
-    processor::ExecutionContext* context, bool launchNewWorkerThread) {
-    scheduleTaskAndWaitOrError(task, context->clientContext, launchNewWorkerThread, nullptr);
-}
-
-void TaskScheduler::scheduleTaskAndWaitOrError(const std::shared_ptr<Task>& task,
     processor::ExecutionContext* context, bool launchNewWorkerThread, TaskBeforeRunFn beforeRun) {
     scheduleTaskAndWaitOrError(task, context->clientContext, launchNewWorkerThread, beforeRun);
-}
-
-void TaskScheduler::scheduleTaskAndWaitOrError(const std::shared_ptr<Task>& task,
-    main::ClientContext* clientContext, bool launchNewWorkerThread) {
-    scheduleTaskAndWaitOrError(task, clientContext, launchNewWorkerThread, nullptr);
 }
 
 void TaskScheduler::scheduleTaskAndWaitOrError(const std::shared_ptr<Task>& task,

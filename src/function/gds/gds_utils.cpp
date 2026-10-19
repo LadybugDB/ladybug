@@ -45,14 +45,14 @@ static void scheduleFrontierTask(ExecutionContext* context, const GraphRelInfo& 
         return;
     }
 
-    // GDSUtils::runFrontiersUntilConvergence is called from a GDSCall operator, which is
-    // already executed by a worker thread Tm of the task scheduler. So this function is
-    // executed by Tm. Because this function will monitor the task and wait for it to
-    // complete, running GDS algorithms effectively "loses" Tm. This can even lead to the
-    // query processor to halt, e.g., if there is a single worker thread in the system, and
+    // GDSUtils::runFrontiersUntilConvergence is called from a GDSCall operator, which already
+    // runs inside a task on a thread Tm: a worker, or the calling thread for a one-thread task.
+    // So this function is executed by Tm. Because this function will monitor the task and wait
+    // for it to complete, running GDS algorithms effectively "loses" Tm. This can even lead to
+    // the query processor to halt, e.g., if there is a single worker thread in the system, and
     // more generally decrease the number of worker threads by 1. Therefore, we instruct
-    // scheduleTaskAndWaitOrError to start a new thread by passing true as the last
-    // argument.
+    // scheduleTaskAndWaitOrError to start a new thread, which takes over Tm's slot, by passing
+    // true for launchNewWorkerThread.
     TaskScheduler::Get(*context->clientContext)
         ->scheduleTaskAndWaitOrError(task, context, true /* launchNewWorkerThread */);
 }

@@ -65,14 +65,11 @@ public:
     // returns, no task related to the given task will be in the task queue. Further no worker
     // thread will be working on the given task.
     void scheduleTaskAndWaitOrError(const std::shared_ptr<Task>& task,
-        processor::ExecutionContext* context, bool launchNewWorkerThread = false);
+        processor::ExecutionContext* context, bool launchNewWorkerThread = false,
+        TaskBeforeRunFn beforeRun = nullptr);
     void scheduleTaskAndWaitOrError(const std::shared_ptr<Task>& task,
-        main::ClientContext* clientContext, bool launchNewWorkerThread = false);
-    void scheduleTaskAndWaitOrError(const std::shared_ptr<Task>& task,
-        processor::ExecutionContext* context, bool launchNewWorkerThread,
-        TaskBeforeRunFn beforeRun);
-    void scheduleTaskAndWaitOrError(const std::shared_ptr<Task>& task,
-        main::ClientContext* clientContext, bool launchNewWorkerThread, TaskBeforeRunFn beforeRun);
+        main::ClientContext* clientContext, bool launchNewWorkerThread = false,
+        TaskBeforeRunFn beforeRun = nullptr);
 
     static TaskScheduler* Get(const main::ClientContext& context);
 
@@ -114,14 +111,11 @@ public:
     ~TaskScheduler();
 
     void scheduleTaskAndWaitOrError(const std::shared_ptr<Task>& task,
-        processor::ExecutionContext* context, bool launchNewWorkerThread = false);
+        processor::ExecutionContext* context, bool launchNewWorkerThread = false,
+        TaskBeforeRunFn beforeRun = nullptr);
     void scheduleTaskAndWaitOrError(const std::shared_ptr<Task>& task,
-        main::ClientContext* clientContext, bool launchNewWorkerThread = false);
-    void scheduleTaskAndWaitOrError(const std::shared_ptr<Task>& task,
-        processor::ExecutionContext* context, bool launchNewWorkerThread,
-        TaskBeforeRunFn beforeRun);
-    void scheduleTaskAndWaitOrError(const std::shared_ptr<Task>& task,
-        main::ClientContext* clientContext, bool launchNewWorkerThread, TaskBeforeRunFn beforeRun);
+        main::ClientContext* clientContext, bool launchNewWorkerThread = false,
+        TaskBeforeRunFn beforeRun = nullptr);
 
     static TaskScheduler* Get(const main::ClientContext& context);
 
