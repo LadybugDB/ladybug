@@ -222,6 +222,27 @@ TEST_F(RelDegreeTest, ReaderBeforeCopyDoesNotCountIt) {
     checkDegrees();
 }
 
+// A reader that began before a delete still counts the deleted rels, persistent and in memory.
+TEST_F(RelDegreeTest, ReaderBeforeDeleteStillCountsIt) {
+    run("CREATE NODE TABLE N(id INT64, PRIMARY KEY(id));");
+    run("CREATE REL TABLE R(FROM N TO N);");
+    run("UNWIND range(0, 999) AS i CREATE (:N {id: i});");
+    run("COPY R FROM (UNWIND range(0, 999) AS i UNWIND range(1, 1 + i % 4) AS k "
+        "RETURN i, (i * 7 + k) % 1000);");
+    run("UNWIND range(0, 999, 3) AS i MATCH (a:N {id: i}), (b:N {id: 999 - i}) "
+        "CREATE (a)-[:R]->(b);");
+    auto writer = std::make_unique<main::Connection>(database.get());
+
+    run("BEGIN TRANSACTION READ ONLY;");
+    const auto before = cypherDegrees(RelDataDirection::FWD);
+    auto result = writer->query("MATCH (a:N)-[r:R]->() WHERE a.id % 10 = 0 DELETE r;");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    EXPECT_EQ(cypherDegrees(RelDataDirection::FWD), before);
+    checkDegrees();
+    run("COMMIT;");
+    checkDegrees();
+}
+
 // A sequential CSR index entry is {first row, number of rows}; one without them has no rels.
 TEST_F(RelDegreeTest, SequentialIndexEntryWithoutRangeHasNoRels) {
     run("CREATE NODE TABLE N(id INT64, PRIMARY KEY(id));");

@@ -177,6 +177,24 @@ TEST(VersionRetentionTest, InsertedRowsIgnoreDeletions) {
     EXPECT_EQ(info.getNumInsertedRows(&olderReader, 0, numCommitted + 3), 0u);
 }
 
+TEST(VersionRetentionTest, HasDeletionsSeesOnlyVisibleDeletes) {
+    VersionInfo info;
+    constexpr auto writerID = Transaction::START_TRANSACTION_ID;
+    constexpr row_idx_t numRows = DEFAULT_VECTOR_CAPACITY + 5;
+    info.append(writerID, 0, numRows);
+    info.commitInsert(0, numRows, 5);
+    const Transaction reader{TransactionType::READ_ONLY, 7, 10};
+    EXPECT_FALSE(info.hasDeletions(&reader));
+    info.delete_(writerID + 1, DEFAULT_VECTOR_CAPACITY + 1);
+    EXPECT_FALSE(info.hasDeletions(&reader));
+    const Transaction deleter{TransactionType::WRITE, writerID + 1, 10};
+    EXPECT_TRUE(info.hasDeletions(&deleter));
+    info.commitDelete(DEFAULT_VECTOR_CAPACITY + 1, 1, 12);
+    EXPECT_FALSE(info.hasDeletions(&reader));
+    const Transaction laterReader{TransactionType::READ_ONLY, 8, 12};
+    EXPECT_TRUE(info.hasDeletions(&laterReader));
+}
+
 TEST(VersionRetentionTest, BakedEntriesDoNotCountAsRetained) {
     VersionInfo info;
     constexpr auto writerID = Transaction::START_TRANSACTION_ID;
