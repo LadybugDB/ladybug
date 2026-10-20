@@ -433,6 +433,218 @@ TEST(CApiValueTestEmptyDB, CreateListWithNull) {
     lbug_value_destroy(value);
 }
 
+static lbug_value* createTypedNull(lbug_data_type_id typeID) {
+    lbug_logical_type type;
+    lbug_data_type_create(typeID, nullptr, 0, &type);
+    lbug_value* value = lbug_value_create_null_with_data_type(&type);
+    lbug_data_type_destroy(&type);
+    return value;
+}
+
+static void destroyValues(lbug_value** values, uint64_t numValues) {
+    for (uint64_t i = 0; i < numValues; ++i) {
+        lbug_value_destroy(values[i]);
+    }
+}
+
+TEST(CApiValueTestEmptyDB, CreateListMixedIntegerWidths) {
+    lbug_value* elements[] = {lbug_value_create_int8(1), lbug_value_create_int16(1000),
+        lbug_value_create_uint8(200), lbug_value_create_int64(-5)};
+    lbug_value* value = nullptr;
+    ASSERT_EQ(lbug_value_create_list(4, elements, &value), LbugSuccess);
+    auto cppValue = static_cast<Value*>(value->_value);
+    ASSERT_EQ(ListType::getChildType(cppValue->getDataType()).getLogicalTypeID(),
+        LogicalTypeID::INT64);
+    ASSERT_EQ(NestedVal::getChildVal(cppValue, 0)->getValue<int64_t>(), 1);
+    ASSERT_EQ(NestedVal::getChildVal(cppValue, 1)->getValue<int64_t>(), 1000);
+    ASSERT_EQ(NestedVal::getChildVal(cppValue, 2)->getValue<int64_t>(), 200);
+    ASSERT_EQ(NestedVal::getChildVal(cppValue, 3)->getValue<int64_t>(), -5);
+    destroyValues(elements, 4);
+    lbug_value_destroy(value);
+}
+
+TEST(CApiValueTestEmptyDB, CreateListMixedSignIntegerExtremes) {
+    lbug_value* elements[] = {lbug_value_create_int64(std::numeric_limits<int64_t>::min()),
+        lbug_value_create_uint64(std::numeric_limits<uint64_t>::max())};
+    lbug_value* value = nullptr;
+    ASSERT_EQ(lbug_value_create_list(2, elements, &value), LbugSuccess);
+    auto cppValue = static_cast<Value*>(value->_value);
+    ASSERT_EQ(ListType::getChildType(cppValue->getDataType()).getLogicalTypeID(),
+        LogicalTypeID::INT128);
+    ASSERT_TRUE(NestedVal::getChildVal(cppValue, 0)->getValue<int128_t>() ==
+                int128_t(std::numeric_limits<int64_t>::min()));
+    ASSERT_TRUE(NestedVal::getChildVal(cppValue, 1)->getValue<int128_t>() ==
+                int128_t(std::numeric_limits<uint64_t>::max()));
+    destroyValues(elements, 2);
+    lbug_value_destroy(value);
+}
+
+TEST(CApiValueTestEmptyDB, CreateListWithTypedNull) {
+    lbug_value* integers[] = {lbug_value_create_int8(1), createTypedNull(LBUG_INT16),
+        lbug_value_create_int32(70000)};
+    lbug_value* value = nullptr;
+    ASSERT_EQ(lbug_value_create_list(3, integers, &value), LbugSuccess);
+    auto cppValue = static_cast<Value*>(value->_value);
+    ASSERT_EQ(ListType::getChildType(cppValue->getDataType()).getLogicalTypeID(),
+        LogicalTypeID::INT32);
+    ASSERT_EQ(NestedVal::getChildVal(cppValue, 0)->getValue<int32_t>(), 1);
+    ASSERT_TRUE(NestedVal::getChildVal(cppValue, 1)->isNull());
+    ASSERT_EQ(NestedVal::getChildVal(cppValue, 2)->getValue<int32_t>(), 70000);
+    destroyValues(integers, 3);
+    lbug_value_destroy(value);
+
+    lbug_value* strings[] = {createTypedNull(LBUG_INT64), lbug_value_create_string((char*)"a")};
+    ASSERT_EQ(lbug_value_create_list(2, strings, &value), LbugSuccess);
+    cppValue = static_cast<Value*>(value->_value);
+    ASSERT_TRUE(NestedVal::getChildVal(cppValue, 0)->isNull());
+    ASSERT_EQ(NestedVal::getChildVal(cppValue, 1)->getValue<std::string>(), "a");
+    destroyValues(strings, 2);
+    lbug_value_destroy(value);
+
+    lbug_value* doubles[] = {createTypedNull(LBUG_INT64), lbug_value_create_double(2.5)};
+    ASSERT_EQ(lbug_value_create_list(2, doubles, &value), LbugSuccess);
+    cppValue = static_cast<Value*>(value->_value);
+    ASSERT_TRUE(NestedVal::getChildVal(cppValue, 0)->isNull());
+    ASSERT_EQ(NestedVal::getChildVal(cppValue, 1)->getValue<double>(), 2.5);
+    destroyValues(doubles, 2);
+    lbug_value_destroy(value);
+
+    lbug_value* timestamps[] = {createTypedNull(LBUG_DATE),
+        lbug_value_create_timestamp(lbug_timestamp_t{1})};
+    ASSERT_EQ(lbug_value_create_list(2, timestamps, &value), LbugSuccess);
+    cppValue = static_cast<Value*>(value->_value);
+    ASSERT_EQ(ListType::getChildType(cppValue->getDataType()).getLogicalTypeID(),
+        LogicalTypeID::TIMESTAMP);
+    ASSERT_TRUE(NestedVal::getChildVal(cppValue, 0)->isNull());
+    ASSERT_EQ(NestedVal::getChildVal(cppValue, 1)->getValue<timestamp_t>().value, 1);
+    destroyValues(timestamps, 2);
+    lbug_value_destroy(value);
+}
+
+TEST(CApiValueTestEmptyDB, CreateListNestedMixedIntegerWidths) {
+    lbug_value* inner1[] = {lbug_value_create_int8(1)};
+    lbug_value* inner2[] = {lbug_value_create_int16(1000)};
+    lbug_value* elements[] = {nullptr, nullptr};
+    ASSERT_EQ(lbug_value_create_list(1, inner1, &elements[0]), LbugSuccess);
+    ASSERT_EQ(lbug_value_create_list(1, inner2, &elements[1]), LbugSuccess);
+    lbug_value* value = nullptr;
+    ASSERT_EQ(lbug_value_create_list(2, elements, &value), LbugSuccess);
+    auto cppValue = static_cast<Value*>(value->_value);
+    ASSERT_EQ(cppValue->getDataType(), LogicalType::LIST(LogicalType::LIST(LogicalType::INT16())));
+    ASSERT_EQ(NestedVal::getChildVal(NestedVal::getChildVal(cppValue, 0), 0)->getValue<int16_t>(),
+        1);
+    ASSERT_EQ(NestedVal::getChildVal(NestedVal::getChildVal(cppValue, 1), 0)->getValue<int16_t>(),
+        1000);
+    destroyValues(inner1, 1);
+    destroyValues(inner2, 1);
+    destroyValues(elements, 2);
+    lbug_value_destroy(value);
+}
+
+TEST(CApiValueTestEmptyDB, CreateListOfStructsMixedIntegerWidths) {
+    const char* fieldNames[] = {"a"};
+    lbug_value* fields1[] = {lbug_value_create_int8(1)};
+    lbug_value* fields2[] = {lbug_value_create_int16(1000)};
+    lbug_value* elements[] = {nullptr, nullptr};
+    ASSERT_EQ(lbug_value_create_struct(1, fieldNames, fields1, &elements[0]), LbugSuccess);
+    ASSERT_EQ(lbug_value_create_struct(1, fieldNames, fields2, &elements[1]), LbugSuccess);
+    lbug_value* value = nullptr;
+    ASSERT_EQ(lbug_value_create_list(2, elements, &value), LbugSuccess);
+    auto cppValue = static_cast<Value*>(value->_value);
+    const auto& childType = ListType::getChildType(cppValue->getDataType());
+    ASSERT_EQ(childType.getLogicalTypeID(), LogicalTypeID::STRUCT);
+    ASSERT_EQ(StructType::getFieldType(childType, 0).getLogicalTypeID(), LogicalTypeID::INT16);
+    ASSERT_EQ(NestedVal::getChildVal(NestedVal::getChildVal(cppValue, 0), 0)->getValue<int16_t>(),
+        1);
+    ASSERT_EQ(NestedVal::getChildVal(NestedVal::getChildVal(cppValue, 1), 0)->getValue<int16_t>(),
+        1000);
+    destroyValues(fields1, 1);
+    destroyValues(fields2, 1);
+    destroyValues(elements, 2);
+    lbug_value_destroy(value);
+}
+
+TEST(CApiValueTestEmptyDB, CreateListOfMapsMixedIntegerWidths) {
+    lbug_value* keys[] = {lbug_value_create_int8(1)};
+    lbug_value* values1[] = {lbug_value_create_int8(1)};
+    lbug_value* values2[] = {lbug_value_create_int16(1000)};
+    lbug_value* elements[] = {nullptr, nullptr};
+    ASSERT_EQ(lbug_value_create_map(1, keys, values1, &elements[0]), LbugSuccess);
+    ASSERT_EQ(lbug_value_create_map(1, keys, values2, &elements[1]), LbugSuccess);
+    lbug_value* value = nullptr;
+    ASSERT_EQ(lbug_value_create_list(2, elements, &value), LbugSuccess);
+    auto cppValue = static_cast<Value*>(value->_value);
+    const auto& childType = ListType::getChildType(cppValue->getDataType());
+    ASSERT_EQ(MapType::getKeyType(childType).getLogicalTypeID(), LogicalTypeID::INT8);
+    ASSERT_EQ(MapType::getValueType(childType).getLogicalTypeID(), LogicalTypeID::INT16);
+    lbug_value map;
+    lbug_value mapValue;
+    int16_t int16Result = 0;
+    ASSERT_EQ(lbug_value_get_list_element(value, 0, &map), LbugSuccess);
+    ASSERT_EQ(lbug_value_get_map_value(&map, 0, &mapValue), LbugSuccess);
+    ASSERT_EQ(lbug_value_get_int16(&mapValue, &int16Result), LbugSuccess);
+    ASSERT_EQ(int16Result, 1);
+    lbug_value_destroy(&mapValue);
+    lbug_value_destroy(&map);
+    ASSERT_EQ(lbug_value_get_list_element(value, 1, &map), LbugSuccess);
+    ASSERT_EQ(lbug_value_get_map_value(&map, 0, &mapValue), LbugSuccess);
+    ASSERT_EQ(lbug_value_get_int16(&mapValue, &int16Result), LbugSuccess);
+    ASSERT_EQ(int16Result, 1000);
+    lbug_value_destroy(&mapValue);
+    lbug_value_destroy(&map);
+    destroyValues(keys, 1);
+    destroyValues(values1, 1);
+    destroyValues(values2, 1);
+    destroyValues(elements, 2);
+    lbug_value_destroy(value);
+}
+
+TEST(CApiValueTestEmptyDB, CreateListNestedIncompatibleTypes) {
+    lbug_value* dates[] = {lbug_value_create_date(lbug_date_t{1})};
+    lbug_value* timestamps[] = {lbug_value_create_timestamp(lbug_timestamp_t{1})};
+    lbug_value* elements[] = {nullptr, nullptr};
+    ASSERT_EQ(lbug_value_create_list(1, dates, &elements[0]), LbugSuccess);
+    ASSERT_EQ(lbug_value_create_list(1, timestamps, &elements[1]), LbugSuccess);
+    lbug_value* value = nullptr;
+    ASSERT_EQ(lbug_value_create_list(2, elements, &value), LbugError);
+    char* err = lbug_get_last_error();
+    ASSERT_STREQ(err, "Runtime exception: Cannot convert Python object to Lbug value : DATE[]  is "
+                      "incompatible with TIMESTAMP[]");
+    lbug_destroy_string(err);
+    destroyValues(dates, 1);
+    destroyValues(timestamps, 1);
+    destroyValues(elements, 2);
+}
+
+TEST_F(CApiValueTest, BindListMixedIntegerWidths) {
+    auto connection = getConnection();
+    lbug_value* elements[] = {lbug_value_create_int8(0), lbug_value_create_int8(2),
+        lbug_value_create_int16(1000)};
+    lbug_value* ids = nullptr;
+    ASSERT_EQ(lbug_value_create_list(3, elements, &ids), LbugSuccess);
+    lbug_prepared_statement stmt;
+    ASSERT_EQ(lbug_connection_prepare(connection,
+                  (char*)"MATCH (a:person) WHERE a.ID IN $ids RETURN count(*)", &stmt),
+        LbugSuccess);
+    ASSERT_EQ(lbug_prepared_statement_bind_value(&stmt, "ids", ids), LbugSuccess);
+    lbug_query_result result;
+    ASSERT_EQ(lbug_connection_execute(connection, &stmt, &result), LbugSuccess);
+    ASSERT_TRUE(lbug_query_result_is_success(&result));
+    lbug_flat_tuple flatTuple;
+    ASSERT_EQ(lbug_query_result_get_next(&result, &flatTuple), LbugSuccess);
+    lbug_value count;
+    int64_t countResult = 0;
+    ASSERT_EQ(lbug_flat_tuple_get_value(&flatTuple, 0, &count), LbugSuccess);
+    ASSERT_EQ(lbug_value_get_int64(&count, &countResult), LbugSuccess);
+    ASSERT_EQ(countResult, 2);
+    lbug_value_destroy(&count);
+    lbug_flat_tuple_destroy(&flatTuple);
+    lbug_query_result_destroy(&result);
+    lbug_prepared_statement_destroy(&stmt);
+    destroyValues(elements, 3);
+    lbug_value_destroy(ids);
+}
+
 TEST_F(CApiValueTest, CreateListNested) {
     auto connection = getConnection();
     lbug_value* value1 = lbug_value_create_int64(123);
@@ -813,6 +1025,35 @@ TEST(CApiValueTestEmptyDB, CreateMapWithNull) {
     lbug_value_destroy(key2);
     lbug_value_destroy(value1);
     lbug_value_destroy(value2);
+    lbug_value_destroy(map);
+}
+
+TEST(CApiValueTestEmptyDB, CreateMapMixedIntegerWidths) {
+    lbug_value* keys[] = {lbug_value_create_int8(1), lbug_value_create_int16(1000)};
+    lbug_value* values[] = {lbug_value_create_int64(7), lbug_value_create_int8(-1)};
+    lbug_value* map = nullptr;
+    ASSERT_EQ(lbug_value_create_map(2, keys, values, &map), LbugSuccess);
+    auto cppValue = static_cast<Value*>(map->_value);
+    ASSERT_EQ(cppValue->getDataType(),
+        LogicalType::MAP(LogicalType::INT16(), LogicalType::INT64()));
+    lbug_value mapKey;
+    lbug_value mapValue;
+    int16_t keyResult = 0;
+    int64_t valueResult = 0;
+    ASSERT_EQ(lbug_value_get_map_key(map, 0, &mapKey), LbugSuccess);
+    ASSERT_EQ(lbug_value_get_int16(&mapKey, &keyResult), LbugSuccess);
+    ASSERT_EQ(keyResult, 1);
+    lbug_value_destroy(&mapKey);
+    ASSERT_EQ(lbug_value_get_map_key(map, 1, &mapKey), LbugSuccess);
+    ASSERT_EQ(lbug_value_get_int16(&mapKey, &keyResult), LbugSuccess);
+    ASSERT_EQ(keyResult, 1000);
+    lbug_value_destroy(&mapKey);
+    ASSERT_EQ(lbug_value_get_map_value(map, 1, &mapValue), LbugSuccess);
+    ASSERT_EQ(lbug_value_get_int64(&mapValue, &valueResult), LbugSuccess);
+    ASSERT_EQ(valueResult, -1);
+    lbug_value_destroy(&mapValue);
+    destroyValues(keys, 2);
+    destroyValues(values, 2);
     lbug_value_destroy(map);
 }
 
