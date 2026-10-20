@@ -53,6 +53,15 @@ jobs:
           dnf install -y 'dnf-command(config-manager)'
           dnf config-manager --set-enabled powertools
           dnf install -y cmake ninja-build python3 python3-pip git wget unzip gcc-toolset-13 openssl3 openssl3-devel pkg-config libpq libpq-devel
+          # Arrow 26 for libarrow.so.2600: the icebug 13.5 prebuilt vendored by
+          # extension/algo needs the 2600 SONAME, which conda-forge (pixi)
+          # does not ship yet. Pin to 26.* so Arrow 27 cannot slip in silently;
+          # the assertion below fails loudly if the repo stops serving 26.
+          # (Arrow RPMs have a GPG key mismatch, so we use --nogpgcheck.)
+          dnf install -y https://apache.jfrog.io/artifactory/arrow/centos/$(cut -d: -f5 /etc/system-release-cpe)/apache-arrow-release-latest.rpm
+          dnf install -y --nogpgcheck --enablerepo=epel 'arrow-devel-26*'
+          test -e /usr/lib64/libarrow.so.2600
+          ldconfig -p | grep -q 'libarrow.so.2600'
 
       - name: Install DuckDB (Linux)
         if: runner.os == 'Linux'
@@ -153,7 +162,11 @@ jobs:
           source /opt/rh/gcc-toolset-13/enable
           export CC=gcc
           export CXX=g++
-          export EXTRA_CMAKE_FLAGS="-DOPENSSL_ROOT_DIR=/usr/lib64/openssl3 -DOPENSSL_INCLUDE_DIR=/usr/include/openssl3 -DOPENSSL_CRYPTO_LIBRARY=/usr/lib64/openssl3/libcrypto.so -DOPENSSL_SSL_LIBRARY=/usr/lib64/openssl3/libssl.so"
+          # -DArrow_ROOT=/usr forces find_package(Arrow) onto the system Arrow 26
+          # (libarrow.so.2600, required by the vendored icebug 13.5 prebuilt)
+          # instead of the pixi env's Arrow 25, which the root CMakeLists
+          # prepends to CMAKE_PREFIX_PATH.
+          export EXTRA_CMAKE_FLAGS="-DOPENSSL_ROOT_DIR=/usr/lib64/openssl3 -DOPENSSL_INCLUDE_DIR=/usr/include/openssl3 -DOPENSSL_CRYPTO_LIBRARY=/usr/lib64/openssl3/libcrypto.so -DOPENSSL_SSL_LIBRARY=/usr/lib64/openssl3/libssl.so -DArrow_ROOT=/usr"
           make extension-release
 
       - name: Install PostgreSQL client (macOS)
