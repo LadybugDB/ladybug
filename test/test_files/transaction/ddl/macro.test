@@ -376,3 +376,14 @@ Macro crème_m has been dropped.
 -STATEMENT CALL show_macros() RETURN name
 ---- 1
 CAFÉ_M
+
+-CASE DropMissingMacroIfExists
+-STATEMENT DROP MACRO IF EXISTS missing_m
+---- 1
+Macro missing_m does not exist.
+-STATEMENT DROP MACRO IF EXISTS crème_m
+---- 1
+Macro crème_m does not exist.
+-STATEMENT DROP MACRO missing_m
+---- error
+Binder exception: Macro missing_m does not exist.
