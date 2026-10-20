@@ -71,6 +71,33 @@ TEST(FactorizedTableTest, ClaimedTuplesAreZeroOnRecycledPages) {
     }
 }
 
+// Shrinking gives tuples back to the block. Growing again, by resize or by appending, must hand
+// them out zeroed rather than with their old bytes, and keep the tuples that were not given back.
+TEST(FactorizedTableTest, TuplesAreZeroAfterShrinkAndRegrow) {
+    main::Database db(":memory:");
+    main::Connection conn(&db);
+    auto* mm = storage::MemoryManager::Get(*conn.getClientContext());
+    FactorizedTable table(mm, makeSchema());
+    const auto numBytesPerTuple = table.getTableSchema()->getNumBytesPerTuple();
+    // Spans several zeroing granules within the first block.
+    const auto numTuples = 3 * 4096 / numBytesPerTuple + 7;
+    const auto numKept = 5u;
+    appendFilled(table, numTuples, 0xCD);
+    table.resize(numKept);
+    table.resize(numTuples);
+    for (auto i = numKept; i < numTuples; i++) {
+        ASSERT_TRUE(isZero(table.getTuple(i), numBytesPerTuple)) << "resize, tuple " << i;
+        memset(table.getTuple(i), 0xCD, numBytesPerTuple);
+    }
+    table.resize(numKept);
+    for (auto i = numKept; i < numTuples; i++) {
+        ASSERT_TRUE(isZero(table.appendEmptyTuple(), numBytesPerTuple)) << "append, tuple " << i;
+    }
+    for (auto i = 0u; i < numKept; i++) {
+        ASSERT_TRUE(isFilled(table.getTuple(i), numBytesPerTuple, 0xCD)) << i;
+    }
+}
+
 // Merging copies the tuples of one table's last block into the other's last block, past the part
 // that block had zeroed. Later claims must neither zero over the copied tuples nor hand out dirty
 // bytes.

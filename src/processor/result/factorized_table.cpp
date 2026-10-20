@@ -41,6 +41,12 @@ void DataBlock::zeroClaimedBytes() {
     memset(getData() + zeroStart, 0, zeroEnd - zeroStart);
     numUninitializedBytes = size - zeroEnd;
 }
+void DataBlock::truncate(uint64_t numBytes) {
+    auto size = block->getBuffer().size();
+    DASSERT(numBytes <= size - freeSize);
+    freeSize = size - numBytes;
+    numUninitializedBytes = freeSize;
+}
 void DataBlock::resetNumTuplesAndFreeSize() {
     freeSize = block->getBuffer().size();
     numTuples = 0;
@@ -167,8 +173,7 @@ void FactorizedTable::resize(uint64_t numTuples) {
         for (auto& block : flatTupleBlockCollection->getBlocks()) {
             block->numTuples =
                 std::min(static_cast<uint32_t>(numTuplesRemaining), numFlatTuplesPerBlock);
-            block->freeSize =
-                block->getSizedData().size() - block->numTuples * tableSchema.getNumBytesPerTuple();
+            block->truncate(block->numTuples * tableSchema.getNumBytesPerTuple());
             numTuplesRemaining -= block->numTuples;
         }
         DASSERT(numTuplesRemaining == 0);
