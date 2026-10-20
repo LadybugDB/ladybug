@@ -174,9 +174,15 @@ void RelBatchInsert::appendNodeGroup(const RelGroupCatalogEntry& relGroupEntry, 
     // This will be used to set the num of values of the node group.
     const auto numNodes = std::min(StorageConfig::NODE_GROUP_SIZE,
         partitionerSharedState->getNumNodes(relInfo.partitioningIdx) - startNodeOffset);
-    // We optimistically flush new node group directly to disk in gapped CSR format.
-    // There is no benefit of leaving gaps for existing node groups, which is kept in memory.
-    const auto leaveGaps = nodeGroup.isEmpty();
+    // We optimistically flush new node groups to disk in gapped CSR format under
+    // autocommit. Explicit transactions keep new groups in memory, and gap filler
+    // rows would be counted as real edges on that path, so only leave gaps when
+    // we will flush.
+    const auto* clientContext = transaction->getClientContext();
+    const bool inManualTransaction =
+        clientContext != nullptr &&
+        !transaction::TransactionContext::Get(*clientContext)->isAutoTransaction();
+    const auto leaveGaps = nodeGroup.isEmpty() && !inManualTransaction;
     populateCSRHeader(relGroupEntry, *executionState, startNodeOffset, relInfo, localState,
         numNodes, leaveGaps);
     const auto& csrHeader =
