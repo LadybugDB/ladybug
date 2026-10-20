@@ -287,8 +287,8 @@ private:
     static void initScanForCommittedInMem(RelTableScanState& relScanState,
         CSRNodeGroupScanState& nodeGroupScanState);
 
-    void updateCSRIndex(common::offset_t boundNodeOffsetInGroup, common::row_idx_t startRow,
-        common::length_t length) const;
+    static void updateCSRIndex(CSRIndex& index, common::offset_t boundNodeOffsetInGroup,
+        common::row_idx_t startRow, common::length_t length);
 
     NodeGroupScanResult scanCommittedPersistent(const transaction::Transaction* transaction,
         RelTableScanState& tableState, CSRNodeGroupScanState& nodeGroupScanState) const;
@@ -314,7 +314,7 @@ private:
         const transaction::Transaction* transaction, CSRNodeGroupScanPin& pin) const;
     void pruneRetainedSnapshotsNoLock(const std::vector<common::transaction_t>& openStartTSs);
     bool needsRetainedSnapshotNoLock(const std::vector<common::transaction_t>& openStartTSs) const;
-    void ensureCSRIndex();
+    CSRIndex& getCSRIndexForAppend(const common::UniqLock& lock);
 
     void checkpointInMemOnly(const common::UniqLock& lock, NodeGroupCheckpointState& state);
     void checkpointInMemAndOnDisk(const common::UniqLock& lock, NodeGroupCheckpointState& state);

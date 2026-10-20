@@ -901,8 +901,7 @@ static row_idx_t countVisiblePersistentRels(MemoryManager& memoryManager,
 }
 
 // Rows [0, n) of each pinned in-memory group are visible to the transaction, where n is the group's
-// row count when it was found fully visible, else 0. The CSR index is live, so rows appended after
-// that are checked one by one.
+// row count when it was found fully visible, else 0.
 static std::vector<row_idx_t> getVisibleInMemPrefixes(const CSRNodeGroupScanPin& pin,
     const Transaction* transaction) {
     std::vector<row_idx_t> prefixes(pin.inMemGroups.size(), 0);

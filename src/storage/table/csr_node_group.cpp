@@ -639,10 +639,11 @@ void CSRNodeGroup::appendChunkedCSRGroup(const Transaction* transaction,
     }
     auto startRow = NodeGroup::append(transaction, columnIDs, chunkedGroupForProperties, 0,
         chunkedGroup.getNumRows());
-    ensureCSRIndex();
+    const auto lock = chunkedGroups.lock();
+    auto& index = getCSRIndexForAppend(lock);
     for (auto i = 0u; i < csrHeader.offset->getNumValues(); i++) {
         const auto length = csrHeader.length->getValue<length_t>(i);
-        updateCSRIndex(i, startRow, length);
+        updateCSRIndex(index, i, startRow, length);
         startRow += length;
     }
 }
@@ -652,21 +653,24 @@ void CSRNodeGroup::append(const Transaction* transaction, const std::vector<colu
     row_idx_t numRows) {
     const auto startRow =
         NodeGroup::append(transaction, columnIDs, chunks, startRowInChunks, numRows);
-    ensureCSRIndex();
-    updateCSRIndex(boundOffsetInGroup, startRow, 1 /*length*/);
+    const auto lock = chunkedGroups.lock();
+    updateCSRIndex(getCSRIndexForAppend(lock), boundOffsetInGroup, startRow, 1 /*length*/);
 }
 
-void CSRNodeGroup::ensureCSRIndex() {
-    // A scan copies this pointer under the group lock when it starts (captureLiveScanPin).
-    const auto lock = chunkedGroups.lock();
+// A scan pins the index under the group lock (captureLiveScanPin) and reads it without the lock,
+// so an append edits it under the lock, and edits a copy when a scan holds it.
+CSRIndex& CSRNodeGroup::getCSRIndexForAppend(const UniqLock& /*lock*/) {
     if (!csrIndex) {
         csrIndex = std::make_shared<CSRIndex>();
+    } else if (csrIndex.use_count() > 1) {
+        csrIndex = std::make_shared<CSRIndex>(*csrIndex);
     }
+    return *csrIndex;
 }
 
-void CSRNodeGroup::updateCSRIndex(offset_t boundNodeOffsetInGroup, row_idx_t startRow,
-    length_t length) const {
-    auto& nodeCSRIndex = csrIndex->indices[boundNodeOffsetInGroup];
+void CSRNodeGroup::updateCSRIndex(CSRIndex& index, offset_t boundNodeOffsetInGroup,
+    row_idx_t startRow, length_t length) {
+    auto& nodeCSRIndex = index.indices[boundNodeOffsetInGroup];
     const auto isEmptyCSR = nodeCSRIndex.rowIndices.empty();
     const auto appendToEndOfCSR =
         !isEmptyCSR && nodeCSRIndex.isSequential &&

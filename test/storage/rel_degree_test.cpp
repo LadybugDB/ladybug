@@ -161,6 +161,50 @@ TEST_F(RelDegreeTest, MatchesCypherAcrossNodeGroupsAndStorageStates) {
     checkDegrees();
 }
 
+// A scan keeps the CSR index it pinned: a commit that appends rels, one by one or by COPY into a
+// non-empty table, updates a copy, which later scans pin. COPY checkpoints at commit by default.
+TEST_F(RelDegreeTest, AppendDoesNotChangePinnedIndex) {
+    run("CALL auto_checkpoint=false;");
+    run("CREATE NODE TABLE N(id INT64, PRIMARY KEY(id));");
+    run("CREATE REL TABLE R(FROM N TO N);");
+    run("UNWIND range(0, 9) AS i CREATE (:N {id: i});");
+    run("MATCH (a:N {id: 0}), (b:N {id: 1}) CREATE (a)-[:R]->(b);");
+    auto writer = std::make_unique<main::Connection>(database.get());
+    auto write = [&](const std::string& query) {
+        auto result = writer->query(query);
+        ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    };
+    auto pinIndex = [&] {
+        auto transaction = transaction::Transaction::Get(*getClientContext(*conn));
+        return relTable()
+            .getDirectedTableData(RelDataDirection::FWD)
+            ->getNodeGroup(0)
+            ->cast<storage::CSRNodeGroup>()
+            .captureScanPin(transaction)
+            .index;
+    };
+
+    run("BEGIN TRANSACTION READ ONLY;");
+    auto pinned = pinIndex();
+    ASSERT_TRUE(pinned);
+    write("MATCH (a:N {id: 2}), (b:N {id: 3}) CREATE (a)-[:R]->(b);");
+    write("COPY R FROM (UNWIND [0, 4] AS i RETURN i, i + 5);");
+    EXPECT_EQ(pinned->getNumRows(0), 1u);
+    EXPECT_EQ(pinned->getNumRows(2), 0u);
+    EXPECT_EQ(pinned->getNumRows(4), 0u);
+    run("COMMIT;");
+
+    run("BEGIN TRANSACTION READ ONLY;");
+    auto fresh = pinIndex();
+    ASSERT_TRUE(fresh);
+    EXPECT_NE(fresh, pinned);
+    EXPECT_EQ(fresh->getNumRows(0), 2u);
+    EXPECT_EQ(fresh->getNumRows(2), 1u);
+    EXPECT_EQ(fresh->getNumRows(4), 1u);
+    run("COMMIT;");
+    checkDegrees();
+}
+
 // Deleted rels leave their CSR lengths until a checkpoint compacts them.
 TEST_F(RelDegreeTest, DeletedRelsAreNotCounted) {
     run("CREATE NODE TABLE N(id INT64, PRIMARY KEY(id));");
