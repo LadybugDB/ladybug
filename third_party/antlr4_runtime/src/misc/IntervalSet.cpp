@@ -70,7 +70,7 @@ void IntervalSet::add(const Interval &addition) {
   // upgrade. Deserialized sets arrive sorted; appending them one by one would otherwise scan the
   // whole list per interval.
   if (_intervals.empty() ||
-      (_intervals.back().b < addition.a && !addition.adjacent(_intervals.back()))) {
+      (_intervals.back().b < addition.a && addition.a != _intervals.back().b + 1)) {
     _intervals.push_back(addition);
     return;
   }
