@@ -135,7 +135,7 @@ void Planner::appendIntersect(const std::shared_ptr<Expression>& intersectNodeID
         intersect->setChild(i + 1, buildPlans[i].getLastOperator());
         auto ratio = probePlan.getCardinality() / buildPlans[i].getCardinality();
         if (ratio > PlannerKnobs::SIP_RATIO) {
-            intersect->getSIPInfoUnsafe().position = SemiMaskPosition::PROHIBIT;
+            intersect->getSIPInfoUnsafe().position = SemiMaskPosition::PROHIBIT_PROBE_TO_BUILD;
         }
     }
     intersect->computeFactorizedSchema();

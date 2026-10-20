@@ -1,0 +1,73 @@
+-DATASET CSV empty
+
+--
+
+-CASE IntersectBuildSideMasksProbeScan
+-STATEMENT CREATE NODE TABLE Person(id INT64 PRIMARY KEY);
+---- ok
+-STATEMENT CREATE NODE TABLE Post(id INT64 PRIMARY KEY);
+---- ok
+-STATEMENT CREATE NODE TABLE Photo(id INT64 PRIMARY KEY);
+---- ok
+-STATEMENT CREATE NODE TABLE Comment(id INT64 PRIMARY KEY);
+---- ok
+-STATEMENT CREATE REL TABLE hasCreator(FROM Post TO Person, FROM Photo TO Person, FROM Comment TO Person, MANY_ONE);
+---- ok
+-STATEMENT CREATE REL TABLE replyOf(FROM Comment TO Post, FROM Comment TO Photo, MANY_ONE);
+---- ok
+-STATEMENT UNWIND range(0, 9) AS i CREATE (:Person {id: i});
+---- ok
+-STATEMENT UNWIND range(0, 999) AS i CREATE (:Post {id: i});
+---- ok
+-STATEMENT UNWIND range(0, 999) AS i CREATE (:Photo {id: i});
+---- ok
+-STATEMENT UNWIND range(0, 499) AS i CREATE (:Comment {id: i});
+---- ok
+-STATEMENT MATCH (p:Post), (a:Person) WHERE a.id = p.id % 10 CREATE (p)-[:hasCreator]->(a);
+---- ok
+-STATEMENT MATCH (p:Photo), (a:Person) WHERE a.id = (p.id + 3) % 10 CREATE (p)-[:hasCreator]->(a);
+---- ok
+-STATEMENT MATCH (c:Comment), (a:Person) WHERE a.id = c.id % 7 CREATE (c)-[:hasCreator]->(a);
+---- ok
+# Only 150 of the 1000 posts and 40 of the 1000 photos have replies, and the probe side scans
+# every post or photo, so the replyOf build side masks the probe's scan.
+-STATEMENT MATCH (c:Comment), (p:Post) WHERE c.id < 300 AND p.id = (c.id % 50) * 20 + c.id % 3 CREATE (c)-[:replyOf]->(p);
+---- ok
+-STATEMENT MATCH (c:Comment), (p:Photo) WHERE c.id >= 300 AND p.id = (c.id % 40) * 25 + 1 CREATE (c)-[:replyOf]->(p);
+---- ok
+-LOG SelfReplies
+-STATEMENT MATCH (c:Comment)-[hc:hasCreator]->(creator:Person), (c)-[r:replyOf]->(post:Post)-[phc:hasCreator]->(creator)
+           HINT (((post JOIN phc) JOIN creator) MULTI_JOIN hc MULTI_JOIN r) JOIN c
+           RETURN COUNT(*), SUM(c.id), SUM(post.id);
+---- 1
+45|6660|22245
+-STATEMENT CALL enable_semi_mask=false;
+---- ok
+-STATEMENT MATCH (c:Comment)-[hc:hasCreator]->(creator:Person), (c)-[r:replyOf]->(post:Post)-[phc:hasCreator]->(creator)
+           HINT (((post JOIN phc) JOIN creator) MULTI_JOIN hc MULTI_JOIN r) JOIN c
+           RETURN COUNT(*), SUM(c.id), SUM(post.id);
+---- 1
+45|6660|22245
+-STATEMENT CALL enable_semi_mask=true;
+---- ok
+-LOG SelfRepliesWithProbeFilter
+-STATEMENT MATCH (c:Comment)-[hc:hasCreator]->(creator:Person), (c)-[r:replyOf]->(post:Post)-[phc:hasCreator]->(creator)
+           WHERE post.id < 500
+           HINT (((post JOIN phc) JOIN creator) MULTI_JOIN hc MULTI_JOIN r) JOIN c
+           RETURN COUNT(*), SUM(c.id);
+---- 1
+23|3025
+-LOG SelfRepliesTwoProbeTables
+-STATEMENT MATCH (c:Comment)-[hc:hasCreator]->(creator:Person), (c)-[r:replyOf]->(post:Post:Photo)-[phc:hasCreator]->(creator)
+           HINT (((post JOIN phc) JOIN creator) MULTI_JOIN hc MULTI_JOIN r) JOIN c
+           RETURN COUNT(*), SUM(c.id), SUM(post.id);
+---- 1
+59|12302|29309
+-LOG EmptyBuildSide
+-STATEMENT MATCH (:Comment)-[r:replyOf]->(:Photo) DELETE r;
+---- ok
+-STATEMENT MATCH (c:Comment)-[hc:hasCreator]->(creator:Person), (c)-[r:replyOf]->(post:Photo)-[phc:hasCreator]->(creator)
+           HINT (((post JOIN phc) JOIN creator) MULTI_JOIN hc MULTI_JOIN r) JOIN c
+           RETURN COUNT(*);
+---- 1
+0
