@@ -42,7 +42,9 @@ private:
     void dropMacro(const main::ClientContext* context);
     void dropGraph(const main::ClientContext* context);
     void dropIndex(const main::ClientContext* context);
-    void handleMacroExistence(const main::ClientContext* context);
+    // Returns false if the macro is missing and IF EXISTS was given; throws if it is missing
+    // otherwise.
+    bool handleMacroExistence(const main::ClientContext* context);
     void dropRelGroup(const main::ClientContext* context);
 
 private:
