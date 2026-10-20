@@ -58,10 +58,10 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           if [ "${{ runner.arch }}" = "X64" ]; then
-            wget https://github.com/duckdb/duckdb/releases/latest/download/libduckdb-linux-amd64.zip
+            wget --tries=5 --waitretry=10 --retry-connrefused --retry-on-http-error=429,500,502,503,504 https://github.com/duckdb/duckdb/releases/latest/download/libduckdb-linux-amd64.zip
             unzip libduckdb-linux-amd64.zip -d duckdb
           else
-            wget https://github.com/duckdb/duckdb/releases/latest/download/libduckdb-linux-arm64.zip
+            wget --tries=5 --waitretry=10 --retry-connrefused --retry-on-http-error=429,500,502,503,504 https://github.com/duckdb/duckdb/releases/latest/download/libduckdb-linux-arm64.zip
             unzip libduckdb-linux-arm64.zip -d duckdb
           fi
           cp duckdb/duckdb.h /usr/local/include/
@@ -89,7 +89,7 @@ jobs:
       - name: Install DuckDB (macOS)
         if: runner.os == 'macOS'
         run: |
-          wget https://github.com/duckdb/duckdb/releases/latest/download/libduckdb-osx-universal.zip
+          wget --tries=5 --waitretry=10 --retry-connrefused --retry-on-http-error=429,500,502,503,504 https://github.com/duckdb/duckdb/releases/latest/download/libduckdb-osx-universal.zip
           unzip libduckdb-osx-universal.zip -d duckdb
           sudo mkdir -p /usr/local/include
           sudo mkdir -p /usr/local/lib
@@ -118,7 +118,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: cmd
         run: |
-          curl -L -o libduckdb-windows-amd64.zip https://github.com/duckdb/duckdb/releases/latest/download/libduckdb-windows-amd64.zip
+          curl -fL --retry 5 --retry-delay 10 --retry-connrefused -o libduckdb-windows-amd64.zip https://github.com/duckdb/duckdb/releases/latest/download/libduckdb-windows-amd64.zip
           powershell -Command "Expand-Archive -Path libduckdb-windows-amd64.zip -DestinationPath duckdb"
           if not exist "C:\local" mkdir "C:\local"
           if not exist "C:\local\include" mkdir "C:\local\include"
@@ -222,8 +222,8 @@ jobs:
 
       - name: Install ccache (Windows)
         if: runner.os == 'Windows'
-        run: choco install ccache -y
-        shell: cmd
+        run: ./scripts/choco-install.ps1 ccache
+        shell: pwsh
 
       - name: Setup ccache (Windows)
         if: runner.os == 'Windows'
@@ -257,7 +257,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          choco install postgresql --version=16 --params='/NoServer /NoTools' -y
+          ./scripts/choco-install.ps1 postgresql -Version 16 -PackageParameters '/NoServer /NoTools'
           echo "CMAKE_PREFIX_PATH=C:\Program Files\PostgreSQL\16;C:\local" >> $env:GITHUB_ENV
 
       - name: Build precompiled extensions (Windows)

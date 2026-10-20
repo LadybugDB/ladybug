@@ -194,7 +194,7 @@ jobs:
         if: ${{ matrix.platform == 'win32' }}
         shell: cmd
         run: |
-          choco install ccache -y
+          pwsh -NoProfile -File scripts\choco-install.ps1 ccache || exit /b 1
           echo CMAKE_C_COMPILER_LAUNCHER=ccache>> %GITHUB_ENV%
           echo CMAKE_CXX_COMPILER_LAUNCHER=ccache>> %GITHUB_ENV%
           echo CCACHE_DIR=D:\c>> %GITHUB_ENV%

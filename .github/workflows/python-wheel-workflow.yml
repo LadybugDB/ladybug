@@ -209,7 +209,7 @@ jobs:
         if: matrix.os == 'windows'
         shell: cmd
         run: |
-          choco install ccache -y
+          pwsh -NoProfile -File scripts\choco-install.ps1 ccache || exit /b 1
           REM windows-11-arm runners do not reliably provide a D: drive, so ARM uses C:.
           if "${{ matrix.platform }}"=="arm64" (
             set "LB_CCACHE_DIR=C:\c"
