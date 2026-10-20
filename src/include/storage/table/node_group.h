@@ -25,7 +25,8 @@ struct NodeGroupScanState {
     // Index of committed but not yet checkpointed chunked group to scan.
     common::idx_t chunkedGroupIdx = 0;
     // Batches to scan without filtering on predicates first, after a batch where that kept too
-    // many rows, and the length of the last such pause.
+    // many rows, and the length of the last such pause. Reset on entering a node group, not a
+    // chunked group: an in-memory chunked group holds a single batch.
     uint8_t numBatchesWithoutEarlyFilter = 0;
     uint8_t earlyFilterBackoff = 0;
     common::row_idx_t nextRowToScan = 0;
@@ -36,6 +37,11 @@ struct NodeGroupScanState {
 
     explicit NodeGroupScanState() {}
     explicit NodeGroupScanState(common::idx_t numChunks) { chunkStates.resize(numChunks); }
+
+    void resetEarlyFilterBackoff() {
+        numBatchesWithoutEarlyFilter = 0;
+        earlyFilterBackoff = 0;
+    }
 
     virtual ~NodeGroupScanState() = default;
     DELETE_COPY_DEFAULT_MOVE(NodeGroupScanState);

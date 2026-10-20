@@ -21,13 +21,26 @@ ZoneMapCheckResult ColumnPredicateSet::checkZoneMap(const MergedColumnChunkStats
     return ZoneMapCheckResult::ALWAYS_SCAN;
 }
 
+// Filtering dispatches on the expression type instead of a virtual so that the vtable of
+// ColumnPredicate, which extensions compile against, stays unchanged. A new ColumnPredicate
+// subclass needs its own case here.
 void ColumnPredicateSet::filter(const ValueVector& vector, SelectionVector& sel) const {
     for (auto& predicate : predicates) {
-        const auto type = predicate->getExpressionType();
-        if (type == ExpressionType::IS_NULL || type == ExpressionType::IS_NOT_NULL) {
+        switch (predicate->getExpressionType()) {
+        case ExpressionType::IS_NULL:
+        case ExpressionType::IS_NOT_NULL:
             predicate->constCast<ColumnNullPredicate>().filter(vector, sel);
-        } else {
+            break;
+        case ExpressionType::EQUALS:
+        case ExpressionType::NOT_EQUALS:
+        case ExpressionType::GREATER_THAN:
+        case ExpressionType::GREATER_THAN_EQUALS:
+        case ExpressionType::LESS_THAN:
+        case ExpressionType::LESS_THAN_EQUALS:
             predicate->constCast<ColumnConstantPredicate>().filter(vector, sel);
+            break;
+        default:
+            UNREACHABLE_CODE;
         }
     }
 }

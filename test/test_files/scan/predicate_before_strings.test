@@ -292,3 +292,227 @@
 ---- 1
 31283|644219236|d10001|d9999
 
+-CASE ScanPredicatesEarlyFilterTypes
+-STATEMENT CALL threads=1;
+---- ok
+-STATEMENT CREATE NODE TABLE T(id INT64, d DATE, t TIMESTAMP, s STRING, PRIMARY KEY(id));
+---- ok
+-STATEMENT UNWIND range(0, 4095) AS i CREATE (:T {id: i, d: date('2020-01-01') + i % 366, t: timestamp('2020-01-01 00:00:00') + to_minutes(i), s: 't' + string(i)});
+---- ok
+-STATEMENT MATCH (n:T) WHERE n.d < date('2020-01-04') RETURN count(n.s), sum(n.id), min(n.s), max(n.s);
+---- 1
+36|72504|t0|t734
+-STATEMENT MATCH (n:T) WHERE n.d >= date('2020-02-01') RETURN count(n.s), sum(n.id);
+---- 1
+3724|7632144
+-STATEMENT MATCH (n:T) WHERE n.d = date('2020-03-01') RETURN count(n.s), sum(n.id), min(n.s), max(n.s);
+---- 1
+12|24876|t1158|t792
+-STATEMENT MATCH (n:T) WHERE n.t < timestamp('2020-01-01 00:10:00') RETURN count(n.s), sum(n.id), min(n.s), max(n.s);
+---- 1
+10|45|t0|t9
+-STATEMENT MATCH (n:T) WHERE n.t > timestamp('2020-01-02 00:00:00') RETURN count(n.s), sum(n.id);
+---- 1
+2655|7349040
+-STATEMENT MATCH (n:T) WHERE n.s = 't77' RETURN count(n.s), sum(n.id), min(n.s), max(n.s);
+---- 1
+1|77|t77|t77
+-STATEMENT MATCH (n:T) WHERE n.s >= 't40' RETURN count(n.s), sum(n.id);
+---- 1
+761|812465
+-STATEMENT MATCH (n:T) WHERE n.s < 't2' AND n.d < date('2020-01-11') RETURN count(n.s), sum(n.id), min(n.s), max(n.s);
+---- 1
+32|44056|t0|t1839
+-STATEMENT CHECKPOINT;
+---- ok
+-STATEMENT MATCH (n:T) WHERE n.d < date('2020-01-04') RETURN count(n.s), sum(n.id), min(n.s), max(n.s);
+---- 1
+36|72504|t0|t734
+-STATEMENT MATCH (n:T) WHERE n.d >= date('2020-02-01') RETURN count(n.s), sum(n.id);
+---- 1
+3724|7632144
+-STATEMENT MATCH (n:T) WHERE n.d = date('2020-03-01') RETURN count(n.s), sum(n.id), min(n.s), max(n.s);
+---- 1
+12|24876|t1158|t792
+-STATEMENT MATCH (n:T) WHERE n.t < timestamp('2020-01-01 00:10:00') RETURN count(n.s), sum(n.id), min(n.s), max(n.s);
+---- 1
+10|45|t0|t9
+-STATEMENT MATCH (n:T) WHERE n.t > timestamp('2020-01-02 00:00:00') RETURN count(n.s), sum(n.id);
+---- 1
+2655|7349040
+-STATEMENT MATCH (n:T) WHERE n.s = 't77' RETURN count(n.s), sum(n.id), min(n.s), max(n.s);
+---- 1
+1|77|t77|t77
+-STATEMENT MATCH (n:T) WHERE n.s >= 't40' RETURN count(n.s), sum(n.id);
+---- 1
+761|812465
+-STATEMENT MATCH (n:T) WHERE n.s < 't2' AND n.d < date('2020-01-11') RETURN count(n.s), sum(n.id), min(n.s), max(n.s);
+---- 1
+32|44056|t0|t1839
+-STATEMENT MATCH (n:T) WHERE n.id % 7 = 2 DELETE n;
+---- ok
+-STATEMENT MATCH (n:T) WHERE n.d < date('2020-01-04') RETURN count(n.s), sum(n.id), min(n.s), max(n.s);
+---- 1
+30|61152|t0|t734
+-STATEMENT MATCH (n:T) WHERE n.d >= date('2020-02-01') RETURN count(n.s), sum(n.id);
+---- 1
+3193|6544010
+-STATEMENT MATCH (n:T) WHERE n.d = date('2020-03-01') RETURN count(n.s), sum(n.id), min(n.s), max(n.s);
+---- 1
+11|22620|t1158|t792
+-STATEMENT MATCH (n:T) WHERE n.t < timestamp('2020-01-01 00:10:00') RETURN count(n.s), sum(n.id), min(n.s), max(n.s);
+---- 1
+8|34|t0|t8
+-STATEMENT MATCH (n:T) WHERE n.t > timestamp('2020-01-02 00:00:00') RETURN count(n.s), sum(n.id);
+---- 1
+2276|6300347
+-STATEMENT MATCH (n:T) WHERE n.s = 't77' RETURN count(n.s), sum(n.id), min(n.s), max(n.s);
+---- 1
+1|77|t77|t77
+-STATEMENT MATCH (n:T) WHERE n.s >= 't40' RETURN count(n.s), sum(n.id);
+---- 1
+653|699213
+-STATEMENT MATCH (n:T) WHERE n.s < 't2' AND n.d < date('2020-01-11') RETURN count(n.s), sum(n.id), min(n.s), max(n.s);
+---- 1
+28|38182|t0|t1839
+-STATEMENT CHECKPOINT;
+---- ok
+-STATEMENT MATCH (n:T) WHERE n.d < date('2020-01-04') RETURN count(n.s), sum(n.id), min(n.s), max(n.s);
+---- 1
+30|61152|t0|t734
+-STATEMENT MATCH (n:T) WHERE n.d >= date('2020-02-01') RETURN count(n.s), sum(n.id);
+---- 1
+3193|6544010
+-STATEMENT MATCH (n:T) WHERE n.d = date('2020-03-01') RETURN count(n.s), sum(n.id), min(n.s), max(n.s);
+---- 1
+11|22620|t1158|t792
+-STATEMENT MATCH (n:T) WHERE n.t < timestamp('2020-01-01 00:10:00') RETURN count(n.s), sum(n.id), min(n.s), max(n.s);
+---- 1
+8|34|t0|t8
+-STATEMENT MATCH (n:T) WHERE n.t > timestamp('2020-01-02 00:00:00') RETURN count(n.s), sum(n.id);
+---- 1
+2276|6300347
+-STATEMENT MATCH (n:T) WHERE n.s = 't77' RETURN count(n.s), sum(n.id), min(n.s), max(n.s);
+---- 1
+1|77|t77|t77
+-STATEMENT MATCH (n:T) WHERE n.s >= 't40' RETURN count(n.s), sum(n.id);
+---- 1
+653|699213
+-STATEMENT MATCH (n:T) WHERE n.s < 't2' AND n.d < date('2020-01-11') RETURN count(n.s), sum(n.id), min(n.s), max(n.s);
+---- 1
+28|38182|t0|t1839
+-STATEMENT CREATE NODE TABLE T2(id INT64, d DATE, t TIMESTAMP, s STRING, PRIMARY KEY(id));
+---- ok
+-STATEMENT UNWIND range(0, 4095) AS i CREATE (:T2 {id: i, d: date('2020-01-01') + i % 366, t: timestamp('2020-01-01 00:00:00') + to_minutes(i), s: 't' + string(i)});
+---- ok
+-STATEMENT MATCH (n:T2) WHERE n.id % 7 = 2 DELETE n;
+---- ok
+-STATEMENT MATCH (n:T2) WHERE n.d < date('2020-01-04') RETURN count(n.s), sum(n.id), min(n.s), max(n.s);
+---- 1
+30|61152|t0|t734
+-STATEMENT MATCH (n:T2) WHERE n.d >= date('2020-02-01') RETURN count(n.s), sum(n.id);
+---- 1
+3193|6544010
+-STATEMENT MATCH (n:T2) WHERE n.d = date('2020-03-01') RETURN count(n.s), sum(n.id), min(n.s), max(n.s);
+---- 1
+11|22620|t1158|t792
+-STATEMENT MATCH (n:T2) WHERE n.t < timestamp('2020-01-01 00:10:00') RETURN count(n.s), sum(n.id), min(n.s), max(n.s);
+---- 1
+8|34|t0|t8
+-STATEMENT MATCH (n:T2) WHERE n.t > timestamp('2020-01-02 00:00:00') RETURN count(n.s), sum(n.id);
+---- 1
+2276|6300347
+-STATEMENT MATCH (n:T2) WHERE n.s = 't77' RETURN count(n.s), sum(n.id), min(n.s), max(n.s);
+---- 1
+1|77|t77|t77
+-STATEMENT MATCH (n:T2) WHERE n.s >= 't40' RETURN count(n.s), sum(n.id);
+---- 1
+653|699213
+-STATEMENT MATCH (n:T2) WHERE n.s < 't2' AND n.d < date('2020-01-11') RETURN count(n.s), sum(n.id), min(n.s), max(n.s);
+---- 1
+28|38182|t0|t1839
+-STATEMENT CHECKPOINT;
+---- ok
+-STATEMENT MATCH (n:T2) WHERE n.d < date('2020-01-04') RETURN count(n.s), sum(n.id), min(n.s), max(n.s);
+---- 1
+30|61152|t0|t734
+-STATEMENT MATCH (n:T2) WHERE n.d >= date('2020-02-01') RETURN count(n.s), sum(n.id);
+---- 1
+3193|6544010
+-STATEMENT MATCH (n:T2) WHERE n.d = date('2020-03-01') RETURN count(n.s), sum(n.id), min(n.s), max(n.s);
+---- 1
+11|22620|t1158|t792
+-STATEMENT MATCH (n:T2) WHERE n.t < timestamp('2020-01-01 00:10:00') RETURN count(n.s), sum(n.id), min(n.s), max(n.s);
+---- 1
+8|34|t0|t8
+-STATEMENT MATCH (n:T2) WHERE n.t > timestamp('2020-01-02 00:00:00') RETURN count(n.s), sum(n.id);
+---- 1
+2276|6300347
+-STATEMENT MATCH (n:T2) WHERE n.s = 't77' RETURN count(n.s), sum(n.id), min(n.s), max(n.s);
+---- 1
+1|77|t77|t77
+-STATEMENT MATCH (n:T2) WHERE n.s >= 't40' RETURN count(n.s), sum(n.id);
+---- 1
+653|699213
+-STATEMENT MATCH (n:T2) WHERE n.s < 't2' AND n.d < date('2020-01-11') RETURN count(n.s), sum(n.id), min(n.s), max(n.s);
+---- 1
+28|38182|t0|t1839
+-STATEMENT CREATE NODE TABLE T3(id INT64, d DATE, t TIMESTAMP, s STRING, PRIMARY KEY(id));
+---- ok
+-STATEMENT BEGIN TRANSACTION;
+---- ok
+-STATEMENT UNWIND range(0, 4095) AS i CREATE (:T3 {id: i, d: date('2020-01-01') + i % 366, t: timestamp('2020-01-01 00:00:00') + to_minutes(i), s: 't' + string(i)});
+---- ok
+-STATEMENT MATCH (n:T3) WHERE n.id % 7 = 2 DELETE n;
+---- ok
+-STATEMENT MATCH (n:T3) WHERE n.d < date('2020-01-04') RETURN count(n.s), sum(n.id), min(n.s), max(n.s);
+---- 1
+30|61152|t0|t734
+-STATEMENT MATCH (n:T3) WHERE n.d >= date('2020-02-01') RETURN count(n.s), sum(n.id);
+---- 1
+3193|6544010
+-STATEMENT MATCH (n:T3) WHERE n.d = date('2020-03-01') RETURN count(n.s), sum(n.id), min(n.s), max(n.s);
+---- 1
+11|22620|t1158|t792
+-STATEMENT MATCH (n:T3) WHERE n.t < timestamp('2020-01-01 00:10:00') RETURN count(n.s), sum(n.id), min(n.s), max(n.s);
+---- 1
+8|34|t0|t8
+-STATEMENT MATCH (n:T3) WHERE n.t > timestamp('2020-01-02 00:00:00') RETURN count(n.s), sum(n.id);
+---- 1
+2276|6300347
+-STATEMENT MATCH (n:T3) WHERE n.s = 't77' RETURN count(n.s), sum(n.id), min(n.s), max(n.s);
+---- 1
+1|77|t77|t77
+-STATEMENT MATCH (n:T3) WHERE n.s >= 't40' RETURN count(n.s), sum(n.id);
+---- 1
+653|699213
+-STATEMENT MATCH (n:T3) WHERE n.s < 't2' AND n.d < date('2020-01-11') RETURN count(n.s), sum(n.id), min(n.s), max(n.s);
+---- 1
+28|38182|t0|t1839
+-STATEMENT COMMIT;
+---- ok
+-STATEMENT MATCH (n:T3) WHERE n.d < date('2020-01-04') RETURN count(n.s), sum(n.id), min(n.s), max(n.s);
+---- 1
+30|61152|t0|t734
+-STATEMENT MATCH (n:T3) WHERE n.d >= date('2020-02-01') RETURN count(n.s), sum(n.id);
+---- 1
+3193|6544010
+-STATEMENT MATCH (n:T3) WHERE n.d = date('2020-03-01') RETURN count(n.s), sum(n.id), min(n.s), max(n.s);
+---- 1
+11|22620|t1158|t792
+-STATEMENT MATCH (n:T3) WHERE n.t < timestamp('2020-01-01 00:10:00') RETURN count(n.s), sum(n.id), min(n.s), max(n.s);
+---- 1
+8|34|t0|t8
+-STATEMENT MATCH (n:T3) WHERE n.t > timestamp('2020-01-02 00:00:00') RETURN count(n.s), sum(n.id);
+---- 1
+2276|6300347
+-STATEMENT MATCH (n:T3) WHERE n.s = 't77' RETURN count(n.s), sum(n.id), min(n.s), max(n.s);
+---- 1
+1|77|t77|t77
+-STATEMENT MATCH (n:T3) WHERE n.s >= 't40' RETURN count(n.s), sum(n.id);
+---- 1
+653|699213
+-STATEMENT MATCH (n:T3) WHERE n.s < 't2' AND n.d < date('2020-01-11') RETURN count(n.s), sum(n.id), min(n.s), max(n.s);
+---- 1
+28|38182|t0|t1839
+

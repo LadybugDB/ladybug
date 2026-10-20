@@ -276,6 +276,7 @@ void CSRNodeGroup::initializeScanState(const Transaction* transaction,
     auto& nodeGroupScanState = relScanState.nodeGroupScanState->cast<CSRNodeGroupScanState>();
     if (relScanState.nodeGroupIdx != nodeGroupIdx || !nodeGroupScanState.pin.isHeld()) {
         relScanState.nodeGroupIdx = nodeGroupIdx;
+        nodeGroupScanState.resetEarlyFilterBackoff();
         {
             // Checkpoint holds this lock for the whole operation, so the pin never names a
             // half-rewritten group, and a checkpoint sees every pin taken before it started.
