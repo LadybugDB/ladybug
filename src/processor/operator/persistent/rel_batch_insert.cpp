@@ -138,9 +138,9 @@ static void appendNewChunkedGroup(MemoryManager& mm, transaction::Transaction* t
     PageAllocator& pageAllocator) {
     const bool isNewNodeGroup = nodeGroup.isEmpty();
     const auto* clientContext = transaction->getClientContext();
-    const bool inManualTransaction = clientContext != nullptr &&
-                                     !transaction::TransactionContext::Get(*clientContext)
-                                          .isAutoTransaction();
+    const bool inManualTransaction =
+        clientContext != nullptr &&
+        !transaction::TransactionContext::Get(*clientContext).isAutoTransaction();
     const bool flushNewNodeGroupToDisk = isNewNodeGroup && !inManualTransaction;
     const CSRNodeGroupScanSource source = flushNewNodeGroupToDisk ?
                                               CSRNodeGroupScanSource::COMMITTED_PERSISTENT :
