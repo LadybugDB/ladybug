@@ -92,3 +92,17 @@ TEST(AntlrIntervalSetTest, EmptyIntervalAndRangeLimits) {
     ASSERT_EQ(set.getIntervals().size(), 1u);
     EXPECT_EQ(set.getIntervals()[0], Interval(MAX - 3, MAX));
 }
+
+// adjacent() computes a - 1, which overflows for a set that starts at SSIZE_MIN; the fast path
+// must not call it.
+TEST(AntlrIntervalSetTest, AppendAfterRangeMinimum) {
+    constexpr auto MIN = std::numeric_limits<ssize_t>::min();
+    IntervalSet set;
+    set.add(MIN);
+    set.add(MIN + 2);
+    set.add(0);
+    ASSERT_EQ(set.getIntervals().size(), 3u);
+    EXPECT_EQ(set.getIntervals()[0], Interval(MIN, MIN));
+    EXPECT_EQ(set.getIntervals()[1], Interval(MIN + 2, MIN + 2));
+    EXPECT_EQ(set.getIntervals()[2], Interval(static_cast<ssize_t>(0), static_cast<ssize_t>(0)));
+}
