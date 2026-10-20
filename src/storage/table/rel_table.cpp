@@ -946,7 +946,11 @@ static row_idx_t countVisibleInMemRows(const CSRNodeGroupScanPin& pin,
         }
         return count;
     }
-    // Sequential rows are contiguous: take each chunk's visible prefix at once.
+    // A sequential index is {first row, number of rows}, and the rows are contiguous: take each
+    // chunk's visible prefix at once.
+    if (index.rowIndices.size() < 2) {
+        return 0;
+    }
     row_idx_t count = 0;
     auto row = index.rowIndices[0];
     auto remaining = index.rowIndices[1];

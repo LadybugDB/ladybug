@@ -222,5 +222,29 @@ TEST_F(RelDegreeTest, ReaderBeforeCopyDoesNotCountIt) {
     checkDegrees();
 }
 
+// A sequential CSR index entry is {first row, number of rows}; one without them has no rels.
+TEST_F(RelDegreeTest, SequentialIndexEntryWithoutRangeHasNoRels) {
+    run("CREATE NODE TABLE N(id INT64, PRIMARY KEY(id));");
+    run("CREATE REL TABLE R(FROM N TO N);");
+    run("UNWIND range(0, 9) AS i CREATE (:N {id: i});");
+    run("MATCH (a:N {id: 0}), (b:N {id: 1}) CREATE (a)-[:R]->(b);");
+
+    run("BEGIN TRANSACTION READ ONLY;");
+    auto transaction = transaction::Transaction::Get(*getClientContext(*conn));
+    auto& table = relTable();
+    auto pin = table.getDirectedTableData(RelDataDirection::FWD)
+                   ->getNodeGroup(0)
+                   ->cast<storage::CSRNodeGroup>()
+                   .captureScanPin(transaction);
+    ASSERT_TRUE(pin.index);
+    auto& entry = pin.index->indices[2];
+    ASSERT_TRUE(entry.isEmpty());
+    entry.isSequential = true;
+    EXPECT_EQ(table.getDegreeForOffset(transaction, RelDataDirection::FWD, 2), 0u);
+    EXPECT_EQ(table.getNumActiveBoundNodes(transaction, RelDataDirection::FWD), 1u);
+    entry.isSequential = false;
+    run("COMMIT;");
+}
+
 } // namespace testing
 } // namespace lbug
