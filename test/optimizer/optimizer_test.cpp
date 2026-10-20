@@ -17,6 +17,7 @@
 #include "planner/operator/logical_plan_util.h"
 #include "planner/operator/scan/logical_count_rel_table.h"
 #include "planner/operator/scan/logical_dummy_scan.h"
+#include "planner/operator/scan/logical_query_primary_key_lookup.h"
 #include "planner/operator/scan/logical_scan_node_table.h"
 #include "test_runner/test_runner.h"
 #include "transaction/transaction.h"
@@ -71,15 +72,20 @@ public:
         return false;
     }
 
+    // A node scan or a primary-key lookup join (QUERY_PRIMARY_KEY_LOOKUP) may read the property.
     static bool scansNodeProperty(planner::LogicalOperator* op, const std::string& variable,
         const std::string& property) {
+        binder::expression_vector properties;
         if (op->getOperatorType() == planner::LogicalOperatorType::SCAN_NODE_TABLE) {
-            for (auto& expr : op->constCast<planner::LogicalScanNodeTable>().getProperties()) {
-                auto& scanned = expr->constCast<binder::PropertyExpression>();
-                if (scanned.getRawVariableName() == variable &&
-                    scanned.getPropertyName() == property) {
-                    return true;
-                }
+            properties = op->constCast<planner::LogicalScanNodeTable>().getProperties();
+        } else if (op->getOperatorType() ==
+                   planner::LogicalOperatorType::QUERY_PRIMARY_KEY_LOOKUP) {
+            properties = op->constCast<planner::LogicalQueryPrimaryKeyLookup>().getProperties();
+        }
+        for (auto& expr : properties) {
+            auto& scanned = expr->constCast<binder::PropertyExpression>();
+            if (scanned.getRawVariableName() == variable && scanned.getPropertyName() == property) {
+                return true;
             }
         }
         for (auto i = 0u; i < op->getNumChildren(); ++i) {
