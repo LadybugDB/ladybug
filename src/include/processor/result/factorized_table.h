@@ -45,6 +45,9 @@ public:
         }
         return data;
     }
+    // Gives back the claimed bytes past the first numBytes. They may still hold old tuples, so
+    // they are zeroed again if claimed later.
+    void truncate(uint64_t numBytes);
     void resetNumTuplesAndFreeSize();
     void resetToZero();
 
