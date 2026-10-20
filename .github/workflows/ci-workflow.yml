@@ -364,6 +364,27 @@ jobs:
           cache: false
           activate-environment: true
 
+      # The icebug 13.5 prebuilt (vendored by extension/algo) is linked
+      # against libarrow.so.2600, which conda-forge does not ship yet
+      # (pixi still provides libarrow 25.x for libadbc-driver-manager).
+      # Install Arrow 26 from Apache's apt repo so the algo extension builds
+      # and loads against 2600. The 26.* pin keeps a future Arrow 27 from
+      # silently changing the SONAME again; the libarrow.so.2600 assertion
+      # fails the job loudly if the repo ever stops serving 26.
+      - name: Install Apache Arrow 26 (Linux)
+        run: |
+          wget https://apache.jfrog.io/artifactory/arrow/ubuntu/apache-arrow-apt-source-latest-noble.deb
+          sudo apt-get install -y ./apache-arrow-apt-source-latest-noble.deb
+          sudo apt-get update
+          sudo tee /etc/apt/preferences.d/apache-arrow > /dev/null <<'EOF'
+          Package: libarrow* apache-arrow*
+          Pin: version 26.*
+          Pin-Priority: 1001
+          EOF
+          sudo apt-get install -y libarrow-dev
+          test -e /usr/lib/x86_64-linux-gnu/libarrow.so.2600
+          ldconfig -p | grep -q 'libarrow.so.2600'
+
       - name: Configure ADBC runtime
         run: |
           curl -LsSf https://dbc.columnar.tech/install.sh | sh
@@ -449,6 +470,10 @@ jobs:
       # shell needs to be built first to generate the dataset provided by the server
       - name: Extension test build
         run: |
+          # Force find_package(Arrow) onto the system Arrow 26: the root
+          # CMakeLists prepends the pixi env (Arrow 25) to CMAKE_PREFIX_PATH,
+          # but the vendored icebug prebuilt needs libarrow.so.2600.
+          export EXTRA_CMAKE_FLAGS="-DArrow_ROOT=/usr"
           make relwithdebinfo
           cp build/relwithdebinfo/tools/shell/lbug lbug.prod
           make extension-test-build
