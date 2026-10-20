@@ -15,6 +15,7 @@
 #include "common/partition_routing_hook.h"
 #include "common/serializer/deserializer.h"
 #include "common/serializer/serializer.h"
+#include "common/string_utils.h"
 #include "extension/extension_manager.h"
 #include "function/function_collection.h"
 #include "main/client_context.h"
@@ -587,7 +588,7 @@ std::vector<FunctionCatalogEntry*> Catalog::getFunctionEntries(
 }
 
 bool Catalog::containsMacro(const Transaction* transaction, const std::string& macroName) const {
-    return macros->containsEntry(transaction, macroName);
+    return macros->containsEntry(transaction, StringUtils::getUpper(macroName));
 }
 
 function::ScalarMacroFunction* Catalog::getScalarMacroFunction(const Transaction* transaction,
@@ -627,11 +628,12 @@ std::vector<std::string> Catalog::getMacroNames(const Transaction* transaction) 
 }
 
 void Catalog::dropMacro(Transaction* transaction, std::string& name) {
-    if (!containsMacro(transaction, name)) {
+    auto macroName = StringUtils::getUpper(name);
+    if (!macros->containsEntry(transaction, macroName)) {
         throw CatalogException{std::format("Macro {} doesn't exist.", name)};
     }
-    auto entry = getFunctionEntry(transaction, name);
-    macros->dropEntry(transaction, name, entry->getOID());
+    auto entry = macros->getEntry(transaction, macroName);
+    macros->dropEntry(transaction, macroName, entry->getOID());
 }
 
 void Catalog::registerBuiltInFunctions() {

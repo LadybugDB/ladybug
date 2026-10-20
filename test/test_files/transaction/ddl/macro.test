@@ -352,3 +352,27 @@ CASE_MACRO2|CREATE MACRO `CASE_MACRO2` (x) AS CASE x WHEN 35 THEN x + 1 END;
 -STATEMENT CALL show_macros() RETURN *
 ---- 1
 CASE_MACRO|CREATE MACRO `CASE_MACRO` (x) AS CASE x WHEN 35 THEN x + 1 ELSE x - 5 END;
+
+-CASE DropNonAsciiMacro
+-STATEMENT CREATE MACRO café_m(x) AS x + 1
+---- ok
+-STATEMENT RETURN café_m(1), CAFÉ_M(1), Café_M(1)
+---- 1
+2|2|2
+-STATEMENT DROP MACRO café_m
+---- 1
+Macro café_m has been dropped.
+-STATEMENT CREATE MACRO café_m(x) AS x + 2
+---- ok
+-STATEMENT RETURN café_m(1)
+---- 1
+3
+-STATEMENT CREATE MACRO crème_m(x) AS x
+---- ok
+-RELOADDB
+-STATEMENT DROP MACRO IF EXISTS crème_m
+---- 1
+Macro crème_m has been dropped.
+-STATEMENT CALL show_macros() RETURN name
+---- 1
+CAFÉ_M
