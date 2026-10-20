@@ -61,9 +61,8 @@ private:
     // Left is always the one with less num of values.
     static void twoWayIntersect(common::nodeID_t* leftNodeIDs, common::SelectionVector& lSelVector,
         common::nodeID_t* rightNodeIDs, common::SelectionVector& rSelVector);
-    void intersectLists(const std::vector<common::overflow_value_t>& listsToIntersect);
-    void populatePayloads(const std::vector<uint8_t*>& tuples,
-        const std::vector<uint32_t>& listIdxes);
+    void intersectLists();
+    void populatePayloads();
     bool hasNextTuplesToIntersect();
 
     uint32_t getNumBuilds() { return sharedHTs.size(); }
@@ -86,6 +85,13 @@ private:
     uint32_t carryBuildSideIdx;
     // Aligned copy of the right-hand list being intersected (see intersectLists).
     std::vector<common::nodeID_t> alignedRightList;
+    // Per-tuple scratch, so probing does not allocate. The vectors hold one entry per build side
+    // and are sized in initLocalStateInternal; leftSelVector has DEFAULT_VECTOR_CAPACITY.
+    std::vector<uint8_t*> flatTuplesToIntersect;
+    std::vector<common::overflow_value_t> listsToIntersect;
+    std::vector<uint32_t> listIdxes;
+    std::vector<common::SelectionVector*> selVectorsForIntersectedLists;
+    common::SelectionVector leftSelVector;
 };
 
 } // namespace processor
