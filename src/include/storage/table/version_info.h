@@ -32,6 +32,7 @@ public:
     void clearVectorInfo(common::idx_t vectorIdx);
 
     bool hasDeletions() const;
+    // Rows whose delete the transaction can see. Insert stamps are not checked.
     common::row_idx_t getNumDeletions(const transaction::Transaction* transaction,
         common::row_idx_t startRow, common::length_t numRows) const;
     common::row_idx_t getNumVisibleRows(const transaction::Transaction* transaction,
@@ -39,7 +40,8 @@ public:
     // Rows whose insert the transaction can see, deleted or not.
     common::row_idx_t getNumInsertedRows(const transaction::Transaction* transaction,
         common::row_idx_t startRow, common::length_t numRows) const;
-    // Appends the rows in [startRow, startRow + numRows) whose delete the transaction can see.
+    // Appends to `rows` the rows in [startRow, startRow + numRows) whose delete the transaction can
+    // see, as row indices in the group, not offsets from startRow. Insert stamps are not checked.
     void getDeletedRows(const transaction::Transaction* transaction, common::row_idx_t startRow,
         common::length_t numRows, std::vector<common::row_idx_t>& rows) const;
     bool hasInsertions() const;

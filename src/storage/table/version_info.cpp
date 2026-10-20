@@ -593,15 +593,19 @@ std::unique_ptr<VectorVersionInfo> VectorVersionInfo::deSerialize(Deserializer& 
 }
 
 bool VectorVersionInfo::hasDeletions(const transaction::Transaction* transaction) const {
+    if (deletionStatus == DeletionStatus::NO_DELETED) {
+        return false;
+    }
     if (isSameDeletionVersion()) {
         return sameDeletionVersion <= transaction->getStartTS() ||
                sameDeletionVersion == transaction->getID();
     }
-    row_idx_t numDeletions = 0;
-    for (auto i = 0u; i < deletedVersions->size(); i++) {
-        numDeletions += isDeleted(transaction->getStartTS(), transaction->getID(), i);
+    for (auto i = 0u; i < DEFAULT_VECTOR_CAPACITY; i++) {
+        if (isDeleted(transaction->getStartTS(), transaction->getID(), i)) {
+            return true;
+        }
     }
-    return numDeletions > 0;
+    return false;
 }
 
 VectorVersionInfo& VersionInfo::getOrCreateVersionInfo(idx_t vectorIdx) {

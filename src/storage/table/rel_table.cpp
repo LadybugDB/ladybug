@@ -812,17 +812,16 @@ static uint64_t readCSRHeaderValue(ColumnChunk& chunk, Column& column, offset_t 
     return value;
 }
 
-// Rows [0, numRows) of the group, gap rows included, are all visible to the transaction: no version
-// info, or no delete stamp and every insert visible, which version info answers per vector when one
-// version covers it.
+// Rows [0, numRows) of the group, gap rows included, are all visible to the transaction: it sees no
+// delete in the group and every insert in the range.
 static bool allRowsVisible(const ChunkedNodeGroup& group, row_idx_t numRows,
     const Transaction* transaction) {
     if (!group.hasVersionInfo()) {
         return true;
     }
     const auto& versionInfo = *group.getVersionInfo();
-    return !versionInfo.hasDeletions() &&
-           versionInfo.getNumVisibleRows(transaction, 0, numRows) == numRows;
+    return !versionInfo.hasDeletions(transaction) &&
+           versionInfo.getNumInsertedRows(transaction, 0, numRows) == numRows;
 }
 
 // Adds each node's rels in a persistent group that the transaction can see. A node's rels are the
@@ -868,7 +867,8 @@ static void addPersistentDegrees(MemoryManager& memoryManager, const RelTableDat
     }
 }
 
-// The rels in a persistent group that the transaction can see.
+// The rels in a persistent group that the transaction can see. count(*) needs only this total, so
+// unlike addPersistentDegrees it takes deletions off without finding the node each belongs to.
 static row_idx_t countVisiblePersistentRels(MemoryManager& memoryManager,
     const RelTableData& relTableData, ChunkedNodeGroup& group, const Transaction* transaction) {
     auto& csrHeader = group.cast<ChunkedCSRNodeGroup>().getCSRHeader();
@@ -1132,6 +1132,8 @@ row_idx_t RelTable::getNumVisibleRels(const Transaction* transaction, RelDataDir
             numRels += countVisiblePersistentRels(*memoryManager, *relTableData, *pin.persistent,
                 transaction);
         }
+        // In-memory groups have no gap rows, so their visible rows are the rels. The degree paths
+        // walk the CSR index instead, since they need each row's node.
         for (const auto& inMemGroup : pin.inMemGroups) {
             numRels += inMemGroup->getNumVisibleRows(transaction);
         }
