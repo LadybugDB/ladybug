@@ -59,7 +59,7 @@ static bool canCopyValueForNested(const Value& value, const LogicalType& targetT
     if (value.getDataType().getLogicalTypeID() != targetType.getLogicalTypeID()) {
         return false;
     }
-    auto* nested = const_cast<Value*>(&value);
+    const auto* nested = &value;
     if (targetType.getLogicalTypeID() == LogicalTypeID::LIST) {
         const auto& childType = ListType::getChildType(targetType);
         for (auto i = 0u; i < NestedVal::getChildrenSize(nested); ++i) {
@@ -84,7 +84,7 @@ static bool canCopyValueForNested(const Value& value, const LogicalType& targetT
     if (targetType.getLogicalTypeID() == LogicalTypeID::STRUCT) {
         for (auto i = 0u; i < NestedVal::getChildrenSize(nested); ++i) {
             if (!canCopyValueForNested(*NestedVal::getChildVal(nested, i),
-                    StructType::getFieldType(targetType, i))) {
+                    StructType::getFieldType(targetType, static_cast<struct_field_idx_t>(i)))) {
                 return false;
             }
         }
@@ -107,10 +107,14 @@ static lbug_value* createCAPIValue(std::unique_ptr<Value> value) {
     return c_value;
 }
 
-// The target is the max type of all elements, which holds every integer element without loss.
+// The target comes from LogicalTypeUtils::tryGetMaxLogicalType, which joins two integer types only
+// into one that holds both: implicit integer casts only widen, and a signed/unsigned pair becomes a
+// wider signed type. So the cast below is exact. CreateListAllIntegerPairs pins this.
 static std::unique_ptr<Value> castIntegerForNested(const Value& value,
     const LogicalType& targetType) {
-    auto result = std::make_unique<Value>(Value::createDefaultValue(targetType));
+    // A null of the target type keeps its exact type: SERIAL's default value is an INT64.
+    auto result = std::make_unique<Value>(Value::createNullValue(targetType));
+    result->setNull(false);
     TypeUtils::visit(
         value.getDataType(),
         [&]<IntegerTypes SRC>(SRC) {
@@ -183,10 +187,9 @@ static std::unique_ptr<Value> copyValueForNested(const Value& value,
     if (value.getDataType().getLogicalTypeID() == LogicalTypeID::STRUCT &&
         targetType.getLogicalTypeID() == LogicalTypeID::STRUCT) {
         std::vector<std::unique_ptr<Value>> children;
-        for (auto i = 0u; i < NestedVal::getChildrenSize(const_cast<Value*>(&value)); ++i) {
-            children.push_back(
-                copyValueForNested(*NestedVal::getChildVal(const_cast<Value*>(&value), i),
-                    StructType::getFieldType(targetType, i)));
+        for (auto i = 0u; i < NestedVal::getChildrenSize(&value); ++i) {
+            children.push_back(copyValueForNested(*NestedVal::getChildVal(&value, i),
+                StructType::getFieldType(targetType, static_cast<struct_field_idx_t>(i))));
         }
         return std::make_unique<Value>(targetType.copy(), std::move(children));
     }
