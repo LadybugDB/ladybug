@@ -922,6 +922,40 @@ TEST_F(StatsOptimizerTest, CountPrimaryKeyNeedsPrimaryKeyIndex) {
     ASSERT_FALSE(scansKey("unindexed"));
 }
 
+// A cached COUNT(pk) plan rebinds when its primary-key index is dropped or created. The
+// built-in PK index lives in storage only, so its drop has no catalog entry of its own.
+TEST_F(StatsOptimizerTest, CachedCountPrimaryKeyFollowsIndexDDL) {
+    for (const auto* statement : {"CREATE NODE TABLE indexed(id INT64, PRIMARY KEY(id));",
+             "CREATE REL TABLE link(FROM indexed TO indexed);",
+             "UNWIND [1, 2, 3] AS i CREATE (:indexed {id: i});",
+             "MATCH (a:indexed {id: 1}), (b:indexed) WHERE b.id > 1 CREATE (a)-[:link]->(b);"}) {
+        auto result = conn->query(statement);
+        ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    }
+    auto prepared =
+        conn->prepare("MATCH (a:indexed)-[:link]->(b:indexed) RETURN COUNT(DISTINCT b.id);");
+    ASSERT_TRUE(prepared->isSuccess()) << prepared->getErrorMessage();
+    auto executeAndScansKey = [&]() {
+        auto result = conn->execute(prepared.get());
+        EXPECT_TRUE(result->isSuccess()) << result->getErrorMessage();
+        EXPECT_EQ(std::vector<std::string>{"2"}, TestHelper::convertResultToString(*result));
+        auto cachedStatement =
+            conn->getClientContext()->getCachedPreparedStatementManager().getCachedStatement(
+                prepared->getName());
+        return OptimizerTest::scansNodeProperty(
+            cachedStatement->logicalPlan->getLastOperator().get(), "b", "id");
+    };
+    ASSERT_FALSE(executeAndScansKey());
+    ASSERT_FALSE(executeAndScansKey());
+    const auto planVersion = database->getCatalog()->getPlanVersion();
+    ASSERT_TRUE(conn->query("DROP INDEX indexed._PK;")->isSuccess());
+    ASSERT_EQ(planVersion + 1, database->getCatalog()->getPlanVersion());
+    ASSERT_TRUE(executeAndScansKey());
+    ASSERT_TRUE(
+        conn->query("CREATE HASH INDEX indexed_pk FOR (n:indexed) ON (n.id);")->isSuccess());
+    ASSERT_FALSE(executeAndScansKey());
+}
+
 // Table IDs repeat across databases: the attached Person shares ID 0 with the main table Local,
 // whose primary-key index must not approve counting Person's internal IDs.
 TEST_F(StatsOptimizerTest, CountPrimaryKeyKeepsAttachedTableKey) {

@@ -167,11 +167,12 @@ public:
         storage::VectorUpdateInfo& vectorUpdateInfo, common::transaction_t version) const;
 
     static Transaction* Get(const main::ClientContext& context);
+    // Records that `catalog` changed; its version is bumped when the transaction commits.
+    void recordCatalogChange(catalog::Catalog* catalog);
 
 private:
     common::offset_t getMinUncommittedNodeOffset(const storage::Table& table) const;
     common::offset_t getMinUncommittedNodeOffset(common::table_id_t tableID) const;
-    void recordCatalogChange(catalog::Catalog* catalog);
 
 private:
     TransactionType type;

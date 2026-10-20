@@ -249,6 +249,9 @@ void Drop::dropIndex(const main::ClientContext* context) {
     if (inStorage) {
         // Removes the in-memory index; its pages are reclaimed on the next checkpoint.
         nodeTable->dropIndex(dropInfo.indexName);
+        // A storage-only index (the built-in PK hash index) has no catalog entry to record the
+        // drop, but cached plans may rely on it (e.g. COUNT of the key bound as the internal id).
+        transaction->recordCatalogChange(catalog);
     }
     appendMessage(std::format("Index {} has been dropped.", dropInfo.indexName), memoryManager);
 }
