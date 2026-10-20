@@ -1,0 +1,13 @@
+Include <chrono>, which ProfilingATNSimulator.cpp uses; the Windows build
+fails without it. Ladybug commit 145651785.
+
+--- a/src/antlr4-common.h
++++ b/src/antlr4-common.h
+@@ -32,6 +32,7 @@
+ #include <unordered_set>
+ #include <utility>
+ #include <vector>
++#include <chrono>
+ 
+ // Defines for the Guid class and other platform dependent stuff.
+ #ifdef _WIN32

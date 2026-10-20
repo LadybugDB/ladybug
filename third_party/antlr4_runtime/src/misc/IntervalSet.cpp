@@ -66,9 +66,8 @@ void IntervalSet::add(const Interval &addition) {
     return;
   }
 
-  // Ladybug local patch on ANTLR 4.13.1, which has no such fast path; keep it on a runtime
-  // upgrade. Deserialized sets arrive sorted; appending them one by one would otherwise scan the
-  // whole list per interval.
+  // Ladybug patch (third_party/ports/antlr4_runtime/patches). Deserialized sets arrive sorted;
+  // appending them one by one would otherwise scan the whole list per interval.
   if (_intervals.empty() ||
       (_intervals.back().b < addition.a && addition.a != _intervals.back().b + 1)) {
     _intervals.push_back(addition);

@@ -1,0 +1,22 @@
+Append an interval that starts after the last one without scanning the
+set. The lexer's ATN deserializer adds large sorted character sets one
+interval at a time, which made the first query's compile about twice as
+slow.
+
+--- a/src/misc/IntervalSet.cpp
++++ b/src/misc/IntervalSet.cpp
+@@ -66,6 +66,14 @@
+     return;
+   }
+ 
++  // Ladybug patch (third_party/ports/antlr4_runtime/patches). Deserialized sets arrive sorted;
++  // appending them one by one would otherwise scan the whole list per interval.
++  if (_intervals.empty() ||
++      (_intervals.back().b < addition.a && addition.a != _intervals.back().b + 1)) {
++    _intervals.push_back(addition);
++    return;
++  }
++
+   // find position in list
+   for (auto iterator = _intervals.begin(); iterator != _intervals.end(); ++iterator) {
+     Interval r = *iterator;
