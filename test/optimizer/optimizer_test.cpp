@@ -15,11 +15,13 @@
 #include "graph_test/private_graph_test.h"
 #include "planner/join_order/cost_model.h"
 #include "planner/operator/logical_filter.h"
+#include "planner/operator/logical_intersect.h"
 #include "planner/operator/logical_plan_util.h"
 #include "planner/operator/scan/logical_count_rel_table.h"
 #include "planner/operator/scan/logical_dummy_scan.h"
 #include "planner/operator/scan/logical_query_primary_key_lookup.h"
 #include "planner/operator/scan/logical_scan_node_table.h"
+#include "planner/operator/sip/logical_semi_masker.h"
 #include "test_runner/test_runner.h"
 #include "transaction/transaction.h"
 #include <format>
@@ -318,6 +320,99 @@ TEST_F(OptimizerTest, GroupKeyPredicatePushDownKeepsAggregatePredicate) {
     ASSERT_TRUE(expected->isSuccess()) << expected->getErrorMessage();
     ASSERT_EQ(TestHelper::convertResultToString(*result),
         TestHelper::convertResultToString(*expected));
+}
+
+static void collectOperators(planner::LogicalOperator* op, planner::LogicalOperatorType type,
+    std::vector<planner::LogicalOperator*>& result) {
+    if (op->getOperatorType() == type) {
+        result.push_back(op);
+    }
+    for (auto i = 0u; i < op->getNumChildren(); ++i) {
+        collectOperators(op->getChild(i).get(), type, result);
+    }
+}
+
+static int64_t getCount(main::QueryResult& result) {
+    EXPECT_TRUE(result.isSuccess()) << result.getErrorMessage();
+    EXPECT_TRUE(result.hasNext());
+    return result.getNext()->getValue(0)->getValue<int64_t>();
+}
+
+TEST_F(OptimizerTest, IntersectBuildSideMasksProbeScan) {
+    using planner::LogicalOperatorType;
+    ASSERT_TRUE(
+        conn->query("CREATE NODE TABLE MaskPerson(id INT64, PRIMARY KEY(id));"
+                    "CREATE NODE TABLE MaskPost(id INT64, PRIMARY KEY(id));"
+                    "CREATE NODE TABLE MaskComment(id INT64, PRIMARY KEY(id));"
+                    "CREATE NODE TABLE MaskTag(id INT64, PRIMARY KEY(id));"
+                    "CREATE REL TABLE MaskPostCreator(FROM MaskPost TO MaskPerson, MANY_ONE);"
+                    "CREATE REL TABLE MaskCommentCreator(FROM MaskComment TO MaskPerson, MANY_ONE);"
+                    "CREATE REL TABLE MaskReplyOf(FROM MaskComment TO MaskPost, MANY_ONE);"
+                    "CREATE REL TABLE MaskHasTag(FROM MaskPost TO MaskTag);"
+                    "UNWIND range(0, 9) AS i CREATE (:MaskPerson {id: i});"
+                    "UNWIND range(0, 999) AS i CREATE (:MaskPost {id: i});"
+                    "UNWIND range(0, 499) AS i CREATE (:MaskComment {id: i});"
+                    "UNWIND range(0, 9) AS i CREATE (:MaskTag {id: i});")
+            ->isSuccess());
+    ASSERT_TRUE(conn->query("MATCH (p:MaskPost), (a:MaskPerson) WHERE a.id = p.id % 10 "
+                            "CREATE (p)-[:MaskPostCreator]->(a);"
+                            "MATCH (c:MaskComment), (a:MaskPerson) WHERE a.id = c.id % 7 "
+                            "CREATE (c)-[:MaskCommentCreator]->(a);"
+                            "MATCH (c:MaskComment), (p:MaskPost) WHERE c.id < 300 AND "
+                            "p.id = (c.id % 50) * 20 + c.id % 3 CREATE (c)-[:MaskReplyOf]->(p);"
+                            "MATCH (p:MaskPost), (t:MaskTag) WHERE t.id = p.id % 10 "
+                            "CREATE (p)-[:MaskHasTag]->(t);")
+                    ->isSuccess());
+    const std::string pattern =
+        "MATCH (c:MaskComment)-[hc:MaskCommentCreator]->(creator:MaskPerson), "
+        "(c)-[r:MaskReplyOf]->(post:MaskPost)-[phc:MaskPostCreator]->(creator) ";
+    const std::string intersectHint =
+        "(((post JOIN phc) JOIN creator) MULTI_JOIN hc MULTI_JOIN r) JOIN c";
+    // The probe side scans 1000 posts against 10 creators, which prohibits probe-to-build SIP.
+    // The MaskReplyOf build side, which holds the 150 posts with replies, masks the post scan.
+    const auto query = pattern + "HINT " + intersectHint + " RETURN COUNT(*)";
+    auto plan = TestRunner::getLogicalPlan(query, *conn);
+    std::vector<planner::LogicalOperator*> maskers;
+    collectOperators(plan->getLastOperator().get(), LogicalOperatorType::SEMI_MASKER, maskers);
+    ASSERT_EQ(maskers.size(), 1u);
+    auto& masker = maskers[0]->constCast<planner::LogicalSemiMasker>();
+    ASSERT_EQ(masker.getTargetOperators().size(), 1u);
+    auto& scan = masker.getTargetOperators()[0]->constCast<planner::LogicalScanNodeTable>();
+    EXPECT_EQ(scan.getNodeID()->getUniqueName(), masker.getKey()->getUniqueName());
+    EXPECT_EQ(masker.getKey()->toString(), "post._ID");
+    // The mapper drops a semi masker whose target scan is not mapped yet.
+    EXPECT_NE(conn->query("EXPLAIN " + query)->toString().find("SEMI_MASKER"), std::string::npos);
+
+    // Each execution builds a fresh mask: a reply added between executions is counted.
+    auto prepared = conn->prepare(query);
+    ASSERT_TRUE(prepared->isSuccess()) << prepared->getErrorMessage();
+    EXPECT_EQ(getCount(*conn->execute(prepared.get())), 45);
+    ASSERT_TRUE(conn->query("MATCH (c:MaskComment {id: 499}), (p:MaskPost {id: 12}) "
+                            "CREATE (c)-[:MaskReplyOf]->(p)")
+                    ->isSuccess());
+    EXPECT_EQ(getCount(*conn->execute(prepared.get())), 46);
+
+    // An outer join on post that already masks the post scan keeps its more selective mask: a
+    // scan holds one mask, so the intersect adds none.
+    const auto taggedQuery = "MATCH (t:MaskTag)<-[ht:MaskHasTag]-(post:MaskPost), " +
+                             pattern.substr(6) + "WHERE t.id = 2 HINT (" + intersectHint +
+                             ") JOIN (ht JOIN t) RETURN COUNT(*)";
+    auto taggedPlan = TestRunner::getLogicalPlan(taggedQuery, *conn);
+    std::vector<planner::LogicalOperator*> intersects;
+    collectOperators(taggedPlan->getLastOperator().get(), LogicalOperatorType::INTERSECT,
+        intersects);
+    ASSERT_EQ(intersects.size(), 1u);
+    for (auto i = 1u; i < intersects[0]->getNumChildren(); ++i) {
+        std::vector<planner::LogicalOperator*> buildMaskers;
+        collectOperators(intersects[0]->getChild(i).get(), LogicalOperatorType::SEMI_MASKER,
+            buildMaskers);
+        EXPECT_TRUE(buildMaskers.empty());
+    }
+    std::vector<planner::LogicalOperator*> taggedMaskers;
+    collectOperators(taggedPlan->getLastOperator().get(), LogicalOperatorType::SEMI_MASKER,
+        taggedMaskers);
+    EXPECT_EQ(taggedMaskers.size(), 1u);
+    EXPECT_EQ(getCount(*conn->query(taggedQuery)), 16);
 }
 
 TEST_F(OptimizerTest, IndexScanTest) {
