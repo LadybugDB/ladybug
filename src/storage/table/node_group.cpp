@@ -459,6 +459,14 @@ void NodeGroup::addColumn(TableAddColumnState& addColumnState, PageAllocator* pa
 
 void NodeGroup::rollbackInsert(row_idx_t startRow) {
     const auto lock = chunkedGroups.lock();
+    // Version rollback truncates chunked groups, but a startRow of 0 means every
+    // in-memory row is undone. Drop all chunked groups so a later append cannot
+    // stack on stale physical rows while NodeGroup::numRows is already 0.
+    if (startRow == 0) {
+        chunkedGroups.clear(lock);
+        numRows = 0;
+        return;
+    }
     const auto numEmptyTrailingGroups = chunkedGroups.getNumEmptyTrailingGroups(lock);
     chunkedGroups.removeTrailingGroups(lock, numEmptyTrailingGroups);
     numRows = startRow;

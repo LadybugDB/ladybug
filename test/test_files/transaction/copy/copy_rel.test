@@ -427,6 +427,8 @@
 0|7
 
 -CASE CopyRelRollbackAfterAutocommitCopy
+-STATEMENT CALL auto_checkpoint=false;
+---- ok
 -STATEMENT CREATE NODE TABLE A(id INT64 PRIMARY KEY);
 ---- ok
 -STATEMENT CREATE REL TABLE T(FROM A TO A);
@@ -458,8 +460,45 @@
 ---- ok
 -STATEMENT COPY T FROM (UNWIND range(0, 29) AS i RETURN i + 100, i + 101);
 ---- ok
+-STATEMENT MATCH ()-[t:T]->() RETURN count(*);
+---- 1
+530
 -STATEMENT COMMIT;
 ---- ok
 -STATEMENT MATCH ()-[t:T]->() RETURN count(*);
 ---- 1
 530
+
+-CASE CopyRelNewGroupExplicitTxnRollbackAndCommit
+-STATEMENT CALL auto_checkpoint=false;
+---- ok
+-STATEMENT CREATE NODE TABLE A(id INT64 PRIMARY KEY);
+---- ok
+-STATEMENT UNWIND range(0, 99) AS i CREATE (:A {id: i});
+---- ok
+-STATEMENT CREATE REL TABLE T(FROM A TO A);
+---- ok
+-STATEMENT BEGIN TRANSACTION;
+---- ok
+-STATEMENT COPY T FROM (UNWIND range(0, 499) AS i RETURN (i % 100), ((i + 1) % 100));
+---- ok
+-STATEMENT MATCH ()-[t:T]->() RETURN count(*);
+---- 1
+500
+-STATEMENT ROLLBACK;
+---- ok
+-STATEMENT MATCH ()-[t:T]->() RETURN count(*);
+---- 1
+0
+-STATEMENT BEGIN TRANSACTION;
+---- ok
+-STATEMENT COPY T FROM (UNWIND range(0, 499) AS i RETURN (i % 100), ((i + 1) % 100));
+---- ok
+-STATEMENT MATCH ()-[t:T]->() RETURN count(*);
+---- 1
+500
+-STATEMENT COMMIT;
+---- ok
+-STATEMENT MATCH ()-[t:T]->() RETURN count(*);
+---- 1
+500

@@ -264,6 +264,7 @@ public:
         return NodeGroup::hasRows() ||
                (persistentChunkGroup && persistentChunkGroup->getNumRows() != 0);
     }
+    void rollbackInsert(common::row_idx_t startRow) override;
 
     ChunkedNodeGroup* getPersistentChunkedGroup() const { return persistentChunkGroup.get(); }
     const CSRIndex* getCSRIndex() const { return csrIndex.get(); }
