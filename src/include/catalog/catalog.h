@@ -190,9 +190,11 @@ public:
 
     // ----------------------------- Macro ----------------------------
 
-    // Check if macro entry exists.
+    // Macro names are stored uppercased (see bindCreateMacro). containsMacro and dropMacro
+    // uppercase the given name the same way; the catalog set itself only folds ASCII letters.
     bool containsMacro(const transaction::Transaction* transaction,
         const std::string& macroName) const;
+    // Takes the stored (uppercased) name.
     void addScalarMacroFunction(transaction::Transaction* transaction, std::string name,
         std::unique_ptr<function::ScalarMacroFunction> macro);
     ScalarMacroCatalogEntry* getScalarMacroCatalogEntry(const transaction::Transaction* transaction,
@@ -200,6 +202,7 @@ public:
     void dropMacroEntry(transaction::Transaction* transaction, const lbug::common::oid_t macroID);
     void dropMacroEntry(transaction::Transaction* transaction,
         const ScalarMacroCatalogEntry* entry);
+    // Takes the stored (uppercased) name.
     function::ScalarMacroFunction* getScalarMacroFunction(
         const transaction::Transaction* transaction, const std::string& name) const;
     std::vector<std::string> getMacroNames(const transaction::Transaction* transaction) const;
