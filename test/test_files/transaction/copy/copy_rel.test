@@ -440,7 +440,7 @@
 500
 -STATEMENT BEGIN TRANSACTION;
 ---- ok
--STATEMENT UNWIND range(100, 109) AS i CREATE (:A {id: i});
+-STATEMENT UNWIND range(100, 130) AS i CREATE (:A {id: i});
 ---- ok
 -STATEMENT COPY T FROM (UNWIND range(0, 29) AS i RETURN i + 100, i + 101);
 ---- ok
@@ -454,7 +454,7 @@
 500
 -STATEMENT BEGIN TRANSACTION;
 ---- ok
--STATEMENT UNWIND range(100, 109) AS i CREATE (:A {id: i});
+-STATEMENT UNWIND range(100, 130) AS i CREATE (:A {id: i});
 ---- ok
 -STATEMENT COPY T FROM (UNWIND range(0, 29) AS i RETURN i + 100, i + 101);
 ---- ok
