@@ -274,9 +274,8 @@ private:
         std::optional<uint64_t> queryID = std::nullopt) const;
 
 private:
-    // Protects the `columns` vector from concurrent access during checkpoint
-    // column vacuum. Readers/writers take shared_lock; checkpoint takes
-    // unique_lock during the brief column swap.
+    // Guards the `columns` vector: checkpoint's column vacuum swaps it and ALTER TABLE ADD grows
+    // it under a unique lock; readers take a shared lock.
     mutable std::shared_mutex schemaMtx;
     std::vector<std::unique_ptr<Column>> columns;
     std::unique_ptr<NodeGroupCollection> nodeGroups;

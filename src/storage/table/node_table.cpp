@@ -640,8 +640,12 @@ bool NodeTable::delete_(Transaction* transaction, TableDeleteState& deleteState)
 void NodeTable::addColumn(Transaction* transaction, TableAddColumnState& addColumnState,
     PageAllocator& pageAllocator) {
     auto& definition = addColumnState.propertyDefinition;
-    columns.push_back(ColumnFactory::createColumn(definition.getName(), definition.getType().copy(),
-        pageAllocator.getDataFH(), memoryManager, shadowFile, enableCompression));
+    auto column = ColumnFactory::createColumn(definition.getName(), definition.getType().copy(),
+        pageAllocator.getDataFH(), memoryManager, shadowFile, enableCompression);
+    {
+        std::unique_lock schemaLck{schemaMtx};
+        columns.push_back(std::move(column));
+    }
     LocalTable* localTable = nullptr;
     if (transaction->getLocalStorage()) {
         localTable = transaction->getLocalStorage()->getLocalTable(*this);
@@ -663,6 +667,7 @@ std::pair<offset_t, offset_t> NodeTable::appendToLastNodeGroup(Transaction* tran
 
 DataChunk NodeTable::constructDataChunkForColumns(const std::vector<column_id_t>& columnIDs) const {
     std::vector<LogicalType> types;
+    std::shared_lock lck{schemaMtx};
     for (const auto& columnID : columnIDs) {
         DASSERT(columnID < columns.size());
         types.push_back(columns[columnID]->getDataType().copy());
