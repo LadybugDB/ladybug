@@ -344,9 +344,14 @@ static bool canFilterEarly(const TableScanState& scanState) {
     return hasFilter && hasPerRowColumn;
 }
 
+// A filtered selection makes string and list columns read one row at a time, so narrowing a batch
+// before they are read pays off only while it keeps fewer than 1/SPARSE_BATCH_DIVISOR of its rows.
+static constexpr uint64_t SPARSE_BATCH_DIVISOR = 16;
+
 // After a batch where filtering early kept too many rows, the next 1 batch skips it, then 2, 4, 8
-// and at most 15 while the batches that try it stay dense; a batch it narrows resets this. Smaller
-// batches (short rel lists) cost little to filter and say little about the next batch.
+// and at most 15 while the batches that try it stay dense; a batch it narrows resets this, and so
+// does entering a node group. Smaller batches (short rel lists) cost little to filter and say
+// little about the next batch.
 static constexpr uint8_t EARLY_FILTER_MAX_BACKOFF = 15;
 static constexpr sel_t EARLY_FILTER_BACKOFF_MIN_ROWS = 256;
 
@@ -366,9 +371,8 @@ void ChunkedNodeGroup::scan(const Transaction* transaction, const TableScanState
         anchorSelVector.setToUnfiltered(numRowsToScan);
     }
 
-    // A filtered scan reads string and list columns one row at a time, so narrowing the selection
-    // to the semi-mask before reading the columns pays off only when the mask drops most of this
-    // batch's rows. A denser mask is applied after the columns are read.
+    // The semi-mask narrows the selection before the columns are read only when it keeps a sparse
+    // part of this batch; a denser mask is applied after the columns are read.
     const bool semiMaskEnabled = scanState.source == TableScanSource::COMMITTED &&
                                  scanState.semiMask != nullptr && scanState.semiMask->isEnabled();
     const auto startNodeOffset = StorageUtils::getStartOffsetOfNodeGroup(scanState.nodeGroupIdx) +
@@ -377,7 +381,7 @@ void ChunkedNodeGroup::scan(const Transaction* transaction, const TableScanState
     bool maskBeforeColumns = false;
     if (semiMaskEnabled && anchorSelVector.getSelSize() > 0) {
         maskedOffsets = scanState.semiMask->range(startNodeOffset, startNodeOffset + numRowsToScan);
-        maskBeforeColumns = maskedOffsets.size() * 16 < numRowsToScan;
+        maskBeforeColumns = maskedOffsets.size() * SPARSE_BATCH_DIVISOR < numRowsToScan;
         if (maskBeforeColumns) {
             NodeTable::applySemiMaskFilter(maskedOffsets, startNodeOffset, anchorSelVector);
         }
@@ -423,12 +427,18 @@ void ChunkedNodeGroup::scan(const Transaction* transaction, const TableScanState
                     anchorSelVector);
             }
         }
-        const bool keptMany = wasUnfiltered && anchorSelVector.getSelSize() * 16 >= numVisible;
-        if (keptMany) {
+        const bool keptMany = anchorSelVector.getSelSize() * SPARSE_BATCH_DIVISOR >= numVisible;
+        if (keptMany && wasUnfiltered) {
             anchorSelVector.setToUnfiltered(numVisible);
         }
+        // Only a batch that arrived unfiltered can go back to all its visible rows: a filtered
+        // arrival is a visibility mask, not a prefix. On disk it keeps the narrowed selection, as
+        // its string and list columns are read one row at a time anyway; in-memory chunks are
+        // copied in full whatever the selection, so there a dense batch pauses the early filter.
+        const bool pause =
+            keptMany && (wasUnfiltered || residencyState == ResidencyState::IN_MEMORY);
         auto& backoff = nodeGroupScanState.earlyFilterBackoff;
-        if (!keptMany) {
+        if (!pause) {
             backoff = 0;
         } else if (numVisible >= EARLY_FILTER_BACKOFF_MIN_ROWS) {
             backoff = std::min<uint8_t>(backoff == 0 ? 1 : 2 * backoff, EARLY_FILTER_MAX_BACKOFF);

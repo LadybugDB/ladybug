@@ -183,6 +183,7 @@ void NodeGroup::initializeScanState(const Transaction*, const UniqLock& lock,
     auto& nodeGroupScanState = *state.nodeGroupScanState;
     nodeGroupScanState.chunkedGroupIdx = 0;
     nodeGroupScanState.numCheckpoints = numCheckpoints;
+    nodeGroupScanState.resetEarlyFilterBackoff();
     ChunkedNodeGroup* firstChunkedGroup = chunkedGroups.getFirstGroup(lock);
     // A sub-node-group morsel may start after the first row of the group.
     nodeGroupScanState.nextRowToScan =
