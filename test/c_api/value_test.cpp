@@ -1,3 +1,5 @@
+#include <limits>
+
 #include "c_api_test/c_api_test.h"
 
 using namespace lbug::main;
@@ -471,10 +473,70 @@ TEST(CApiValueTestEmptyDB, CreateListMixedSignIntegerExtremes) {
     auto cppValue = static_cast<Value*>(value->_value);
     ASSERT_EQ(ListType::getChildType(cppValue->getDataType()).getLogicalTypeID(),
         LogicalTypeID::INT128);
-    ASSERT_TRUE(NestedVal::getChildVal(cppValue, 0)->getValue<int128_t>() ==
-                int128_t(std::numeric_limits<int64_t>::min()));
-    ASSERT_TRUE(NestedVal::getChildVal(cppValue, 1)->getValue<int128_t>() ==
-                int128_t(std::numeric_limits<uint64_t>::max()));
+    ASSERT_EQ(NestedVal::getChildVal(cppValue, 0)->getDataType(), LogicalType::INT128());
+    ASSERT_EQ(NestedVal::getChildVal(cppValue, 0)->toString(), "-9223372036854775808");
+    ASSERT_EQ(NestedVal::getChildVal(cppValue, 1)->getDataType(), LogicalType::INT128());
+    ASSERT_EQ(NestedVal::getChildVal(cppValue, 1)->toString(), "18446744073709551615");
+    destroyValues(elements, 2);
+    lbug_value_destroy(value);
+}
+
+template<typename T>
+static void addIntegerExtremes(std::vector<std::pair<lbug_value*, std::string>>& extremes,
+    lbug_value* (*create)(T)) {
+    extremes.emplace_back(create(std::numeric_limits<T>::min()),
+        std::to_string(std::numeric_limits<T>::min()));
+    extremes.emplace_back(create(std::numeric_limits<T>::max()),
+        std::to_string(std::numeric_limits<T>::max()));
+}
+
+TEST(CApiValueTestEmptyDB, CreateListAllIntegerPairs) {
+    std::vector<std::pair<lbug_value*, std::string>> extremes;
+    addIntegerExtremes(extremes, lbug_value_create_int8);
+    addIntegerExtremes(extremes, lbug_value_create_int16);
+    addIntegerExtremes(extremes, lbug_value_create_int32);
+    addIntegerExtremes(extremes, lbug_value_create_int64);
+    addIntegerExtremes(extremes, lbug_value_create_uint8);
+    addIntegerExtremes(extremes, lbug_value_create_uint16);
+    addIntegerExtremes(extremes, lbug_value_create_uint32);
+    addIntegerExtremes(extremes, lbug_value_create_uint64);
+    extremes.emplace_back(
+        lbug_value_create_int128(lbug_int128_t{0, std::numeric_limits<int64_t>::min()}),
+        "-170141183460469231731687303715884105728");
+    extremes.emplace_back(
+        lbug_value_create_int128(lbug_int128_t{std::numeric_limits<uint64_t>::max(),
+            std::numeric_limits<int64_t>::max()}),
+        "170141183460469231731687303715884105727");
+    for (const auto& [left, leftString] : extremes) {
+        for (const auto& [right, rightString] : extremes) {
+            lbug_value* elements[] = {left, right};
+            lbug_value* value = nullptr;
+            ASSERT_EQ(lbug_value_create_list(2, elements, &value), LbugSuccess)
+                << leftString << ", " << rightString;
+            auto cppValue = static_cast<Value*>(value->_value);
+            const auto& childType = ListType::getChildType(cppValue->getDataType());
+            EXPECT_EQ(NestedVal::getChildVal(cppValue, 0)->getDataType(), childType);
+            EXPECT_EQ(NestedVal::getChildVal(cppValue, 0)->toString(), leftString);
+            EXPECT_EQ(NestedVal::getChildVal(cppValue, 1)->getDataType(), childType);
+            EXPECT_EQ(NestedVal::getChildVal(cppValue, 1)->toString(), rightString);
+            lbug_value_destroy(value);
+        }
+    }
+    for (const auto& extreme : extremes) {
+        lbug_value_destroy(extreme.first);
+    }
+}
+
+TEST(CApiValueTestEmptyDB, CreateListWithSerialNull) {
+    lbug_value* elements[] = {createTypedNull(LBUG_SERIAL), lbug_value_create_int8(1)};
+    lbug_value* value = nullptr;
+    ASSERT_EQ(lbug_value_create_list(2, elements, &value), LbugSuccess);
+    auto cppValue = static_cast<Value*>(value->_value);
+    const auto& childType = ListType::getChildType(cppValue->getDataType());
+    ASSERT_EQ(childType.getLogicalTypeID(), LogicalTypeID::SERIAL);
+    ASSERT_TRUE(NestedVal::getChildVal(cppValue, 0)->isNull());
+    ASSERT_EQ(NestedVal::getChildVal(cppValue, 1)->getDataType(), childType);
+    ASSERT_EQ(NestedVal::getChildVal(cppValue, 1)->getValue<int64_t>(), 1);
     destroyValues(elements, 2);
     lbug_value_destroy(value);
 }
@@ -522,10 +584,10 @@ TEST(CApiValueTestEmptyDB, CreateListWithTypedNull) {
 }
 
 TEST(CApiValueTestEmptyDB, CreateListNestedMixedIntegerWidths) {
-    lbug_value* inner1[] = {lbug_value_create_int8(1)};
+    lbug_value* inner1[] = {lbug_value_create_int8(1), createTypedNull(LBUG_INT8)};
     lbug_value* inner2[] = {lbug_value_create_int16(1000)};
     lbug_value* elements[] = {nullptr, nullptr};
-    ASSERT_EQ(lbug_value_create_list(1, inner1, &elements[0]), LbugSuccess);
+    ASSERT_EQ(lbug_value_create_list(2, inner1, &elements[0]), LbugSuccess);
     ASSERT_EQ(lbug_value_create_list(1, inner2, &elements[1]), LbugSuccess);
     lbug_value* value = nullptr;
     ASSERT_EQ(lbug_value_create_list(2, elements, &value), LbugSuccess);
@@ -533,9 +595,12 @@ TEST(CApiValueTestEmptyDB, CreateListNestedMixedIntegerWidths) {
     ASSERT_EQ(cppValue->getDataType(), LogicalType::LIST(LogicalType::LIST(LogicalType::INT16())));
     ASSERT_EQ(NestedVal::getChildVal(NestedVal::getChildVal(cppValue, 0), 0)->getValue<int16_t>(),
         1);
+    auto* nestedNull = NestedVal::getChildVal(NestedVal::getChildVal(cppValue, 0), 1);
+    ASSERT_TRUE(nestedNull->isNull());
+    ASSERT_EQ(nestedNull->getDataType().getLogicalTypeID(), LogicalTypeID::INT16);
     ASSERT_EQ(NestedVal::getChildVal(NestedVal::getChildVal(cppValue, 1), 0)->getValue<int16_t>(),
         1000);
-    destroyValues(inner1, 1);
+    destroyValues(inner1, 2);
     destroyValues(inner2, 1);
     destroyValues(elements, 2);
     lbug_value_destroy(value);
