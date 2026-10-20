@@ -618,6 +618,17 @@ NodeGroupScanResult CSRNodeGroup::scanCommittedInMemRandom(const Transaction* tr
     return NodeGroupScanResult{0, numRows};
 }
 
+void CSRNodeGroup::rollbackInsert(row_idx_t startRow) {
+    NodeGroup::rollbackInsert(startRow);
+    // appendChunkedCSRGroup mutates csrIndex outside versioned storage. When every
+    // in-memory row is rolled back, drop the index so the next COPY cannot append
+    // onto stale row ranges and inflate counts after a later COMMIT.
+    if (startRow == 0) {
+        const auto lock = chunkedGroups.lock();
+        csrIndex.reset();
+    }
+}
+
 void CSRNodeGroup::appendChunkedCSRGroup(const Transaction* transaction,
     const std::vector<column_id_t>& columnIDs, InMemChunkedCSRNodeGroup& chunkedGroup) {
     const auto& csrHeader = chunkedGroup.getCSRHeader();
