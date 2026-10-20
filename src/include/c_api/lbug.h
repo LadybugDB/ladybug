@@ -140,6 +140,9 @@ typedef struct {
     bool enable_multi_writes;
     // If true, node tables create the default primary-key hash index.
     bool enable_default_hash_index;
+    // How many reusable cloned physical plans each thread retains per cached prepared
+    // statement. 0 disables pooled-plan reuse.
+    uint64_t physical_plan_pool_per_thread;
 
 #if defined(__APPLE__)
     // The thread quality of service (QoS) for the worker threads.

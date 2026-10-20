@@ -62,20 +62,17 @@ std::string DecimalType::insertDecimalPoint(const std::string& value, uint32_t p
         return value;
         // Don't want to end up with cases where integral values are followed by a useless dot
     }
+    if (!value.empty() && value[0] == '-') {
+        return "-" + insertDecimalPoint(value.substr(1), positionFromEnd);
+    }
     std::string retval;
     if (positionFromEnd > value.size()) {
-        auto greaterBy = positionFromEnd - value.size();
         retval = "0.";
-        for (auto i = 0u; i < greaterBy; i++) {
-            retval += "0";
-        }
+        retval.append(positionFromEnd - value.size(), '0');
         retval += value;
     } else {
         auto lessBy = value.size() - positionFromEnd;
-        retval = value.substr(0, lessBy);
-        if (retval == "" || retval == "-") {
-            retval += '0';
-        }
+        retval = lessBy == 0 ? "0" : value.substr(0, lessBy);
         retval += ".";
         retval += value.substr(lessBy);
     }

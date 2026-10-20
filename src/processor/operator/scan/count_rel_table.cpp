@@ -1,21 +1,12 @@
 #include "processor/operator/scan/count_rel_table.h"
 
-#include "common/system_config.h"
 #include "common/types/int128_t.h"
 #include "common/types/uint128_t.h"
 #include "main/client_context.h"
-#include "main/database.h"
 #include "processor/execution_context.h"
-#include "storage/buffer_manager/memory_manager.h"
-#include "storage/local_storage/local_rel_table.h"
-#include "storage/local_storage/local_storage.h"
-#include "storage/table/column.h"
-#include "storage/table/column_chunk_data.h"
 #include "storage/table/columnar_rel_table_base.h"
-#include "storage/table/csr_chunked_node_group.h"
-#include "storage/table/csr_node_group.h"
 #include "storage/table/foreign_rel_table.h"
-#include "storage/table/rel_table_data.h"
+#include "storage/table/rel_table.h"
 #include "transaction/transaction.h"
 
 using namespace lbug::common;
@@ -31,15 +22,13 @@ void CountRelTable::initLocalStateInternal(ResultSet* resultSet, ExecutionContex
     totalCount = 0;
 }
 
-// Count rels by using CSR metadata, accounting for deletions and uncommitted data.
-// This is more efficient than scanning through all edges.
+// Count rels from the rel table's CSR metadata instead of scanning every edge.
 bool CountRelTable::getNextTuplesInternal(ExecutionContext* context) {
     if (hasExecuted) {
         return false;
     }
 
     auto transaction = Transaction::Get(*context->clientContext);
-    auto* memoryManager = context->clientContext->getDatabase()->getMemoryManager();
 
     for (auto* relTable : relTables) {
         if (dynamic_cast<ColumnarRelTableBase*>(relTable) != nullptr) {
@@ -54,80 +43,7 @@ bool CountRelTable::getNextTuplesInternal(ExecutionContext* context) {
             continue;
         }
 
-        // Get the RelTableData for the specified direction
-        auto* relTableData = relTable->getDirectedTableData(direction);
-        auto numNodeGroups = relTableData->getNumNodeGroups();
-        auto* csrLengthColumn = relTableData->getCSRLengthColumn();
-
-        // For each node group in the rel table
-        for (node_group_idx_t nodeGroupIdx = 0; nodeGroupIdx < numNodeGroups; nodeGroupIdx++) {
-            auto* nodeGroup = relTableData->getNodeGroup(nodeGroupIdx);
-            if (!nodeGroup) {
-                continue;
-            }
-
-            // Pinned under the group lock; parked readers get their retained snapshot.
-            const auto pin = nodeGroup->cast<CSRNodeGroup>().captureScanPin(transaction);
-
-            // Count from persistent (checkpointed) data
-            if (auto* persistentGroup = pin.persistent.get()) {
-                // Sum the actual relationship lengths from the CSR header instead of using
-                // getNumRows() which includes dummy rows added for CSR offset array gaps
-                auto& csrPersistentGroup = persistentGroup->cast<ChunkedCSRNodeGroup>();
-                auto& csrHeader = csrPersistentGroup.getCSRHeader();
-
-                // Get the number of nodes in this CSR header
-                auto numNodes = csrHeader.length->getNumValues();
-                if (numNodes == 0) {
-                    continue;
-                }
-
-                // Create an in-memory chunk to scan the CSR length column into
-                auto lengthChunk = ColumnChunkFactory::createColumnChunkData(*memoryManager,
-                    LogicalType::UINT64(), false /*enableCompression*/,
-                    StorageConfig::NODE_GROUP_SIZE, ResidencyState::IN_MEMORY,
-                    false /*hasNullData*/, false /*initializeToZero*/);
-
-                // Initialize scan state and scan the length column from disk
-                ChunkState chunkState;
-                csrHeader.length->initializeScanState(chunkState, csrLengthColumn);
-                csrLengthColumn->scan(chunkState, lengthChunk.get(), 0 /*offsetInChunk*/, numNodes);
-
-                // Sum all the lengths
-                auto* lengthData = reinterpret_cast<const uint64_t*>(lengthChunk->getData());
-                row_idx_t groupRelCount = 0;
-                for (offset_t i = 0; i < numNodes; ++i) {
-                    groupRelCount += lengthData[i];
-                }
-                totalCount += groupRelCount;
-
-                // Deletions are recorded at CSR rows, which gaps can push past groupRelCount, so
-                // check every row; gap rows are never deleted.
-                if (persistentGroup->hasVersionInfo()) {
-                    auto numDeletions = persistentGroup->getNumDeletions(transaction, 0,
-                        persistentGroup->getNumRows());
-                    totalCount -= numDeletions;
-                }
-            }
-
-            // In-memory (not yet checkpointed) rows visible to the transaction.
-            for (const auto& chunkedGroup : pin.inMemGroups) {
-                totalCount += chunkedGroup->getNumVisibleRows(transaction);
-            }
-        }
-
-        // Add uncommitted insertions from local storage
-        if (transaction->isWriteTransaction()) {
-            if (auto* localTable = transaction->getLocalStorage()->getLocalTable(*relTable)) {
-                auto& localRelTable = localTable->cast<LocalRelTable>();
-                // Count entries in the CSR index for this direction.
-                // We can't use getNumTotalRows() because it includes deleted rows.
-                auto& csrIndex = localRelTable.getCSRIndex(direction);
-                for (const auto& [nodeOffset, rowIndices] : csrIndex) {
-                    totalCount += rowIndices.size();
-                }
-            }
-        }
+        totalCount += relTable->getNumVisibleRels(transaction, direction);
     }
 
     hasExecuted = true;

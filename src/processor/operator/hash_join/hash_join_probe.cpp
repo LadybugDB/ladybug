@@ -16,6 +16,9 @@ std::string HashJoinProbePrintInfo::toString() const {
 }
 
 void HashJoinProbe::initLocalStateInternal(ResultSet* resultSet, ExecutionContext* context) {
+    // Clear member vectors so re-execution on a reused operator starts clean.
+    keyVectors.clear();
+    vectorsToReadInto.clear();
     probeState = std::make_unique<ProbeState>();
     for (auto& keyDataPos : probeDataInfo.keysDataPos) {
         keyVectors.push_back(resultSet->getValueVector(keyDataPos).get());

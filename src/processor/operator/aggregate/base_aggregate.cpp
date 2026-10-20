@@ -23,6 +23,7 @@ BaseAggregateSharedState::BaseAggregateSharedState(
       readyForFinalization{false} {}
 
 void BaseAggregate::initLocalStateInternal(ResultSet* resultSet, ExecutionContext* /*context*/) {
+    aggInputs.clear();
     for (auto& info : aggInfos) {
         auto aggregateInput = AggregateInput();
         if (info.aggVectorPos.dataChunkPos == INVALID_DATA_CHUNK_POS) {

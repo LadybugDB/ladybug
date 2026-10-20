@@ -306,9 +306,52 @@ static ZoneMapCheckResult getZoneMapResult(const TableScanState& scanState,
     return ZoneMapCheckResult::ALWAYS_SCAN;
 }
 
+static bool isScannedColumn(column_id_t columnID) {
+    return columnID != INVALID_COLUMN_ID && columnID != ROW_IDX_COLUMN_ID;
+}
+
+// String and list columns are read one row at a time when the selection is filtered.
+static bool isReadPerRow(const ValueVector& vector) {
+    switch (vector.dataType.getPhysicalType()) {
+    case PhysicalTypeID::STRING:
+    case PhysicalTypeID::JSON:
+    case PhysicalTypeID::LIST:
+    case PhysicalTypeID::ARRAY:
+        return true;
+    default:
+        return false;
+    }
+}
+
+// A column whose predicates can drop rows before the columns read per row are read.
+static bool filtersEarly(const TableScanState& scanState, idx_t columnIdx) {
+    return isScannedColumn(scanState.columnIDs[columnIdx]) &&
+           !scanState.columnPredicateSets[columnIdx].isEmpty() &&
+           !isReadPerRow(*scanState.outputVectors[columnIdx]);
+}
+
+static bool canFilterEarly(const TableScanState& scanState) {
+    if (scanState.columnPredicateSets.empty()) {
+        return false;
+    }
+    bool hasFilter = false;
+    bool hasPerRowColumn = false;
+    for (auto i = 0u; i < scanState.columnIDs.size(); i++) {
+        hasFilter |= filtersEarly(scanState, i);
+        hasPerRowColumn |=
+            isScannedColumn(scanState.columnIDs[i]) && isReadPerRow(*scanState.outputVectors[i]);
+    }
+    return hasFilter && hasPerRowColumn;
+}
+
+// After a batch where filtering early kept too many rows, the next 1 batch skips it, then 2, 4, 8
+// and at most 15 while the batches that try it stay dense; a batch it narrows resets this. Smaller
+// batches (short rel lists) cost little to filter and say little about the next batch.
+static constexpr uint8_t EARLY_FILTER_MAX_BACKOFF = 15;
+static constexpr sel_t EARLY_FILTER_BACKOFF_MIN_ROWS = 256;
+
 void ChunkedNodeGroup::scan(const Transaction* transaction, const TableScanState& scanState,
-    const NodeGroupScanState& nodeGroupScanState, offset_t rowIdxInGroup,
-    length_t numRowsToScan) const {
+    NodeGroupScanState& nodeGroupScanState, offset_t rowIdxInGroup, length_t numRowsToScan) const {
     DASSERT(rowIdxInGroup + numRowsToScan <= numRows);
     auto& anchorSelVector = scanState.outState->getSelVectorUnsafe();
     if (getZoneMapResult(scanState, chunks) == ZoneMapCheckResult::SKIP_SCAN) {
@@ -340,23 +383,64 @@ void ChunkedNodeGroup::scan(const Transaction* transaction, const TableScanState
         }
     }
 
+    auto scanColumn = [&](idx_t columnIdx) {
+        const auto columnID = scanState.columnIDs[columnIdx];
+        if (columnID == INVALID_COLUMN_ID) {
+            scanState.outputVectors[columnIdx]->setAllNull();
+            return;
+        }
+        if (columnID == ROW_IDX_COLUMN_ID) {
+            for (auto rowIdx = 0u; rowIdx < numRowsToScan; rowIdx++) {
+                scanState.rowIdxVector->setValue<row_idx_t>(rowIdx,
+                    rowIdx + rowIdxInGroup + startRowIdx);
+            }
+            return;
+        }
+        DASSERT(columnID < chunks.size());
+        chunks[columnID]->scan(transaction, nodeGroupScanState.chunkStates[columnIdx],
+            *scanState.outputVectors[columnIdx], rowIdxInGroup, numRowsToScan);
+    };
+
+    // Columns with a predicate are read and filtered first, so string and list columns are read
+    // only for the rows the predicates keep. The FILTER operator still evaluates the whole
+    // predicate, so a selection that keeps many rows can go back to all visible rows.
+    bool filterEarly = anchorSelVector.getSelSize() > 0 && canFilterEarly(scanState);
+    if (filterEarly && nodeGroupScanState.numBatchesWithoutEarlyFilter > 0) {
+        nodeGroupScanState.numBatchesWithoutEarlyFilter--;
+        filterEarly = false;
+    }
+    if (filterEarly) {
+        const bool wasUnfiltered = anchorSelVector.isUnfiltered();
+        const auto numVisible = anchorSelVector.getSelSize();
+        for (auto i = 0u; i < scanState.columnIDs.size(); i++) {
+            if (filtersEarly(scanState, i)) {
+                scanColumn(i);
+            }
+        }
+        for (auto i = 0u; i < scanState.columnIDs.size(); i++) {
+            if (filtersEarly(scanState, i)) {
+                scanState.columnPredicateSets[i].filter(*scanState.outputVectors[i],
+                    anchorSelVector);
+            }
+        }
+        const bool keptMany = wasUnfiltered && anchorSelVector.getSelSize() * 16 >= numVisible;
+        if (keptMany) {
+            anchorSelVector.setToUnfiltered(numVisible);
+        }
+        auto& backoff = nodeGroupScanState.earlyFilterBackoff;
+        if (!keptMany) {
+            backoff = 0;
+        } else if (numVisible >= EARLY_FILTER_BACKOFF_MIN_ROWS) {
+            backoff = std::min<uint8_t>(backoff == 0 ? 1 : 2 * backoff, EARLY_FILTER_MAX_BACKOFF);
+            nodeGroupScanState.numBatchesWithoutEarlyFilter = backoff;
+        }
+    }
+
     if (anchorSelVector.getSelSize() > 0) {
         for (auto i = 0u; i < scanState.columnIDs.size(); i++) {
-            const auto columnID = scanState.columnIDs[i];
-            if (columnID == INVALID_COLUMN_ID) {
-                scanState.outputVectors[i]->setAllNull();
-                continue;
+            if (!filterEarly || !filtersEarly(scanState, i)) {
+                scanColumn(i);
             }
-            if (columnID == ROW_IDX_COLUMN_ID) {
-                for (auto rowIdx = 0u; rowIdx < numRowsToScan; rowIdx++) {
-                    scanState.rowIdxVector->setValue<row_idx_t>(rowIdx,
-                        rowIdx + rowIdxInGroup + startRowIdx);
-                }
-                continue;
-            }
-            DASSERT(columnID < chunks.size());
-            chunks[columnID]->scan(transaction, nodeGroupScanState.chunkStates[i],
-                *scanState.outputVectors[i], rowIdxInGroup, numRowsToScan);
         }
     }
     if (semiMaskEnabled && !maskBeforeColumns && anchorSelVector.getSelSize() > 0) {

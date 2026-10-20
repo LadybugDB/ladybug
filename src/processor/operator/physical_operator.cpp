@@ -244,6 +244,21 @@ void PhysicalOperator::finalize(ExecutionContext* context) {
 }
 
 void PhysicalOperator::registerProfilingMetrics(Profiler* profiler) {
+    if (!profiler->enabled) {
+        // Fast path for normal (non-PROFILE) execution: bind to shared disabled dummies
+        // instead of registering into the profiler's metric map. Registration allocates
+        // map nodes, strings and metric objects per operator per task and serializes on
+        // the profiler mutex -- pure overhead when nobody reads the metrics.
+        // These must have static (not thread_local) storage: pooled physical plans
+        // outlive threads and migrate across them, so a thread_local dummy would dangle
+        // once its thread exits. Sharing is safe because disabled metrics never mutate
+        // state (TimeMetric::start/stop and NumericMetric::increase return early when
+        // enabled==false), so there is no data race on the shared instances.
+        static TimeMetric dummyTime{false};
+        static NumericMetric dummyNum{false};
+        metrics = std::make_unique<OperatorMetrics>(dummyTime, dummyNum);
+        return;
+    }
     auto executionTime = profiler->registerTimeMetric(getTimeMetricKey());
     auto numOutputTuple = profiler->registerNumericMetric(getNumTupleMetricKey());
     metrics = std::make_unique<OperatorMetrics>(*executionTime, *numOutputTuple);

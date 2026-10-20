@@ -28,6 +28,8 @@ void TableScanState::setToTable(const transaction::Transaction*, Table* table_,
     columnIDs = std::move(columnIDs_);
     columnPredicateSets = std::move(columnPredicateSets_);
     nodeGroupScanState->chunkStates.resize(columnIDs.size());
+    nodeGroupScanState->numBatchesWithoutEarlyFilter = 0;
+    nodeGroupScanState->earlyFilterBackoff = 0;
 }
 
 TableInsertState::TableInsertState(std::vector<ValueVector*> propertyVectors)

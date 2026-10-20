@@ -1,7 +1,10 @@
+#include <algorithm>
+
 #include "binder/binder.h"
 #include "binder/expression/aggregate_function_expression.h"
 #include "binder/expression/scalar_function_expression.h"
 #include "binder/expression_binder.h"
+#include "binder/expression_visitor.h"
 #include "catalog/catalog.h"
 #include "common/exception/binder.h"
 #include "function/arithmetic/vector_arithmetic_functions.h"
@@ -22,6 +25,14 @@ using namespace lbug::catalog;
 
 namespace lbug {
 namespace binder {
+
+static bool containsExpressionNamed(const Expression& expression, const std::string& uniqueName) {
+    if (expression.getUniqueName() == uniqueName) {
+        return true;
+    }
+    return std::ranges::any_of(ExpressionChildrenCollector::collectChildren(expression),
+        [&](const auto& child) { return containsExpressionNamed(*child, uniqueName); });
+}
 
 std::shared_ptr<Expression> ExpressionBinder::bindFunctionExpression(const ParsedExpression& expr) {
     auto funcExpr = expr.constPtrCast<ParsedFunctionExpression>();
@@ -180,6 +191,18 @@ std::shared_ptr<Expression> ExpressionBinder::bindAggregateFunctionExpression(
         AggregateFunctionExpression::getUniqueName(function.name, children, function.isDistinct);
     if (children.empty()) {
         uniqueExpressionName = binder->getUniqueExpressionName(uniqueExpressionName);
+    } else if (config.bindingProjectionList &&
+               std::ranges::any_of(binder->scope.getExpressions(), [&](const auto& expr) {
+                   return containsExpressionNamed(*expr, uniqueExpressionName);
+               })) {
+        // The name is structural, so this aggregate would share it, and its column, with the
+        // earlier clause's result, e.g. the group key c in WITH x, count(x) AS c RETURN c,
+        // count(x), or count(x) inside c in WITH x, count(x) + x AS c RETURN c, count(x) + x.
+        auto [entry, isNew] = config.projectionAggregateNames.try_emplace(uniqueExpressionName);
+        if (isNew) {
+            entry->second = binder->getUniqueExpressionName(uniqueExpressionName);
+        }
+        uniqueExpressionName = entry->second;
     }
     std::unique_ptr<FunctionBindData> bindData;
     if (function.bindFunc) {

@@ -304,28 +304,25 @@ protected:
     void resetInMemoryStats();
 
 private:
-    using flush_buffer_func_t = std::function<ColumnChunkMetadata(const std::span<uint8_t>,
-        FileHandle*, const PageRange&, const ColumnChunkMetadata&)>;
-    flush_buffer_func_t initializeFlushBufferFunction(
-        std::shared_ptr<CompressionAlg> compression) const;
+    // Direct dispatch helpers for flush/metadata (called without std::function indirection,
+    // so no per-chunk heap allocation and no `this`-capture lifetime issues under moves).
+    ColumnChunkMetadata flushBufferImpl(std::span<uint8_t> buffer, FileHandle* dataFH,
+        const PageRange& entry, const ColumnChunkMetadata& otherMetadata) const;
+    ColumnChunkMetadata getMetadataImpl(std::span<const uint8_t> buffer, uint64_t numValues,
+        StorageValue minValue, StorageValue maxValue) const;
     uint64_t getBufferSize(uint64_t capacity_) const;
 
 protected:
-    using get_metadata_func_t = std::function<ColumnChunkMetadata(const std::span<uint8_t>,
-        uint64_t, StorageValue, StorageValue)>;
-    using get_min_max_func_t =
-        std::function<std::pair<StorageValue, StorageValue>(const uint8_t*, uint64_t)>;
-
     ResidencyState residencyState;
     common::LogicalType dataType;
     bool enableCompression;
+    // Owned compression algorithm for the flush/metadata dispatch helpers below.
+    std::shared_ptr<CompressionAlg> compressionAlg;
     uint32_t numBytesPerValue;
     uint64_t capacity;
     std::unique_ptr<MemoryBuffer> buffer;
     std::unique_ptr<NullChunkData> nullData;
     uint64_t numValues;
-    flush_buffer_func_t flushBufferFunction;
-    get_metadata_func_t getMetadataFunction;
 
     // On-disk metadata for column chunk.
     ColumnChunkMetadata metadata;

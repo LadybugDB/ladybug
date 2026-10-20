@@ -30,6 +30,9 @@ void PathPropertyProbe::initLocalStateInternal(ResultSet* /*resultSet_*/,
         StructVector::getFieldVectorRaw(*relsDataVector, InternalKeyword::SRC);
     pathDstNodeIDsDataVector =
         StructVector::getFieldVectorRaw(*relsDataVector, InternalKeyword::DST);
+    // Clear for pooled-plan reuse (fresh operators start empty).
+    pathNodesPropertyDataVectors.clear();
+    pathRelsPropertyDataVectors.clear();
     for (auto fieldIdx : info.nodeFieldIndices) {
         pathNodesPropertyDataVectors.push_back(
             StructVector::getFieldVector(nodesDataVector, fieldIdx).get());

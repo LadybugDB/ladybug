@@ -7,6 +7,7 @@ namespace lbug {
 namespace processor {
 
 void CrossProduct::initLocalStateInternal(ResultSet* resultSet, ExecutionContext* /*context*/) {
+    vectorsToScan.clear();
     for (auto& pos : info.outVecPos) {
         vectorsToScan.push_back(resultSet->getValueVector(pos).get());
     }

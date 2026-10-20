@@ -43,6 +43,10 @@ struct RelTableScanState : TableScanState {
     // groups have been scanned (the local/uncommitted scan and downstream resume paths
     // iterate over the full batch).
     std::vector<common::sel_t> allBoundNodePositions;
+    // Reusable workspace for RelTable::initScanState: the batch's bound-node positions
+    // (copied from the input selection vector, then sorted by node offset). Kept on the
+    // scan state so repeated per-morsel inits reuse the buffer instead of allocating.
+    std::vector<common::sel_t> positionsBuffer;
 
     // Multi-parent packed scan support (see docs/multi_parent_lifetime.md). When
     // packedMultiParentScan is true, the CSR scan may serve children of MULTIPLE bound parents
@@ -253,6 +257,9 @@ public:
     void reclaimStorage(PageAllocator& pageAllocator) const override;
 
     common::row_idx_t getNumTotalRows(const transaction::Transaction* transaction) override;
+    // Rels of a native rel table that the transaction can see, as count(*) counts them.
+    common::row_idx_t getNumVisibleRels(const transaction::Transaction* transaction,
+        common::RelDataDirection direction);
     virtual common::row_idx_t getNumActiveBoundNodes(const transaction::Transaction* transaction,
         common::RelDataDirection direction);
     virtual std::vector<std::pair<common::offset_t, common::row_idx_t>> getDegreeEntries(

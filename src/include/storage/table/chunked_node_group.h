@@ -202,7 +202,7 @@ public:
         common::offset_t offsetInOtherNodeGroup, common::offset_t numRowsToAppend);
 
     void scan(const transaction::Transaction* transaction, const TableScanState& scanState,
-        const NodeGroupScanState& nodeGroupScanState, common::offset_t rowIdxInGroup,
+        NodeGroupScanState& nodeGroupScanState, common::offset_t rowIdxInGroup,
         common::length_t numRowsToScan) const;
 
     template<ResidencyState SCAN_RESIDENCY_STATE>

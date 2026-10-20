@@ -9,6 +9,8 @@ namespace processor {
 
 void OrderByScanLocalState::init(std::vector<DataPos>& outVectorPos, SortSharedState& sharedState,
     ResultSet& resultSet) {
+    // Clear for pooled-plan reuse (fresh states start empty).
+    vectorsToRead.clear();
     for (auto& dataPos : outVectorPos) {
         vectorsToRead.push_back(resultSet.getValueVector(dataPos).get());
     }

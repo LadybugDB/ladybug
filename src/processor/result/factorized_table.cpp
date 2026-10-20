@@ -14,8 +14,11 @@ using namespace lbug::storage;
 namespace lbug {
 namespace processor {
 
-DataBlock::DataBlock(storage::MemoryManager* mm, uint64_t size) : numTuples{0}, freeSize{size} {
-    block = mm->allocateBuffer(true /* initializeToZero */, size);
+static constexpr uint64_t ZERO_ON_CLAIM_GRANULE = 4096;
+
+DataBlock::DataBlock(storage::MemoryManager* mm, uint64_t size, bool zeroOnClaim)
+    : numTuples{0}, freeSize{size}, numUninitializedBytes{zeroOnClaim ? size : 0} {
+    block = mm->allocateBuffer(!zeroOnClaim /* initializeToZero */, size);
 }
 
 DataBlock::~DataBlock() = default;
@@ -29,12 +32,21 @@ std::span<uint8_t> DataBlock::getSizedData() const {
 uint8_t* DataBlock::getWritableData() const {
     return block->getBuffer().last(freeSize).data();
 }
+void DataBlock::zeroClaimedBytes() {
+    auto size = block->getBuffer().size();
+    auto zeroStart = size - numUninitializedBytes;
+    auto claimedEnd = size - freeSize;
+    auto zeroEnd = std::min<uint64_t>(size,
+        (claimedEnd + ZERO_ON_CLAIM_GRANULE - 1) / ZERO_ON_CLAIM_GRANULE * ZERO_ON_CLAIM_GRANULE);
+    memset(getData() + zeroStart, 0, zeroEnd - zeroStart);
+    numUninitializedBytes = size - zeroEnd;
+}
 void DataBlock::resetNumTuplesAndFreeSize() {
     freeSize = block->getBuffer().size();
     numTuples = 0;
 }
 void DataBlock::resetToZero() {
-    memset(block->getBuffer().data(), 0, block->getBuffer().size());
+    memset(block->getBuffer().data(), 0, block->getBuffer().size() - numUninitializedBytes);
 }
 
 void DataBlock::preventDestruction() {
@@ -52,6 +64,8 @@ void DataBlock::copyTuples(DataBlock* blockToCopyFrom, ft_tuple_idx_t tupleIdxTo
     }
     blockToCopyInto->numTuples += numTuplesToCopy;
     blockToCopyInto->freeSize -= (numTuplesToCopy * numBytesPerTuple);
+    blockToCopyInto->numUninitializedBytes =
+        std::min(blockToCopyInto->numUninitializedBytes, blockToCopyInto->freeSize);
 }
 
 void DataBlockCollection::merge(DataBlockCollection& other) {
@@ -131,18 +145,19 @@ void FactorizedTable::resize(uint64_t numTuples) {
         auto numTuplesToAdd = numTuples - this->numTuples;
         auto numBytesPerTuple = tableSchema.getNumBytesPerTuple();
         while (flatTupleBlockCollection->needAllocation(numTuplesToAdd * numBytesPerTuple)) {
-            auto newBlock = std::make_unique<DataBlock>(memoryManager, flatTupleBlockSize);
+            auto newBlock = std::make_unique<DataBlock>(memoryManager, flatTupleBlockSize,
+                true /* zeroOnClaim */);
             flatTupleBlockCollection->append(std::move(newBlock));
             auto numTuplesToAddInBlock =
                 std::min(static_cast<uint32_t>(numTuplesToAdd), numFlatTuplesPerBlock);
             auto block = flatTupleBlockCollection->getLastBlock();
-            block->freeSize -= numBytesPerTuple * numTuplesToAddInBlock;
+            block->claim(numBytesPerTuple * numTuplesToAddInBlock);
             block->numTuples += numTuplesToAddInBlock;
             numTuplesToAdd -= numTuplesToAddInBlock;
         }
         DASSERT(numTuplesToAdd < numFlatTuplesPerBlock);
         auto block = flatTupleBlockCollection->getLastBlock();
-        block->freeSize -= numBytesPerTuple * numTuplesToAdd;
+        block->claim(numBytesPerTuple * numTuplesToAdd);
         block->numTuples += numTuplesToAdd;
     } else {
         auto numTuplesRemaining = numTuples;
@@ -163,12 +178,12 @@ void FactorizedTable::resize(uint64_t numTuples) {
 uint8_t* FactorizedTable::appendEmptyTuple() {
     auto numBytesPerTuple = tableSchema.getNumBytesPerTuple();
     if (flatTupleBlockCollection->needAllocation(numBytesPerTuple)) {
-        auto newBlock = std::make_unique<DataBlock>(memoryManager, flatTupleBlockSize);
+        auto newBlock =
+            std::make_unique<DataBlock>(memoryManager, flatTupleBlockSize, true /* zeroOnClaim */);
         flatTupleBlockCollection->append(std::move(newBlock));
     }
     auto block = flatTupleBlockCollection->getLastBlock();
-    uint8_t* tuplePtr = block->getWritableData();
-    block->freeSize -= numBytesPerTuple;
+    uint8_t* tuplePtr = block->claim(numBytesPerTuple);
     block->numTuples++;
     numTuples++;
     return tuplePtr;
@@ -393,14 +408,15 @@ std::vector<BlockAppendingInfo> FactorizedTable::allocateFlatTupleBlocks(
     std::vector<BlockAppendingInfo> appendingInfos;
     while (numTuplesToAppend > 0) {
         if (flatTupleBlockCollection->needAllocation(numBytesPerTuple)) {
-            auto newBlock = std::make_unique<DataBlock>(memoryManager, flatTupleBlockSize);
+            auto newBlock = std::make_unique<DataBlock>(memoryManager, flatTupleBlockSize,
+                true /* zeroOnClaim */);
             flatTupleBlockCollection->append(std::move(newBlock));
         }
         auto block = flatTupleBlockCollection->getLastBlock();
         auto numTuplesToAppendInCurBlock =
             std::min(numTuplesToAppend, block->freeSize / numBytesPerTuple);
-        appendingInfos.emplace_back(block->getWritableData(), numTuplesToAppendInCurBlock);
-        block->freeSize -= numTuplesToAppendInCurBlock * numBytesPerTuple;
+        appendingInfos.emplace_back(block->claim(numTuplesToAppendInCurBlock * numBytesPerTuple),
+            numTuplesToAppendInCurBlock);
         block->numTuples += numTuplesToAppendInCurBlock;
         numTuplesToAppend -= numTuplesToAppendInCurBlock;
     }

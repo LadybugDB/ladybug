@@ -1,7 +1,9 @@
 #pragma once
 
 #include <memory>
+#include <mutex>
 #include <string>
+#include <thread>
 #include <unordered_map>
 #include <vector>
 
@@ -72,6 +74,28 @@ struct CachedPreparedStatement {
     // logical/physical plan is stale and must be rebound (see
     // https://github.com/LadybugDB/ladybug/issues/1158).
     uint64_t planVersion = 0;
+
+    // Pool of cloned physical plans ready for reuse, keyed by executing thread.
+    // Cloning the cached template per execution costs hundreds of small allocations
+    // (operators, evaluators, print infos, schemas); pooled plans are reset via
+    // prepareForReuse() and reused instead. Capped per thread: deeper reentrancy
+    // (nested same-statement execution) falls back to fresh clones. Guarded by
+    // physicalPlanPoolMutex; entries are dropped with the statement.
+    // Thread affinity is a perf hint only: plans are interchangeable across threads.
+    // A stale entry from an exited thread is therefore safe to hand to a new thread
+    // whose std::thread::id happens to compare equal, and empty per-thread vectors
+    // are pruned on checkout so short-lived-thread churn cannot grow the map
+    // unboundedly (see checkoutPooledPhysicalPlan / recyclePooledPhysicalPlan).
+    // Total retained plans are bounded by MAX_POOLED_THREADS * per-thread limit.
+    // The per-thread limit is runtime-configurable via the
+    // `physical_plan_pool_per_thread` setting (DBConfig); 0 disables pooling.
+    // Defaults below mirror the setting's default; the pool code reads the live
+    // setting rather than these constants.
+    static constexpr size_t PHYSICAL_PLAN_POOL_PER_THREAD_DEFAULT = 5;
+    static constexpr size_t PHYSICAL_PLAN_POOL_MAX_THREADS = 32;
+    std::mutex physicalPlanPoolMutex;
+    std::unordered_map<std::thread::id, std::vector<std::unique_ptr<processor::PhysicalPlan>>>
+        physicalPlanPool;
 
     CachedPreparedStatement();
     ~CachedPreparedStatement();

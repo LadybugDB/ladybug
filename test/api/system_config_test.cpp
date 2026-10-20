@@ -172,6 +172,42 @@ TEST_F(SystemConfigTest, testDisableDefaultHashIndexFromDBConfig) {
     ASSERT_EQ(nodeTable.tryGetPKIndex(), nullptr);
 }
 
+TEST_F(SystemConfigTest, testPhysicalPlanPoolPerThreadSetting) {
+    // Default comes from SystemConfig.
+    ASSERT_EQ(systemConfig->physicalPlanPoolPerThread, 5);
+    auto db = std::make_unique<Database>(databasePath, *systemConfig);
+    auto con = std::make_unique<Connection>(db.get());
+    auto result = con->query("CALL current_setting('physical_plan_pool_per_thread') RETURN *");
+    ASSERT_TRUE(result->isSuccess());
+    ASSERT_EQ(TestHelper::convertResultToString(*result), std::vector<std::string>{"5"});
+    // Runtime update via CALL; 0 disables pooled-plan reuse (fresh clone path).
+    assertQuery(*con->query("CALL physical_plan_pool_per_thread=0;"));
+    result = con->query("CALL current_setting('physical_plan_pool_per_thread') RETURN *");
+    ASSERT_TRUE(result->isSuccess());
+    ASSERT_EQ(TestHelper::convertResultToString(*result), std::vector<std::string>{"0"});
+    assertQuery(*con->query("CREATE NODE TABLE P(id INT64, PRIMARY KEY(id));"));
+    assertQuery(*con->query("UNWIND range(1, 10) AS i CREATE (:P {id: i});"));
+    auto prepared = con->prepare("MATCH (p:P) WHERE p.id = $x RETURN p.id;");
+    ASSERT_TRUE(prepared->isSuccess());
+    for (auto i = 1; i <= 10; ++i) {
+        auto r = con->execute(prepared.get(), std::make_pair(std::string("x"), (int64_t)i));
+        ASSERT_TRUE(r->isSuccess()) << r->toString();
+        ASSERT_EQ(TestHelper::convertResultToString(*r),
+            std::vector<std::string>{std::to_string(i)});
+    }
+    // Negative values are rejected.
+    auto bad = con->query("CALL physical_plan_pool_per_thread=-1;");
+    ASSERT_FALSE(bad->isSuccess());
+    // Restore pooling and verify the reuse path still returns correct results.
+    assertQuery(*con->query("CALL physical_plan_pool_per_thread=5;"));
+    for (auto i = 1; i <= 10; ++i) {
+        auto r = con->execute(prepared.get(), std::make_pair(std::string("x"), (int64_t)i));
+        ASSERT_TRUE(r->isSuccess()) << r->toString();
+        ASSERT_EQ(TestHelper::convertResultToString(*r),
+            std::vector<std::string>{std::to_string(i)});
+    }
+}
+
 // Regression: the per-thread reusable ResultSet used to live in a process-wide thread_local, so
 // on single-threaded builds (where the calling thread runs ProcessorTask::run, e.g. the
 // single-threaded Wasm package) it outlived Database::~Database and released (or reused)

@@ -237,6 +237,10 @@ void HashAggregateSharedState::assertFinalized() const {
 void HashAggregateLocalState::init(HashAggregateSharedState* sharedState, ResultSet& resultSet,
     main::ClientContext* context, std::vector<function::AggregateFunction>& aggregateFunctions,
     std::vector<common::LogicalType> distinctKeyTypes) {
+    // Clear member vectors so re-execution on a reused operator starts clean.
+    keyVectors.clear();
+    dependentKeyVectors.clear();
+    leadingState = nullptr;
     auto& info = sharedState->getAggregateInfo();
     std::vector<LogicalType> keyDataTypes;
     for (auto& pos : info.flatKeysPos) {

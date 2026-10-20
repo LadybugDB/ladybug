@@ -31,6 +31,11 @@ struct ExpressionBinderConfig {
     // may lead to empty result.
     // e.g. [* (r, n | WHERE label(n)='dummy') ]
     bool disableLabelFunctionLiteralRewrite = false;
+    // Set while a projection list is bound: an aggregate there is computed by that projection, so
+    // one whose structural name an earlier clause's expression has gets a fresh name, the same one
+    // for each occurrence in the list. In WHERE or ORDER BY it keeps the structural name.
+    bool bindingProjectionList = false;
+    std::unordered_map<std::string, std::string> projectionAggregateNames;
 };
 
 class ExpressionBinder {

@@ -18,6 +18,8 @@ std::string OrderByPrintInfo::toString() const {
 }
 
 void OrderBy::initLocalStateInternal(ResultSet* resultSet, ExecutionContext* context) {
+    payloadVectors.clear();
+    orderByVectors.clear();
     localState = SortLocalState();
     localState.init(info, *sharedState, storage::MemoryManager::Get(*context->clientContext));
     for (auto& dataPos : info.payloadsPos) {

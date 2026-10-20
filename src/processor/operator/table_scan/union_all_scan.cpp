@@ -45,6 +45,8 @@ std::unique_ptr<UnionAllScanMorsel> UnionAllScanSharedState::getMorselNoLock(
 
 void UnionAllScan::initLocalStateInternal(ResultSet* /*resultSet_*/,
     ExecutionContext* /*context*/) {
+    // Clear for pooled-plan reuse (fresh operators start empty).
+    vectors.clear();
     for (auto& dataPos : info.outputPositions) {
         vectors.push_back(resultSet->getValueVector(dataPos).get());
     }

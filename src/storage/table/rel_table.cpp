@@ -220,13 +220,29 @@ void RelTable::initScanState(Transaction* transaction, TableScanState& scanState
     // Collect the positions of this batch's bound nodes. On a fresh batch they come from
     // the input sel vector; when resuming a batch (e.g. a multi rel table scan moving to
     // the next rel table over the same bound nodes) they were cached by the previous init.
-    std::vector<common::sel_t> positions;
+    // Reusable workspace (no per-batch allocation): the batch's bound-node positions.
+    auto& positions = relScanState.positionsBuffer;
     const auto& sel = resetCachedBoundNodeSelVec ?
                           relScanState.nodeIDVector->state->getSelVector() :
                           relScanState.cachedBoundNodeSelVector;
     positions.resize(sel.getSelSize());
+    if (positions.empty()) {
+        // No bound nodes in this batch: drop any stale multi-group plan from the previous
+        // batch so scanNext() observes an exhausted batch instead of rescanning it.
+        relScanState.boundNodeGroupPlan.clear();
+        relScanState.allBoundNodePositions.clear();
+        scanState.source = TableScanSource::NONE;
+        return;
+    }
+    bool alreadySorted = true;
+    common::offset_t prevOffset = 0;
     for (auto i = 0u; i < sel.getSelSize(); i++) {
         positions[i] = sel[i];
+        const auto offset = relScanState.nodeIDVector->readNodeOffset(sel[i]);
+        if (i > 0 && offset < prevOffset) {
+            alreadySorted = false;
+        }
+        prevOffset = offset;
     }
     // The CSR scan processes the bound nodes of a batch in a single forward pass over the
     // CSR lists, which are laid out in ascending bound-node-offset order within each node
@@ -235,21 +251,24 @@ void RelTable::initScanState(Transaction* transaction, TableScanState& scanState
     // (a)->(b)->(c) as scan(a) -> extend(a->b) -> extend(b->c)), the bound nodes are the
     // children of a single parent and come in arbitrary order, so sort them by offset.
     // Parents whose CSR list lies before the current scan position would otherwise be
-    // silently skipped by CSRNodeGroup::scanCommittedPersistentWithCache.
-    std::sort(positions.begin(), positions.end(), [&](common::sel_t a, common::sel_t b) {
-        return relScanState.nodeIDVector->readNodeOffset(a) <
-               relScanState.nodeIDVector->readNodeOffset(b);
-    });
-    // Partition the bound nodes by node group. They form a contiguous sequence within a
-    // single node group when the input is a node table scan. However, the children of a
-    // single parent can span multiple node groups, in which case the batch is scanned one
-    // node group at a time; see RelTableScanState::boundNodeGroupPlan.
-    std::map<node_group_idx_t, std::vector<common::sel_t>> groups;
-    for (const auto pos : positions) {
-        const auto boundNodeID = relScanState.nodeIDVector->getValue<nodeID_t>(pos);
-        groups[StorageUtils::getNodeGroupIdx(boundNodeID.offset)].push_back(pos);
+    // silently skipped by CSRNodeGroup::scanCommittedPersistentWithCache. Batches that
+    // already arrive in ascending offset order skip the sort.
+    if (!alreadySorted) {
+        std::sort(positions.begin(), positions.end(), [&](common::sel_t a, common::sel_t b) {
+            return relScanState.nodeIDVector->readNodeOffset(a) <
+                   relScanState.nodeIDVector->readNodeOffset(b);
+        });
     }
-    if (groups.size() <= 1) {
+    // Partition the bound nodes by node group. Offsets are ascending now, so node groups
+    // form contiguous runs: comparing the first/last group detects the common
+    // single-group case without a tree or per-group vectors. The children of a single
+    // parent can still span multiple node groups, in which case the batch is scanned one
+    // node group at a time; see RelTableScanState::boundNodeGroupPlan.
+    const auto firstGroupIdx =
+        StorageUtils::getNodeGroupIdx(relScanState.nodeIDVector->readNodeOffset(positions.front()));
+    const auto lastGroupIdx =
+        StorageUtils::getNodeGroupIdx(relScanState.nodeIDVector->readNodeOffset(positions.back()));
+    if (firstGroupIdx == lastGroupIdx) {
         // Single node group (the common case): historical fast path.
         relScanState.boundNodeGroupPlan.clear();
         relScanState.allBoundNodePositions.clear();
@@ -291,13 +310,32 @@ void RelTable::initScanState(Transaction* transaction, TableScanState& scanState
         }
         return;
     }
-    // Multi-group batch: scan one node group at a time.
-    relScanState.allBoundNodePositions = std::move(positions);
+    // Multi-group batch: scan one node group at a time. Offsets are ascending, so node
+    // groups form contiguous runs over the sorted positions: linear run partition, no map.
+    // allBoundNodePositions keeps a copy (reusing its capacity across batches); the
+    // workspace buffer stays intact for the next batch.
+    relScanState.allBoundNodePositions = positions;
     relScanState.boundNodeGroupPlan.clear();
-    for (auto& [groupIdx, groupPositions] : groups) {
-        relScanState.boundNodeGroupPlan.emplace_back(
-            getDirectedTableData(relScanState.direction)->getNodeGroup(groupIdx),
-            std::move(groupPositions));
+    auto runStart = 0u;
+    auto runGroupIdx = firstGroupIdx;
+    for (auto k = 1u;; ++k) {
+        const auto runEnds = (k == positions.size());
+        const auto groupIdx = runEnds ?
+                                  runGroupIdx :
+                                  StorageUtils::getNodeGroupIdx(
+                                      relScanState.nodeIDVector->readNodeOffset(positions[k]));
+        if (runEnds || groupIdx != runGroupIdx) {
+            std::vector<common::sel_t> runPositions(positions.begin() + runStart,
+                positions.begin() + k);
+            relScanState.boundNodeGroupPlan.emplace_back(
+                getDirectedTableData(relScanState.direction)->getNodeGroup(runGroupIdx),
+                std::move(runPositions));
+            if (runEnds) {
+                break;
+            }
+            runStart = k;
+            runGroupIdx = groupIdx;
+        }
     }
     relScanState.startNextBoundNodeGroup(transaction);
 }
@@ -751,9 +789,218 @@ row_idx_t RelTable::getNumTotalRows(const Transaction* transaction) {
     return numLocalRows + nextRelOffset;
 }
 
+// COPY and checkpoint flush a persistent group before publishing it, so its CSR header chunks are
+// on disk: read them through their columns.
+static std::unique_ptr<ColumnChunkData> scanCSRHeaderColumn(MemoryManager& memoryManager,
+    ColumnChunk& chunk, Column& column, offset_t numValues) {
+    auto result = ColumnChunkFactory::createColumnChunkData(memoryManager, LogicalType::UINT64(),
+        false /*enableCompression*/, StorageConfig::NODE_GROUP_SIZE, ResidencyState::IN_MEMORY,
+        false /*hasNullData*/, false /*initializeToZero*/);
+    ChunkState chunkState;
+    chunk.initializeScanState(chunkState, &column);
+    column.scan(chunkState, result.get(), 0 /*offsetInChunk*/, numValues);
+    return result;
+}
+
+static uint64_t readCSRHeaderValue(ColumnChunk& chunk, Column& column, offset_t offset) {
+    ChunkState chunkState;
+    chunk.initializeScanState(chunkState, &column);
+    const auto [segmentState, offsetInSegment] = chunkState.findSegment(offset);
+    uint64_t value = 0;
+    column.scanSegment(*segmentState, offsetInSegment, 1 /*length*/,
+        reinterpret_cast<uint8_t*>(&value));
+    return value;
+}
+
+// Rows [0, numRows) of the group, gap rows included, are all visible to the transaction: no version
+// info, or no delete stamp and every insert visible, which version info answers per vector when one
+// version covers it.
+static bool allRowsVisible(const ChunkedNodeGroup& group, row_idx_t numRows,
+    const Transaction* transaction) {
+    if (!group.hasVersionInfo()) {
+        return true;
+    }
+    const auto& versionInfo = *group.getVersionInfo();
+    return !versionInfo.hasDeletions() &&
+           versionInfo.getNumVisibleRows(transaction, 0, numRows) == numRows;
+}
+
+// Adds each node's rels in a persistent group that the transaction can see. A node's rels are the
+// first `length` rows of its CSR region; the rest of the region is gap rows.
+static void addPersistentDegrees(MemoryManager& memoryManager, const RelTableData& relTableData,
+    ChunkedNodeGroup& group, const Transaction* transaction, std::vector<row_idx_t>& degrees,
+    std::vector<row_idx_t>& deletedRows) {
+    auto& csrHeader = group.cast<ChunkedCSRNodeGroup>().getCSRHeader();
+    const auto numNodes = csrHeader.length->getNumValues();
+    const auto lengths = scanCSRHeaderColumn(memoryManager, *csrHeader.length,
+        *relTableData.getCSRLengthColumn(), numNodes);
+    const auto* lengthData = reinterpret_cast<const uint64_t*>(lengths->getData());
+    if (allRowsVisible(group, group.getNumRows(), transaction)) {
+        for (offset_t i = 0; i < numNodes; ++i) {
+            degrees[i] += lengthData[i];
+        }
+        return;
+    }
+    const auto offsets = scanCSRHeaderColumn(memoryManager, *csrHeader.offset,
+        *relTableData.getCSROffsetColumn(), numNodes);
+    const auto* endOffsets = reinterpret_cast<const uint64_t*>(offsets->getData());
+    const auto& versionInfo = *group.getVersionInfo();
+    const auto numRows = group.getNumRows();
+    if (versionInfo.getNumInsertedRows(transaction, 0, numRows) == numRows) {
+        // Only deletions hide rows: take each deleted row off the node whose region holds it. Gap
+        // rows are never deleted.
+        for (offset_t i = 0; i < numNodes; ++i) {
+            degrees[i] += lengthData[i];
+        }
+        deletedRows.clear();
+        versionInfo.getDeletedRows(transaction, 0, numRows, deletedRows);
+        for (const auto row : deletedRows) {
+            const auto node = std::upper_bound(endOffsets, endOffsets + numNodes, row) - endOffsets;
+            if (static_cast<offset_t>(node) < numNodes) {
+                degrees[node]--;
+            }
+        }
+        return;
+    }
+    for (offset_t i = 0; i < numNodes; ++i) {
+        const auto start = i == 0 ? 0 : endOffsets[i - 1];
+        degrees[i] += versionInfo.getNumVisibleRows(transaction, start, lengthData[i]);
+    }
+}
+
+// The rels in a persistent group that the transaction can see.
+static row_idx_t countVisiblePersistentRels(MemoryManager& memoryManager,
+    const RelTableData& relTableData, ChunkedNodeGroup& group, const Transaction* transaction) {
+    auto& csrHeader = group.cast<ChunkedCSRNodeGroup>().getCSRHeader();
+    const auto numNodes = csrHeader.length->getNumValues();
+    const auto lengths = scanCSRHeaderColumn(memoryManager, *csrHeader.length,
+        *relTableData.getCSRLengthColumn(), numNodes);
+    const auto* lengthData = reinterpret_cast<const uint64_t*>(lengths->getData());
+    row_idx_t numRels = 0;
+    for (offset_t i = 0; i < numNodes; ++i) {
+        numRels += lengthData[i];
+    }
+    if (!group.hasVersionInfo()) {
+        return numRels;
+    }
+    const auto& versionInfo = *group.getVersionInfo();
+    const auto numRows = group.getNumRows();
+    if (versionInfo.getNumInsertedRows(transaction, 0, numRows) == numRows) {
+        // Gap rows are never deleted, so every deletion is one of the rels.
+        return numRels - versionInfo.getNumDeletions(transaction, 0, numRows);
+    }
+    const auto offsets = scanCSRHeaderColumn(memoryManager, *csrHeader.offset,
+        *relTableData.getCSROffsetColumn(), numNodes);
+    const auto* endOffsets = reinterpret_cast<const uint64_t*>(offsets->getData());
+    numRels = 0;
+    for (offset_t i = 0; i < numNodes; ++i) {
+        const auto start = i == 0 ? 0 : endOffsets[i - 1];
+        numRels += versionInfo.getNumVisibleRows(transaction, start, lengthData[i]);
+    }
+    return numRels;
+}
+
+// Rows [0, n) of each pinned in-memory group are visible to the transaction, where n is the group's
+// row count when it was found fully visible, else 0. The CSR index is live, so rows appended after
+// that are checked one by one.
+static std::vector<row_idx_t> getVisibleInMemPrefixes(const CSRNodeGroupScanPin& pin,
+    const Transaction* transaction) {
+    std::vector<row_idx_t> prefixes(pin.inMemGroups.size(), 0);
+    for (auto i = 0u; i < pin.inMemGroups.size(); ++i) {
+        if (!pin.inMemGroups[i]) {
+            continue;
+        }
+        // An append stamps its rows' versions before it adds them to numRows, so the versions of
+        // every row below this count are in place when they are checked.
+        const auto numRows = pin.inMemGroups[i]->getNumRows();
+        if (allRowsVisible(*pin.inMemGroups[i], numRows, transaction)) {
+            prefixes[i] = numRows;
+        }
+    }
+    return prefixes;
+}
+
+static row_idx_t countVisibleInMemRows(const CSRNodeGroupScanPin& pin,
+    const std::vector<row_idx_t>& visiblePrefixes, const NodeCSRIndex& index,
+    const Transaction* transaction) {
+    auto isVisible = [&](row_idx_t rowIdx) {
+        if (rowIdx == INVALID_ROW_IDX) {
+            return false;
+        }
+        const auto [chunkIdx, rowInChunk] =
+            StorageUtils::getQuotientRemainder(rowIdx, StorageConfig::CHUNKED_NODE_GROUP_CAPACITY);
+        if (chunkIdx >= pin.inMemGroups.size() || !pin.inMemGroups[chunkIdx]) {
+            return false;
+        }
+        if (rowInChunk < visiblePrefixes[chunkIdx]) {
+            return true;
+        }
+        const auto& group = *pin.inMemGroups[chunkIdx];
+        return group.isInserted(transaction, rowInChunk) &&
+               !group.isDeleted(transaction, rowInChunk);
+    };
+    if (!index.isSequential) {
+        row_idx_t count = 0;
+        for (const auto rowIdx : index.rowIndices) {
+            count += isVisible(rowIdx);
+        }
+        return count;
+    }
+    // Sequential rows are contiguous: take each chunk's visible prefix at once.
+    row_idx_t count = 0;
+    auto row = index.rowIndices[0];
+    auto remaining = index.rowIndices[1];
+    while (remaining > 0) {
+        const auto [chunkIdx, rowInChunk] =
+            StorageUtils::getQuotientRemainder(row, StorageConfig::CHUNKED_NODE_GROUP_CAPACITY);
+        const auto numInChunk =
+            std::min(remaining, StorageConfig::CHUNKED_NODE_GROUP_CAPACITY - rowInChunk);
+        row_idx_t numInPrefix = 0;
+        if (chunkIdx < visiblePrefixes.size() && rowInChunk < visiblePrefixes[chunkIdx]) {
+            numInPrefix = std::min(numInChunk, visiblePrefixes[chunkIdx] - rowInChunk);
+        }
+        count += numInPrefix;
+        for (auto i = numInPrefix; i < numInChunk; ++i) {
+            count += isVisible(row + i);
+        }
+        row += numInChunk;
+        remaining -= numInChunk;
+    }
+    return count;
+}
+
+// One node's committed rels the transaction can see.
+static row_idx_t getCommittedDegree(const RelTableData& relTableData, const CSRNodeGroup& nodeGroup,
+    offset_t offsetInGroup, const Transaction* transaction) {
+    const auto pin = nodeGroup.captureScanPin(transaction);
+    row_idx_t count = 0;
+    if (auto* persistentGroup = pin.persistent.get()) {
+        auto& csrHeader = persistentGroup->cast<ChunkedCSRNodeGroup>().getCSRHeader();
+        if (offsetInGroup < csrHeader.length->getNumValues()) {
+            const auto length = readCSRHeaderValue(*csrHeader.length,
+                *relTableData.getCSRLengthColumn(), offsetInGroup);
+            if (!persistentGroup->hasVersionInfo()) {
+                count += length;
+            } else {
+                const auto start = offsetInGroup == 0 ?
+                                       0 :
+                                       readCSRHeaderValue(*csrHeader.offset,
+                                           *relTableData.getCSROffsetColumn(), offsetInGroup - 1);
+                count += persistentGroup->getVersionInfo()->getNumVisibleRows(transaction, start,
+                    length);
+            }
+        }
+    }
+    if (pin.index) {
+        count += countVisibleInMemRows(pin, getVisibleInMemPrefixes(pin, transaction),
+            pin.index->indices[offsetInGroup], transaction);
+    }
+    return count;
+}
+
 // Calls func(offset, degree) for every bound node with at least one rel, in ascending offset
-// order. A degree adds up the node's checkpointed CSR length, its committed in-memory rels and,
-// in a write transaction, its uncommitted rels.
+// order. A degree counts the node's rels the transaction can see: persistent, committed in memory
+// and, in a write transaction, uncommitted.
 template<typename FUNC>
 void RelTable::forEachDegree(const Transaction* transaction, RelDataDirection direction,
     FUNC&& func) {
@@ -767,38 +1014,28 @@ void RelTable::forEachDegree(const Transaction* transaction, RelDataDirection di
         }
     }
     auto localIt = localRels->begin();
-    auto* memoryManager = this->memoryManager;
     auto* relTableData = getDirectedTableData(direction);
-    auto* csrLengthColumn = relTableData->getCSRLengthColumn();
     std::vector<row_idx_t> nodeGroupDegrees;
+    std::vector<row_idx_t> deletedRows;
     for (node_group_idx_t nodeGroupIdx = 0; nodeGroupIdx < relTableData->getNumNodeGroups();
          nodeGroupIdx++) {
         auto* nodeGroup = relTableData->getNodeGroup(nodeGroupIdx);
         if (!nodeGroup) {
             continue;
         }
-        auto& csrNodeGroup = nodeGroup->cast<CSRNodeGroup>();
         auto groupStartOffset = StorageUtils::getStartOffsetOfNodeGroup(nodeGroupIdx);
         auto groupEndOffset = groupStartOffset + StorageConfig::NODE_GROUP_SIZE;
         nodeGroupDegrees.assign(StorageConfig::NODE_GROUP_SIZE, 0);
-        if (auto* persistentGroup = csrNodeGroup.getPersistentChunkedGroup()) {
-            auto& csrPersistentGroup = persistentGroup->cast<ChunkedCSRNodeGroup>();
-            auto& csrHeader = csrPersistentGroup.getCSRHeader();
-            auto numNodes = csrHeader.length->getNumValues();
-            auto lengthChunk = ColumnChunkFactory::createColumnChunkData(*memoryManager,
-                LogicalType::UINT64(), false /*enableCompression*/, StorageConfig::NODE_GROUP_SIZE,
-                ResidencyState::IN_MEMORY, false /*hasNullData*/, false /*initializeToZero*/);
-            ChunkState chunkState;
-            csrHeader.length->initializeScanState(chunkState, csrLengthColumn);
-            csrLengthColumn->scan(chunkState, lengthChunk.get(), 0, numNodes);
-            auto* lengthData = reinterpret_cast<const uint64_t*>(lengthChunk->getData());
-            for (offset_t i = 0; i < numNodes; ++i) {
-                nodeGroupDegrees[i] += lengthData[i];
-            }
+        const auto pin = nodeGroup->cast<CSRNodeGroup>().captureScanPin(transaction);
+        if (pin.persistent) {
+            addPersistentDegrees(*memoryManager, *relTableData, *pin.persistent, transaction,
+                nodeGroupDegrees, deletedRows);
         }
-        if (const auto* csrIndex = csrNodeGroup.getCSRIndex()) {
+        if (pin.index) {
+            const auto visiblePrefixes = getVisibleInMemPrefixes(pin, transaction);
             for (offset_t i = 0; i < StorageConfig::NODE_GROUP_SIZE; ++i) {
-                nodeGroupDegrees[i] += csrIndex->getNumRows(i);
+                nodeGroupDegrees[i] +=
+                    countVisibleInMemRows(pin, visiblePrefixes, pin.index->indices[i], transaction);
             }
         }
         for (; localIt != localRels->end() && localIt->first < groupEndOffset; ++localIt) {
@@ -877,6 +1114,35 @@ std::vector<std::pair<offset_t, row_idx_t>> RelTable::getTopKDegrees(const Trans
     return result;
 }
 
+row_idx_t RelTable::getNumVisibleRels(const Transaction* transaction, RelDataDirection direction) {
+    auto* relTableData = getDirectedTableData(direction);
+    row_idx_t numRels = 0;
+    for (node_group_idx_t nodeGroupIdx = 0; nodeGroupIdx < relTableData->getNumNodeGroups();
+         nodeGroupIdx++) {
+        auto* nodeGroup = relTableData->getNodeGroup(nodeGroupIdx);
+        if (!nodeGroup) {
+            continue;
+        }
+        const auto pin = nodeGroup->cast<CSRNodeGroup>().captureScanPin(transaction);
+        if (pin.persistent) {
+            numRels += countVisiblePersistentRels(*memoryManager, *relTableData, *pin.persistent,
+                transaction);
+        }
+        for (const auto& inMemGroup : pin.inMemGroups) {
+            numRels += inMemGroup->getNumVisibleRows(transaction);
+        }
+    }
+    if (transaction->isWriteTransaction()) {
+        if (auto* localTable = transaction->getLocalStorage()->getLocalTable(*this)) {
+            for (const auto& [_, rowIndices] :
+                localTable->cast<LocalRelTable>().getCSRIndex(direction)) {
+                numRels += rowIndices.size();
+            }
+        }
+    }
+    return numRels;
+}
+
 row_idx_t RelTable::getNumActiveBoundNodes(const Transaction* transaction,
     RelDataDirection direction) {
     return getDegreeSummary(transaction, direction).numActiveBoundNodes;
@@ -887,21 +1153,12 @@ row_idx_t RelTable::getDegreeForOffset(const Transaction* transaction, RelDataDi
     const auto nodeGroupIdx = StorageUtils::getNodeGroupIdx(nodeOffset);
     const auto offsetInGroup = nodeOffset - StorageUtils::getStartOffsetOfNodeGroup(nodeGroupIdx);
     auto* relTableData = getDirectedTableData(direction);
-    if (nodeGroupIdx >= relTableData->getNumNodeGroups()) {
-        return 0;
-    }
-    auto* nodeGroup = relTableData->getNodeGroup(nodeGroupIdx);
-    if (!nodeGroup) {
-        return 0;
-    }
-    auto& csrNodeGroup = nodeGroup->cast<CSRNodeGroup>();
     row_idx_t count = 0;
-    if (auto* persistentGroup = csrNodeGroup.getPersistentChunkedGroup()) {
-        count +=
-            persistentGroup->cast<ChunkedCSRNodeGroup>().getCSRHeader().getCSRLength(offsetInGroup);
-    }
-    if (const auto* csrIndex = csrNodeGroup.getCSRIndex()) {
-        count += csrIndex->getNumRows(offsetInGroup);
+    if (nodeGroupIdx < relTableData->getNumNodeGroups()) {
+        if (auto* nodeGroup = relTableData->getNodeGroup(nodeGroupIdx)) {
+            count += getCommittedDegree(*relTableData, nodeGroup->cast<CSRNodeGroup>(),
+                offsetInGroup, transaction);
+        }
     }
     if (transaction->isWriteTransaction()) {
         if (auto* localTable = transaction->getLocalStorage()->getLocalTable(*this)) {

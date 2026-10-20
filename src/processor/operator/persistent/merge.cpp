@@ -45,6 +45,8 @@ void Merge::initLocalStateInternal(ResultSet* resultSet_, ExecutionContext* cont
 
 void MergeLocalState::init(ResultSet& resultSet, main::ClientContext* context, MergeInfo& info) {
     std::vector<common::LogicalType> types;
+    // Clear for pooled-plan reuse (fresh states start empty).
+    keyVectors.clear();
     for (auto& evaluator : info.keyEvaluators) {
         auto keyVector = evaluator->resultVector.get();
         types.push_back(keyVector->dataType.copy());

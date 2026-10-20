@@ -186,5 +186,15 @@ struct EnableSubNodeGroupMorselsSetting {
     static common::Value getSetting(const ClientContext* context);
 };
 
+struct PhysicalPlanPoolPerThreadSetting {
+    static constexpr auto name = "physical_plan_pool_per_thread";
+    static constexpr auto inputType = common::LogicalTypeID::INT64;
+    // How many reusable cloned physical plans each thread retains per cached prepared
+    // statement. 0 disables pooled-plan reuse (every execution clones afresh).
+    // Safety valve for latent plan-reuse state bugs; lowering bounds retained memory.
+    static void setContext(ClientContext* context, const common::Value& parameter);
+    static common::Value getSetting(const ClientContext* context);
+};
+
 } // namespace main
 } // namespace lbug

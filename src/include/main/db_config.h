@@ -29,6 +29,7 @@ struct DBConfig {
     bool enableChecksums;
     bool enableDefaultHashIndex;
     bool enableSpillingToDisk;
+    uint64_t physicalPlanPoolPerThread;
 #if defined(__APPLE__)
     uint32_t threadQos;
 #endif

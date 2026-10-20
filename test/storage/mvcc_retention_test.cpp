@@ -134,6 +134,49 @@ TEST(VersionRetentionTest, DeleteStampsFilterAtHorizon) {
     EXPECT_FALSE(info.hasRetainedEntries(21));
 }
 
+TEST(VersionRetentionTest, DeletedRowsAcrossVectorBoundaries) {
+    VersionInfo info;
+    constexpr auto writerID = Transaction::START_TRANSACTION_ID;
+    constexpr row_idx_t numRows = 2 * DEFAULT_VECTOR_CAPACITY + 10;
+    info.append(writerID, 0, numRows);
+    info.commitInsert(0, numRows, 5);
+    const std::vector<row_idx_t> committed{DEFAULT_VECTOR_CAPACITY - 1, DEFAULT_VECTOR_CAPACITY,
+        numRows - 1};
+    for (const auto row : committed) {
+        info.delete_(writerID + 1, row);
+        info.commitDelete(row, 1, 6);
+    }
+    info.delete_(writerID + 2, 3); // Not committed: hidden from every other transaction.
+    const Transaction reader{TransactionType::READ_ONLY, 7, 10};
+    std::vector<row_idx_t> rows;
+    info.getDeletedRows(&reader, 0, numRows, rows);
+    EXPECT_EQ(rows, committed);
+    EXPECT_EQ(info.getNumDeletions(&reader, 0, numRows), committed.size());
+    rows.clear();
+    info.getDeletedRows(&reader, DEFAULT_VECTOR_CAPACITY, DEFAULT_VECTOR_CAPACITY + 9, rows);
+    EXPECT_EQ(rows, std::vector<row_idx_t>{DEFAULT_VECTOR_CAPACITY});
+    rows.clear();
+    const Transaction olderReader{TransactionType::READ_ONLY, 8, 5};
+    info.getDeletedRows(&olderReader, 0, numRows, rows);
+    EXPECT_TRUE(rows.empty());
+}
+
+TEST(VersionRetentionTest, InsertedRowsIgnoreDeletions) {
+    VersionInfo info;
+    constexpr auto writerID = Transaction::START_TRANSACTION_ID;
+    constexpr row_idx_t numCommitted = DEFAULT_VECTOR_CAPACITY + 5;
+    info.append(writerID, 0, numCommitted);
+    info.commitInsert(0, numCommitted, 5);
+    info.append(writerID + 1, numCommitted, 3); // Not committed.
+    info.delete_(writerID + 2, 1);
+    info.commitDelete(1, 1, 6);
+    const Transaction reader{TransactionType::READ_ONLY, 7, 10};
+    EXPECT_EQ(info.getNumInsertedRows(&reader, 0, numCommitted + 3), numCommitted);
+    EXPECT_EQ(info.getNumVisibleRows(&reader, 0, numCommitted + 3), numCommitted - 1);
+    const Transaction olderReader{TransactionType::READ_ONLY, 8, 4};
+    EXPECT_EQ(info.getNumInsertedRows(&olderReader, 0, numCommitted + 3), 0u);
+}
+
 TEST(VersionRetentionTest, BakedEntriesDoNotCountAsRetained) {
     VersionInfo info;
     constexpr auto writerID = Transaction::START_TRANSACTION_ID;
