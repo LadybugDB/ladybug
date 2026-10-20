@@ -15,6 +15,7 @@
 #include "storage/table/column_chunk_data.h"
 #include "storage/table/csr_chunked_node_group.h"
 #include "storage/table/rel_table.h"
+#include "transaction/transaction_context.h"
 #include <format>
 
 using namespace lbug::catalog;
@@ -136,14 +137,19 @@ static void appendNewChunkedGroup(MemoryManager& mm, transaction::Transaction* t
     RelTable& relTable, CSRNodeGroup& nodeGroup, RelDataDirection direction,
     PageAllocator& pageAllocator) {
     const bool isNewNodeGroup = nodeGroup.isEmpty();
-    const CSRNodeGroupScanSource source = isNewNodeGroup ?
+    const auto* clientContext = transaction->getClientContext();
+    const bool inManualTransaction = clientContext != nullptr &&
+                                     !transaction::TransactionContext::Get(*clientContext)
+                                          .isAutoTransaction();
+    const bool flushNewNodeGroupToDisk = isNewNodeGroup && !inManualTransaction;
+    const CSRNodeGroupScanSource source = flushNewNodeGroupToDisk ?
                                               CSRNodeGroupScanSource::COMMITTED_PERSISTENT :
                                               CSRNodeGroupScanSource::COMMITTED_IN_MEMORY;
     // since each thread operates on distinct node groups
     // We don't need a lock here (to ensure the insert info and append agree on the number of rows
     // in the node group)
     relTable.pushInsertInfo(transaction, direction, nodeGroup, chunkedGroup.getNumRows(), source);
-    if (isNewNodeGroup) {
+    if (flushNewNodeGroupToDisk) {
         auto flushedChunkedGroup = chunkedGroup.flush(transaction, pageAllocator);
 
         // If there are deleted columns that haven't been vacuumed yet
