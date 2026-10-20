@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cmath>
+#include <shared_mutex>
 
 #include "common/enums/rel_direction.h"
 #include "common/enums/rel_multiplicity.h"
@@ -71,12 +72,20 @@ public:
     bool checkIfNodeHasRels(transaction::Transaction* transaction,
         common::ValueVector* srcNodeIDVector) const;
 
-    Column* getNbrIDColumn() const { return columns[NBR_ID_COLUMN_ID].get(); }
+    Column* getNbrIDColumn() const { return getColumn(NBR_ID_COLUMN_ID); }
     Column* getCSROffsetColumn() const { return csrHeaderColumns.offset.get(); }
     Column* getCSRLengthColumn() const { return csrHeaderColumns.length.get(); }
-    common::column_id_t getNumColumns() const { return columns.size(); }
-    Column* getColumn(common::column_id_t columnID) const { return columns[columnID].get(); }
+    common::column_id_t getNumColumns() const {
+        std::shared_lock lck{columnsMtx};
+        return columns.size();
+    }
+    Column* getColumn(common::column_id_t columnID) const {
+        std::shared_lock lck{columnsMtx};
+        DASSERT(columnID < columns.size());
+        return columns[columnID].get();
+    }
     std::vector<const Column*> getColumns() const {
+        std::shared_lock lck{columnsMtx};
         std::vector<const Column*> result;
         result.reserve(columns.size());
         for (const auto& column : columns) {
@@ -139,6 +148,7 @@ private:
     }
 
     std::vector<common::LogicalType> getColumnTypes() const {
+        std::shared_lock lck{columnsMtx};
         std::vector<common::LogicalType> types;
         types.reserve(columns.size());
         for (const auto& column : columns) {
@@ -161,6 +171,10 @@ private:
     std::unique_ptr<NodeGroupCollection> nodeGroups;
 
     CSRHeaderColumns csrHeaderColumns;
+    // Guards the `columns` vector, as NodeTable::schemaMtx guards the node table's: checkpoint
+    // swaps it and ALTER TABLE ADD grows it under a unique lock while other connections' scans
+    // read it under a shared lock. A Column* stays valid for every column a checkpoint keeps.
+    mutable std::shared_mutex columnsMtx;
     std::vector<std::unique_ptr<Column>> columns;
 
     PersistentVersionRecordHandler persistentVersionRecordHandler;

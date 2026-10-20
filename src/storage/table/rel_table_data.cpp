@@ -162,8 +162,12 @@ bool RelTableData::delete_(Transaction* transaction, ValueVector& boundNodeIDVec
 
 void RelTableData::addColumn(TableAddColumnState& addColumnState, PageAllocator& pageAllocator) {
     auto& definition = addColumnState.propertyDefinition;
-    columns.push_back(ColumnFactory::createColumn(definition.getName(), definition.getType().copy(),
-        pageAllocator.getDataFH(), mm, shadowFile, enableCompression));
+    auto column = ColumnFactory::createColumn(definition.getName(), definition.getType().copy(),
+        pageAllocator.getDataFH(), mm, shadowFile, enableCompression);
+    {
+        std::unique_lock lck{columnsMtx};
+        columns.push_back(std::move(column));
+    }
     nodeGroups->addColumn(addColumnState, &pageAllocator);
 }
 
@@ -186,7 +190,6 @@ std::pair<CSRNodeGroupScanSource, row_idx_t> RelTableData::findMatchingRow(Trans
     // RelID output vector.
     scanChunk.insert(0, std::make_shared<ValueVector>(LogicalType::INTERNAL_ID()));
     std::vector columnIDs = {REL_ID_COLUMN_ID, ROW_IDX_COLUMN_ID};
-    std::vector<const Column*> columns{getColumn(REL_ID_COLUMN_ID), nullptr};
     auto scanState = std::make_unique<RelTableScanState>(*mm, &boundNodeIDVector,
         std::vector{&scanChunk.getValueVectorMutable(0)}, scanChunk.state, true /*randomLookup*/);
     scanState->setToTable(transaction, &table, columnIDs, {}, direction);
@@ -228,7 +231,6 @@ bool RelTableData::checkIfNodeHasRels(Transaction* transaction,
     // RelID output vector.
     scanChunk.insert(0, std::make_shared<ValueVector>(LogicalType::INTERNAL_ID()));
     std::vector columnIDs = {REL_ID_COLUMN_ID};
-    std::vector<const Column*> columns{getColumn(REL_ID_COLUMN_ID)};
     auto scanState = std::make_unique<RelTableScanState>(*mm, srcNodeIDVector,
         std::vector{&scanChunk.getValueVectorMutable(0)}, scanChunk.state, true /*randomLookup*/);
     scanState->setToTable(transaction, &table, columnIDs, {}, direction);
@@ -266,16 +268,18 @@ void RelTableData::pushInsertInfo(const Transaction* transaction, const CSRNodeG
 void RelTableData::checkpoint(const std::vector<column_id_t>& columnIDs,
     PageAllocator& pageAllocator, const Transaction* snapshotTxn, transaction_t retentionHorizon,
     const std::vector<transaction_t>& openStartTSs) {
-    std::vector<std::unique_ptr<Column>> checkpointColumns;
-    for (auto i = 0u; i < columnIDs.size(); i++) {
-        const auto columnID = columnIDs[i];
-        checkpointColumns.push_back(std::move(columns[columnID]));
-    }
-    columns = std::move(checkpointColumns);
-
     std::vector<Column*> checkpointColumnPtrs;
-    for (const auto& column : columns) {
-        checkpointColumnPtrs.push_back(column.get());
+    {
+        std::unique_lock lck{columnsMtx};
+        std::vector<std::unique_ptr<Column>> checkpointColumns;
+        for (auto i = 0u; i < columnIDs.size(); i++) {
+            const auto columnID = columnIDs[i];
+            checkpointColumns.push_back(std::move(columns[columnID]));
+        }
+        columns = std::move(checkpointColumns);
+        for (const auto& column : columns) {
+            checkpointColumnPtrs.push_back(column.get());
+        }
     }
 
     CSRNodeGroupCheckpointState state{columnIDs, std::move(checkpointColumnPtrs), pageAllocator, mm,
