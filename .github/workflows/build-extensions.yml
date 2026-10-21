@@ -98,8 +98,13 @@ jobs:
       - name: Install DuckDB (macOS)
         if: runner.os == 'macOS'
         run: |
-          wget --tries=5 --waitretry=10 --retry-connrefused --retry-on-http-error=429,500,502,503,504 https://github.com/duckdb/duckdb/releases/latest/download/libduckdb-osx-universal.zip
-          unzip libduckdb-osx-universal.zip -d duckdb
+          if [ "${{ runner.arch }}" = "X64" ]; then
+            wget --tries=5 --waitretry=10 --retry-connrefused --retry-on-http-error=429,500,502,503,504 https://github.com/duckdb/duckdb/releases/latest/download/libduckdb-osx-amd64.zip
+            unzip libduckdb-osx-amd64.zip -d duckdb
+          else
+            wget --tries=5 --waitretry=10 --retry-connrefused --retry-on-http-error=429,500,502,503,504 https://github.com/duckdb/duckdb/releases/latest/download/libduckdb-osx-arm64.zip
+            unzip libduckdb-osx-arm64.zip -d duckdb
+          fi
           sudo mkdir -p /usr/local/include
           sudo mkdir -p /usr/local/lib
           sudo cp duckdb/duckdb.h /usr/local/include/
