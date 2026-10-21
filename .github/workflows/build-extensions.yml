@@ -66,15 +66,22 @@ jobs:
       - name: Install DuckDB (Linux)
         if: runner.os == 'Linux'
         run: |
+          DUCKDB_VERSION=v2.0.0
           if [ "${{ runner.arch }}" = "X64" ]; then
-            wget --tries=5 --waitretry=10 --retry-connrefused --retry-on-http-error=429,500,502,503,504 https://github.com/duckdb/duckdb/releases/latest/download/libduckdb-linux-amd64.zip
-            unzip libduckdb-linux-amd64.zip -d duckdb
+            DUCKDB_ARCH=linux-amd64
           else
-            wget --tries=5 --waitretry=10 --retry-connrefused --retry-on-http-error=429,500,502,503,504 https://github.com/duckdb/duckdb/releases/latest/download/libduckdb-linux-arm64.zip
-            unzip libduckdb-linux-arm64.zip -d duckdb
+            DUCKDB_ARCH=linux-arm64
           fi
-          cp duckdb/duckdb.h /usr/local/include/
-          cp duckdb/duckdb.hpp /usr/local/include/
+          wget --tries=5 --waitretry=10 --retry-connrefused --retry-on-http-error=429,500,502,503,504 https://github.com/duckdb/duckdb/releases/download/${DUCKDB_VERSION}/duckdb-shared-libs-${DUCKDB_ARCH}.tar.gz
+          mkdir -p duckdb && tar xzf duckdb-shared-libs-${DUCKDB_ARCH}.tar.gz -C duckdb
+          # 2.0.0 dropped the amalgamated duckdb.hpp from release assets;
+          # fetch the C++ headers from source (C headers there are identical
+          # to the ones shipped in the tarball - verified by diff).
+          git clone -c advice.detachedHead=false --filter=blob:none --sparse --depth 1 --branch ${DUCKDB_VERSION} https://github.com/duckdb/duckdb duckdb-src
+          git -C duckdb-src sparse-checkout set src/include
+          cp -r duckdb-src/src/include/. duckdb/
+          cp duckdb/duckdb*.h duckdb/duckdb.hpp /usr/local/include/
+          cp -r duckdb/duckdb /usr/local/include/
           cp duckdb/libduckdb.so /usr/local/lib/
           ldconfig
           # Create CMake config files
@@ -98,17 +105,24 @@ jobs:
       - name: Install DuckDB (macOS)
         if: runner.os == 'macOS'
         run: |
+          DUCKDB_VERSION=v2.0.0
           if [ "${{ runner.arch }}" = "X64" ]; then
-            wget --tries=5 --waitretry=10 --retry-connrefused --retry-on-http-error=429,500,502,503,504 https://github.com/duckdb/duckdb/releases/latest/download/libduckdb-osx-amd64.zip
-            unzip libduckdb-osx-amd64.zip -d duckdb
+            DUCKDB_ARCH=osx-amd64
           else
-            wget --tries=5 --waitretry=10 --retry-connrefused --retry-on-http-error=429,500,502,503,504 https://github.com/duckdb/duckdb/releases/latest/download/libduckdb-osx-arm64.zip
-            unzip libduckdb-osx-arm64.zip -d duckdb
+            DUCKDB_ARCH=osx-arm64
           fi
+          wget --tries=5 --waitretry=10 --retry-connrefused --retry-on-http-error=429,500,502,503,504 https://github.com/duckdb/duckdb/releases/download/${DUCKDB_VERSION}/duckdb-shared-libs-${DUCKDB_ARCH}.tar.gz
+          mkdir -p duckdb && tar xzf duckdb-shared-libs-${DUCKDB_ARCH}.tar.gz -C duckdb
+          # 2.0.0 dropped the amalgamated duckdb.hpp from release assets;
+          # fetch the C++ headers from source (C headers there are identical
+          # to the ones shipped in the tarball - verified by diff).
+          git clone -c advice.detachedHead=false --filter=blob:none --sparse --depth 1 --branch ${DUCKDB_VERSION} https://github.com/duckdb/duckdb duckdb-src
+          git -C duckdb-src sparse-checkout set src/include
+          cp -r duckdb-src/src/include/. duckdb/
           sudo mkdir -p /usr/local/include
           sudo mkdir -p /usr/local/lib
-          sudo cp duckdb/duckdb.h /usr/local/include/
-          sudo cp duckdb/duckdb.hpp /usr/local/include/
+          sudo cp duckdb/duckdb*.h duckdb/duckdb.hpp /usr/local/include/
+          sudo cp -r duckdb/duckdb /usr/local/include/
           sudo cp duckdb/libduckdb.dylib /usr/local/lib/
           # Create CMake config files
           sudo mkdir -p /usr/local/lib/cmake/DuckDB
@@ -132,13 +146,21 @@ jobs:
         if: runner.os == 'Windows'
         shell: cmd
         run: |
-          curl -fL --retry 5 --retry-delay 10 --retry-connrefused -o libduckdb-windows-amd64.zip https://github.com/duckdb/duckdb/releases/latest/download/libduckdb-windows-amd64.zip
-          powershell -Command "Expand-Archive -Path libduckdb-windows-amd64.zip -DestinationPath duckdb"
+          set DUCKDB_VERSION=v2.0.0
+          curl -fL --retry 5 --retry-delay 10 --retry-connrefused -o duckdb-shared-libs-windows-amd64.tar.gz https://github.com/duckdb/duckdb/releases/download/%DUCKDB_VERSION%/duckdb-shared-libs-windows-amd64.tar.gz
+          if not exist duckdb mkdir duckdb
+          tar -xzf duckdb-shared-libs-windows-amd64.tar.gz -C duckdb
+          REM 2.0.0 dropped the amalgamated duckdb.hpp from release assets; fetch C++ headers from source
+          git clone -c advice.detachedHead=false --filter=blob:none --sparse --depth 1 --branch %DUCKDB_VERSION% https://github.com/duckdb/duckdb duckdb-src
+          git -C duckdb-src sparse-checkout set src/include
+          copy duckdb-src\src\include\duckdb.hpp duckdb\
+          xcopy duckdb-src\src\include\duckdb duckdb\duckdb\ /E /I /Y
           if not exist "C:\local" mkdir "C:\local"
           if not exist "C:\local\include" mkdir "C:\local\include"
           if not exist "C:\local\lib" mkdir "C:\local\lib"
-          copy duckdb\duckdb.h C:\local\include\
+          copy duckdb\duckdb*.h C:\local\include\
           copy duckdb\duckdb.hpp C:\local\include\
+          xcopy duckdb\duckdb C:\local\include\duckdb\ /E /I /Y
           copy duckdb\duckdb.dll C:\local\lib\
           copy duckdb\duckdb.lib C:\local\lib\
           REM Create CMake config files
