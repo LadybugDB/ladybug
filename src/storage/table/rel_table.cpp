@@ -78,6 +78,11 @@ void RelTableScanState::setToTable(const Transaction* transaction, Table* table_
 void RelTableScanState::initState(Transaction* transaction, NodeGroup* nodeGroup,
     bool resetCachedBoundNodeIDs) {
     this->nodeGroup = nodeGroup;
+    if (!nodeGroup) {
+        // RelTable::initScanState reuses `nodeGroup` while `nodeGroupIdx` matches, so a bound
+        // node past the last node group must not leave a null group under an earlier index.
+        nodeGroupIdx = INVALID_NODE_GROUP_IDX;
+    }
     if (resetCachedBoundNodeIDs) {
         initCachedBoundNodeIDSelVector();
     }
