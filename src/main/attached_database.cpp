@@ -20,7 +20,7 @@ void AttachedDatabase::invalidateCache() {
     }
 }
 
-std::unique_ptr<duckdb::MaterializedQueryResult> AttachedDatabase::executeQuery(
+std::unique_ptr<duckdb::QueryResult> AttachedDatabase::executeQuery(
     [[maybe_unused]] const std::string& query) const {
     throw common::RuntimeException("executeQuery not implemented for this database type");
 }

@@ -9,7 +9,7 @@
 #include "transaction/transaction_manager.h"
 
 namespace duckdb {
-class MaterializedQueryResult;
+class QueryResult;
 }
 
 namespace lbug {
@@ -29,8 +29,7 @@ public:
 
     catalog::Catalog* getCatalog() { return catalog.get(); }
 
-    virtual std::unique_ptr<duckdb::MaterializedQueryResult> executeQuery(
-        const std::string& query) const;
+    virtual std::unique_ptr<duckdb::QueryResult> executeQuery(const std::string& query) const;
 
     // Get column names for a table in the attached database
     // Returns empty vector if table doesn't exist or on error
