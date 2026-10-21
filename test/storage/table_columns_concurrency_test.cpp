@@ -43,9 +43,9 @@ protected:
                 std::string error;
                 if (!result->isSuccess()) {
                     error = result->getErrorMessage();
-                } else if (auto value = result->getNext()->getValue(0)->getValue<int64_t>();
-                           value != expected) {
-                    error = "read " + std::to_string(value);
+                } else if (auto value = result->getNext()->getValue(0)->toString();
+                           value != std::to_string(expected)) {
+                    error = "read " + value;
                 }
                 if (!error.empty()) {
                     std::lock_guard<std::mutex> guard(failureMtx);
