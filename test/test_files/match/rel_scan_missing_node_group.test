@@ -1,0 +1,56 @@
+-DATASET CSV empty
+
+--
+
+-CASE RelsAfterNodePastLastRelNodeGroup
+# N spans two node groups and no node of the second has an outgoing edge, so E's forward data has
+# one node group. Scans that reach 131080 must still read the edges of nodes they scan after it.
+-SKIP_NODE_GROUP_SIZE_TESTS
+-STATEMENT CREATE NODE TABLE N(id INT64 PRIMARY KEY);
+---- ok
+-STATEMENT UNWIND range(0, 131111) AS i CREATE (:N {id: i});
+---- ok
+-STATEMENT CREATE REL TABLE E(FROM N TO N);
+---- ok
+-STATEMENT MATCH (a:N {id: 1}), (b:N {id: 2}) CREATE (a)-[:E]->(b);
+---- ok
+-STATEMENT MATCH (a:N {id: 2}), (b:N {id: 3}) CREATE (a)-[:E]->(b);
+---- ok
+-STATEMENT MATCH (a:N {id: 1}), (b:N {id: 3}) CREATE (a)-[:E]->(b);
+---- ok
+-STATEMENT MATCH (a:N {id: 10}), (b:N {id: 17}) CREATE (a)-[:E]->(b);
+---- ok
+-STATEMENT MATCH (a:N {id: 10}), (b:N {id: 131080}) CREATE (a)-[:E]->(b);
+---- ok
+-STATEMENT MATCH (a:N {id: 10}), (b:N {id: 18}) CREATE (a)-[:E]->(b);
+---- ok
+-STATEMENT MATCH (a:N {id: 17}), (b:N {id: 5}) CREATE (a)-[:E]->(b);
+---- ok
+-STATEMENT MATCH (a:N {id: 18}), (b:N {id: 6}) CREATE (a)-[:E]->(b);
+---- ok
+-STATEMENT MATCH (a:N {id: 5}), (b:N {id: 7}) CREATE (a)-[:E]->(b);
+---- ok
+-STATEMENT MATCH (a:N {id: 6}), (b:N {id: 8}) CREATE (a)-[:E]->(b);
+---- ok
+-STATEMENT MATCH (a:N {id: 11}), (b:N {id: 12}) CREATE (a)-[:E]->(b);
+---- ok
+-STATEMENT MATCH (a:N {id: 12}), (b:N {id: 13}) CREATE (a)-[:E]->(b);
+---- ok
+-STATEMENT MATCH (a:N {id: 10})-[:E*1..3]->(b:N) RETURN b.id;
+---- 7
+5
+6
+7
+8
+17
+18
+131080
+-STATEMENT MATCH (a:N)-[:E*1..2]->(b:N) RETURN count(*);
+---- 1
+18
+-STATEMENT MATCH (a:N)-[:E]->(m:N)-[:E]->(b:N) WHERE a.id < 12 RETURN a.id, m.id, b.id;
+---- 4
+1|2|3
+10|17|5
+10|18|6
+11|12|13

@@ -11,6 +11,7 @@
 #include "catalog/catalog_entry/node_table_catalog_entry.h"
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
 #include "common/enums/storage_format.h"
+#include "common/system_config.h"
 #include "graph_test/private_graph_test.h"
 #include "planner/join_order/cost_model.h"
 #include "planner/operator/logical_filter.h"
@@ -1479,6 +1480,76 @@ TEST_F(OptimizerTest, GroupedReachableCountMatchesUnoptimizedPlan) {
             ASSERT_EQ(optimized, unoptimized) << q;
         }
     }
+}
+
+// A node of the second node group in createTwoNodeGroupGraph: past the forward rel data's last one.
+static constexpr int64_t FAR_NODE = common::StorageConfig::NODE_GROUP_SIZE + 8;
+
+// `node` gets two node groups' worth of rows (the second with 40), and `rel` the edges 1->2, 2->3,
+// 1->3, 10->17, 10->FAR_NODE, 17->5 and 5->6. No node of the second group has an outgoing edge, so
+// `rel`'s forward data has one node group, and the reachable counts expand nodes of the first group
+// after FAR_NODE.
+static void createTwoNodeGroupGraph(main::Connection& conn, const std::string& node,
+    const std::string& rel, bool csr) {
+    ASSERT_TRUE(conn.query(std::format("CREATE NODE TABLE {}(id INT64, PRIMARY KEY(id));", node))
+                    ->isSuccess());
+    ASSERT_TRUE(conn.query(std::format("UNWIND range(0, {}) AS i CREATE (:{} {{id: i}});",
+                               common::StorageConfig::NODE_GROUP_SIZE + 39, node))
+                    ->isSuccess());
+    ASSERT_TRUE(conn.query(std::format("CREATE REL TABLE {}(FROM {} TO {});", rel, node, node))
+                    ->isSuccess());
+    const std::vector<std::pair<int64_t, int64_t>> edges = {{1, 2}, {2, 3}, {1, 3}, {10, 17},
+        {10, FAR_NODE}, {17, 5}, {5, 6}};
+    for (auto& [src, dst] : edges) {
+        auto q = std::format("MATCH (a:{0} {{id: {2}}}), (b:{0} {{id: {3}}}) "
+                             "CREATE (a)-[:{1}]->(b);",
+            node, rel, src, dst);
+        ASSERT_TRUE(conn.query(q)->isSuccess()) << q;
+    }
+    if (csr) {
+        ASSERT_TRUE(conn.query(std::format("ALTER TABLE {} SET SORTED BY (id ASC) CSR;", node))
+                        ->isSuccess());
+    }
+}
+
+TEST_F(OptimizerTest, GroupedReachableCountPastLastRelNodeGroup) {
+#if defined(_WIN32)
+    GTEST_SKIP() << "Windows may pick a different recursive-extend plan shape for grouped "
+                    "reachable-count queries, so this plan-shape test is nondeterministic there.";
+#endif
+    ASSERT_NO_FATAL_FAILURE(createTwoNodeGroupGraph(*conn, "grc5_n", "grc5_e", false /* csr */));
+    auto q = "MATCH (a:grc5_n)-[:grc5_e*1..2]->(b:grc5_n) RETURN b.id, count(b) ORDER BY b.id;";
+    ASSERT_TRUE(hasOperatorType(getRoot(q)->getLastOperator().get(),
+        planner::LogicalOperatorType::GROUPED_REACHABLE_COUNT));
+    auto result = conn->query(q);
+    ASSERT_TRUE(result->isSuccess());
+    // Walks ending at each node: 3 by 2->3, 1->3 and 1->2->3; 5 by 17->5 and 10->17->5; 6 by 5->6
+    // and 17->5->6.
+    const std::vector<std::pair<int64_t, int64_t>> expected = {{2, 1}, {3, 3}, {5, 2}, {6, 2},
+        {17, 1}, {FAR_NODE, 1}};
+    for (auto& [id, walks] : expected) {
+        ASSERT_TRUE(result->hasNext());
+        auto tuple = result->getNext();
+        ASSERT_EQ(tuple->getValue(0)->getValue<int64_t>(), id);
+        EXPECT_EQ(tuple->getValue(1)->getValue<int64_t>(), walks) << id;
+    }
+    EXPECT_FALSE(result->hasNext());
+}
+
+TEST_F(OptimizerTest, CountReachableDistinctNodesPastLastRelNodeGroup) {
+#if defined(_WIN32)
+    GTEST_SKIP() << "Windows may pick a different recursive-extend plan shape for reachable-count "
+                    "queries, so this plan-shape test is nondeterministic there.";
+#endif
+    ASSERT_NO_FATAL_FAILURE(createTwoNodeGroupGraph(*conn, "rc2_n", "rc2_e", true /* csr */));
+    auto q = "MATCH (a:rc2_n {id: 10})-[:rc2_e*1..3]->(b:rc2_n) RETURN count(distinct b);";
+    ASSERT_TRUE(hasOperatorType(getRoot(q)->getLastOperator().get(),
+        planner::LogicalOperatorType::REACHABLE_COUNT));
+    auto result = conn->query(q);
+    ASSERT_TRUE(result->isSuccess());
+    // 17, FAR_NODE, 5 and 6. Whichever of 17 and FAR_NODE the search expands first, an expansion
+    // of a first-group node follows FAR_NODE's.
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 4);
 }
 
 // The COUNT_ANTI_EDGE_CHAIN fast path walks the committed node-group grid and reads
