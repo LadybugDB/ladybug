@@ -52,7 +52,14 @@ private:
     std::optional<uint64_t> queryID;
 };
 
-[[noreturn]] void throwPostCommitCheckpointFailure(const std::exception& e) {
+[[noreturn]] void throwPostCommitCheckpointFailure(const std::exception& e, bool forced) {
+    if (forced) {
+        throw CheckpointException{std::format(
+            "Transaction committed successfully, but the checkpoint it requires failed. Its "
+            "changes are not in the WAL and may be lost on restart unless a later CHECKPOINT "
+            "succeeds: {}",
+            e.what())};
+    }
     throw CheckpointException{
         std::format("Transaction committed successfully, but the post-commit checkpoint failed. "
                     "The committed data is durable and will be recovered on restart: {}",
@@ -194,10 +201,10 @@ void TransactionManager::commit(main::ClientContext& clientContext, Transaction*
         // ART rely on their forced checkpoint instead of the WAL, so that failure still fails the
         // statement.
         if (shouldForceCheckpoint || wal.isPoisoned()) {
-            throwPostCommitCheckpointFailure(e);
+            throwPostCommitCheckpointFailure(e, shouldForceCheckpoint);
         }
     } catch (const std::exception& e) {
-        throwPostCommitCheckpointFailure(e);
+        throwPostCommitCheckpointFailure(e, shouldForceCheckpoint);
     }
 }
 
