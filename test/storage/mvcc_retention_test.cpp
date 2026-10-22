@@ -338,6 +338,42 @@ TEST_F(MVCCRetentionTest, CommittedUpdatesSurvivePinnedCheckpoint) {
     EXPECT_EQ(rows, expectedRows);
 }
 
+TEST_F(MVCCRetentionTest, UpdatedLongStringSurvivesPinnedCheckpoint) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+    const auto strings = [](main::Connection& connection) {
+        auto result = connection.query("MATCH (p:P) RETURN p.s ORDER BY p.id;");
+        EXPECT_TRUE(result->isSuccess()) << result->getErrorMessage();
+        std::vector<std::string> values;
+        while (result->hasNext()) {
+            values.push_back(result->getNext()->getValue(0)->getValue<std::string>());
+        }
+        return values;
+    };
+    ASSERT_TRUE(conn->query("CALL auto_checkpoint=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE P(id INT64 PRIMARY KEY, s STRING);")->isSuccess());
+    // A string over 12 bytes is not inlined, so reading it back allocates overflow memory.
+    ASSERT_TRUE(
+        conn->query("CREATE (:P {id: 1, s: 'a string longer than twelve bytes'});")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:P {id: 2, s: 'short'});")->isSuccess());
+    ASSERT_TRUE(conn->query("CHECKPOINT;")->isSuccess());
+    auto reader = std::make_unique<main::Connection>(database.get());
+    ASSERT_TRUE(reader->query("BEGIN TRANSACTION READ ONLY;")->isSuccess());
+    ASSERT_TRUE(conn->query("MATCH (p:P) SET p.s = 'new';")->isSuccess());
+    {
+        auto checkpoint = conn->query("CHECKPOINT;");
+        ASSERT_TRUE(checkpoint->isSuccess()) << checkpoint->getErrorMessage();
+    }
+    EXPECT_EQ(strings(*reader),
+        std::vector<std::string>({"a string longer than twelve bytes", "short"}));
+    ASSERT_TRUE(reader->query("COMMIT;")->isSuccess());
+    reader.reset();
+    EXPECT_EQ(strings(*conn), std::vector<std::string>({"new", "new"}));
+    createDBAndConn();
+    EXPECT_EQ(strings(*conn), std::vector<std::string>({"new", "new"}));
+}
+
 TEST_F(MVCCRetentionTest, NoWriteCheckpointReclaimsRetention) {
     if (inMemMode) {
         GTEST_SKIP();

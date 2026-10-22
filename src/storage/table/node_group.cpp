@@ -715,7 +715,7 @@ std::vector<UpdateRetentionCapture> NodeGroup::capturePersistentUpdateRetention(
                 ResidencyState::IN_MEMORY);
             ChunkState chunkState;
             chunk.initializeScanState(chunkState, state.columns[i]);
-            ValueVector baseValue{chunk.getDataType().copy()};
+            ValueVector baseValue{chunk.getDataType().copy(), &memoryManager};
             baseValue.setState(std::make_shared<DataChunkState>(DEFAULT_VECTOR_CAPACITY));
             for (auto r = 0u; r < DEFAULT_VECTOR_CAPACITY; r++) {
                 if (!synthetic.test(r)) {
