@@ -351,6 +351,42 @@ TEST_F(OptimizerTest, RemoveUnnecessaryJoinTest) {
     ASSERT_STREQ(getEncodedPlan(q1).c_str(), "E(b)S(a)");
 }
 
+TEST_F(OptimizerTest, RemoveUnnecessaryJoinNullableKeyTest) {
+    // b can be NULL after each OPTIONAL MATCH form, so the join with S(b) stays.
+    auto q1 = "MATCH (a:person) OPTIONAL MATCH (a)-[:studyAt]->(b:organisation) "
+              "WITH a, b MATCH (b) RETURN a.ID;";
+    ASSERT_STREQ(getEncodedPlan(q1).c_str(),
+        "HJ(b._ID){HJ(a._ID){S(a)}{HJ(a._ID){}{E(b)S(a)}}}{S(b)}");
+    auto q2 = "MATCH (a:person) WHERE a.ID < 3 OPTIONAL MATCH (b:organisation) "
+              "WHERE b.score > 1000 WITH a, b MATCH (b) RETURN a.ID;";
+    ASSERT_STREQ(getEncodedPlan(q2).c_str(), "HJ(b._ID){CP(){Filter()S(a)}{Filter()S(b)}}{S(b)}");
+    auto q3 = "OPTIONAL MATCH (b:organisation) WHERE b.score > 1000 WITH b MATCH (b) RETURN b.ID;";
+    ASSERT_STREQ(getEncodedPlan(q3).c_str(), "HJ(b._ID){Filter()S(b)}{S(b)}");
+    // a is the LEFT join's probe key and MERGE creates b, so neither is NULL: the join goes.
+    auto q4 = "MATCH (a:person) OPTIONAL MATCH (a)-[:studyAt]->(b:organisation) "
+              "WITH a, b MATCH (a) RETURN b.ID;";
+    ASSERT_STREQ(getEncodedPlan(q4).c_str(),
+        "HJ(a._ID){S(a)}{HJ(a._ID){}{HJ(b._ID){S(b)}{E(b)S(a)}}}");
+    auto q5 = "MATCH (a:person) WHERE a.ID = 0 "
+              "MERGE (a)-[:studyAt]->(b:organisation {ID: 100}) WITH a, b MATCH (b) RETURN a.ID;";
+    ASSERT_STREQ(getEncodedPlan(q5).c_str(),
+        "Filter()HJ(a._ID){IndexScan(a)}{HJ(b._ID){IndexScan(b)}{E(b)S(a)}}");
+    auto q6 = "MATCH (a:person) WHERE a.ID = 0 MERGE (b:organisation {ID: 100}) "
+              "WITH a, b MATCH (b) RETURN a.ID;";
+    ASSERT_STREQ(getEncodedPlan(q6).c_str(), "Filter()CP(){IndexScan(a)}{IndexScan(b)}");
+    auto q7 = "MERGE (b:organisation {ID: 100}) WITH b MATCH (b) RETURN b.ID;";
+    ASSERT_STREQ(getEncodedPlan(q7).c_str(), "Filter()IndexScan(b)");
+    // After an update the scan is the probe side.
+    auto q8 = "MATCH (a:person) OPTIONAL MATCH (a)-[:studyAt]->(b:organisation) "
+              "SET a.age = a.age WITH a, b MATCH (b) RETURN a.ID;";
+    ASSERT_STREQ(getEncodedPlan(q8).c_str(),
+        "HJ(b._ID){S(b)}{HJ(a._ID){S(a)}{HJ(a._ID){}{E(b)S(a)}}}");
+    auto q9 = "MATCH (a:person) OPTIONAL MATCH (a)-[:studyAt]->(b:organisation) "
+              "SET a.age = a.age WITH a, b MATCH (a) RETURN b.ID;";
+    ASSERT_STREQ(getEncodedPlan(q9).c_str(),
+        "HJ(a._ID){S(a)}{HJ(a._ID){}{HJ(b._ID){S(b)}{E(b)S(a)}}}");
+}
+
 TEST_F(OptimizerTest, MergeConsecutiveMatch) {
     auto q1 = "MATCH (a:person) MATCH (b:person) WHERE b.ID=0 MATCH (a)-[]->(b) "
               "RETURN COUNT(*);";

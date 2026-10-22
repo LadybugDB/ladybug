@@ -118,3 +118,44 @@ Hubert Blaine Wolfeschlegelsteinhausenbergerdorff|
 -STATEMENT MATCH (a:person) OPTIONAL MATCH (a)-[:knows]->(b:person) OPTIONAL MATCH (b)-[:knows]->(c:person) RETURN COUNT(*)
 ---- 1
 41
+
+-LOG MatchDropsNullFromLeftJoin
+-STATEMENT MATCH (a:person) OPTIONAL MATCH (a)-[:studyAt]->(b:organisation) WITH a, b MATCH (b) RETURN a.ID, b.ID
+---- 3
+0|1
+2|1
+8|1
+
+-LOG MatchDropsNullFromLeftJoinAlias
+-STATEMENT MATCH (a:person) OPTIONAL MATCH (a)-[:studyAt]->(b:organisation) WITH a, b AS c MATCH (c) RETURN a.ID, c.name
+---- 3
+0|ABFsUni
+2|ABFsUni
+8|ABFsUni
+
+-LOG MatchDropsNullFromLeftJoinAfterSet
+-STATEMENT MATCH (a:person) OPTIONAL MATCH (a)-[:studyAt]->(b:organisation) SET a.age = a.age WITH a, b MATCH (b) RETURN a.ID, b.ID
+---- 3
+0|1
+2|1
+8|1
+
+-LOG MatchDropsNullFromOptionalCrossProduct
+-STATEMENT MATCH (a:person) WHERE a.ID < 3 OPTIONAL MATCH (b:organisation) WHERE b.score > 1000 WITH a, b MATCH (b) RETURN a.ID, b.ID
+---- 0
+
+-LOG MatchDropsNullFromOptionalAccumulate
+-STATEMENT OPTIONAL MATCH (b:organisation) WHERE b.score > 1000 WITH b MATCH (b) RETURN b.ID
+---- 0
+
+-LOG MatchOnNonNullVariableKeepsRows
+-STATEMENT MATCH (a:person) OPTIONAL MATCH (a)-[:studyAt]->(b:organisation) WITH a, b MATCH (a) RETURN a.ID, b.ID
+---- 8
+0|1
+2|1
+3|
+5|
+7|
+8|1
+9|
+10|

@@ -15,7 +15,8 @@ namespace optimizer {
  *   E(e) S(b)
  *    |
  *   S(a)
- * This optimizer prunes such redundant joins.
+ * This optimizer prunes such redundant joins. A join whose key an OPTIONAL MATCH can leave
+ * NULL is not redundant: it drops the rows with a NULL key, so it stays.
  */
 class RemoveUnnecessaryJoinOptimizer : public LogicalOperatorVisitor {
 public:
