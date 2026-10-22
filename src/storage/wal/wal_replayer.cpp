@@ -257,8 +257,8 @@ static uint64_t getReadOffset(Deserializer& deSer, bool enableChecksums) {
 // object's bytes before its checksum, so the WAL starts with the header in both modes. An
 // attached-graph WAL may have been written by a different session (e.g. a standalone graph
 // session) whose checksum setting differs from the recovering session's, so its checksum flag
-// must come from here. A torn header holds no acknowledged commits, so strict recovery rethrows
-// and non-strict recovery may retire the WAL.
+// must come from here. A torn header holds no acknowledged commits: with throwOnWalReplayFailure
+// the read error is rethrown, otherwise nullopt lets non-strict recovery retire the WAL.
 static std::optional<bool> tryReadWALChecksumFlag(FileInfo& fileInfo,
     main::ClientContext& clientContext, bool throwOnWalReplayFailure) {
     try {

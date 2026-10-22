@@ -1414,8 +1414,11 @@ TEST_F(FrozenWALRecoveryTest, FrozenWALWithoutCheckpointRecordSurvivesSecondReco
 }
 
 // A frozen WAL written with the other checksum setting is kept as well, also with
-// throwOnWalReplayFailure false (the fixture's setting).
+// throwOnWalReplayFailure false (the fixture's setting). The WAL is written with the setting
+// flipped, the other direction from WALChecksumConfigMismatchNoThrow.
 TEST_F(FrozenWALRecoveryTest, FrozenWALWithOtherChecksumSettingIsKept) {
+    systemConfig->enableChecksums = !systemConfig->enableChecksums;
+    createDBAndConn();
     insertRange(0, 100);
     closeDB();
     std::filesystem::rename(walFilePath, frozenWALFilePath);
