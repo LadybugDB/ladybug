@@ -6,6 +6,8 @@
 #include "api_test/private_api_test.h"
 #include "catalog/catalog.h"
 #include "catalog/catalog_entry/node_table_catalog_entry.h"
+#include "catalog/catalog_entry/rel_group_catalog_entry.h"
+#include "common/data_chunk/data_chunk_state.h"
 #include "common/types/date_t.h"
 #include "common/types/string_t.h"
 #include "common/types/types.h"
@@ -13,6 +15,10 @@
 #include "graph/on_disk_graph.h"
 #include "main/client_context.h"
 #include "storage/buffer_manager/memory_manager.h"
+#include "storage/storage_manager.h"
+#include "storage/table/csr_node_group.h"
+#include "storage/table/rel_table.h"
+#include <format>
 
 namespace lbug {
 
@@ -493,6 +499,227 @@ TEST_F(EmptyVertexScanTest, ScanVertexPropertiesDuringTransaction) {
     compare(0, 1000);
     compare(1, 20000);
     conn->query("COMMIT");
+}
+
+// Drives a rel scan over chosen bound-node batches and checks how much of the persistent CSR
+// header each batch decodes. Node i has one rel, to (i + 1) % numNodes, so a node's neighbour is
+// known and its header entries are i - 1 and i (only 0 for node 0).
+class CSRHeaderDecodeTest : public PrivateApiTest {
+public:
+    static constexpr offset_t numNodes = 8000;
+
+    std::string getInputDir() override { return "empty"; }
+
+    void SetUp() override {
+        PrivateApiTest::SetUp();
+        if (inMemMode) {
+            GTEST_SKIP() << "the decode only runs on a persistent CSR header";
+        }
+        // LBUG_NODE_GROUP_SIZE_LOG2 is a build option.
+        if (common::StorageConfig::NODE_GROUP_SIZE < numNodes) {
+            GTEST_SKIP() << "the expected decodes assume all nodes in one node group";
+        }
+        ASSERT_NO_FATAL_FAILURE(runQuery("CREATE NODE TABLE N(id INT64, PRIMARY KEY(id));"));
+        ASSERT_NO_FATAL_FAILURE(runQuery("CREATE REL TABLE E(FROM N TO N);"));
+        ASSERT_NO_FATAL_FAILURE(
+            runQuery(std::format("UNWIND range(0, {}) AS i CREATE (:N {{id: i}});", numNodes - 1)));
+        ASSERT_NO_FATAL_FAILURE(runQuery(std::format(
+            "MATCH (a:N), (b:N) WHERE b.id = (a.id + 1) % {} CREATE (a)-[:E]->(b);", numNodes)));
+        ASSERT_NO_FATAL_FAILURE(runQuery("CHECKPOINT;"));
+        ASSERT_NO_FATAL_FAILURE(runQuery("BEGIN TRANSACTION READ ONLY;"));
+        context = getClientContext(*conn);
+        transaction = transaction::Transaction::Get(*context);
+        auto* catalog = catalog::Catalog::Get(*context);
+        nodeTableID = catalog->getTableCatalogEntry(transaction, "N")->getTableID();
+        const auto relTableID = catalog->getTableCatalogEntry(transaction, "E")
+                                    ->ptrCast<catalog::RelGroupCatalogEntry>()
+                                    ->getSingleRelEntryInfo()
+                                    .oid;
+        relTable = storage::StorageManager::Get(*context)
+                       ->getTable(relTableID)
+                       ->ptrCast<storage::RelTable>();
+        auto* mm = storage::MemoryManager::Get(*context);
+        boundState = std::make_shared<common::DataChunkState>();
+        boundVector = std::make_unique<common::ValueVector>(common::LogicalType::INTERNAL_ID(), mm);
+        boundVector->state = boundState;
+        outState = std::make_shared<common::DataChunkState>();
+        nbrVector = std::make_unique<common::ValueVector>(common::LogicalType::INTERNAL_ID(), mm);
+        nbrVector->state = outState;
+        scanState = std::make_unique<storage::RelTableScanState>(*mm, boundVector.get(),
+            std::vector<common::ValueVector*>{nbrVector.get()}, outState);
+        scanState->setToTable(transaction, relTable, {storage::NBR_ID_COLUMN_ID}, {},
+            common::RelDataDirection::FWD);
+    }
+
+    void TearDown() override {
+        // These hold buffers from the database's memory manager, which TearDown closes.
+        scanState.reset();
+        nbrVector.reset();
+        boundVector.reset();
+        PrivateApiTest::TearDown();
+    }
+
+    void runQuery(const std::string& query) const {
+        const auto result = conn->query(query);
+        ASSERT_TRUE(result->isSuccess()) << query << ": " << result->getErrorMessage();
+    }
+
+    // Starts a scan of `nodes` as one bound-node batch.
+    void startBatch(const std::vector<offset_t>& nodes) {
+        boundState->setToUnflat();
+        boundState->getSelVectorUnsafe().setToUnfiltered(nodes.size());
+        for (auto i = 0u; i < nodes.size(); i++) {
+            boundVector->setValue<nodeID_t>(i, nodeID_t{nodes[i], nodeTableID});
+        }
+        relTable->initScanState(transaction, *scanState);
+    }
+
+    // Scans `nodes` as one bound-node batch and returns their neighbours, sorted.
+    std::vector<offset_t> scanBatch(const std::vector<offset_t>& nodes) {
+        startBatch(nodes);
+        std::vector<offset_t> nbrs;
+        while (relTable->scan(transaction, *scanState)) {
+            const auto& selVector = outState->getSelVector();
+            for (auto i = 0u; i < selVector.getSelSize(); i++) {
+                nbrs.push_back(nbrVector->getValue<nodeID_t>(selVector[i]).offset);
+            }
+        }
+        std::ranges::sort(nbrs);
+        return nbrs;
+    }
+
+    static std::vector<offset_t> nextNodes(const std::vector<offset_t>& nodes) {
+        std::vector<offset_t> nbrs;
+        for (const auto node : nodes) {
+            nbrs.push_back((node + 1) % numNodes);
+        }
+        std::ranges::sort(nbrs);
+        return nbrs;
+    }
+
+    storage::CSRNodeGroupScanState& csrState() const {
+        return scanState->nodeGroupScanState->cast<storage::CSRNodeGroupScanState>();
+    }
+
+    using Ranges = std::vector<std::pair<offset_t, offset_t>>;
+
+    main::ClientContext* context = nullptr;
+    transaction::Transaction* transaction = nullptr;
+    common::table_id_t nodeTableID = common::INVALID_TABLE_ID;
+    storage::RelTable* relTable = nullptr;
+    std::shared_ptr<common::DataChunkState> boundState;
+    std::unique_ptr<common::ValueVector> boundVector;
+    std::shared_ptr<common::DataChunkState> outState;
+    std::unique_ptr<common::ValueVector> nbrVector;
+    std::unique_ptr<storage::RelTableScanState> scanState;
+};
+
+// Nodes far apart decode two entries each, in clusters, not the span between them.
+TEST_F(CSRHeaderDecodeTest, SparseBatchDecodesClusters) {
+    const std::vector<offset_t> nodes{10, 2000, 5000};
+    EXPECT_EQ(scanBatch(nodes), nextNodes(nodes));
+    const auto& state = csrState();
+    EXPECT_EQ(state.numHeaderSpansDecoded, 1u);
+    EXPECT_EQ(state.numHeaderEntriesDecoded, 6u);
+    EXPECT_FALSE(state.header->wholeHeader);
+    EXPECT_EQ(state.header->decodedRanges, (Ranges{{9, 11}, {1999, 2001}, {4999, 5001}}));
+}
+
+// Bound nodes whose entries are less than 256 apart share one cluster.
+TEST_F(CSRHeaderDecodeTest, NearbyNodesShareCluster) {
+    const std::vector<offset_t> nodes{10, 20, 2000};
+    EXPECT_EQ(scanBatch(nodes), nextNodes(nodes));
+    const auto& state = csrState();
+    EXPECT_EQ(state.numHeaderSpansDecoded, 1u);
+    EXPECT_EQ(state.numHeaderEntriesDecoded, 14u);
+    EXPECT_EQ(state.header->decodedRanges, (Ranges{{9, 21}, {1999, 2001}}));
+}
+
+// Nodes too close for clusters to pay off decode the packed span between them.
+TEST_F(CSRHeaderDecodeTest, CloseNodesDecodeSpan) {
+    const std::vector<offset_t> nodes{100, 300};
+    EXPECT_EQ(scanBatch(nodes), nextNodes(nodes));
+    const auto& state = csrState();
+    EXPECT_EQ(state.numHeaderEntriesDecoded, 202u);
+    EXPECT_EQ(state.header->indexBase, 99u);
+    EXPECT_EQ(state.header->decodedRanges, (Ranges{{99, 301}}));
+}
+
+// A later batch inside the decoded ranges decodes nothing; one outside them decodes its own.
+TEST_F(CSRHeaderDecodeTest, LaterBatchesReuseDecodedRanges) {
+    scanBatch({10, 2000, 5000});
+    const std::vector<offset_t> covered{10, 5000};
+    EXPECT_EQ(scanBatch(covered), nextNodes(covered));
+    EXPECT_EQ(csrState().numHeaderSpansDecoded, 1u);
+    EXPECT_EQ(csrState().numHeaderEntriesDecoded, 6u);
+    const std::vector<offset_t> uncovered{3000, 7000};
+    EXPECT_EQ(scanBatch(uncovered), nextNodes(uncovered));
+    EXPECT_EQ(csrState().numHeaderSpansDecoded, 2u);
+    EXPECT_EQ(csrState().numHeaderEntriesDecoded, 10u);
+    EXPECT_EQ(csrState().header->decodedRanges, (Ranges{{2999, 3001}, {6999, 7001}}));
+}
+
+// A dense first batch decodes its span.
+TEST_F(CSRHeaderDecodeTest, DenseFirstBatchDecodesSpan) {
+    std::vector<offset_t> nodes(200);
+    std::iota(nodes.begin(), nodes.end(), 1000);
+    EXPECT_EQ(scanBatch(nodes), nextNodes(nodes));
+    EXPECT_EQ(csrState().header->indexBase, 999u);
+    EXPECT_EQ(csrState().header->decodedRanges, (Ranges{{999, 1200}}));
+}
+
+// After a first decode, a dense batch of more than 128 bound nodes decodes the whole header.
+TEST_F(CSRHeaderDecodeTest, DenseLaterBatchDecodesWholeHeader) {
+    scanBatch({10, 2000, 5000});
+    std::vector<offset_t> nodes(200);
+    std::iota(nodes.begin(), nodes.end(), 1000);
+    EXPECT_EQ(scanBatch(nodes), nextNodes(nodes));
+    EXPECT_TRUE(csrState().header->wholeHeader);
+}
+
+// Partial decodes stop once their entries would add up to the header's size.
+TEST_F(CSRHeaderDecodeTest, EntriesBudgetDecodesWholeHeader) {
+    std::vector<offset_t> first, second;
+    for (offset_t i = 0; i < 60; i++) {
+        first.push_back(10 + 100 * i);
+        second.push_back(2000 + 100 * i);
+    }
+    scanBatch(first);
+    EXPECT_EQ(csrState().numHeaderEntriesDecoded, 5902u);
+    EXPECT_FALSE(csrState().header->wholeHeader);
+    EXPECT_EQ(scanBatch(second), nextNodes(second));
+    EXPECT_TRUE(csrState().header->wholeHeader);
+}
+
+// After 16 partial decodes in a node group the scan decodes the whole header.
+TEST_F(CSRHeaderDecodeTest, ManyMissesDecodeWholeHeader) {
+    for (offset_t i = 0; i < 16; i++) {
+        scanBatch({100 + i * 400, 300 + i * 400});
+    }
+    EXPECT_EQ(csrState().numHeaderSpansDecoded, 16u);
+    EXPECT_FALSE(csrState().header->wholeHeader);
+    const std::vector<offset_t> nodes{7500, 7900};
+    EXPECT_EQ(scanBatch(nodes), nextNodes(nodes));
+    EXPECT_TRUE(csrState().header->wholeHeader);
+}
+
+// A refill copies only the current list when the next bound list starts 256 or more rows past it,
+// even inside the 2048-row window.
+TEST_F(CSRHeaderDecodeTest, RefillStopsAtGap) {
+    startBatch({10, 1000});
+    ASSERT_TRUE(relTable->scan(transaction, *scanState));
+    const auto& state = csrState();
+    EXPECT_EQ(state.numCachedRows, 1u);
+    // Node 1000's list lies inside the window, so only the gap stops the refill.
+    EXPECT_LE(state.numTotalRows, common::DEFAULT_VECTOR_CAPACITY);
+    EXPECT_GE(state.header->getStartCSROffset(1000) - state.nextRowToScan, 256u);
+}
+
+// Adjacent lists share one refill: the rows of nodes 10 to 14 are copied together.
+TEST_F(CSRHeaderDecodeTest, RefillRunsThroughAdjacentLists) {
+    startBatch({10, 11, 12, 13, 14});
+    ASSERT_TRUE(relTable->scan(transaction, *scanState));
+    EXPECT_EQ(csrState().numCachedRows, 5u);
 }
 
 } // namespace testing
