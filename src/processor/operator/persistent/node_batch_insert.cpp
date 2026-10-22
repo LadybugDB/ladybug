@@ -865,6 +865,51 @@ static void commitPrimaryKeyIndexInsertions(Transaction* transaction, NodeTable&
     }
 }
 
+static void commitSecondaryIndexInsertions(Transaction* transaction, NodeTable& nodeTable,
+    Index& index, const InMemChunkedNodeGroup& nodeGroup, const NodeBatchInsertInfo& info,
+    offset_t nodeOffset, length_t numRows, main::ClientContext* context) {
+    if (numRows == 0) {
+        return;
+    }
+    const auto& columnIDs = index.getIndexInfo().columnIDs;
+    std::vector<const ColumnChunkData*> keyChunks;
+    for (const auto columnID : columnIDs) {
+        const auto it =
+            std::find(info.insertColumnIDs.begin(), info.insertColumnIDs.end(), columnID);
+        if (it == info.insertColumnIDs.end()) {
+            return;
+        }
+        const auto chunkIdx =
+            info.outputDataColumns[std::distance(info.insertColumnIDs.begin(), it)];
+        keyChunks.push_back(&nodeGroup.getColumnChunk(chunkIdx));
+    }
+    auto state = std::make_shared<DataChunkState>();
+    ValueVector nodeIDVector{LogicalType::INTERNAL_ID()};
+    nodeIDVector.setState(state);
+    std::vector<std::unique_ptr<ValueVector>> keyVectors;
+    std::vector<ValueVector*> keyVectorPtrs;
+    for (const auto* chunk : keyChunks) {
+        auto keyVector = std::make_unique<ValueVector>(chunk->getDataType().copy(),
+            MemoryManager::Get(*context), state);
+        keyVectorPtrs.push_back(keyVector.get());
+        keyVectors.push_back(std::move(keyVector));
+    }
+    auto insertState = index.initInsertState(context, [&nodeTable, transaction](offset_t offset) {
+        return nodeTable.isVisible(transaction, offset);
+    });
+    for (auto start = 0u; start < numRows; start += DEFAULT_VECTOR_CAPACITY) {
+        const auto size = std::min<length_t>(DEFAULT_VECTOR_CAPACITY, numRows - start);
+        state->getSelVectorUnsafe().setToUnfiltered(size);
+        for (auto colIdx = 0u; colIdx < keyChunks.size(); ++colIdx) {
+            keyChunks[colIdx]->scan(*keyVectors[colIdx], start, size);
+        }
+        for (auto i = 0u; i < size; ++i) {
+            nodeIDVector.setValue<nodeID_t>(i, {nodeOffset + start + i, nodeTable.getTableID()});
+        }
+        index.commitInsert(transaction, nodeIDVector, keyVectorPtrs, *insertState);
+    }
+}
+
 void NodeBatchInsert::clearToIndex(MemoryManager* mm,
     std::unique_ptr<InMemChunkedNodeGroup>& nodeGroup, offset_t startIndexInGroup) const {
     // Create a new chunked node group and move the unwritten values to it
@@ -928,6 +973,20 @@ void NodeBatchInsert::writeAndResetNodeGroup(transaction::Transaction* transacti
         sharedTarget.noIndexPKValidator->validate(
             nodeGroup->getColumnChunk(nodeSharedState->pkColumnID), 0, numRowsWritten);
     }
+
+    const auto nodeInfo = info->ptrCast<NodeBatchInsertInfo>();
+    for (auto& indexHolder : nodeTable->getIndexes()) {
+        if (!indexHolder.isLoaded()) {
+            continue;
+        }
+        auto* index = indexHolder.getIndex();
+        if (index->isPrimary()) {
+            continue;
+        }
+        commitSecondaryIndexInsertions(transaction, *nodeTable, *index, *nodeGroup, *nodeInfo,
+            nodeOffset, numRowsWritten, transaction->getClientContext());
+    }
+
     if (numRowsWritten == nodeGroup->getNumRows()) {
         nodeGroup->resetToEmpty();
     } else {

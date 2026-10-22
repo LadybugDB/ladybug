@@ -280,6 +280,27 @@ art_secondary_person|art_secondary_person_name|ART|[name]
 6
 7
 9
+-STATEMENT COPY art_secondary_person FROM (UNWIND range(20, 22) AS i RETURN i, 'Grace', i);
+---- ok
+-STATEMENT MATCH (p:art_secondary_person) WHERE p.name = 'Grace' RETURN p.ID ORDER BY p.ID;
+---- 6
+2
+3
+5
+20
+21
+22
+-STATEMENT CHECKPOINT;
+---- ok
+-RELOADDB
+-STATEMENT MATCH (p:art_secondary_person) WHERE p.name = 'Grace' RETURN p.ID ORDER BY p.ID;
+---- 6
+2
+3
+5
+20
+21
+22
 
 # Check to see if Count() correctly handles full vectors that are all null
 -CASE AddInt64PropertyWithoutDefault
