@@ -427,8 +427,6 @@
 0|7
 
 -CASE CopyRelRollbackAfterAutocommitCopy
--STATEMENT CALL auto_checkpoint=false;
----- ok
 -STATEMENT CREATE NODE TABLE A(id INT64 PRIMARY KEY);
 ---- ok
 -STATEMENT CREATE REL TABLE T(FROM A TO A);
@@ -470,8 +468,6 @@
 530
 
 -CASE CopyRelNewGroupExplicitTxnRollbackAndCommit
--STATEMENT CALL auto_checkpoint=false;
----- ok
 -STATEMENT CREATE NODE TABLE A(id INT64 PRIMARY KEY);
 ---- ok
 -STATEMENT UNWIND range(0, 99) AS i CREATE (:A {id: i});
