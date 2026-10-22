@@ -814,6 +814,155 @@ TEST_F(CheckpointRetryAfterFailureTest, PartitionShadowsSurviveUntilMainWALRetir
     ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 1);
 }
 
+// Checkpoints automatically after every commit.
+class PostCommitCheckpointFailureTest : public CheckpointRetryAfterFailureTest {
+public:
+    void SetUp() override {
+        CheckpointRetryAfterFailureTest::SetUp();
+        checkpointAfterEveryCommit();
+    }
+
+    void checkpointAfterEveryCommit() const {
+        ASSERT_TRUE(conn->query("CALL force_checkpoint_on_close=false;")->isSuccess());
+        ASSERT_TRUE(conn->query("CALL auto_checkpoint=true;")->isSuccess());
+        ASSERT_TRUE(conn->query("CALL checkpoint_threshold=0;")->isSuccess());
+    }
+
+    // Counts checkpoint attempts; each one fails while failCheckpoints is set.
+    template<typename FAILING_CHECKPOINTER>
+    void countCheckpoints() {
+        FlakyCheckpointer counting(
+            [this](main::ClientContext& context) -> std::unique_ptr<Checkpointer> {
+                numCheckpoints++;
+                if (failCheckpoints) {
+                    return std::make_unique<FAILING_CHECKPOINTER>(context);
+                }
+                return std::make_unique<Checkpointer>(context);
+            });
+        counting.setCheckpointer(*getClientContext(*conn));
+    }
+
+    uint64_t numCheckpoints = 0;
+    bool failCheckpoints = true;
+};
+
+TEST_F(PostCommitCheckpointFailureTest, FailedAutoCheckpointDoesNotFailCommit) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+    countCheckpoints<FlakyCheckpointerFailsOnCheckpointStorage>();
+    insertNodes(0, 1);
+    ASSERT_TRUE(conn->query("BEGIN TRANSACTION;")->isSuccess());
+    insertNodes(1, 2);
+    auto res = conn->query("COMMIT;");
+    ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+    ASSERT_EQ(numCheckpoints, 2u);
+    // Reopen without checkpointing: the WAL alone recovers both commits.
+    res.reset();
+    createDBAndConn();
+    checkNodes(2);
+}
+
+TEST_F(PostCommitCheckpointFailureTest, NextCommitRetriesFailedAutoCheckpoint) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+    countCheckpoints<FlakyCheckpointerFailsOnCheckpointStorage>();
+    insertNodes(0, 1);
+    EXPECT_GT(WAL::Get(*getClientContext(*conn))->getFileSize(), 0u);
+    failCheckpoints = false;
+    insertNodes(1, 2);
+    ASSERT_EQ(numCheckpoints, 2u);
+    EXPECT_EQ(WAL::Get(*getClientContext(*conn))->getFileSize(), 0u);
+    createDBAndConn();
+    checkNodes(2);
+}
+
+TEST_F(PostCommitCheckpointFailureTest, AutoCheckpointBlockedByOpenWriterDoesNotFailCommit) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+    conn.reset();
+    createDB(10000 /* checkpoint wait timeout in microseconds */);
+    conn = std::make_unique<main::Connection>(database.get());
+    checkpointAfterEveryCommit();
+    ASSERT_TRUE(conn->query("CALL debug_enable_multi_writes=true;")->isSuccess());
+    auto context = getClientContext(*conn);
+    main::Connection other{database.get()};
+    ASSERT_TRUE(other.query("BEGIN TRANSACTION;")->isSuccess());
+    ASSERT_TRUE(other.query("CREATE (a:test {id: 1, name: 'name_1'});")->isSuccess());
+    // This commit's checkpoint times out waiting for the other connection's write transaction.
+    insertNodes(0, 1);
+    EXPECT_GT(WAL::Get(*context)->getFileSize(), 0u);
+    auto res = other.query("COMMIT;");
+    ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+    EXPECT_EQ(WAL::Get(*context)->getFileSize(), 0u);
+    checkNodes(2);
+}
+
+TEST_F(PostCommitCheckpointFailureTest, AutoCheckpointThatPoisonsWALFailsCommit) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+    countCheckpoints<FlakyCheckpointerFailsOnApplyingShadow>();
+    auto res = conn->query("CREATE (a:test {id: 0, name: 'name_0'});");
+    ASSERT_FALSE(res->isSuccess());
+    EXPECT_NE(res->getErrorMessage().find("Transaction committed successfully"), std::string::npos)
+        << res->getErrorMessage();
+    EXPECT_NE(res->getErrorMessage().find("refuses further writes until restart"),
+        std::string::npos)
+        << res->getErrorMessage();
+    ASSERT_EQ(numCheckpoints, 1u);
+    res.reset();
+    createDBAndConn();
+    checkNodes(1);
+}
+
+TEST_F(PostCommitCheckpointFailureTest, FailedForcedCheckpointFailsCopy) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+    countCheckpoints<FlakyCheckpointerFailsOnCheckpointStorage>();
+    auto res = conn->query("COPY test FROM (UNWIND range(0, 9) AS i RETURN i, 'n');");
+    ASSERT_FALSE(res->isSuccess());
+    EXPECT_NE(res->getErrorMessage().find("Transaction committed successfully"), std::string::npos)
+        << res->getErrorMessage();
+    ASSERT_EQ(numCheckpoints, 1u);
+}
+
+TEST_F(PostCommitCheckpointFailureTest, FailedForcedCheckpointFailsCreateIndex) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+    insertNodes(0, 2);
+    countCheckpoints<FlakyCheckpointerFailsOnCheckpointStorage>();
+    setenv("LBUG_CREATE_INDEX_WAL_THRESHOLD", "1", 1);
+    auto res = conn->query("CREATE ART INDEX test_name_idx FOR (n:test) ON (n.name);");
+    unsetenv("LBUG_CREATE_INDEX_WAL_THRESHOLD");
+    ASSERT_FALSE(res->isSuccess());
+    EXPECT_NE(res->getErrorMessage().find("Transaction committed successfully"), std::string::npos)
+        << res->getErrorMessage();
+    ASSERT_EQ(numCheckpoints, 1u);
+}
+
+TEST_F(PostCommitCheckpointFailureTest, FailedCheckpointCleanupFailsCommit) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+    countCheckpoints<CheckpointerFailsBeforeWALRetirement>();
+    auto res = conn->query("CREATE (a:test {id: 0, name: 'name_0'});");
+    ASSERT_FALSE(res->isSuccess());
+    EXPECT_NE(res->getErrorMessage().find("Transaction committed successfully"), std::string::npos)
+        << res->getErrorMessage();
+    EXPECT_NE(res->getErrorMessage().find("checkpoint interrupted before WAL retirement"),
+        std::string::npos)
+        << res->getErrorMessage();
+    ASSERT_EQ(numCheckpoints, 1u);
+    res.reset();
+    createDBAndConn();
+    checkNodes(1);
+}
+
 class CommittedPartitionMissingBaseTest : public CheckpointRetryAfterFailureTest,
                                           public ::testing::WithParamInterface<bool> {};
 
