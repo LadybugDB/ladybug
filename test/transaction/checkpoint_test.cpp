@@ -925,9 +925,15 @@ TEST_F(PostCommitCheckpointFailureTest, FailedForcedCheckpointFailsCopy) {
     countCheckpoints<FlakyCheckpointerFailsOnCheckpointStorage>();
     auto res = conn->query("COPY test FROM (UNWIND range(0, 9) AS i RETURN i, 'n');");
     ASSERT_FALSE(res->isSuccess());
-    EXPECT_NE(res->getErrorMessage().find("Transaction committed successfully"), std::string::npos)
+    EXPECT_NE(
+        res->getErrorMessage().find("may be lost on restart unless a later CHECKPOINT succeeds"),
+        std::string::npos)
         << res->getErrorMessage();
     ASSERT_EQ(numCheckpoints, 1u);
+    failCheckpoints = false;
+    checkpoint();
+    createDBAndConn();
+    checkNodes(10);
 }
 
 TEST_F(PostCommitCheckpointFailureTest, FailedForcedCheckpointFailsCreateIndex) {
@@ -940,9 +946,17 @@ TEST_F(PostCommitCheckpointFailureTest, FailedForcedCheckpointFailsCreateIndex) 
     auto res = conn->query("CREATE ART INDEX test_name_idx FOR (n:test) ON (n.name);");
     unsetenv("LBUG_CREATE_INDEX_WAL_THRESHOLD");
     ASSERT_FALSE(res->isSuccess());
-    EXPECT_NE(res->getErrorMessage().find("Transaction committed successfully"), std::string::npos)
+    EXPECT_NE(
+        res->getErrorMessage().find("may be lost on restart unless a later CHECKPOINT succeeds"),
+        std::string::npos)
         << res->getErrorMessage();
     ASSERT_EQ(numCheckpoints, 1u);
+    failCheckpoints = false;
+    checkpoint();
+    createDBAndConn();
+    res = conn->query("CALL SHOW_INDEXES() WHERE index_name = 'test_name_idx' RETURN count(*);");
+    ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+    EXPECT_EQ(res->getNext()->getValue(0)->getValue<int64_t>(), 1);
 }
 
 TEST_F(PostCommitCheckpointFailureTest, FailedCheckpointCleanupFailsCommit) {
