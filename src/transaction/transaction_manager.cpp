@@ -52,6 +52,13 @@ private:
     std::optional<uint64_t> queryID;
 };
 
+[[noreturn]] void throwPostCommitCheckpointFailure(const std::exception& e) {
+    throw CheckpointException{
+        std::format("Transaction committed successfully, but the post-commit checkpoint failed. "
+                    "The committed data is durable and will be recovered on restart: {}",
+            e.what())};
+}
+
 } // namespace
 
 Transaction* TransactionManager::beginTransaction(main::ClientContext& clientContext,
@@ -181,11 +188,16 @@ void TransactionManager::commit(main::ClientContext& clientContext, Transaction*
         } else if (shouldAutoCheckpoint) {
             tryCheckpoint(clientContext);
         }
+    } catch (const CheckpointException& e) {
+        // Unless the WAL is poisoned, a failed automatic checkpoint left nothing behind: the commit
+        // is in the WAL and the next write commit retries. COPY FROM and CREATE INDEX on a large
+        // ART rely on their forced checkpoint instead of the WAL, so that failure still fails the
+        // statement.
+        if (shouldForceCheckpoint || wal.isPoisoned()) {
+            throwPostCommitCheckpointFailure(e);
+        }
     } catch (const std::exception& e) {
-        throw CheckpointException{std::format(
-            "Transaction committed successfully, but the post-commit checkpoint failed. "
-            "The committed data is durable and will be recovered on restart: {}",
-            e.what())};
+        throwPostCommitCheckpointFailure(e);
     }
 }
 
@@ -353,6 +365,8 @@ void TransactionManager::tryCheckpoint(main::ClientContext& clientContext) {
     checkpointNoLock(clientContext);
 }
 
+// Throws CheckpointException only with the checkpoint rolled back or not started, or with the WAL
+// poisoned; commit() relies on this to drop failed automatic checkpoints.
 void TransactionManager::checkpointNoLock(main::ClientContext& clientContext) {
     QueryProgressScope progress{clientContext, 0.01};
     // Capture the retention horizon before acquiring the write gate. Taking the

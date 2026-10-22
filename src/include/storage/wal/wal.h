@@ -63,6 +63,7 @@ public:
     uint64_t getFrozenWALFileSize();
     bool mayHaveCheckpointRecord();
     void throwIfPoisoned();
+    bool isPoisoned();
     void poison(const std::string& reason);
 
     static WAL* Get(const main::ClientContext& context);
