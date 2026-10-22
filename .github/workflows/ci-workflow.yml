@@ -163,7 +163,8 @@ jobs:
       TEST_JOBS: 4
       NUM_THREADS: 4
       WERROR: ${{ matrix.platform == 'windows' && '0' || '1' }}
-      EXTRA_CMAKE_FLAGS: ${{ matrix.platform == 'windows' && '-DCMAKE_POLICY_DEFAULT_CMP0141=NEW -DCMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded -DBUILD_STATIC_LBUG=FALSE' || '' }}
+      # Linux: line tables only, so backtraces keep file:line and objects and the ccache shrink several-fold.
+      EXTRA_CMAKE_FLAGS: ${{ matrix.platform == 'windows' && '-DCMAKE_POLICY_DEFAULT_CMP0141=NEW -DCMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded -DBUILD_STATIC_LBUG=FALSE' || matrix.platform == 'linux' && '-DCMAKE_C_FLAGS_RELWITHDEBINFO="-O2 -g1 -DNDEBUG" -DCMAKE_CXX_FLAGS_RELWITHDEBINFO="-O2 -g1 -DNDEBUG"' || '' }}
     steps:
       - uses: ilammy/msvc-dev-cmd@v1
         if: matrix.platform == 'windows'
@@ -176,10 +177,12 @@ jobs:
 
       - name: Setup ccache
         if: matrix.platform != 'windows'
-        uses: hendrikmuhs/ccache-action@v1.2
+        uses: hendrikmuhs/ccache-action@5ebbd400eff9e74630f759d94ddd7b6c26299639 # v1.2.20
         with:
           key: minimal-test-${{ runner.os }}-${{ github.ref }}
           max-size: 2G
+          # Saved by the steps at the end of the job, which a cancelled run skips.
+          save: false
           restore-keys: |
             minimal-test-${{ runner.os }}-refs/heads/main
             minimal-test-${{ runner.os }}-
@@ -235,6 +238,7 @@ jobs:
           CMAKE_CXX_COMPILER_LAUNCHER: ccache
         shell: bash
         run: |
+          echo "CCACHE_JOB_START=$(date +%s)" >> "$GITHUB_ENV"
           if [ "$RUNNER_OS" = "Windows" ]; then
             ccache -s
           fi
@@ -272,7 +276,8 @@ jobs:
               else
                 echo "Warning: libssl.so.3 not found by probe; relying on existing EXTRA_CMAKE_FLAGS"
               fi
-              make relwithdebinfo
+              # One build serves the tests, the dataset generation and the shell tests.
+              make test-build
             fi
           fi
           if [ "$RUNNER_OS" = "Windows" ]; then
@@ -315,6 +320,18 @@ jobs:
           uv pip install pytest pexpect
           make shell-test test
 
+      # Objects this run did not use are evicted first, so an entry stays at the run's working set.
+      - name: Evict unused ccache objects
+        if: ${{ !cancelled() && matrix.platform != 'windows' && env.CCACHE_JOB_START != '' }}
+        run: ccache --evict-older-than "$(( $(date +%s) - CCACHE_JOB_START ))s"
+
+      - name: Save ccache
+        if: ${{ !cancelled() && matrix.platform != 'windows' && env.CCACHE_JOB_START != '' }}
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ${{ github.workspace }}/.ccache
+          key: ccache-minimal-test-${{ runner.os }}-${{ github.ref }}-${{ github.run_id }}-${{ github.run_attempt }}
+
       - name: Save ccache directory (Windows)
         if: always() && matrix.platform == 'windows'
         uses: actions/cache/save@v4
@@ -339,6 +356,10 @@ jobs:
       AZURE_CONNECTION_STRING: ${{ format('DefaultEndpointsProtocol=https;AccountName={0};AccountKey={1};EndpointSuffix=core.windows.net', secrets.AZURE_ACCOUNT_NAME, secrets.AZURE_ACCOUNT_KEY) }}
       AZURE_ACCOUNT_NAME: ${{ secrets.AZURE_ACCOUNT_NAME }}
       AZURE_PUBLIC_CONTAINER: ${{ secrets.AZURE_PUBLIC_CONTAINER }}
+      # Line tables only: backtraces keep file:line, objects and the ccache shrink several-fold.
+      EXTRA_CMAKE_FLAGS: '-DCMAKE_C_FLAGS_RELWITHDEBINFO="-O2 -g1 -DNDEBUG" -DCMAKE_CXX_FLAGS_RELWITHDEBINFO="-O2 -g1 -DNDEBUG"'
+      # The Makefile default (nproc * 2 / 3) builds with 2 jobs on the 4-vCPU runner.
+      NUM_THREADS: 4
 
     steps:
       - uses: actions/checkout@v4
@@ -346,16 +367,6 @@ jobs:
       - name: Checkout extensions
         run: |
           git submodule update --init extension dataset benchmark
-
-      - name: Free disk space on Ubuntu runner
-        uses: kfir4444/free-disk-space@main
-        with:
-          tool-cache: true
-          android: true
-          dotnet: true
-          haskell: true
-          large-packages: true
-          swap-storage: true
 
       - name: Setup pixi
         uses: prefix-dev/setup-pixi@v0.9.4
@@ -393,10 +404,12 @@ jobs:
           "$HOME/.local/bin/dbc" install --level user duckdb
 
       - name: Setup ccache
-        uses: hendrikmuhs/ccache-action@v1.2
+        uses: hendrikmuhs/ccache-action@5ebbd400eff9e74630f759d94ddd7b6c26299639 # v1.2.20
         with:
           key: minimal-extension-test-${{ runner.os }}-${{ github.ref }}
           max-size: 2G
+          # Saved by the steps at the end of the job, which a cancelled run skips.
+          save: false
           restore-keys: |
             minimal-extension-test-${{ runner.os }}-refs/heads/main
             minimal-extension-test-${{ runner.os }}-
@@ -477,14 +490,16 @@ jobs:
       # shell needs to be built first to generate the dataset provided by the server
       - name: Extension test build
         run: |
+          echo "CCACHE_JOB_START=$(date +%s)" >> "$GITHUB_ENV"
           # Force find_package(Arrow) onto the system Arrow 26: the root
           # CMakeLists prepends the pixi env (Arrow 25) to CMAKE_PREFIX_PATH,
           # but the vendored icebug prebuilt needs libarrow.so.2600.
-          export EXTRA_CMAKE_FLAGS="-DArrow_ROOT=/usr"
+          export EXTRA_CMAKE_FLAGS="$EXTRA_CMAKE_FLAGS -DArrow_ROOT=/usr"
           make relwithdebinfo
           cp build/relwithdebinfo/tools/shell/lbug lbug.prod
           make extension-test-build
           cp lbug.prod build/relwithdebinfo/tools/shell/lbug
+          df -h /
 
       - name: Test dynamic extension loading
         run: |
@@ -499,3 +514,14 @@ jobs:
           uv run scripts/generate-tinysnb.py
           uv run scripts/setup-extension-repo.py &
           make extension-test
+
+      - name: Evict unused ccache objects
+        if: ${{ !cancelled() && env.CCACHE_JOB_START != '' }}
+        run: ccache --evict-older-than "$(( $(date +%s) - CCACHE_JOB_START ))s"
+
+      - name: Save ccache
+        if: ${{ !cancelled() && env.CCACHE_JOB_START != '' }}
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ${{ github.workspace }}/.ccache
+          key: ccache-minimal-extension-test-${{ runner.os }}-${{ github.ref }}-${{ github.run_id }}-${{ github.run_attempt }}
