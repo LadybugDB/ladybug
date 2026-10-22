@@ -24,3 +24,23 @@ CASE_MACRO|CREATE MACRO `CASE_MACRO` (x) AS CASE x WHEN 35 THEN x + 1 ELSE x - 5
 MINUS|CREATE MACRO `MINUS` (a,b) AS a - b;
 CASE_MACRO2|CREATE MACRO `CASE_MACRO2` (x) AS CASE x WHEN 35 THEN x + 1 END;
 ADD|CREATE MACRO `ADD` (a,b) AS a + b;
+
+-CASE showMacroWithNegativeLiteral
+-STATEMENT CREATE NODE TABLE T(id INT64 PRIMARY KEY, a INT64 DEFAULT -2, b DOUBLE DEFAULT -2.5)
+---- ok
+-STATEMENT CALL table_info('T') RETURN name, default_expr
+---- 3
+id|NULL
+a|-2
+b|-2.500000
+-STATEMENT CREATE MACRO neg(x) AS x * -2
+---- ok
+-STATEMENT CREATE MACRO neg_float(x) AS -2.5 - x
+---- ok
+-STATEMENT call show_macros() return name, definition
+---- 2
+NEG|CREATE MACRO `NEG` (x) AS x * -2;
+NEG_FLOAT|CREATE MACRO `NEG_FLOAT` (x) AS -2.5 - x;
+-STATEMENT return neg(1), neg_float(1.0)
+---- 1
+-2|-3.500000
