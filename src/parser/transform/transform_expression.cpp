@@ -675,16 +675,16 @@ std::unique_ptr<ParsedExpression> Transformer::transformIntegerLiteral(
     string_t literal{text.c_str(), text.length()};
     int64_t result = 0;
     if (function::CastString::tryCast(literal, result)) {
-        return std::make_unique<ParsedLiteralExpression>(Value(result), ctx.getText());
+        return std::make_unique<ParsedLiteralExpression>(Value(result), text);
     }
     int128_t result128 = 0;
     if (function::trySimpleIntegerCast(reinterpret_cast<const char*>(literal.getData()),
             literal.len, result128)) {
-        return std::make_unique<ParsedLiteralExpression>(Value(result128), ctx.getText());
+        return std::make_unique<ParsedLiteralExpression>(Value(result128), text);
     }
     uint128_t resultu128 = 0;
     function::CastString::operation(literal, resultu128);
-    return std::make_unique<ParsedLiteralExpression>(Value(resultu128), ctx.getText());
+    return std::make_unique<ParsedLiteralExpression>(Value(resultu128), text);
 }
 
 std::unique_ptr<ParsedExpression> Transformer::transformDoubleLiteral(
@@ -697,7 +697,7 @@ std::unique_ptr<ParsedExpression> Transformer::transformDoubleLiteral(
     string_t literal{text.c_str(), text.length()};
     double result = 0;
     function::CastString::operation(literal, result);
-    return std::make_unique<ParsedLiteralExpression>(Value(result), ctx.getText());
+    return std::make_unique<ParsedLiteralExpression>(Value(result), text);
 }
 
 } // namespace parser
