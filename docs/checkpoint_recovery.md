@@ -74,7 +74,9 @@ its own again.
 
 Recovery reads the checksum flag of an attached-graph WAL from the WAL's own header, so a graph
 opened on its own may be opened with either checksum setting: its committed changes are replayed
-or its committed checkpoint recovered when the parent database is reopened.
+or its committed checkpoint recovered when the parent database is reopened. The database's own
+WAL must instead match the configured setting. A mismatch is a configuration error, not a torn
+tail, so it fails the open even with `throwOnWalReplayFailure` false and leaves the WAL untouched.
 
 ## Downgrades
 
