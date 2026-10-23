@@ -11,6 +11,10 @@
 #include "resizable_buffer.h"
 
 namespace lbug {
+namespace storage {
+class MemoryManager;
+} // namespace storage
+
 namespace processor {
 
 struct ParquetReaderPrefetchConfig {
@@ -58,6 +62,7 @@ public:
     const common::LogicalType& getColumnType(uint32_t idx) const { return columnTypes[idx]; }
 
     lbug_parquet::format::FileMetaData* getMetadata() const { return metadata.get(); }
+    storage::MemoryManager* getMemoryManager() const;
 
 private:
     std::unique_ptr<lbug_apache::thrift::protocol::TProtocol> createThriftProtocol(

@@ -387,6 +387,14 @@ Binder exception: Column i does not exist in table testArray.
 Binder exception: Column id is not of the expected type ARRAY.
 -STATEMENT CALL _CACHE_ARRAY_COLUMN_LOCALLY('testArray', 'arr');
 ---- ok
+-STATEMENT CREATE NODE TABLE testStringArray(id INT64 PRIMARY KEY, arr STRING[2]);
+---- ok
+-STATEMENT UNWIND range(1, 10) AS i CREATE (:testStringArray {id: i, arr: ['a string longer than twelve bytes', 'another long string value']});
+---- ok
+-STATEMENT CHECKPOINT;
+---- ok
+-STATEMENT CALL _CACHE_ARRAY_COLUMN_LOCALLY('testStringArray', 'arr');
+---- ok
 
 -CASE ShowFunctionsWithAlias
 -STATEMENT CALL SHOW_FUNCTIONS() WHERE name = 'TOLOWER' RETURN *;

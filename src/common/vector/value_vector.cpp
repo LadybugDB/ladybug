@@ -2,6 +2,7 @@
 
 #include <numeric>
 
+#include "common/assert.h"
 #include "common/exception/runtime.h"
 #include "common/null_buffer.h"
 #include "common/serializer/deserializer.h"
@@ -26,6 +27,11 @@ ValueVector::ValueVector(LogicalType dataType, storage::MemoryManager* memoryMan
                                "Data type is expected to be resolved during binding.");
         // LCOV_EXCL_STOP
     }
+    // Strings too long to inline live in overflow blocks from the memory manager; nested types
+    // pass it to their child vectors, so the check covers strings at any depth.
+    DASSERT(
+        memoryManager != nullptr || (this->dataType.getPhysicalType() != PhysicalTypeID::STRING &&
+                                        this->dataType.getPhysicalType() != PhysicalTypeID::JSON));
     numBytesPerValue = getDataTypeSize(this->dataType);
     initializeValueBuffer();
     auxiliaryBuffer = AuxiliaryBufferFactory::getAuxiliaryBuffer(this->dataType, memoryManager);

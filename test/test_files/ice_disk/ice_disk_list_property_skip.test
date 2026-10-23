@@ -1,0 +1,29 @@
+-DATASET CSV empty
+
+--
+
+-CASE ListOfStringsPropertyFromMidRowGroup
+-SKIP_IN_MEM
+-SKIP_WASM
+-STATEMENT CREATE NODE TABLE nodes(id INT32, PRIMARY KEY(id));
+---- ok
+-STATEMENT CREATE REL TABLE edges(FROM nodes TO nodes, tags STRING[]);
+---- ok
+-STATEMENT UNWIND range(0, 2999) AS i CREATE (:nodes {id: i});
+---- ok
+-STATEMENT MATCH (a:nodes), (b:nodes) WHERE b.id = a.id + 1 CREATE (a)-[:edges {tags: ['a tag longer than twelve bytes ' + CAST(a.id AS STRING)]}]->(b);
+---- ok
+-STATEMENT EXPORT DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_ice_list_strings/export";
+---- ok
+-STATEMENT DROP TABLE edges;
+---- ok
+-STATEMENT DROP TABLE nodes;
+---- ok
+-STATEMENT CREATE NODE TABLE nodes(id INT32, PRIMARY KEY(id)) WITH (storage = "${LBUG_EXPORT_DB_DIRECTORY}_ice_list_strings/export", format = 'icebug-disk');
+---- ok
+-STATEMENT CREATE REL TABLE edges(FROM nodes TO nodes, tags STRING[]) WITH (storage = "${LBUG_EXPORT_DB_DIRECTORY}_ice_list_strings/export", format = 'icebug-disk');
+---- ok
+# The edges of node 2000 start 2000 rows into the indices file's row group, so the scan skips rows of the list column.
+-STATEMENT MATCH (a:nodes {id: 2000})-[e:edges]->(b:nodes) RETURN b.id, e.tags;
+---- 1
+2001|[a tag longer than twelve bytes 2000]
