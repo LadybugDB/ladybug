@@ -48,9 +48,8 @@ uint64_t CostModel::computeMarkJoinCost(const binder::expression_vector& joinNod
     return computeHashJoinCost(joinNodeIDs, probe, build);
 }
 
-uint64_t CostModel::computeLookupJoinCost(const LogicalPlan& outerPlan,
-    cardinality_t outerCardinality) {
-    return outerPlan.getCost() + outerCardinality;
+uint64_t CostModel::computeLookupJoinCost(const LogicalPlan& outerPlan, cardinality_t numProbes) {
+    return outerPlan.getCost() + numProbes;
 }
 
 uint64_t CostModel::computeIntersectCost(const LogicalPlan& probePlan,

@@ -22,11 +22,10 @@ public:
         const LogicalPlan& probe, const LogicalPlan& build);
     static uint64_t computeIntersectCost(const LogicalPlan& probePlan,
         const std::vector<LogicalPlan>& buildPlans);
-    // Lookup join: one PK probe/payload fetch per outer row on top of the outer plan.
+    // Lookup join: one PK probe/payload fetch per flat outer row on top of the outer plan.
     // Like the INL-join precedent, this only pays off for small outer cardinalities,
     // which callers enforce via PlannerKnobs::LOOKUP_JOIN_MAX_OUTER_CARDINALITY.
-    static uint64_t computeLookupJoinCost(const LogicalPlan& outerPlan,
-        cardinality_t outerCardinality);
+    static uint64_t computeLookupJoinCost(const LogicalPlan& outerPlan, cardinality_t numProbes);
 };
 
 } // namespace planner

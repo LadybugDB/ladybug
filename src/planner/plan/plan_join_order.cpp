@@ -895,7 +895,8 @@ static const LogicalScanNodeTable* getBareSingleNodeScan(const SubqueryGraph& su
 // (b3) Each non-recursive extend multiplies the estimate's uncertainty by the observed
 // worst/mean fan-out ratio (ANALYZE CSR degree stats). The lookup fires only if the
 // uncertainty-discounted estimate still fits comfortably inside the eliminated scan:
-// outerCard * uncertainty < innerCard. Missing degree stats fail closed.
+// numProbes * uncertainty < innerCard, where numProbes counts flat outer rows and so already
+// includes the mean fan-out. Missing degree stats fail closed.
 struct LookupOuterAnalysis {
     bool trusted = true;
     double uncertainty = 1.0;
@@ -1019,9 +1020,9 @@ bool Planner::tryPlanLookupJoin(const SubqueryGraph& innerSubgraph, const Logica
     if (tableID != joinNode->getTableIDs()[0]) {
         return false;
     }
-    // Per-tuple probes only pay off for small outer cardinalities (INLJ precedent).
-    // Checked before touching storage, so virtual/partition table IDs without a
-    // storage entry never throw here.
+    // Per-tuple probes only pay off for small outer cardinalities (INLJ precedent). This
+    // pre-filter on the factorized estimate runs before touching storage, so virtual/partition
+    // table IDs without a storage entry never throw here; the cap on flat rows below decides.
     const auto outerCard = outerPlan.getCardinality();
     if (outerCard > PlannerKnobs::LOOKUP_JOIN_MAX_OUTER_CARDINALITY) {
         return false;
@@ -1043,6 +1044,12 @@ bool Planner::tryPlanLookupJoin(const SubqueryGraph& innerSubgraph, const Logica
     }
     auto plan = outerPlan.copy();
     appendFlattens(plan.getSchema()->getGroupsPosInScope(), plan);
+    // The lookup probes once per flat outer row. An extend leaves its neighbours in an unflat
+    // group, so the factorized estimate checked above can be far below the number of probes.
+    const auto numProbes = plan.getCardinality();
+    if (numProbes > PlannerKnobs::LOOKUP_JOIN_MAX_OUTER_CARDINALITY) {
+        return false;
+    }
     const auto outputGroupPos = plan.getSchema()->getGroupPos(*key);
     auto properties = getProperties(*joinNode);
     properties.erase(std::remove_if(properties.begin(), properties.end(),
@@ -1086,19 +1093,19 @@ bool Planner::tryPlanLookupJoin(const SubqueryGraph& innerSubgraph, const Logica
             analysis.maxExtendDepth > PlannerKnobs::LOOKUP_JOIN_MAX_OUTER_EXTEND_DEPTH) {
             return false;
         }
-        const auto discountedOuter = static_cast<double>(outerCard) * analysis.uncertainty;
+        const auto discountedOuter = static_cast<double>(numProbes) * analysis.uncertainty;
         if (!(discountedOuter < static_cast<double>(innerPlan.getCardinality()))) {
             return false;
         }
     }
-    const auto lookupCost = CostModel::computeLookupJoinCost(outerPlan, outerCard);
+    const auto lookupCost = CostModel::computeLookupJoinCost(outerPlan, numProbes);
     if (lookupCost >= maxCost) {
         return false;
     }
     auto lookup = std::make_shared<LogicalQueryPrimaryKeyLookup>(tableID, joinNode->getInternalID(),
         properties, key, outputGroupPos, plan.getLastOperator());
     lookup->computeFactorizedSchema();
-    lookup->setCardinality(outerCard);
+    lookup->setCardinality(numProbes);
     plan.setLastOperator(std::move(lookup));
     appendFilters(predicates, plan);
     plan.setCost(lookupCost);

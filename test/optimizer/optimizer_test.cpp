@@ -435,6 +435,67 @@ TEST_F(OptimizerTest, SingleNodeTwoHopJoins) {
 #endif
 }
 
+TEST_F(OptimizerTest, LookupJoinCountsFlatOuterRows) {
+    if (common::DEFAULT_EXTEND_DIRECTION != common::ExtendDirection::BOTH) {
+        GTEST_SKIP();
+    }
+    // Every outer node has 20 neighbours, so the lookup probes 20 times the outer side's
+    // factorized estimate. lkp_big's 2,000 probes exceed the cap, although they are fewer than
+    // the 5,000 rows a scan of lkp_target reads. lkp_mid's 1,000 probes are within the cap but
+    // more than the 500 rows of lkp_mid_target. lkp_small's 200 probes pass both.
+    constexpr auto cap = common::PlannerKnobs::LOOKUP_JOIN_MAX_OUTER_CARDINALITY;
+    static_assert(100 <= cap && 100 * 20 > cap && 100 * 20 < 5000);
+    static_assert(50 * 20 <= cap && 50 * 20 > 500 && 10 * 20 <= cap);
+    for (auto query : {"CREATE NODE TABLE lkp_big(id INT64, PRIMARY KEY(id));",
+             "CREATE NODE TABLE lkp_mid(id INT64, PRIMARY KEY(id));",
+             "CREATE NODE TABLE lkp_small(id INT64, PRIMARY KEY(id));",
+             "CREATE NODE TABLE lkp_target(id INT64, name STRING, PRIMARY KEY(id));",
+             "CREATE NODE TABLE lkp_mid_target(id INT64, name STRING, PRIMARY KEY(id));",
+             "CREATE REL TABLE lkp_big_to(FROM lkp_big TO lkp_target);",
+             "CREATE REL TABLE lkp_mid_to(FROM lkp_mid TO lkp_mid_target);",
+             "CREATE REL TABLE lkp_small_to(FROM lkp_small TO lkp_target);",
+             "UNWIND range(0, 99) AS i CREATE (:lkp_big {id: i});",
+             "UNWIND range(0, 49) AS i CREATE (:lkp_mid {id: i});",
+             "UNWIND range(0, 9) AS i CREATE (:lkp_small {id: i});",
+             "UNWIND range(0, 4999) AS i CREATE (:lkp_target {id: i, name: CAST(i AS STRING)});",
+             "UNWIND range(0, 499) AS i CREATE (:lkp_mid_target {id: i, name: CAST(i AS STRING)});",
+             "MATCH (a:lkp_big), (t:lkp_target) WHERE t.id % 250 = a.id "
+             "CREATE (a)-[:lkp_big_to]->(t);",
+             "MATCH (a:lkp_mid), (t:lkp_mid_target) WHERE t.id % 25 = a.id % 25 "
+             "CREATE (a)-[:lkp_mid_to]->(t);",
+             "MATCH (a:lkp_small), (t:lkp_target) WHERE t.id % 250 = a.id "
+             "CREATE (a)-[:lkp_small_to]->(t);"}) {
+        auto result = conn->query(query);
+        ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    }
+    using planner::LogicalOperator;
+    using planner::LogicalOperatorType;
+    std::function<const LogicalOperator*(const LogicalOperator*)> findLookup =
+        [&](const LogicalOperator* op) -> const LogicalOperator* {
+        if (op->getOperatorType() == LogicalOperatorType::QUERY_PRIMARY_KEY_LOOKUP) {
+            return op;
+        }
+        for (auto i = 0u; i < op->getNumChildren(); ++i) {
+            if (auto* lookup = findLookup(op->getChild(i).get())) {
+                return lookup;
+            }
+        }
+        return nullptr;
+    };
+    for (auto query : {"MATCH (a:lkp_big)-[:lkp_big_to]->(t:lkp_target) RETURN t.name;",
+             "MATCH (a:lkp_mid)-[:lkp_mid_to]->(t:lkp_mid_target) RETURN t.name;"}) {
+        auto plan = getRoot(query);
+        EXPECT_EQ(findLookup(plan->getLastOperator().get()), nullptr) << query;
+        EXPECT_TRUE(hasOperatorType(plan->getLastOperator().get(), LogicalOperatorType::HASH_JOIN))
+            << query;
+    }
+    auto plan = getRoot("MATCH (a:lkp_small)-[:lkp_small_to]->(t:lkp_target) RETURN t.name;");
+    auto* lookup = findLookup(plan->getLastOperator().get());
+    ASSERT_NE(lookup, nullptr);
+    // The lookup reports its flat input rows, not the 10 factorized ones.
+    EXPECT_EQ(lookup->getCardinality(), 10u * 20);
+}
+
 TEST_F(OptimizerTest, PlanUndirectedInnerJoin) {
     if (common::DEFAULT_EXTEND_DIRECTION != common::ExtendDirection::BOTH) {
         GTEST_SKIP();
