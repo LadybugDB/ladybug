@@ -37,7 +37,7 @@ public:
     static binder::expression_vector getJoinNodeIDs(
         const std::vector<join_condition_t>& joinConditions);
 
-    std::vector<join_condition_t> getJoinConditions() const { return joinConditions; }
+    const std::vector<join_condition_t>& getJoinConditions() const { return joinConditions; }
     common::JoinType getJoinType() const { return joinType; }
     bool hasMark() const { return mark != nullptr; }
     std::shared_ptr<binder::Expression> getMark() const { return mark; }
