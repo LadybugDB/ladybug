@@ -1,6 +1,7 @@
 #include "transaction/transaction_manager.h"
 
 #include <algorithm>
+#include <iostream>
 #include <thread>
 
 #include "common/exception/checkpoint.h"
@@ -52,18 +53,14 @@ private:
     std::optional<uint64_t> queryID;
 };
 
-[[noreturn]] void throwPostCommitCheckpointFailure(const std::exception& e, bool forced) {
-    if (forced) {
-        throw CheckpointException{std::format(
-            "Transaction committed successfully, but the checkpoint it requires failed. Its "
-            "changes are not in the WAL and may be lost on restart unless a later CHECKPOINT "
-            "succeeds: {}",
-            e.what())};
+void warnAutoCheckpointFailed(WAL& wal, const std::exception& e) {
+    std::string walSize = "unknown";
+    try {
+        walSize = std::to_string(wal.getFileSize());
+    } catch (...) { // NOLINT: The statement has committed, so reporting must not fail it.
     }
-    throw CheckpointException{
-        std::format("Transaction committed successfully, but the post-commit checkpoint failed. "
-                    "The committed data is durable and will be recovered on restart: {}",
-            e.what())};
+    std::cerr << "Warning: automatic checkpoint after a commit failed, WAL " << walSize
+              << " bytes: " << e.what() << std::endl;
 }
 
 } // namespace
@@ -189,22 +186,26 @@ void TransactionManager::commit(main::ClientContext& clientContext, Transaction*
     // (commit/rollback) during the drain phase instead of deadlocking. The transaction has
     // already been removed from activeTransactions at this point, so any later failure is a
     // checkpoint failure, not a transaction failure that can be rolled back.
-    try {
-        if (shouldForceCheckpoint) {
+    if (shouldForceCheckpoint) {
+        try {
             checkpoint(clientContext);
-        } else if (shouldAutoCheckpoint) {
+        } catch (const std::exception& e) {
+            // COPY FROM and CREATE INDEX on a large ART rely on this checkpoint instead of the WAL.
+            throw CheckpointException{std::format(
+                "Transaction committed successfully, but the checkpoint it requires failed. Its "
+                "changes are not in the WAL and may be lost on restart unless a later CHECKPOINT "
+                "succeeds: {}",
+                e.what())};
+        }
+    } else if (shouldAutoCheckpoint) {
+        try {
             tryCheckpoint(clientContext);
+        } catch (const std::exception& e) {
+            // The commit is in the WAL whatever the checkpoint did, so failing the statement would
+            // only invite a retry that applies it twice. A rolled-back checkpoint is retried by a
+            // later write commit; a poisoned WAL fails the next write instead.
+            warnAutoCheckpointFailed(wal, e);
         }
-    } catch (const CheckpointException& e) {
-        // Unless the WAL is poisoned, a failed automatic checkpoint left nothing behind: the commit
-        // is in the WAL and the next write commit retries. COPY FROM and CREATE INDEX on a large
-        // ART rely on their forced checkpoint instead of the WAL, so that failure still fails the
-        // statement.
-        if (shouldForceCheckpoint || wal.isPoisoned()) {
-            throwPostCommitCheckpointFailure(e, shouldForceCheckpoint);
-        }
-    } catch (const std::exception& e) {
-        throwPostCommitCheckpointFailure(e, shouldForceCheckpoint);
     }
 }
 
@@ -372,8 +373,6 @@ void TransactionManager::tryCheckpoint(main::ClientContext& clientContext) {
     checkpointNoLock(clientContext);
 }
 
-// Throws CheckpointException only with the checkpoint rolled back or not started, or with the WAL
-// poisoned; commit() relies on this to drop failed automatic checkpoints.
 void TransactionManager::checkpointNoLock(main::ClientContext& clientContext) {
     QueryProgressScope progress{clientContext, 0.01};
     // Capture the retention horizon before acquiring the write gate. Taking the
