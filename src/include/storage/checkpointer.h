@@ -82,6 +82,8 @@ protected:
     // the horizon pins the WAL.
     virtual void onWALRetired(bool walRotated);
     virtual void beforeGraphShadowApply(StorageManager& storageManager);
+    // Runs first in rollback(), so tests can make the rollback itself fail.
+    virtual void beforeRollback();
     void applyShadowPagesForPartitionChildren();
     void flushGraphShadowFiles();
     void applyGraphShadowPages();
