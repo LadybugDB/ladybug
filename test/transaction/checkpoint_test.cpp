@@ -887,12 +887,18 @@ TEST_F(PostCommitCheckpointFailureTest, FailedAutoCheckpointDoesNotFailCommit) {
         GTEST_SKIP();
     }
     countCheckpoints<FlakyCheckpointerFailsOnCheckpointStorage>();
+    ::testing::internal::CaptureStderr();
     insertNodes(0, 1);
     ASSERT_TRUE(conn->query("BEGIN TRANSACTION;")->isSuccess());
     insertNodes(1, 2);
     auto res = conn->query("COMMIT;");
+    const auto warnings = ::testing::internal::GetCapturedStderr();
     ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
     ASSERT_EQ(numCheckpoints, 2u);
+    EXPECT_NE(warnings.find("Warning: automatic checkpoint after a commit failed, WAL "),
+        std::string::npos)
+        << warnings;
+    EXPECT_NE(warnings.find("checkpoint failed."), std::string::npos) << warnings;
     // Reopen without checkpointing: the WAL alone recovers both commits.
     res.reset();
     createDBAndConn();
@@ -936,19 +942,18 @@ TEST_F(PostCommitCheckpointFailureTest, AutoCheckpointBlockedByOpenWriterDoesNot
     checkNodes(2);
 }
 
-TEST_F(PostCommitCheckpointFailureTest, AutoCheckpointThatPoisonsWALFailsCommit) {
+TEST_F(PostCommitCheckpointFailureTest, AutoCheckpointThatPoisonsWALFailsNextWrite) {
     if (inMemMode) {
         GTEST_SKIP();
     }
     countCheckpoints<FlakyCheckpointerFailsOnApplyingShadow>();
-    auto res = conn->query("CREATE (a:test {id: 0, name: 'name_0'});");
+    insertNodes(0, 1);
+    ASSERT_EQ(numCheckpoints, 1u);
+    auto res = conn->query("CREATE (a:test {id: 1, name: 'name_1'});");
     ASSERT_FALSE(res->isSuccess());
-    EXPECT_NE(res->getErrorMessage().find("Transaction committed successfully"), std::string::npos)
-        << res->getErrorMessage();
     EXPECT_NE(res->getErrorMessage().find("refuses further writes until restart"),
         std::string::npos)
         << res->getErrorMessage();
-    ASSERT_EQ(numCheckpoints, 1u);
     res.reset();
     createDBAndConn();
     checkNodes(1);
@@ -995,19 +1000,18 @@ TEST_F(PostCommitCheckpointFailureTest, FailedForcedCheckpointFailsCreateIndex) 
     EXPECT_EQ(res->getNext()->getValue(0)->getValue<int64_t>(), 1);
 }
 
-TEST_F(PostCommitCheckpointFailureTest, FailedCheckpointCleanupFailsCommit) {
+TEST_F(PostCommitCheckpointFailureTest, FailedCheckpointCleanupFailsNextWrite) {
     if (inMemMode) {
         GTEST_SKIP();
     }
     countCheckpoints<CheckpointerFailsBeforeWALRetirement>();
-    auto res = conn->query("CREATE (a:test {id: 0, name: 'name_0'});");
+    insertNodes(0, 1);
+    ASSERT_EQ(numCheckpoints, 1u);
+    auto res = conn->query("CREATE (a:test {id: 1, name: 'name_1'});");
     ASSERT_FALSE(res->isSuccess());
-    EXPECT_NE(res->getErrorMessage().find("Transaction committed successfully"), std::string::npos)
-        << res->getErrorMessage();
     EXPECT_NE(res->getErrorMessage().find("checkpoint interrupted before WAL retirement"),
         std::string::npos)
         << res->getErrorMessage();
-    ASSERT_EQ(numCheckpoints, 1u);
     res.reset();
     createDBAndConn();
     checkNodes(1);

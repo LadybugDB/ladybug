@@ -367,11 +367,6 @@ void WAL::throwIfPoisoned() {
     throwIfPoisonedNoLock();
 }
 
-bool WAL::isPoisoned() {
-    std::unique_lock lck{mtx};
-    return poisoned;
-}
-
 void WAL::poison(const std::string& reason) {
     std::unique_lock lck{mtx};
     poisonNoLock(reason);
