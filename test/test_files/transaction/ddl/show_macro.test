@@ -28,11 +28,11 @@ ADD|CREATE MACRO `ADD` (a,b) AS a + b;
 -CASE showMacroWithNegativeLiteral
 -STATEMENT CREATE NODE TABLE T(id INT64 PRIMARY KEY, a INT64 DEFAULT -2, b DOUBLE DEFAULT -2.5)
 ---- ok
--STATEMENT CALL table_info('T') RETURN name, default_expr
+-STATEMENT CALL table_info('T') RETURN name, `default expression`
 ---- 3
 id|NULL
 a|-2
-b|-2.500000
+b|-2.5
 -STATEMENT CREATE MACRO neg(x) AS x * -2
 ---- ok
 -STATEMENT CREATE MACRO neg_float(x) AS -2.5 - x
