@@ -280,7 +280,7 @@ art_secondary_person|art_secondary_person_name|ART|[name]
 6
 7
 9
--STATEMENT COPY art_secondary_person FROM (UNWIND range(20, 22) AS i RETURN i, 'Grace', i);
+-STATEMENT COPY art_secondary_person FROM (UNWIND range(20, 22) AS i RETURN i, 'Grace', i + 0);
 ---- ok
 -STATEMENT MATCH (p:art_secondary_person) WHERE p.name = 'Grace' RETURN p.ID ORDER BY p.ID;
 ---- 6
