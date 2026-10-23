@@ -148,6 +148,19 @@ Hubert Blaine Wolfeschlegelsteinhausenbergerdorff|
 -STATEMENT OPTIONAL MATCH (b:organisation) WHERE b.score > 1000 WITH b MATCH (b) RETURN b.ID
 ---- 0
 
+-LOG MatchDropsNullFromCascadeLast
+-STATEMENT MATCH (a:person) WHERE a.ID IN [0, 8, 10] OPTIONAL MATCH (a)-[:studyAt]->(b:organisation) OPTIONAL MATCH (b)<-[:studyAt]-(c:person) WHERE c.ID > a.ID WITH a, b, c MATCH (c) RETURN a.ID, b.ID, c.ID
+---- 2
+0|1|2
+0|1|8
+
+-LOG MatchDropsNullFromCascadeMiddle
+-STATEMENT MATCH (a:person) WHERE a.ID IN [0, 8, 10] OPTIONAL MATCH (a)-[:studyAt]->(b:organisation) OPTIONAL MATCH (b)<-[:studyAt]-(c:person) WHERE c.ID > a.ID WITH a, b, c MATCH (b) RETURN a.ID, b.ID, c.ID
+---- 3
+0|1|2
+0|1|8
+8|1|
+
 -LOG MatchOnNonNullVariableKeepsRows
 -STATEMENT MATCH (a:person) OPTIONAL MATCH (a)-[:studyAt]->(b:organisation) WITH a, b MATCH (a) RETURN a.ID, b.ID
 ---- 8
