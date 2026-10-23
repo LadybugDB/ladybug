@@ -6,6 +6,7 @@
 #include "function/table/bind_input.h"
 #include "function/table/simple_table_function.h"
 #include "processor/execution_context.h"
+#include "storage/buffer_manager/memory_manager.h"
 #include "storage/local_cached_column.h"
 #include "storage/partition_storage_registry.h"
 #include "storage/storage_manager.h"
@@ -98,7 +99,8 @@ struct CacheArrayColumnLocalState final : TableFuncLocalState {
                           ->cast<storage::NodeTable>();
         dataChunk.insert(0, std::make_shared<ValueVector>(LogicalType::INTERNAL_ID()));
         dataChunk.insert(1,
-            std::make_shared<ValueVector>(table.getColumn(columnID).getDataType().copy()));
+            std::make_shared<ValueVector>(table.getColumn(columnID).getDataType().copy(),
+                storage::MemoryManager::Get(context)));
         std::vector<column_id_t> columnIDs;
         columnIDs.push_back(columnID);
         scanState =

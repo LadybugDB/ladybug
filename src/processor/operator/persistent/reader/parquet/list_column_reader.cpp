@@ -1,5 +1,7 @@
 #include "processor/operator/persistent/reader/parquet/list_column_reader.h"
 
+#include "processor/operator/persistent/reader/parquet/parquet_reader.h"
+
 namespace lbug {
 namespace processor {
 
@@ -25,7 +27,8 @@ void ListColumnReader::applyPendingSkips(uint64_t numValues) {
     uint64_t remaining = numValues;
     uint64_t numValuesRead = 0;
     while (remaining) {
-        auto result_out = std::make_unique<common::ValueVector>(type.copy());
+        auto result_out =
+            std::make_unique<common::ValueVector>(type.copy(), reader.getMemoryManager());
         parquet_filter_t filter;
         auto to_read = std::min<uint64_t>(remaining, common::DEFAULT_VECTOR_CAPACITY);
         numValuesRead += read(to_read, filter, defineOut.get(), repeatOut.get(), result_out.get());

@@ -95,7 +95,7 @@ void ColumnReader::applyPendingSkips(uint64_t numValues) {
 
     // TODO this can be optimized, for example we dont actually have to bitunpack offsets
     std::unique_ptr<common::ValueVector> dummyResult =
-        std::make_unique<common::ValueVector>(type.copy());
+        std::make_unique<common::ValueVector>(type.copy(), reader.getMemoryManager());
 
     uint64_t remaining = numValues;
     uint64_t numValuesRead = 0;

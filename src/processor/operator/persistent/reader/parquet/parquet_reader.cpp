@@ -29,6 +29,10 @@ ParquetReader::ParquetReader(std::string filePath, std::vector<bool> columnSkips
     initMetadata();
 }
 
+storage::MemoryManager* ParquetReader::getMemoryManager() const {
+    return storage::MemoryManager::Get(*context);
+}
+
 void ParquetReader::initializeScan(ParquetReaderScanState& state,
     std::vector<uint64_t> groups_to_read, VirtualFileSystem* vfs, uint64_t skipRows,
     uint64_t numRows) {
