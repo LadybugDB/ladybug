@@ -1241,6 +1241,14 @@ TEST_F(OptimizerTest, RemoveUnnecessaryDistinctOnPrimaryKey) {
     ASSERT_FALSE(
         hasOperatorType(plan1->getLastOperator().get(), planner::LogicalOperatorType::DISTINCT))
         << "DISTINCT on primary key should be removed";
+    // A removed DISTINCT leaves no FLATTEN, so the scan stays vectorized.
+    ASSERT_FALSE(
+        hasOperatorType(plan1->getLastOperator().get(), planner::LogicalOperatorType::FLATTEN));
+    auto plan4 = getRoot("MATCH (n:person) WITH DISTINCT n.ID AS id RETURN count(*)");
+    ASSERT_FALSE(
+        hasOperatorType(plan4->getLastOperator().get(), planner::LogicalOperatorType::DISTINCT));
+    ASSERT_FALSE(
+        hasOperatorType(plan4->getLastOperator().get(), planner::LogicalOperatorType::FLATTEN));
 
     // Sanity check: DISTINCT on a non-primary-key column should be kept
     auto q2 = "MATCH (n:person) RETURN DISTINCT n.age";
