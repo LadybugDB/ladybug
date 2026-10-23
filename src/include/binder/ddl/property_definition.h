@@ -33,6 +33,7 @@ struct LBUG_API PropertyDefinition {
     std::string getName() const { return columnDefinition.name; }
     const common::LogicalType& getType() const { return columnDefinition.type; }
     std::string getDefaultExpressionName() const { return defaultExpr->getRawName(); }
+    bool hasDefault() const;
     void rename(const std::string& newName) { columnDefinition.name = newName; }
 
     void serialize(common::Serializer& serializer) const;

@@ -15,6 +15,16 @@ PropertyDefinition::PropertyDefinition(ColumnDefinition columnDefinition)
     defaultExpr = std::make_unique<ParsedLiteralExpression>(Value::createNullValue(), "NULL");
 }
 
+bool PropertyDefinition::hasDefault() const {
+    if (defaultExpr == nullptr) {
+        return false;
+    }
+    if (defaultExpr->getExpressionType() == common::ExpressionType::LITERAL) {
+        return !defaultExpr->constCast<parser::ParsedLiteralExpression>().getValue().isNull();
+    }
+    return !defaultExpr->getRawName().empty();
+}
+
 void PropertyDefinition::serialize(Serializer& serializer) const {
     serializer.serializeValue(columnDefinition.name);
     columnDefinition.type.serialize(serializer);
