@@ -32,8 +32,10 @@ std::shared_ptr<LogicalOperator> RemoveUnnecessaryJoinOptimizer::visitOperator(
 static bool nullsBuildOnlyColumns(JoinType joinType) {
     switch (joinType) {
     case JoinType::INNER:
+        return false;
     case JoinType::MARK:
     case JoinType::COUNT:
+        // These output only their probe side, so no build column reaches the parent.
         return false;
     case JoinType::LEFT:
         return true;
@@ -80,6 +82,7 @@ static bool canBeNull(const LogicalOperator& op, const Expression& key) {
         }
     } break;
     default:
+        // Other operators pass a key through or bind it non-NULL (scan, extend, MERGE).
         break;
     }
     for (auto i = 0u; i < op.getNumChildren(); ++i) {
