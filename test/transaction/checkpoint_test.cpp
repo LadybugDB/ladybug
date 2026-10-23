@@ -366,6 +366,42 @@ TEST_F(CheckpointRetryAfterFailureTest, RetryFailsWithNewWritesThenReopen) {
     checkNodes(200);
 }
 
+class FlakyCheckpointerFailsOnRollback final : public Checkpointer {
+public:
+    explicit FlakyCheckpointerFailsOnRollback(main::ClientContext& context)
+        : Checkpointer(context) {}
+
+protected:
+    bool checkpointStorage() override { throw RuntimeException("checkpoint failed."); }
+    void beforeRollback() override { throw RuntimeException("rollback failed."); }
+};
+
+TEST_F(CheckpointRetryAfterFailureTest, FailedRollbackPoisonsWAL) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    insertNodes(0, 100);
+    FlakyCheckpointer flakyCheckpointer([](main::ClientContext& context) {
+        return std::make_unique<FlakyCheckpointerFailsOnRollback>(context);
+    });
+    flakyCheckpointer.setCheckpointer(*getClientContext(*conn));
+    auto res = conn->query("CHECKPOINT;");
+    ASSERT_FALSE(res->isSuccess());
+    EXPECT_NE(res->getErrorMessage().find("refuses further writes until restart"),
+        std::string::npos)
+        << res->getErrorMessage();
+    checkNodes(100);
+    res = conn->query("CREATE (a:test {id: 100, name: 'name_100'});");
+    ASSERT_FALSE(res->isSuccess());
+    EXPECT_NE(res->getErrorMessage().find("panic state"), std::string::npos)
+        << res->getErrorMessage();
+    EXPECT_NE(res->getErrorMessage().find("Checkpoint rollback failed"), std::string::npos)
+        << res->getErrorMessage();
+    res.reset();
+    createDBAndConn();
+    checkNodes(100);
+}
+
 class FlakyCheckpointerFailsOnSerialization final : public Checkpointer {
 public:
     explicit FlakyCheckpointerFailsOnSerialization(main::ClientContext& context)
