@@ -308,3 +308,26 @@ Binder exception: Export database does not support copy options with the parquet
 -STATEMENT MATCH (u:csvoptions) return u.*
 ---- 1
 First Last|27
+
+-CASE ExportImportDBWithColumnDefaults
+-STATEMENT CREATE NODE TABLE with_defaults(id INT64, status STRING DEFAULT 'active', score INT64 DEFAULT 100, PRIMARY KEY(id));
+---- ok
+-STATEMENT CREATE (:with_defaults { id: 1 });
+---- ok
+-STATEMENT MATCH (n:with_defaults) RETURN n.id, n.status, n.score;
+---- 1
+1|active|100
+-STATEMENT EXPORT DATABASE '${LBUG_EXPORT_DB_DIRECTORY}_defaults/test_defaults';
+---- ok
+-IMPORT_DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_defaults/test_defaults"
+-STATEMENT IMPORT DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_defaults/test_defaults";
+---- ok
+-STATEMENT MATCH (n:with_defaults) RETURN n.id, n.status, n.score;
+---- 1
+1|active|100
+-STATEMENT CREATE (:with_defaults { id: 2 });
+---- ok
+-STATEMENT MATCH (n:with_defaults) RETURN n.id, n.status, n.score ORDER BY n.id;
+---- 2
+1|active|100
+2|active|100
