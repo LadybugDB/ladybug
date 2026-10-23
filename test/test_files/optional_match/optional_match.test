@@ -126,6 +126,13 @@ Hubert Blaine Wolfeschlegelsteinhausenbergerdorff|
 2|1
 8|1
 
+-LOG MatchDropsNullFromLeftJoinLabel
+-STATEMENT MATCH (a:person) OPTIONAL MATCH (a)-[:studyAt]->(b:organisation) WITH a, b MATCH (b:organisation) RETURN a.ID, b.ID
+---- 3
+0|1
+2|1
+8|1
+
 -LOG MatchDropsNullFromLeftJoinAlias
 -STATEMENT MATCH (a:person) OPTIONAL MATCH (a)-[:studyAt]->(b:organisation) WITH a, b AS c MATCH (c) RETURN a.ID, c.name
 ---- 3
