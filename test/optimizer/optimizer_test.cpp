@@ -11,8 +11,10 @@
 #include "catalog/catalog_entry/node_table_catalog_entry.h"
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
 #include "common/enums/storage_format.h"
+#include "common/exception/internal.h"
 #include "common/system_config.h"
 #include "graph_test/private_graph_test.h"
+#include "optimizer/remove_unnecessary_distinct_optimizer.h"
 #include "planner/join_order/cost_model.h"
 #include "planner/operator/logical_filter.h"
 #include "planner/operator/logical_plan_util.h"
@@ -1061,6 +1063,24 @@ TEST_F(OptimizerTest, RemoveUnnecessaryDistinctOnPrimaryKey) {
     auto q3 = "MATCH (n:person) RETURN DISTINCT n.ID, n.age";
     auto plan3 = getRoot(q3);
     ASSERT_TRUE(plan3 != nullptr);
+}
+
+TEST_F(OptimizerTest, RemoveUnnecessaryDistinctRequiresFlatPlan) {
+    // getRoot returns the optimized plan, so FactorizationRewriter has placed its flattens.
+    auto plan = getRoot("MATCH (a:person)-[:knows]->(b:person) RETURN DISTINCT a.fName, b.fName");
+    ASSERT_TRUE(
+        hasOperatorType(plan->getLastOperator().get(), planner::LogicalOperatorType::FLATTEN));
+    try {
+        optimizer::RemoveUnnecessaryDistinctOptimizer().rewrite(plan.get());
+        FAIL() << "the pass accepted a factorized plan";
+    } catch (const common::InternalException& e) {
+#if defined(RUNTIME_CHECKS) || !defined(NDEBUG)
+        // The entry check reports it, not LogicalFlatten::computeFlatSchema further down.
+        EXPECT_NE(std::string(e.what()).find("remove_unnecessary_distinct_optimizer.cpp"),
+            std::string::npos)
+            << e.what();
+#endif
+    }
 }
 
 TEST_F(OptimizerTest, CountPrimaryKeyReadsInternalID) {

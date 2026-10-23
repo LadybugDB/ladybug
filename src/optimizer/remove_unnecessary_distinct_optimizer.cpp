@@ -1,6 +1,8 @@
 #include "optimizer/remove_unnecessary_distinct_optimizer.h"
 
 #include "binder/expression/property_expression.h"
+#include "common/assert.h"
+#include "optimizer/logical_operator_collector.h"
 #include "planner/operator/logical_distinct.h"
 #include "planner/operator/logical_operator.h"
 
@@ -12,6 +14,12 @@ namespace lbug {
 namespace optimizer {
 
 void RemoveUnnecessaryDistinctOptimizer::rewrite(LogicalPlan* plan) {
+    // LogicalFlatten::computeFlatSchema throws, so this pass must run before FactorizationRewriter.
+    RUNTIME_CHECK({
+        auto flattens = LogicalFlattenCollector();
+        flattens.collect(plan->getLastOperator().get());
+        DASSERT(!flattens.hasOperators());
+    });
     plan->setLastOperator(visitOperator(plan->getLastOperator()));
 }
 
