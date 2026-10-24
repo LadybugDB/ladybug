@@ -1,6 +1,7 @@
 #include "binder/expression/expression_util.h"
 #include "binder/expression/rel_expression.h"
 #include "binder/expression_binder.h"
+#include "common/exception/binder.h"
 #include "common/types/value/value.h"
 #include "function/arithmetic/vector_arithmetic_functions.h"
 #include "function/path/vector_path_functions.h"
@@ -43,7 +44,9 @@ static std::shared_ptr<Expression> rewriteFunc(const RewriteFunctionBindInput& i
     } else if (ExpressionUtil::isRecursiveRelPattern(*param)) {
         return param->constPtrCast<RelExpression>()->getLengthExpression();
     }
-    UNREACHABLE_CODE;
+    throw BinderException("LENGTH() expects a path or recursive relationship as input. "
+                          "Use LENGTH(path) where path is a MATCH path variable, e.g. MATCH p = "
+                          "(a)-[]->(b) RETURN LENGTH(p).");
 }
 
 function_set LengthFunction::getFunctionSet() {
