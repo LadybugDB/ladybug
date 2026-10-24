@@ -423,11 +423,11 @@ void Checkpointer::postCheckpointCleanup(bool canResetPageManagerToCurrent) try 
     // skipped while a reader is open and resumes at the next unpinned checkpoint. With no
     // transaction open every path below is exactly as before.
     const bool pinWALRetirement = retentionHorizon != common::INVALID_TRANSACTION;
+    // Graph WALs are retired even while pinned: a named graph's commits go to the main WAL, and
+    // a graph WAL holds only records of a session that opened the graph's file on its own, which
+    // this checkpoint has applied. Kept, they would replay again after a crash.
     for (const auto& target : checkpointTargets) {
         if (target.storageManager == mainStorageManager) {
-            continue;
-        }
-        if (pinWALRetirement) {
             continue;
         }
         target.storageManager->getWAL().retireFrozenWAL();
@@ -443,6 +443,13 @@ void Checkpointer::postCheckpointCleanup(bool canResetPageManagerToCurrent) try 
         }
         onWALRetired(mainWALRotated);
     }
+    // A pinned checkpoint keeps its CHECKPOINT record in the active WAL. The marker must be
+    // durable before any shadow is removed: recovery then discards the shadows instead of
+    // replaying a half-removed one.
+    if (pinWALRetirement) {
+        mainStorageManager->getWAL().writePinnedCheckpointMarker(&clientContext);
+    }
+    beforeShadowRemoval();
     for (const auto& target : checkpointTargets) {
         target.storageManager->getShadowFile().clear(*bufferManager, false);
         target.storageManager->getShadowFile().reset();
@@ -458,29 +465,9 @@ void Checkpointer::postCheckpointCleanup(bool canResetPageManagerToCurrent) try 
     common::VirtualFileSystem::GetUnsafe(clientContext)
         ->syncParentDirectory(
             StorageUtils::getShadowFilePath(mainStorageManager->getDatabasePath()));
-    // Durability marker for pinned checkpoints: the active WAL holds CHECKPOINT records
-    // with no rotation, and cleanup above removed the shadow. Recovery treats such
-    // CHECKPOINTs as durable only when this marker exists; a missing shadow without the
-    // marker is an out-of-band loss and must throw, never silently delete the WAL.
-    if (!isInMemory) {
-        auto* vfs = common::VirtualFileSystem::GetUnsafe(clientContext);
-        const auto markerPath =
-            StorageUtils::getPinnedCheckpointMarkerPath(mainStorageManager->getDatabasePath());
-        if (pinWALRetirement) {
-            auto markerFile = vfs->openFile(markerPath,
-                common::FileOpenFlags(
-                    common::FileFlags::WRITE | common::FileFlags::CREATE_IF_NOT_EXISTS),
-                &clientContext);
-            const uint8_t done = 1;
-            markerFile->writeFile(&done, 1, 0);
-            markerFile->truncate(1);
-            markerFile->syncFile();
-            markerFile.reset();
-            vfs->syncParentDirectory(markerPath);
-        } else {
-            vfs->removeFileIfExists(markerPath, &clientContext);
-            vfs->syncParentDirectory(markerPath);
-        }
+    // An unpinned checkpoint retired the WAL above, so no CHECKPOINT record is left to vouch for.
+    if (!pinWALRetirement) {
+        mainStorageManager->getWAL().removePinnedCheckpointMarker(&clientContext);
     }
     bufferManager->removeEvictedCandidates();
     releaseCheckpointLocks();
@@ -575,6 +562,8 @@ void Checkpointer::writeDatabaseHeader(const DatabaseHeader& header) {
 void Checkpointer::beforeWALRetirement(bool) {}
 
 void Checkpointer::onWALRetired(bool) {}
+
+void Checkpointer::beforeShadowRemoval() {}
 
 void Checkpointer::beforeGraphShadowApply(StorageManager&) {}
 
