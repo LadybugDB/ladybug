@@ -5710,6 +5710,15 @@ protected:
         std::ofstream{markerPath(), std::ios::binary | std::ios::trunc} << content;
     }
 
+    void writeToGraphFile(const std::string& statement) {
+        auto graphDatabase = std::make_unique<main::Database>(
+            StorageUtils::getGraphPath(databasePath, "g"), *systemConfig);
+        auto graphConn = std::make_unique<main::Connection>(graphDatabase.get());
+        ASSERT_TRUE(graphConn->query("CALL force_checkpoint_on_close=false;")->isSuccess());
+        auto res = graphConn->query(statement);
+        ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+    }
+
     std::string shadowPath() const { return StorageUtils::getShadowFilePath(databasePath); }
     std::string markerPath() const {
         return StorageUtils::getPinnedCheckpointMarkerPath(databasePath);
@@ -5960,6 +5969,78 @@ TEST_F(PinnedCheckpointCrashTest, LegacyMarkerWithoutShadowReopens) {
     writeMarker("\x01");
     createDBAndConn();
     EXPECT_EQ(ids(), (std::vector<int64_t>{1, 2, 3, 4, 5}));
+}
+
+// A named graph's commits go to the main WAL; its shadow is applied and removed like the main one.
+TEST_F(PinnedCheckpointCrashTest, NamedGraphReopensAfterPinnedCheckpoint) {
+    query("CREATE GRAPH g;");
+    query("USE GRAPH g;");
+    query("CREATE NODE TABLE Q(id INT64 PRIMARY KEY);");
+    query("CREATE (:Q {id: 1});");
+    query("CHECKPOINT;");
+    pinWAL();
+    query("CREATE (:Q {id: 2});");
+    query("CHECKPOINT;");
+    crash();
+    createDBAndConn();
+    query("USE GRAPH g;");
+    EXPECT_EQ(ids("Q"), (std::vector<int64_t>{1, 2}));
+}
+
+TEST_F(PinnedCheckpointCrashTest, NamedGraphLeftoverShadowIsDiscarded) {
+    query("CREATE GRAPH g;");
+    query("USE GRAPH g;");
+    query("CREATE NODE TABLE Q(id INT64 PRIMARY KEY);");
+    query("CREATE (:Q {id: 1});");
+    pinWAL();
+    query("CHECKPOINT;");
+    crash();
+    std::ofstream{StorageUtils::getShadowFilePath(StorageUtils::getGraphPath(databasePath, "g"))};
+    createDBAndConn();
+    query("USE GRAPH g;");
+    EXPECT_EQ(ids("Q"), (std::vector<int64_t>{1}));
+}
+
+// A session that opened the graph's file on its own left a graph WAL. The pinned checkpoint
+// applies it and must retire it, or a crash after a later commit replays it again.
+TEST_F(PinnedCheckpointCrashTest, NamedGraphWALIsRetiredByPinnedCheckpoint) {
+    query("CREATE GRAPH g;");
+    query("USE GRAPH g;");
+    query("CREATE NODE TABLE Q(id INT64 PRIMARY KEY);");
+    query("CREATE (:Q {id: 1});");
+    query("CHECKPOINT;");
+    crash();
+    writeToGraphFile("CREATE (:Q {id: 2});");
+    const auto graphWALPath =
+        StorageUtils::getWALFilePath(StorageUtils::getGraphPath(databasePath, "g"));
+    ASSERT_TRUE(std::filesystem::exists(graphWALPath));
+    createDBAndConn();
+    query("CALL force_checkpoint_on_close=false;");
+    query("CALL auto_checkpoint=false;");
+    pinWAL();
+    query("CHECKPOINT;");
+    EXPECT_FALSE(std::filesystem::exists(graphWALPath));
+    query("USE GRAPH g;");
+    query("CREATE (:Q {id: 3});");
+    crash();
+    createDBAndConn();
+    query("USE GRAPH g;");
+    EXPECT_EQ(ids("Q"), (std::vector<int64_t>{1, 2, 3}));
+}
+
+// A graph WAL found after a pinned checkpoint is newer than it and replays.
+TEST_F(PinnedCheckpointCrashTest, GraphWALWrittenAfterPinnedCheckpointReplays) {
+    query("CREATE GRAPH g;");
+    query("USE GRAPH g;");
+    query("CREATE NODE TABLE Q(id INT64 PRIMARY KEY);");
+    query("CREATE (:Q {id: 1});");
+    pinWAL();
+    query("CHECKPOINT;");
+    crash();
+    writeToGraphFile("CREATE (:Q {id: 2});");
+    createDBAndConn();
+    query("USE GRAPH g;");
+    EXPECT_EQ(ids("Q"), (std::vector<int64_t>{1, 2}));
 }
 
 TEST_F(PinnedCheckpointCrashTest, PartitionedTableReopensAfterPinnedCheckpoint) {

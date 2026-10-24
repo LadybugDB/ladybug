@@ -837,11 +837,11 @@ void WALReplayer::replayPinnedActiveCheckpoint(Checkpointer& checkpointer,
     std::unique_ptr<FileInfo>& fileInfo, const WALReplayInfo& replayInfo) const {
     // A checkpoint taken while a reader pins the WAL skips rotation, so its CHECKPOINT record
     // lands in the active WAL and its cleanup writes the pinned-checkpoint marker before removing
-    // the applied shadows. The trailing CHECKPOINT is therefore applied, and the main and
-    // partition children's shadows left are discarded below; named graphs still recover through
-    // their own shadows. Without the marker the shadow was lost out of band and the prefix may
-    // not be durable, so throw instead of silently deleting the WAL. Only the active-WAL path
-    // uses this; a frozen WAL with no shadow keeps throwing in replayCommittedCheckpoint.
+    // the applied shadows. The trailing CHECKPOINT is therefore applied, and the shadows left
+    // (main, partition children and named graphs) are discarded. Without the marker the shadow
+    // was lost out of band and the prefix may not be durable, so throw instead of silently
+    // deleting the WAL. Only the active-WAL path uses this; a frozen WAL with no shadow keeps
+    // throwing in replayCommittedCheckpoint.
     if (replayInfo.checkpointFormatVersion > WAL::CHECKPOINT_BUNDLE_FORMAT_VERSION) {
         throw RuntimeException(std::format("Cannot recover checkpoint WAL {}: {}", walPath,
             unsupportedCheckpointFormatMessage(replayInfo.checkpointFormatVersion)));
@@ -871,12 +871,10 @@ void WALReplayer::replayPinnedActiveCheckpoint(Checkpointer& checkpointer,
             "file they were written for.",
             walPath, clientContext.getDatabasePath()));
     }
-    std::optional<uuid> checkpointDatabaseID = std::nullopt;
-    if (checkpointBundle) {
-        checkpointDatabaseID = ShadowFile::CHECKPOINT_BUNDLE_DATABASE_ID;
-    }
     checkpointer.readCheckpoint();
-    recoverGraphCheckpoints(clientContext, true, checkpointBundle, checkpointDatabaseID);
+    // Graph shadows were applied too, so graphs load as after a completed checkpoint; any graph
+    // WAL is newer than it (cleanup retires graph WALs) and replays.
+    recoverGraphCheckpoints(clientContext, false, false);
 
     truncateWALFile(*fileInfo, 0);
     fileInfo.reset();
