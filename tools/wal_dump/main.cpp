@@ -58,6 +58,8 @@ static std::string walRecordTypeToString(WALRecordType type) {
         return "BEGIN_TRANSACTION_RECORD";
     case WALRecordType::COMMIT_RECORD:
         return "COMMIT_RECORD";
+    case WALRecordType::ABORT_RECORD:
+        return "ABORT_RECORD";
     case WALRecordType::COPY_TABLE_RECORD:
         return "COPY_TABLE_RECORD";
     case WALRecordType::CREATE_CATALOG_ENTRY_RECORD:
@@ -122,6 +124,11 @@ static void dumpRecord(const WALRecord& record) {
         break;
     case WALRecordType::COMMIT_RECORD:
         std::cout << "      Type: COMMIT\n";
+        break;
+    case WALRecordType::ABORT_RECORD:
+        std::cout << "      Type: ABORT\n";
+        std::cout << "      AbortedBlockStart: "
+                  << record.constCast<AbortRecord>().abortedBlockStart << "\n";
         break;
     case WALRecordType::CHECKPOINT_RECORD:
         std::cout << "      Type: CHECKPOINT\n";

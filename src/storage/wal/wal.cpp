@@ -39,7 +39,7 @@ WAL::WAL(const std::string& dbPath, bool readOnly, bool enableChecksums, Virtual
 WAL::~WAL() {}
 
 void WAL::logCommittedWAL(LocalWAL& localWAL, main::ClientContext* context,
-    uint64_t& commitSequence) {
+    uint64_t& commitSequence, uint64_t* blockStart) {
     DASSERT(!readOnly);
     commitSequence = 0;
     if (inMemory || localWAL.getSize() == 0) {
@@ -48,9 +48,22 @@ void WAL::logCommittedWAL(LocalWAL& localWAL, main::ClientContext* context,
     std::unique_lock lck{mtx};
     throwIfPoisonedNoLock();
     initWriter(context);
+    if (blockStart != nullptr) {
+        *blockStart = serializer->getWriter()->getSize();
+    }
     localWAL.inMemWriter->flush(*serializer->getWriter());
     commitSequence = ++appendedCommitSequence;
     waitForDurabilityNoLock(commitSequence, lck);
+}
+
+// Holds the WAL lock across the sync, like the CHECKPOINT record: this runs only after a failure.
+void WAL::logAbort(main::ClientContext* context, uint64_t abortedBlockStart) {
+    DASSERT(!readOnly);
+    std::unique_lock lck{mtx};
+    throwIfPoisonedNoLock();
+    initWriter(context);
+    addNewWALRecordNoLock(AbortRecord{abortedBlockStart});
+    flushAndSyncNoLock();
 }
 
 void WAL::logAndFlushCheckpoint(main::ClientContext* context) {

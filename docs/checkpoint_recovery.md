@@ -32,6 +32,14 @@ reached the OS — but power-loss durability of those directory entries is not g
 If a step fails after the commit point, the database refuses further writes until it is reopened,
 and recovery finishes the checkpoint.
 
+## Failed commits
+
+A transaction whose changes cannot be applied after its `COMMIT` record is durable, for example
+because the buffer pool is full, is rolled back in memory and gets an `ABORT` record naming the WAL
+offset where its records start. Recovery skips the transactions such records name, so a `COMMIT`
+that reported an error is never applied. If the `ABORT` record cannot be written either, the
+database refuses further writes until it is reopened, and recovery then applies the transaction.
+
 ## Checkpoint bundle format
 
 `CheckpointRecord::bundleFormatVersion` is 2 for checkpoints written by current builds, including
@@ -94,10 +102,11 @@ An ordinary version 2 WAL tail — owner trailers on the records but no pending 
 quieter hazard: an older build does not reliably refuse it. A record type the older build knows
 decodes with the trailer skipped as unknown trailing bytes and replays against the main catalog,
 silently misapplying records meant for a graph. A record type the older build does not know, such
-as `UPDATE_SEQUENCE_NAMED`, is no safer: with the default non-throwing replay configuration the
-decoding error is treated like a corrupt WAL tail — the older build replays the committed prefix
-and truncates the WAL there, silently discarding that transaction and every transaction recorded
-after it. Setting `throwOnWalReplayFailure` to true rejects an unknown record before that WAL
+as `UPDATE_SEQUENCE_NAMED` or `ABORT`, is no safer: with the default non-throwing replay
+configuration the decoding error is treated like a corrupt WAL tail — the older build replays the
+committed prefix and truncates the WAL there, silently discarding that transaction and every
+transaction recorded after it. For `ABORT`, which marks a transaction that failed after its
+`COMMIT` record was written, the older build also applies the transaction it undoes. Setting `throwOnWalReplayFailure` to true rejects an unknown record before that WAL
 is applied, but it still does not make downgrading safe: a WAL containing only recognized
 record types passes validation, and its owner trailers are ignored. This is why the successful
 `CHECKPOINT`, not a clean close, is the downgrade gate.
