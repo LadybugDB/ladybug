@@ -423,11 +423,11 @@ void Checkpointer::postCheckpointCleanup(bool canResetPageManagerToCurrent) try 
     // skipped while a reader is open and resumes at the next unpinned checkpoint. With no
     // transaction open every path below is exactly as before.
     const bool pinWALRetirement = retentionHorizon != common::INVALID_TRANSACTION;
+    // Graph WALs are retired even while pinned: a named graph's commits go to the main WAL, and
+    // a graph WAL holds only records of a session that opened the graph's file on its own, which
+    // this checkpoint has applied. Kept, they would replay again after a crash.
     for (const auto& target : checkpointTargets) {
         if (target.storageManager == mainStorageManager) {
-            continue;
-        }
-        if (pinWALRetirement) {
             continue;
         }
         target.storageManager->getWAL().retireFrozenWAL();
