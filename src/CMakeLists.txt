@@ -54,6 +54,9 @@ if(TARGET lbug)
                 list(APPEND LBUG_STATIC_ARCHIVE_PATHS "$<TARGET_FILE:${LIBRARY}>")
         endforeach()
         set(LBUG_STATIC_ARCHIVE_PATH_FILE "${CMAKE_CURRENT_BINARY_DIR}/lbug_static_archives_$<CONFIG>.txt")
+        if(LBUG_LOCALIZE_STATIC_SYMBOLS AND NOT CMAKE_EXECUTABLE_FORMAT STREQUAL "ELF")
+                message(FATAL_ERROR "LBUG_LOCALIZE_STATIC_SYMBOLS is only supported for ELF targets")
+        endif()
         file(GENERATE
                 OUTPUT "${LBUG_STATIC_ARCHIVE_PATH_FILE}"
                 CONTENT "$<JOIN:${LBUG_STATIC_ARCHIVE_PATHS},\n>\n")
@@ -64,6 +67,10 @@ if(TARGET lbug)
                         "-DSTATIC_LIBRARIES_FILE=${LBUG_STATIC_ARCHIVE_PATH_FILE}"
                         "-DAR_EXECUTABLE=${CMAKE_AR}"
                         "-DRANLIB_EXECUTABLE=${CMAKE_RANLIB}"
+                        "-DLOCALIZE_SYMBOLS=${LBUG_LOCALIZE_STATIC_SYMBOLS}"
+                        "-DLD_EXECUTABLE=${CMAKE_LINKER}"
+                        "-DOBJCOPY_EXECUTABLE=${CMAKE_OBJCOPY}"
+                        "-DNM_EXECUTABLE=${CMAKE_NM}"
                         -P "${PROJECT_SOURCE_DIR}/cmake/BundleStaticLibrary.cmake"
                 VERBATIM)
 endif()
