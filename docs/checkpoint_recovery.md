@@ -14,6 +14,7 @@ The checkpointer keeps that ordering:
 2. Write and sync the main `CHECKPOINT` record.
 3. Apply the shadow pages to the data files.
 4. Retire the graph WALs, then the main WAL: truncate, sync, unlink, and sync the parent directory.
+   A pinned checkpoint keeps the main WAL (see Pinned checkpoints).
 5. Remove the shadow files.
 
 Recovery repairs a file before parsing anything from it. The main file's shadow pages are
@@ -65,12 +66,15 @@ in read-only mode while checkpoint recovery is pending`, also when the `CHECKPOI
 a torn commit; opening it read-write once recovers it.
 
 When nothing was committed after the last `CHECKPOINT` record, the marker decides. With it,
-recovery discards the shadow files of the main database and partition children. Without it, a
-remaining shadow is replayed as the committed checkpoint's, and a missing one is an error. A marker
-written by an older build holds `1` instead of `2` and only proves that a missing shadow was
-applied. A marker that is not exactly one of these bytes, such as the empty file a crash while
-writing it can leave, counts as no marker. Named graphs still recover through their own shadow
-files.
+recovery discards the shadow files of the main database, partition children and named graphs.
+Without it, a remaining shadow is replayed as the committed checkpoint's, and a missing one is an
+error. A marker written by an older build holds `1` instead of `2` and only proves that a missing
+shadow was applied. A marker that is not exactly one of these bytes, such as the empty file a crash
+while writing it can leave, counts as no marker.
+
+A pinned checkpoint retires every named graph's WAL anyway. A named graph's commits go to the main
+WAL; its own WAL holds only the records of a session that opened the graph's file on its own, which
+the checkpoint has applied. A graph WAL found at recovery is therefore newer and is replayed.
 
 ## Checkpoint bundle format
 
