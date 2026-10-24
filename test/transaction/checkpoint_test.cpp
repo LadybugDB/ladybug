@@ -5633,6 +5633,351 @@ TEST_F(ReviewFixesTest, ConsecutivePinnedCheckpointsRecoverAfterCrash) {
 }
 #endif // __SINGLE_THREADED__
 
+// A checkpoint taken while a read-only transaction is open (pinned) keeps its CHECKPOINT record
+// in the active WAL. Each test below crashes after such a checkpoint, leaving a different shadow
+// file behind, and reopens: every commit must be there exactly once.
+class PinnedCheckpointCrashTest : public FlakyCheckpointerTest {
+protected:
+    void SetUp() override {
+        FlakyCheckpointerTest::SetUp();
+        if (inMemMode || systemConfig->checkpointThreshold == 0) {
+            GTEST_SKIP();
+        }
+        // Tearing down without a closing checkpoint models the process dying.
+        ASSERT_TRUE(conn->query("CALL force_checkpoint_on_close=false;")->isSuccess());
+        ASSERT_TRUE(conn->query("CALL auto_checkpoint=false;")->isSuccess());
+    }
+
+    void TearDown() override {
+        reader.reset();
+        FlakyCheckpointerTest::TearDown();
+    }
+
+    void query(const std::string& statement) {
+        auto res = conn->query(statement);
+        ASSERT_TRUE(res->isSuccess()) << statement << ": " << res->getErrorMessage();
+    }
+
+    void createRows(int64_t first, int64_t last) {
+        query(std::format("UNWIND range({}, {}) AS i CREATE (:P {{id: i}});", first, last));
+    }
+
+    void pinWAL() {
+        reader = std::make_unique<main::Connection>(database.get());
+        ASSERT_TRUE(reader->query("BEGIN TRANSACTION READ ONLY;")->isSuccess());
+    }
+
+    template<typename T>
+    void failCheckpoint() {
+        auto* context = getClientContext(*conn);
+        FlakyCheckpointer flakyCheckpointer(
+            [](main::ClientContext& clientContext) { return std::make_unique<T>(clientContext); });
+        flakyCheckpointer.setCheckpointer(*context);
+        auto res = conn->query("CHECKPOINT;");
+        FlakyCheckpointer::resetCheckpointer(*context);
+        ASSERT_FALSE(res->isSuccess());
+    }
+
+    void crash() {
+        reader.reset();
+        conn.reset();
+        database.reset();
+    }
+
+    std::vector<int64_t> ids(const std::string& table = "P") {
+        auto res = conn->query(std::format("MATCH (p:{}) RETURN p.id ORDER BY p.id;", table));
+        EXPECT_TRUE(res->isSuccess()) << res->getErrorMessage();
+        std::vector<int64_t> result;
+        while (res->isSuccess() && res->hasNext()) {
+            result.push_back(res->getNext()->getValue(0)->getValue<int64_t>());
+        }
+        return result;
+    }
+
+    // Appends a well-formed record to the active WAL of a crashed database.
+    void appendToWAL(const WALRecord& record) const {
+        const auto bytes = serializeCheckpointRecord(record);
+        std::ofstream wal{StorageUtils::getWALFilePath(databasePath),
+            std::ios::binary | std::ios::app};
+        wal.write(reinterpret_cast<const char*>(bytes.data.get()), bytes.size);
+        if (systemConfig->enableChecksums) {
+            const auto recordChecksum = checksum(bytes.data.get(), bytes.size);
+            wal.write(reinterpret_cast<const char*>(&recordChecksum), sizeof(recordChecksum));
+        }
+    }
+
+    void writeMarker(const std::string& content) const {
+        std::ofstream{markerPath(), std::ios::binary | std::ios::trunc} << content;
+    }
+
+    std::string shadowPath() const { return StorageUtils::getShadowFilePath(databasePath); }
+    std::string markerPath() const {
+        return StorageUtils::getPinnedCheckpointMarkerPath(databasePath);
+    }
+
+    std::unique_ptr<main::Connection> reader;
+};
+
+// The next checkpoint dies after its storage phase wrote shadow pages, before it logged a record.
+TEST_F(PinnedCheckpointCrashTest, LeftoverShadowKeepsCommitsAfterPinnedCheckpoint) {
+    query("CREATE NODE TABLE P(id INT64 PRIMARY KEY);");
+    query("CHECKPOINT;");
+    createRows(1, 3);
+    pinWAL();
+    query("CHECKPOINT;");
+    createRows(4, 5);
+    failCheckpoint<FlakyCheckpointerKilledAfterCheckpointStorage>();
+    ASSERT_TRUE(std::filesystem::exists(shadowPath()));
+    crash();
+    createDBAndConn();
+    EXPECT_EQ(ids(), (std::vector<int64_t>{1, 2, 3, 4, 5}));
+}
+
+TEST_F(PinnedCheckpointCrashTest, LeftoverShadowKeepsTableCreatedBeforePinnedCheckpoint) {
+    query("CREATE NODE TABLE P(id INT64 PRIMARY KEY);");
+    createRows(1, 3);
+    pinWAL();
+    query("CHECKPOINT;");
+    createRows(4, 5);
+    failCheckpoint<FlakyCheckpointerKilledAfterCheckpointStorage>();
+    ASSERT_TRUE(std::filesystem::exists(shadowPath()));
+    crash();
+    createDBAndConn();
+    EXPECT_EQ(ids(), (std::vector<int64_t>{1, 2, 3, 4, 5}));
+}
+
+// No commit between the pinned checkpoint and the one that dies: the WAL ends in the applied
+// CHECKPOINT record, and the shadow on disk is the next checkpoint's, cut short by a crash while
+// it was being written.
+TEST_F(PinnedCheckpointCrashTest, NextCheckpointShadowAfterPinnedCheckpointIsDiscarded) {
+    query("CREATE NODE TABLE P(id INT64 PRIMARY KEY);");
+    createRows(1, 3);
+    pinWAL();
+    query("CHECKPOINT;");
+    failCheckpoint<FlakyCheckpointerFailsOnLoggingCheckpoint>();
+    ASSERT_TRUE(std::filesystem::exists(shadowPath()));
+    crash();
+    std::filesystem::resize_file(shadowPath(), LBUG_PAGE_SIZE);
+    createDBAndConn();
+    EXPECT_EQ(ids(), (std::vector<int64_t>{1, 2, 3}));
+}
+
+// The state a crash leaves while cleanup removes the applied shadow: ShadowFile::clear truncates
+// the file before unlinking it.
+TEST_F(PinnedCheckpointCrashTest, EmptyShadowAfterPinnedCheckpointIsDiscarded) {
+    query("CREATE NODE TABLE P(id INT64 PRIMARY KEY);");
+    createRows(1, 3);
+    pinWAL();
+    query("CHECKPOINT;");
+    crash();
+    std::ofstream{shadowPath()};
+    createDBAndConn();
+    EXPECT_EQ(ids(), (std::vector<int64_t>{1, 2, 3}));
+}
+
+class CheckpointerCrashesBeforeShadowRemoval final : public Checkpointer {
+public:
+    explicit CheckpointerCrashesBeforeShadowRemoval(main::ClientContext& context)
+        : Checkpointer(context) {}
+
+    static inline std::string markerAtHook;
+    static inline bool shadowAtHook = false;
+
+protected:
+    void beforeShadowRemoval() override {
+        const auto& databasePath = mainStorageManager->getDatabasePath();
+        std::ifstream marker{StorageUtils::getPinnedCheckpointMarkerPath(databasePath),
+            std::ios::binary};
+        markerAtHook = {std::istreambuf_iterator<char>{marker}, {}};
+        shadowAtHook = std::filesystem::exists(StorageUtils::getShadowFilePath(databasePath));
+        throw RuntimeException("simulated crash before removing the shadow files.");
+    }
+};
+
+TEST_F(PinnedCheckpointCrashTest, MarkerIsDurableBeforeShadowsAreRemoved) {
+    query("CREATE NODE TABLE P(id INT64 PRIMARY KEY);");
+    createRows(1, 3);
+    pinWAL();
+    failCheckpoint<CheckpointerCrashesBeforeShadowRemoval>();
+    EXPECT_EQ(CheckpointerCrashesBeforeShadowRemoval::markerAtHook,
+        std::string(1, static_cast<char>(StorageUtils::PINNED_CHECKPOINT_MARKER_APPLIED)));
+    EXPECT_TRUE(CheckpointerCrashesBeforeShadowRemoval::shadowAtHook);
+    ASSERT_TRUE(std::filesystem::exists(shadowPath()));
+    crash();
+    createDBAndConn();
+    EXPECT_EQ(ids(), (std::vector<int64_t>{1, 2, 3}));
+}
+
+// The marker of an earlier pinned checkpoint must not vouch for a later CHECKPOINT record whose
+// shadow was never applied.
+TEST_F(PinnedCheckpointCrashTest, EarlierMarkerDoesNotSkipUnappliedCheckpoint) {
+    query("CREATE NODE TABLE P(id INT64 PRIMARY KEY);");
+    createRows(1, 3);
+    pinWAL();
+    query("CHECKPOINT;");
+    ASSERT_TRUE(std::filesystem::exists(markerPath()));
+    createRows(4, 5);
+    failCheckpoint<FlakyCheckpointerFailsOnApplyingShadow>();
+    EXPECT_FALSE(std::filesystem::exists(markerPath()));
+    ASSERT_TRUE(std::filesystem::exists(shadowPath()));
+    crash();
+    createDBAndConn();
+    EXPECT_EQ(ids(), (std::vector<int64_t>{1, 2, 3, 4, 5}));
+}
+
+// Older builds kept the marker while logging the next CHECKPOINT record.
+TEST_F(PinnedCheckpointCrashTest, LegacyMarkerDoesNotSkipUnappliedCheckpoint) {
+    query("CREATE NODE TABLE P(id INT64 PRIMARY KEY);");
+    createRows(1, 3);
+    pinWAL();
+    query("CHECKPOINT;");
+    createRows(4, 5);
+    failCheckpoint<FlakyCheckpointerFailsOnApplyingShadow>();
+    ASSERT_TRUE(std::filesystem::exists(shadowPath()));
+    crash();
+    writeMarker("\x01");
+    createDBAndConn();
+    EXPECT_EQ(ids(), (std::vector<int64_t>{1, 2, 3, 4, 5}));
+}
+
+// Copies the database's files once the storage phase has run (WAL rotated, shadow pages written),
+// then fails: restoring the copy gives the files a process killed at that point leaves behind,
+// which a failed checkpoint's rollback would otherwise tidy up.
+class CheckpointerImagedAfterCheckpointStorage final : public Checkpointer {
+public:
+    explicit CheckpointerImagedAfterCheckpointStorage(main::ClientContext& context)
+        : Checkpointer(context) {}
+
+    static inline std::map<std::string, std::vector<char>> image;
+
+protected:
+    bool checkpointStorage() override {
+        Checkpointer::checkpointStorage();
+        image.clear();
+        const auto& databasePath = mainStorageManager->getDatabasePath();
+        for (const auto& path : {databasePath, StorageUtils::getWALFilePath(databasePath),
+                 StorageUtils::getCheckpointWALFilePath(databasePath),
+                 StorageUtils::getShadowFilePath(databasePath),
+                 StorageUtils::getPinnedCheckpointMarkerPath(databasePath)}) {
+            if (std::filesystem::exists(path)) {
+                std::ifstream file{path, std::ios::binary};
+                image[path] = {std::istreambuf_iterator<char>{file}, {}};
+            }
+        }
+        throw RuntimeException("simulated crash after checkpoint storage phase.");
+    }
+};
+
+// A recovery that skipped the prefix of a pinned WAL keeps its CHECKPOINT record mid-file; the next
+// unpinned checkpoint rotates that WAL into the frozen WAL and dies before logging its record.
+TEST_F(PinnedCheckpointCrashTest, LeftoverShadowKeepsCommitsInFrozenWAL) {
+    query("CREATE NODE TABLE P(id INT64 PRIMARY KEY);");
+    createRows(1, 3);
+    pinWAL();
+    query("CHECKPOINT;");
+    createRows(4, 5);
+    crash();
+    createDBAndConn();
+    query("CALL force_checkpoint_on_close=false;");
+    query("CALL auto_checkpoint=false;");
+    createRows(6, 7);
+    failCheckpoint<CheckpointerImagedAfterCheckpointStorage>();
+    crash();
+    auto& image = CheckpointerImagedAfterCheckpointStorage::image;
+    ASSERT_TRUE(image.contains(StorageUtils::getCheckpointWALFilePath(databasePath)));
+    ASSERT_TRUE(image.contains(shadowPath()));
+    for (const auto& path : {StorageUtils::getWALFilePath(databasePath),
+             StorageUtils::getCheckpointWALFilePath(databasePath), shadowPath(), markerPath()}) {
+        std::filesystem::remove(path);
+    }
+    // The commits after the inherited CHECKPOINT record prove it completed, without the marker.
+    image.erase(markerPath());
+    for (const auto& [path, bytes] : image) {
+        std::ofstream{path, std::ios::binary}.write(bytes.data(), bytes.size());
+    }
+    createDBAndConn();
+    EXPECT_EQ(ids(), (std::vector<int64_t>{1, 2, 3, 4, 5, 6, 7}));
+}
+
+// Without the shadow and without the marker, the pinned checkpoint's pages were lost out of band.
+TEST_F(PinnedCheckpointCrashTest, MissingShadowWithoutMarkerRefusesToOpen) {
+    query("CREATE NODE TABLE P(id INT64 PRIMARY KEY);");
+    createRows(1, 3);
+    pinWAL();
+    query("CHECKPOINT;");
+    crash();
+    std::filesystem::remove(markerPath());
+    try {
+        createDBAndConn();
+        FAIL() << "reopened without the marker";
+    } catch (const std::exception& e) {
+        EXPECT_NE(std::string{e.what()}.find("no pinned-checkpoint marker"), std::string::npos)
+            << e.what();
+    }
+}
+
+TEST_F(PinnedCheckpointCrashTest, MissingShadowWithoutMarkerRefusesToOpenWithLaterCommits) {
+    query("CREATE NODE TABLE P(id INT64 PRIMARY KEY);");
+    createRows(1, 3);
+    pinWAL();
+    query("CHECKPOINT;");
+    createRows(4, 5);
+    crash();
+    std::filesystem::remove(markerPath());
+    try {
+        createDBAndConn();
+        FAIL() << "reopened without the marker";
+    } catch (const std::exception& e) {
+        EXPECT_NE(std::string{e.what()}.find("no pinned-checkpoint marker"), std::string::npos)
+            << e.what();
+    }
+}
+
+// A crash while a commit after the pinned checkpoint was being written leaves its BEGIN record.
+// Recovery must retire the WAL: kept, it would end in an applied CHECKPOINT that the next
+// checkpoint could rotate into the frozen WAL.
+TEST_F(PinnedCheckpointCrashTest, TornCommitAfterPinnedCheckpointRetiresWAL) {
+    query("CREATE NODE TABLE P(id INT64 PRIMARY KEY);");
+    createRows(1, 3);
+    pinWAL();
+    query("CHECKPOINT;");
+    crash();
+    appendToWAL(BeginTransactionRecord{});
+    createDBAndConn();
+    EXPECT_EQ(ids(), (std::vector<int64_t>{1, 2, 3}));
+    const auto walPath = StorageUtils::getWALFilePath(databasePath);
+    EXPECT_TRUE(!std::filesystem::exists(walPath) || std::filesystem::file_size(walPath) == 0);
+}
+
+// A marker written by an older build still proves that a missing shadow was applied.
+TEST_F(PinnedCheckpointCrashTest, LegacyMarkerWithoutShadowReopens) {
+    query("CREATE NODE TABLE P(id INT64 PRIMARY KEY);");
+    createRows(1, 3);
+    pinWAL();
+    query("CHECKPOINT;");
+    createRows(4, 5);
+    crash();
+    writeMarker("\x01");
+    createDBAndConn();
+    EXPECT_EQ(ids(), (std::vector<int64_t>{1, 2, 3, 4, 5}));
+}
+
+TEST_F(PinnedCheckpointCrashTest, PartitionedTableReopensAfterPinnedCheckpoint) {
+    query("CREATE NODE TABLE L(id INT64, cluster INT64, PRIMARY KEY(id)) PARTITION BY LIST "
+          "(cluster);");
+    query("CREATE (:L {id: 5, cluster: 1});");
+    query("CHECKPOINT;");
+    pinWAL();
+    query("CHECKPOINT;");
+    crash();
+    for (const auto& entry :
+        std::filesystem::directory_iterator{std::filesystem::path{databasePath}.parent_path()}) {
+        ASSERT_NE(entry.path().extension(), ".shadow") << entry.path();
+    }
+    createDBAndConn();
+    EXPECT_EQ(ids("L"), (std::vector<int64_t>{5}));
+}
+
 // Hash index basic recovery
 //
 // HashIndexLocalStorage has no per-entry timestamps; a correct fix for post-snapshotTS

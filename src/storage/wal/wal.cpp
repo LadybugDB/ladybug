@@ -33,6 +33,7 @@ WAL::WAL(const std::string& dbPath, bool readOnly, bool enableChecksums, Virtual
     StorageManager* storageManager)
     : walPath{StorageUtils::getWALFilePath(dbPath)},
       checkpointWalPath{StorageUtils::getCheckpointWALFilePath(dbPath)},
+      pinnedCheckpointMarkerPath{StorageUtils::getPinnedCheckpointMarkerPath(dbPath)},
       inMemory{main::DBConfig::isDBPathInMemory(dbPath)}, readOnly{readOnly}, vfs{vfs},
       storageManager{storageManager}, enableChecksums(enableChecksums) {}
 
@@ -56,6 +57,7 @@ void WAL::logCommittedWAL(LocalWAL& localWAL, main::ClientContext* context,
 void WAL::logAndFlushCheckpoint(main::ClientContext* context) {
     std::unique_lock lck{mtx};
     throwIfPoisonedNoLock();
+    removePinnedCheckpointMarkerNoLock(context);
     initWriter(context);
     CheckpointRecord walRecord{CHECKPOINT_BUNDLE_FORMAT_VERSION};
     checkpointRecordMayExist = true;
@@ -360,6 +362,31 @@ uint64_t WAL::getFrozenWALFileSize() {
 bool WAL::mayHaveCheckpointRecord() {
     std::unique_lock lck{mtx};
     return checkpointRecordMayExist;
+}
+
+void WAL::writePinnedCheckpointMarker(main::ClientContext* context) {
+    std::unique_lock lck{mtx};
+    auto markerFile = vfs->openFile(pinnedCheckpointMarkerPath,
+        FileOpenFlags(FileFlags::WRITE | FileFlags::CREATE_IF_NOT_EXISTS), context);
+    const uint8_t applied = StorageUtils::PINNED_CHECKPOINT_MARKER_APPLIED;
+    markerFile->writeFile(&applied, 1, 0);
+    markerFile->truncate(1);
+    markerFile->syncFile();
+    markerFile.reset();
+    vfs->syncParentDirectory(pinnedCheckpointMarkerPath);
+}
+
+void WAL::removePinnedCheckpointMarker(main::ClientContext* context) {
+    std::unique_lock lck{mtx};
+    removePinnedCheckpointMarkerNoLock(context);
+}
+
+void WAL::removePinnedCheckpointMarkerNoLock(main::ClientContext* context) {
+    if (!vfs->fileOrPathExists(pinnedCheckpointMarkerPath, context)) {
+        return;
+    }
+    vfs->removeFileIfExists(pinnedCheckpointMarkerPath, context);
+    vfs->syncParentDirectory(pinnedCheckpointMarkerPath);
 }
 
 void WAL::throwIfPoisoned() {
