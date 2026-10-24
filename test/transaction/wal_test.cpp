@@ -282,6 +282,31 @@ TEST_F(WalTest, OrdinaryCommitSyncsRegisteredNamespace) {
         lbug::storage::StorageUtils::getWALFilePath("failing-sync://db")));
 }
 
+// The ABORT record of a transaction that failed after its COMMIT record became durable must be
+// synced too; when that fails, the WAL refuses writes instead.
+TEST_F(WalTest, AbortSyncFailurePoisonsWAL) {
+    VirtualFileSystem vfs;
+    auto failingFS = std::make_unique<FailingSyncFileSystem>(false /* failSync */);
+    auto* failingFSPtr = failingFS.get();
+    vfs.registerFileSystem(std::move(failingFS));
+
+    lbug::storage::WAL wal("failing-sync://db", false /* readOnly */, false /* enableChecksums */,
+        &vfs);
+    lbug::storage::LocalWAL localWAL(*lbug::storage::MemoryManager::Get(*conn->getClientContext()),
+        false /* enableChecksums */);
+    localWAL.logLoadExtension("" /* main */, "dummy");
+    localWAL.logCommit();
+    uint64_t walCommitSequence = 0;
+    uint64_t blockStart = 0;
+    ASSERT_NO_THROW(
+        wal.logCommittedWAL(localWAL, conn->getClientContext(), walCommitSequence, &blockStart));
+    EXPECT_GT(blockStart, 0);
+
+    failingFSPtr->setFailSync(true);
+    EXPECT_THROW(wal.logAbort(conn->getClientContext(), blockStart), RuntimeException);
+    EXPECT_THROW(wal.throwIfPoisoned(), RuntimeException);
+}
+
 TEST_F(WalTest, FailureAfterCheckpointRenamePoisonsWAL) {
     VirtualFileSystem vfs;
     auto failingFS = std::make_unique<FailingSyncFileSystem>(false /* failSync */);

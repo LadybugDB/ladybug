@@ -48,6 +48,9 @@ std::unique_ptr<WALRecord> WALRecord::deserialize(Deserializer& deserializer,
     case WALRecordType::COMMIT_RECORD: {
         walRecord = CommitRecord::deserialize(deserializer);
     } break;
+    case WALRecordType::ABORT_RECORD: {
+        walRecord = AbortRecord::deserialize(deserializer);
+    } break;
     case WALRecordType::CREATE_CATALOG_ENTRY_RECORD: {
         walRecord = CreateCatalogEntryRecord::deserialize(deserializer);
     } break;
