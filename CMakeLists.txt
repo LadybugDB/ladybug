@@ -376,6 +376,7 @@ option(BUILD_SINGLE_FILE_HEADER "Build single file header. Requires Python >= 3.
 option(BUILD_LBUG "Build Lbug." TRUE)
 option(BUILD_SHARED_LBUG "Build the shared liblbug library." TRUE)
 option(BUILD_STATIC_LBUG "Build the bundled static liblbug archive." TRUE)
+option(LBUG_LOCALIZE_STATIC_SYMBOLS "Make every symbol of the bundled static liblbug archive except the Ladybug API local, so it can be linked next to code built by a different compiler (ELF only)." FALSE)
 option(LBUG_API_USE_PRECOMPILED_LIB "Link language bindings against a precompiled static liblbug archive." FALSE)
 set(LBUG_API_PRECOMPILED_LIB_PATH "" CACHE FILEPATH "Path to the precompiled static liblbug archive used by language bindings.")
 option(LBUG_NODEJS_USE_PRECOMPILED_LIB "Deprecated alias for LBUG_API_USE_PRECOMPILED_LIB." FALSE)
