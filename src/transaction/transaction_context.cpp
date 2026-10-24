@@ -17,15 +17,11 @@ TransactionContext::TransactionContext(main::ClientContext& clientContext)
 TransactionContext::~TransactionContext() = default;
 
 void TransactionContext::beginReadTransaction() {
-    std::unique_lock lck{mtx};
-    mode = TransactionMode::MANUAL;
-    beginTransactionInternal(TransactionType::READ_ONLY);
+    beginManualTransaction(TransactionType::READ_ONLY);
 }
 
 void TransactionContext::beginWriteTransaction() {
-    std::unique_lock lck{mtx};
-    mode = TransactionMode::MANUAL;
-    beginTransactionInternal(TransactionType::WRITE);
+    beginManualTransaction(TransactionType::WRITE);
 }
 
 void TransactionContext::beginAutoTransaction(bool readOnlyStatement) {
@@ -40,9 +36,7 @@ void TransactionContext::beginAutoTransaction(bool readOnlyStatement) {
 }
 
 void TransactionContext::beginRecoveryTransaction() {
-    std::unique_lock lck{mtx};
-    mode = TransactionMode::MANUAL;
-    beginTransactionInternal(TransactionType::RECOVERY);
+    beginManualTransaction(TransactionType::RECOVERY);
 }
 
 void TransactionContext::validateManualTransaction(bool readOnlyStatement) const {
@@ -85,6 +79,13 @@ void TransactionContext::clearTransaction() {
 
 TransactionContext* TransactionContext::Get(const main::ClientContext& context) {
     return context.transactionContext.get();
+}
+
+void TransactionContext::beginManualTransaction(TransactionType transactionType) {
+    std::unique_lock lck{mtx};
+    beginTransactionInternal(transactionType);
+    // Only once the begin succeeded: a refused BEGIN leaves the connection in auto-commit mode.
+    mode = TransactionMode::MANUAL;
 }
 
 void TransactionContext::beginTransactionInternal(TransactionType transactionType) {
