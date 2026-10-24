@@ -198,9 +198,9 @@ std::unique_ptr<BoundBaseScanSource> Binder::bindQueryScanSource(const BaseScanS
         throw BinderException(std::format("Query returns {} columns but {} columns were expected.",
             columns.size(), columnNames.size()));
     }
-    for (auto i = 0u; i < columns.size(); ++i) {
-        columns[i]->setAlias(columnNames[i]);
-    }
+    // The columns are matched to columnNames by position when the COPY operator is bound. They
+    // must not be renamed here: a RETURN list can bind the same Expression object more than once
+    // (e.g. RETURN i, i), and setAlias would leave that shared object holding one name only.
     auto scanInfo = BoundQueryScanSourceInfo(bindParsingOptions(options));
     return std::make_unique<BoundQueryScanSource>(std::move(boundStatement), std::move(scanInfo));
 }
