@@ -116,18 +116,26 @@ static void bindExpectedRelColumns(const RelGroupCatalogEntry& entry,
     const CopyFromColumnInfo& info, std::vector<std::string>& columnNames,
     std::vector<LogicalType>& columnTypes);
 
+// Returns the source column that feeds a table property. A scan source names its leading columns
+// from expectedColumnNames by position, so the position decides which column a property reads.
+// The name of the bound expression cannot be used for this: a query source may return one shared
+// Expression object for several columns (e.g. RETURN i, i). Columns past the expected ones carry
+// copy warnings. A source bound without expected names, such as a table whose only column is
+// SERIAL, keeps the names it read from the file and is matched by those names.
 static std::pair<ColumnEvaluateType, std::shared_ptr<Expression>> matchColumnExpression(
-    const expression_vector& columns, const PropertyDefinition& property,
-    ExpressionBinder& expressionBinder) {
-    for (auto& column : columns) {
-        if (property.getName() == column->toString()) {
-            if (column->dataType == property.getType()) {
-                return {ColumnEvaluateType::REFERENCE, column};
-            } else {
-                return {ColumnEvaluateType::CAST,
-                    expressionBinder.forceCast(column, property.getType())};
-            }
+    const expression_vector& columns, const std::vector<std::string>& expectedColumnNames,
+    const PropertyDefinition& property, ExpressionBinder& expressionBinder) {
+    for (auto i = 0u; i < columns.size(); ++i) {
+        auto columnName =
+            i < expectedColumnNames.size() ? expectedColumnNames[i] : columns[i]->toString();
+        if (property.getName() != columnName) {
+            continue;
         }
+        auto& column = columns[i];
+        if (column->dataType == property.getType()) {
+            return {ColumnEvaluateType::REFERENCE, column};
+        }
+        return {ColumnEvaluateType::CAST, expressionBinder.forceCast(column, property.getType())};
     }
     return {ColumnEvaluateType::DEFAULT, expressionBinder.bindExpression(*property.defaultExpr)};
 }
@@ -163,8 +171,8 @@ BoundCopyFromInfo Binder::bindCopyNodeFromInfo(std::string tableName,
     expression_vector columns;
     std::vector<ColumnEvaluateType> evaluateTypes;
     for (auto& property : properties) {
-        auto [evaluateType, column] =
-            matchColumnExpression(boundSource->getColumns(), property, expressionBinder);
+        auto [evaluateType, column] = matchColumnExpression(boundSource->getColumns(),
+            expectedColumnNames, property, expressionBinder);
         columns.push_back(column);
         evaluateTypes.push_back(evaluateType);
     }
@@ -247,8 +255,8 @@ BoundCopyFromInfo Binder::bindCopyRelFromInfo(std::string tableName,
         ColumnEvaluateType::REFERENCE, ColumnEvaluateType::REFERENCE};
     for (auto i = 1u; i < properties.size(); ++i) { // skip internal ID
         auto& property = properties[i];
-        auto [evaluateType, column] =
-            matchColumnExpression(boundSource->getColumns(), property, expressionBinder);
+        auto [evaluateType, column] = matchColumnExpression(boundSource->getColumns(),
+            expectedColumnNames, property, expressionBinder);
         columnExprs.push_back(column);
         evaluateTypes.push_back(evaluateType);
     }
