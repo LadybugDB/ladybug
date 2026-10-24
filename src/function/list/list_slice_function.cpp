@@ -67,9 +67,18 @@ static std::unique_ptr<FunctionBindData> bindFunc(const ScalarBindFuncInput& inp
         paramTypes.push_back(arg0Type.copy());
         resultType = LogicalType::LIST(ArrayType::getChildType(arg0Type).copy());
     } break;
-    default: {
+    case LogicalTypeID::LIST:
+    case LogicalTypeID::STRING: {
         paramTypes.push_back(arg0Type.copy());
         resultType = arg0Type.copy();
+    } break;
+    default: {
+        // Scalars (INT, DATE, TIMESTAMP, FLOAT, etc.) match the STRING overload
+        // via implicit cast. Force STRING params so the binder inserts the cast
+        // instead of running the STRING exec over a non-string payload (which
+        // segfaulted in string_t::getAsString during constant folding).
+        paramTypes.push_back(LogicalType::STRING());
+        resultType = LogicalType::STRING();
     }
     }
     paramTypes.push_back(LogicalType(input.definition->parameterTypeIDs[1]));
