@@ -170,7 +170,9 @@ void Intersect::intersectLists() {
         // Here we need to slice all selVectors that have been previously intersected, as all these
         // lists need to be selected synchronously to read payloads correctly.
         sliceSelVectors(selVectorsForIntersectedLists, leftSelVector);
-        leftSelVector.setToUnfiltered();
+        // twoWayIntersect moved the surviving left IDs to the front of outKeyVector, so the next
+        // round reads its first getSelSize() entries in order.
+        leftSelVector.setToUnfiltered(leftSelVector.getSelSize());
         selVectorsForIntersectedLists.push_back(intersectSelVectors[i + 1].get());
     }
     outKeyVector->state->getSelVectorUnsafe().setSelSize(leftSelVector.getSelSize());
