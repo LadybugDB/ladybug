@@ -1,0 +1,32 @@
+-DATASET CSV empty
+
+--
+
+-CASE ZoneMapUpdateWidensBothBounds
+-STATEMENT CREATE NODE TABLE T(id INT64 PRIMARY KEY, v INT64, d DOUBLE);
+---- ok
+-STATEMENT CREATE (:T {id: 1, v: 1, d: 1.5}), (:T {id: 2, v: 1000, d: 1000.5});
+---- ok
+-STATEMENT CHECKPOINT;
+---- ok
+# One checkpointed write that both lowers the min and raises the max.
+-STATEMENT MATCH (t:T) SET t.v = CASE WHEN t.id = 1 THEN 0 ELSE 1023 END,
+                          t.d = CASE WHEN t.id = 1 THEN -0.5 ELSE 2000.5 END;
+---- ok
+-STATEMENT CHECKPOINT;
+---- ok
+-STATEMENT MATCH (t:T) WHERE t.v = 0 RETURN t.id;
+---- 1
+1
+-STATEMENT MATCH (t:T) WHERE t.v < 1 RETURN t.id;
+---- 1
+1
+-STATEMENT MATCH (t:T) WHERE t.v = 1023 RETURN t.id;
+---- 1
+2
+-STATEMENT MATCH (t:T) WHERE t.d < 0.0 RETURN t.id;
+---- 1
+1
+-STATEMENT MATCH (t:T) WHERE t.d > 1500.0 RETURN t.id;
+---- 1
+2
