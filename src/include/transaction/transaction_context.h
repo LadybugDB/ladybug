@@ -63,7 +63,8 @@ private:
     std::mutex mtx;
     main::ClientContext& clientContext;
     // MANUAL implies activeTransaction != nullptr: beginManualTransaction sets the mode only after
-    // the begin succeeded and clearTransaction resets both. Callers hold ClientContext's mutex.
+    // the begin succeeded and clearTransaction resets both. Only beginManualTransaction takes mtx;
+    // the invariant relies on a connection being used by one thread at a time.
     TransactionMode mode;
     Transaction* activeTransaction;
 };
