@@ -39,6 +39,8 @@ public:
 
     void logCommittedWAL(LocalWAL& localWAL, main::ClientContext* context,
         uint64_t& commitSequence);
+    // Removes the pinned-checkpoint marker first, so it never vouches for a record whose shadow is
+    // not applied yet.
     void logAndFlushCheckpoint(main::ClientContext* context);
 
     // Renames the active WAL to the frozen checkpoint WAL. Returns false if there is nothing to
@@ -62,6 +64,9 @@ public:
     // source for WAL pin observability alongside getFileSize() (active).
     uint64_t getFrozenWALFileSize();
     bool mayHaveCheckpointRecord();
+    // See StorageUtils::getPinnedCheckpointMarkerPath.
+    void writePinnedCheckpointMarker(main::ClientContext* context);
+    void removePinnedCheckpointMarker(main::ClientContext* context);
     void throwIfPoisoned();
     void poison(const std::string& reason);
 
@@ -76,11 +81,13 @@ private:
     void waitForDurabilityNoLock(uint64_t commitSequence, std::unique_lock<std::mutex>& lck);
     void flushAndSyncNoLock();
     void writeHeader(main::ClientContext& context);
+    void removePinnedCheckpointMarkerNoLock(main::ClientContext* context);
 
 private:
     std::mutex mtx;
     std::string walPath;
     std::string checkpointWalPath;
+    std::string pinnedCheckpointMarkerPath;
     bool inMemory;
     [[maybe_unused]] bool readOnly;
     common::VirtualFileSystem* vfs;

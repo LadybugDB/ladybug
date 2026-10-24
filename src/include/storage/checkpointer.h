@@ -81,6 +81,8 @@ protected:
     // Runs only when WAL retirement actually executes; skipped alongside retirement while
     // the horizon pins the WAL.
     virtual void onWALRetired(bool walRotated);
+    // Runs after the pinned-checkpoint marker is written, before cleanup removes any shadow file.
+    virtual void beforeShadowRemoval();
     virtual void beforeGraphShadowApply(StorageManager& storageManager);
     void applyShadowPagesForPartitionChildren();
     void flushGraphShadowFiles();
