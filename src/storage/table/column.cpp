@@ -356,7 +356,8 @@ void Column::updateStatistics(ColumnChunkMetadata& metadata, offset_t maxIndex,
         // If new values are outside of the existing min/max, update them
         if (max->gt(metadata.compMeta.max, dataType.getPhysicalType())) {
             metadata.compMeta.max = *max;
-        } else if (metadata.compMeta.min.gt(*min, dataType.getPhysicalType())) {
+        }
+        if (metadata.compMeta.min.gt(*min, dataType.getPhysicalType())) {
             metadata.compMeta.min = *min;
         }
     }
