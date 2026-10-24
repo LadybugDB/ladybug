@@ -121,8 +121,7 @@ public:
 
     bool shouldForceCheckpoint() const;
 
-    void commit(storage::WAL* wal);
-    void writeCommitToWAL(storage::WAL* wal, uint64_t& walCommitSequence);
+    void writeCommitToWAL(storage::WAL* wal, uint64_t& walCommitSequence, uint64_t& walBlockStart);
     void publishCommit();
     void rollback(storage::WAL* wal);
     void pushCommitCallback(std::function<void(Transaction&)> callback);
