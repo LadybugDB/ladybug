@@ -234,14 +234,14 @@ static Deserializer initDeserializer(FileInfo& fileInfo, main::ClientContext& cl
     }
 }
 
-static void checkWALHeader(const WALHeader& header, bool enableChecksums) {
-    if (enableChecksums != header.enableChecksums) {
+static void checkWALHeader(const WALHeader& walHeader, bool enableChecksums) {
+    if (enableChecksums != walHeader.enableChecksums) {
         throw RuntimeException(std::format(
             "The database you are trying to open was serialized with enableChecksums={} but you "
             "are trying to open it with enableChecksums={}. Please open your database using the "
             "correct enableChecksums config. If you wish to change this for your database, please "
             "use the export/import functionality.",
-            TypeUtils::toString(header.enableChecksums), TypeUtils::toString(enableChecksums)));
+            TypeUtils::toString(walHeader.enableChecksums), TypeUtils::toString(enableChecksums)));
     }
 }
 
@@ -253,18 +253,20 @@ static uint64_t getReadOffset(Deserializer& deSer, bool enableChecksums) {
     }
 }
 
-// An attached-graph WAL may have been written by a different session (e.g. a standalone
-// graph session) whose checksum setting differs from the recovering session's, so the
-// checksum flag must come from the WAL's own header. A torn header holds no acknowledged
-// commits, so strict recovery rethrows and non-strict recovery may retire the WAL.
-static std::optional<bool> tryReadWALChecksumFlag(FileInfo& fileInfo,
+// Reads the header with the plain reader whatever the checksum setting: ChecksumWriter writes an
+// object's bytes before its checksum, so the WAL starts with the header in both modes. An
+// attached-graph WAL may have been written by a different session (e.g. a standalone graph
+// session) whose checksum setting differs from the recovering session's, so its checksum flag
+// must come from here. A torn header holds no acknowledged commits: with throwOnWalReplayFailure
+// the read error is rethrown, otherwise nullopt lets non-strict recovery retire the WAL.
+static std::optional<WALHeader> tryReadWALHeader(FileInfo& fileInfo,
     main::ClientContext& clientContext, bool throwOnWalReplayFailure) {
     try {
         auto deserializer = initDeserializer(fileInfo, clientContext, false);
         deserializer.getReader()->onObjectBegin();
         const auto walHeader = readWALHeader(deserializer);
         deserializer.getReader()->onObjectEnd();
-        return walHeader.enableChecksums;
+        return walHeader;
     } catch (...) {
         if (throwOnWalReplayFailure) {
             throw;
@@ -381,14 +383,14 @@ WALReplayer::GraphRecoveryState WALReplayer::prepareGraphCheckpoint(StorageManag
         if (!storageManager.isReadOnly()) {
             syncWALFile(*fileInfo);
         }
-        const auto walEnableChecksums = tryReadWALChecksumFlag(*fileInfo, clientContext,
+        const auto persistedHeader = tryReadWALHeader(*fileInfo, clientContext,
             clientContext.getDBConfig()->throwOnWalReplayFailure);
-        if (!walEnableChecksums.has_value()) {
+        if (!persistedHeader.has_value()) {
             // The header is torn, so the WAL holds no acknowledged commits.
             return std::nullopt;
         }
         auto replayInfo = dryReplay(*fileInfo, clientContext.getDBConfig()->throwOnWalReplayFailure,
-            *walEnableChecksums);
+            persistedHeader->enableChecksums);
         if (!replayInfo.isLastRecordCheckpoint && replayInfo.offsetDeserialized == 0) {
             return std::nullopt;
         }
@@ -520,19 +522,21 @@ void WALReplayer::replayGraphWAL(StorageManager& storageManager,
             }
             auto fileInfo = VirtualFileSystem::GetUnsafe(clientContext)
                                 ->openFile(range.path, FileOpenFlags(flags), &clientContext);
-            const auto walEnableChecksums = tryReadWALChecksumFlag(*fileInfo, clientContext, true);
-            if (!walEnableChecksums.has_value()) {
+            const auto persistedHeader = tryReadWALHeader(*fileInfo, clientContext, true);
+            if (!persistedHeader.has_value()) {
                 throw RuntimeException(std::format(
                     "Cannot replay graph WAL {}: the WAL header could not be read.", range.path));
             }
-            auto deserializer = initDeserializer(*fileInfo, clientContext, *walEnableChecksums);
+            auto deserializer =
+                initDeserializer(*fileInfo, clientContext, persistedHeader->enableChecksums);
             deserializer.getReader()->onObjectBegin();
             const auto walHeader = readWALHeader(deserializer);
-            checkWALHeader(walHeader, *walEnableChecksums);
+            checkWALHeader(walHeader, persistedHeader->enableChecksums);
             FileDBIDUtils::verifyDatabaseID(*fileInfo,
                 storageManager.getOrInitDatabaseID(clientContext), walHeader.databaseID);
             deserializer.getReader()->onObjectEnd();
-            while (getReadOffset(deserializer, *walEnableChecksums) < range.endOffset) {
+            while (
+                getReadOffset(deserializer, persistedHeader->enableChecksums) < range.endOffset) {
                 auto walRecord = WALRecord::deserialize(deserializer, clientContext);
                 replayWALRecord(*walRecord);
             }
@@ -928,13 +932,19 @@ void WALReplayer::replayCommittedCheckpoint(Checkpointer& checkpointer,
 
 WALReplayer::WALReplayInfo WALReplayer::dryReplay(FileInfo& fileInfo, bool throwOnWalReplayFailure,
     bool enableChecksums) const {
+    // A readable header with the other checksum setting is a configuration error, not a torn
+    // tail: the non-strict path below would drop every commit in the WAL, so it throws in both
+    // modes. A header too short to read is left to the path below.
+    const auto persistedHeader = tryReadWALHeader(fileInfo, clientContext, false);
+    if (persistedHeader.has_value()) {
+        checkWALHeader(*persistedHeader, enableChecksums);
+    }
     WALReplayInfo replayInfo;
     try {
         Deserializer deserializer = initDeserializer(fileInfo, clientContext, enableChecksums);
 
         deserializer.getReader()->onObjectBegin();
         const auto walHeader = readWALHeader(deserializer);
-        checkWALHeader(walHeader, enableChecksums);
         replayInfo.walDatabaseID = walHeader.databaseID;
         deserializer.getReader()->onObjectEnd();
 
