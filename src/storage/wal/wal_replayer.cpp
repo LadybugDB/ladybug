@@ -762,10 +762,11 @@ void WALReplayer::replayActiveWAL(Checkpointer& checkpointer, bool throwOnWalRep
             // record poisons the WAL before anything else can be appended. So does a missing
             // shadow, which cleanup removes only after applying it. Then the records up to the
             // last CHECKPOINT are in the data file and only the suffix replays; a remaining
-            // shadow belongs to a later checkpoint that never logged its record. Records after a
-            // CHECKPOINT that form no whole transaction are not ones the engine writes (it logs a
-            // COMMIT only after a BEGIN), so the checkpoint may not have completed: replay the
-            // prefix before the first CHECKPOINT record and discard everything from it onward.
+            // shadow belongs to a later checkpoint that never logged its record. A COMMIT after a
+            // CHECKPOINT without its BEGIN is not one the engine writes (it logs a COMMIT only
+            // after a BEGIN), so the checkpoint may not have completed: replay the prefix before
+            // the first CHECKPOINT record and discard everything from it onward. Records that end
+            // in no COMMIT do not get here: they are a torn tail of the last CHECKPOINT, above.
             // Cleanup writes the pinned-checkpoint marker before removing the shadow, so with
             // neither of them the shadow was lost out of band: throw instead of silently deleting
             // committed records. Check before deleting below.
