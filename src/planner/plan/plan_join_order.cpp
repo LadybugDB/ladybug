@@ -513,6 +513,8 @@ static std::unordered_map<uint32_t, std::vector<std::shared_ptr<RelExpression>>>
 populateIntersectRelCandidates(const QueryGraph& queryGraph, const SubqueryGraph& subgraph) {
     std::unordered_map<uint32_t, std::vector<std::shared_ptr<RelExpression>>>
         intersectNodePosToRelsMap;
+    // Includes nodes bound only by the subgraph's rels, as getRelNbrPositions does.
+    const auto connectedNodes = subgraph.getNodesSelectorWithRelEndpoints();
     for (auto relPos : subgraph.getRelNbrPositions()) {
         auto rel = queryGraph.getQueryRel(relPos);
         if (!queryGraph.containsQueryNode(rel->getSrcNodeName()) ||
@@ -521,8 +523,8 @@ populateIntersectRelCandidates(const QueryGraph& queryGraph, const SubqueryGraph
         }
         auto srcNodePos = queryGraph.getQueryNodeIdx(rel->getSrcNodeName());
         auto dstNodePos = queryGraph.getQueryNodeIdx(rel->getDstNodeName());
-        auto isSrcConnected = subgraph.queryNodesSelector[srcNodePos];
-        auto isDstConnected = subgraph.queryNodesSelector[dstNodePos];
+        auto isSrcConnected = connectedNodes[srcNodePos];
+        auto isDstConnected = connectedNodes[dstNodePos];
         // Closing rel should be handled with inner join.
         if (isSrcConnected && isDstConnected) {
             continue;
@@ -605,6 +607,29 @@ static bool isNodeSequentialOnPlan(const LogicalPlan& plan, const NodeExpression
     return false;
 }
 
+// Joining a bare node scan (no properties, no filters) only re-checks that the node exists.
+// RemoveUnnecessaryJoinOptimizer drops such a join when the kept key cannot be NULL, which holds
+// for a node bound inside one query graph.
+static bool hasOnlyBareScanPlans(const JoinOrderEnumeratorContext& context, uint32_t nodePos) {
+    auto nodeSubgraph = context.getEmptySubqueryGraph();
+    nodeSubgraph.addQueryNode(nodePos);
+    if (!context.containPlans(nodeSubgraph)) {
+        return false;
+    }
+    for (auto& plan : context.getPlans(nodeSubgraph)) {
+        auto* op = plan.getLastOperator().get();
+        if (op->getOperatorType() != LogicalOperatorType::SCAN_NODE_TABLE) {
+            return false;
+        }
+        auto& scan = op->constCast<LogicalScanNodeTable>();
+        if (scan.getScanType() != LogicalScanNodeTableType::SCAN || !scan.getProperties().empty() ||
+            !scan.getTableDBMap().empty()) {
+            return false;
+        }
+    }
+    return true;
+}
+
 // As a heuristic for wcoj, we always pick rel scan that starts from the bound node.
 static LogicalPlan getWCOJBuildPlanForRel(const std::vector<LogicalPlan>& candidatePlans,
     const NodeExpression& boundNode) {
@@ -624,6 +649,9 @@ void Planner::planWCOJoin(const SubqueryGraph& subgraph,
     prevSubgraphs.push_back(subgraph);
     expression_vector boundNodeIDs;
     std::vector<LogicalPlan> relPlans;
+    const auto inCorrelatedSubquery =
+        currentQueryGraphPlanningInfo != nullptr &&
+        currentQueryGraphPlanningInfo->subqueryType == SubqueryPlanningType::CORRELATED;
     for (auto& rel : rels) {
         auto boundNode = rel->getSrcNodeName() == intersectNode->getUniqueName() ?
                              rel->getDstNode() :
@@ -651,6 +679,15 @@ void Planner::planWCOJoin(const SubqueryGraph& subgraph,
         if (relPlan.isEmpty()) { // Cannot find a suitable rel plan.
             return;
         }
+        // The build side scans the bound node's table, so a bare node is matched here instead of
+        // being charged for a join the optimizer would remove. Outside correlated subqueries the
+        // probe can start from that scan and be masked by the build keys, which costing misses.
+        const auto boundNodePos =
+            context.getQueryGraph()->getQueryNodeIdx(boundNode->getUniqueName());
+        if (inCorrelatedSubquery && !newSubgraph.queryNodesSelector[boundNodePos] &&
+            hasOnlyBareScanPlans(context, boundNodePos)) {
+            newSubgraph.addQueryNode(boundNodePos);
+        }
         relPlans.push_back(std::move(relPlan));
     }
     auto predicates =
@@ -666,6 +703,10 @@ void Planner::planWCOJoin(const SubqueryGraph& subgraph,
         // TODO(Xiyang): Fixme according to the description above.
         if (leftPlan.getSchema()->isExpressionInScope(*intersectNode->getInternalID())) {
             continue;
+        }
+        // Each bound node is selected or bound by one of the subgraph's rels, so the probe has it.
+        for (auto& boundNodeID : boundNodeIDs) {
+            DASSERT(leftPlan.getSchema()->isExpressionInScope(*boundNodeID));
         }
         auto leftPlanCopy = leftPlan.copy();
         std::vector<LogicalPlan> rightPlansCopy;
