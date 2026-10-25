@@ -18,6 +18,8 @@ public:
     void write(const uint8_t* data, uint64_t size) override;
 
     void clear() override;
+    // The bytes leave the buffer even when the write fails; fileOffset advances only after it
+    // succeeds.
     void flush() override;
     void sync() override;
 
