@@ -383,7 +383,11 @@ void UpdateInfo::dropUnretainedNodes(const std::vector<VectorRetentionPlan>& pla
         cursor->setPrev(nullptr);
     }
     if (exclusive) {
-        std::erase_if(updates, [](const auto& node) { return !node || node->info == nullptr; });
+        // Chains are found by vector index, so only empty slots at the end can go.
+        // Empty means info == nullptr; UpdateNode::isEmpty() returns the opposite.
+        while (!updates.empty() && (!updates.back() || updates.back()->info == nullptr)) {
+            updates.pop_back();
+        }
     }
 }
 

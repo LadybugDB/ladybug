@@ -154,8 +154,9 @@ public:
     std::vector<VectorRetentionPlan> planRetention(common::transaction_t horizon) const;
     static bool plansHaveKeptNodes(const std::vector<VectorRetentionPlan>& plans);
     // Drops every chain node that is neither kept nor the retained newest-below node of a
-    // vector with kept nodes. Prunes empty vector shells only when `exclusive` (no scan
-    // shares this object); shared owners keep their shells so in-flight scans never observe
+    // vector with kept nodes. Pops trailing empty vector shells only when `exclusive` (no
+    // scan shares this object); shells below a kept chain stay because chains are found by
+    // vector index, and shared owners keep every shell so in-flight scans never observe
     // structural churn. Content removal is safe either way: every dropped node is older
     // than the horizon, hence invisible to every live scan (startTS >= horizon).
     void dropUnretainedNodes(const std::vector<VectorRetentionPlan>& plans, bool exclusive);
