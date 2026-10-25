@@ -663,9 +663,14 @@ std::unique_ptr<VersionInfo> NodeGroup::checkpointVersionInfo(const UniqLock& lo
                             checkpointVersionInfo->stampDeleteCommitTS(currRow + i, deleteTS);
                         }
                     }
-                } else if (retain) {
+                }
+                if (retain) {
                     const auto insertTS = chunkedGroup->getInsertCommitTS(i);
+                    // INVALID_TRANSACTION (UINT64_MAX): a row an earlier checkpoint made visible
+                    // to every reader; stamping it would hide it.
                     if (insertTS != INVALID_TRANSACTION && insertTS >= retentionHorizon) {
+                        // Deleted rows too: delete_ marks a fresh vector ALWAYS_INSERTED, and an
+                        // earlier stamp in this vector 0-fills every other slot.
                         checkpointVersionInfo->stampInsertCommitTS(currRow + i, insertTS);
                     }
                 }

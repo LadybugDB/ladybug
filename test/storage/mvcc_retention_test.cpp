@@ -497,5 +497,77 @@ TEST_F(MVCCRetentionTest, SyntheticBaseNodeSplicesBelowKeptNodes) {
     EXPECT_EQ(observed[1], 10u);
 }
 
+TEST_F(MVCCRetentionTest, RowsCreatedAndDeletedAfterReaderStayHidden) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+    const auto ids = [](main::Connection& connection) {
+        auto result = connection.query("MATCH (p:P) RETURN p.id ORDER BY p.id;");
+        EXPECT_TRUE(result->isSuccess()) << result->getErrorMessage();
+        std::vector<int64_t> values;
+        while (result->hasNext()) {
+            values.push_back(result->getNext()->getValue(0)->getValue<int64_t>());
+        }
+        return values;
+    };
+    const std::vector<int64_t> none;
+    ASSERT_TRUE(conn->query("CALL auto_checkpoint=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE P(id INT64 PRIMARY KEY);")->isSuccess());
+    auto reader = std::make_unique<main::Connection>(database.get());
+    ASSERT_TRUE(reader->query("BEGIN TRANSACTION READ ONLY;")->isSuccess());
+    // Row 0 is deleted before any insert is stamped in its vector; row 2 after row 1's stamp.
+    ASSERT_TRUE(conn->query("UNWIND range(0, 2) AS i CREATE (:P {id: i});")->isSuccess());
+    ASSERT_TRUE(conn->query("MATCH (p:P) WHERE p.id IN [0, 2] DELETE p;")->isSuccess());
+    ASSERT_TRUE(conn->query("CHECKPOINT;")->isSuccess());
+    EXPECT_EQ(ids(*reader), none);
+    EXPECT_EQ(ids(*conn), std::vector<int64_t>{1});
+    // A reader that began between the create and the delete still sees the row.
+    ASSERT_TRUE(conn->query("CREATE (:P {id: 3});")->isSuccess());
+    auto midReader = std::make_unique<main::Connection>(database.get());
+    ASSERT_TRUE(midReader->query("BEGIN TRANSACTION READ ONLY;")->isSuccess());
+    ASSERT_TRUE(conn->query("MATCH (p:P {id: 3}) DELETE p;")->isSuccess());
+    ASSERT_TRUE(conn->query("CHECKPOINT;")->isSuccess());
+    EXPECT_EQ(ids(*reader), none);
+    EXPECT_EQ(ids(*midReader), std::vector<int64_t>({1, 3}));
+    EXPECT_EQ(ids(*conn), std::vector<int64_t>{1});
+    // A checkpoint between the create and the delete.
+    ASSERT_TRUE(conn->query("CREATE (:P {id: 4});")->isSuccess());
+    ASSERT_TRUE(conn->query("CHECKPOINT;")->isSuccess());
+    ASSERT_TRUE(conn->query("MATCH (p:P {id: 4}) DELETE p;")->isSuccess());
+    ASSERT_TRUE(conn->query("CHECKPOINT;")->isSuccess());
+    EXPECT_EQ(ids(*reader), none);
+    EXPECT_EQ(ids(*midReader), std::vector<int64_t>({1, 3}));
+    EXPECT_EQ(ids(*conn), std::vector<int64_t>{1});
+    ASSERT_TRUE(midReader->query("COMMIT;")->isSuccess());
+    ASSERT_TRUE(reader->query("COMMIT;")->isSuccess());
+}
+
+TEST_F(MVCCRetentionTest, CheckpointedRowDeletedAfterReaderStaysVisible) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+    const auto ids = [](main::Connection& connection) {
+        auto result = connection.query("MATCH (p:P) RETURN p.id ORDER BY p.id;");
+        EXPECT_TRUE(result->isSuccess()) << result->getErrorMessage();
+        std::vector<int64_t> values;
+        while (result->hasNext()) {
+            values.push_back(result->getNext()->getValue(0)->getValue<int64_t>());
+        }
+        return values;
+    };
+    ASSERT_TRUE(conn->query("CALL auto_checkpoint=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE P(id INT64 PRIMARY KEY);")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:P {id: 9});")->isSuccess());
+    // Checkpointed with no reader open, so the row has no insert timestamp left.
+    ASSERT_TRUE(conn->query("CHECKPOINT;")->isSuccess());
+    auto reader = std::make_unique<main::Connection>(database.get());
+    ASSERT_TRUE(reader->query("BEGIN TRANSACTION READ ONLY;")->isSuccess());
+    ASSERT_TRUE(conn->query("MATCH (p:P {id: 9}) DELETE p;")->isSuccess());
+    ASSERT_TRUE(conn->query("CHECKPOINT;")->isSuccess());
+    EXPECT_EQ(ids(*reader), std::vector<int64_t>{9});
+    EXPECT_EQ(ids(*conn), std::vector<int64_t>{});
+    ASSERT_TRUE(reader->query("COMMIT;")->isSuccess());
+}
+
 } // namespace testing
 } // namespace lbug
