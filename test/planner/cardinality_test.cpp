@@ -9,6 +9,7 @@
 #include "common/data_chunk/data_chunk_state.h"
 #include "graph_test/private_graph_test.h"
 #include "main/client_context.h"
+#include "planner/operator/logical_hash_join.h"
 #include "planner/operator/logical_plan_util.h"
 #include "storage/buffer_manager/memory_manager.h"
 #include "storage/storage_manager.h"
@@ -572,6 +573,62 @@ TEST_F(CardinalityTest, TestPackedChildSliceAliasedParentSelection) {
     state.setSelVector(replacement);
     EXPECT_EQ(42, (*slices.parentSelVector)[0]);
     EXPECT_EQ(5, slices.getNumValues());
+}
+
+static void collectHashJoins(planner::LogicalOperator* op, common::JoinType joinType,
+    std::vector<planner::LogicalOperator*>& result) {
+    if (op->getOperatorType() == planner::LogicalOperatorType::HASH_JOIN &&
+        op->constCast<planner::LogicalHashJoin>().getJoinType() == joinType) {
+        result.push_back(op);
+    }
+    for (auto i = 0u; i < op->getNumChildren(); ++i) {
+        collectHashJoins(op->getChild(i).get(), joinType, result);
+    }
+}
+
+static uint64_t getJoinCardinality(planner::LogicalPlan& plan, common::JoinType joinType) {
+    std::vector<planner::LogicalOperator*> joins;
+    collectHashJoins(plan.getLastOperator().get(), joinType, joins);
+    EXPECT_EQ(joins.size(), 1u);
+    return joins.empty() ? 0 : joins[0]->getCardinality();
+}
+
+// The plain plan carries the estimate appendHashJoin set while planning, EXPLAIN LOGICAL the
+// re-estimate after optimization. tinysnb has 8 persons and 14 knows edges.
+TEST_F(CardinalityTest, LeftJoinKeepsProbeCardinality) {
+    for (const std::string prefix : {"", "EXPLAIN LOGICAL "}) {
+        // The pattern matches at most one person, but all 8 are kept.
+        auto selective =
+            getRoot(prefix + "MATCH (a:person) OPTIONAL MATCH "
+                             "(a)-[:knows]->(b:person) WHERE b.ID = 0 RETURN a.ID, b.ID");
+        EXPECT_EQ(getJoinCardinality(*selective, common::JoinType::LEFT), 8u) << prefix;
+    }
+    // The 14 matches outnumber the 8 persons, so the inner-join estimate stands. Planning keeps
+    // that fan-out in the neighbour group's multiplier, so only the flat re-estimate exceeds 8.
+    auto fanOut = getRoot("EXPLAIN LOGICAL MATCH (a:person) OPTIONAL MATCH "
+                          "(a)-[:knows]->(b:person) RETURN a.ID, b.ID");
+    EXPECT_GT(getJoinCardinality(*fanOut, common::JoinType::LEFT), 8u);
+}
+
+// EXISTS plans a MARK join, which emits one row per probe row; EXPLAIN LOGICAL used to
+// re-estimate it as an inner join.
+TEST_F(CardinalityTest, MarkJoinKeepsProbeCardinality) {
+    auto plan = getRoot("EXPLAIN LOGICAL MATCH (a:person) "
+                        "RETURN a.ID, EXISTS { MATCH (a)-[:knows]->(b:person) WHERE b.ID = 0 }");
+    std::vector<planner::LogicalOperator*> joins;
+    collectHashJoins(plan->getLastOperator().get(), common::JoinType::MARK, joins);
+    ASSERT_EQ(joins.size(), 1u);
+    EXPECT_EQ(joins[0]->getCardinality(), joins[0]->getChild(0)->getCardinality());
+    EXPECT_EQ(joins[0]->getCardinality(), 8u);
+}
+
+// COUNT { } plans a COUNT join, which emits one row per probe row.
+TEST_F(CardinalityTest, CountJoinKeepsProbeCardinality) {
+    for (const std::string prefix : {"", "EXPLAIN LOGICAL "}) {
+        auto plan = getRoot(prefix + "MATCH (a:person) RETURN a.ID, "
+                                     "COUNT { MATCH (a)-[:knows]->(b:person) WHERE b.ID = 0 }");
+        EXPECT_EQ(getJoinCardinality(*plan, common::JoinType::COUNT), 8u) << prefix;
+    }
 }
 
 } // namespace testing

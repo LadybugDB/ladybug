@@ -239,6 +239,22 @@ uint64_t CardinalityEstimator::estimateHashJoin(const expression_vector& joinNod
     return estimateHashJoin(joinConditions, probeOp, buildOp);
 }
 
+uint64_t CardinalityEstimator::estimateHashJoin(
+    const std::vector<binder::expression_pair>& joinConditions, JoinType joinType,
+    const LogicalOperator& probeOp, const LogicalOperator& buildOp) const {
+    switch (joinType) {
+    case JoinType::INNER:
+        return estimateHashJoin(joinConditions, probeOp, buildOp);
+    case JoinType::LEFT:
+        return std::max<cardinality_t>(estimateHashJoin(joinConditions, probeOp, buildOp),
+            atLeastOne(probeOp.getCardinality()));
+    case JoinType::MARK:
+    case JoinType::COUNT:
+        return atLeastOne(probeOp.getCardinality());
+    }
+    UNREACHABLE_CODE;
+}
+
 uint64_t CardinalityEstimator::estimateCrossProduct(const LogicalOperator& probeOp,
     const LogicalOperator& buildOp) const {
     return atLeastOne(probeOp.getCardinality() * buildOp.getCardinality());
