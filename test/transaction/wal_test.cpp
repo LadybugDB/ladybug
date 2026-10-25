@@ -340,8 +340,8 @@ TEST_F(WalTest, FailedWALWriteIsNotWrittenOnClose) {
     } catch (const Exception&) {} // NOLINT(bugprone-empty-catch): the failure is expected.
     failingFSPtr->setFailWrite(false);
     wal.reset();
-    EXPECT_EQ(failingFSPtr->getFileSize(
-                  lbug::storage::StorageUtils::getWALFilePath("failing-sync://db")),
+    EXPECT_EQ(
+        failingFSPtr->getFileSize(lbug::storage::StorageUtils::getWALFilePath("failing-sync://db")),
         0);
 }
 
