@@ -9,6 +9,7 @@
 #include "common/data_chunk/data_chunk_state.h"
 #include "graph_test/private_graph_test.h"
 #include "main/client_context.h"
+#include "planner/operator/extend/logical_extend.h"
 #include "planner/operator/logical_plan_util.h"
 #include "storage/buffer_manager/memory_manager.h"
 #include "storage/storage_manager.h"
@@ -572,6 +573,89 @@ TEST_F(CardinalityTest, TestPackedChildSliceAliasedParentSelection) {
     state.setSelVector(replacement);
     EXPECT_EQ(42, (*slices.parentSelVector)[0]);
     EXPECT_EQ(5, slices.getNumValues());
+}
+
+static void collectExtends(planner::LogicalOperator* op,
+    std::vector<planner::LogicalOperator*>& result) {
+    if (op->getOperatorType() == planner::LogicalOperatorType::EXTEND) {
+        result.push_back(op);
+    }
+    for (auto i = 0u; i < op->getNumChildren(); ++i) {
+        collectExtends(op->getChild(i).get(), result);
+    }
+}
+
+static std::string boundName(const planner::LogicalOperator* extend) {
+    return extend->constCast<planner::LogicalExtend>().getBoundNode()->getVariableName();
+}
+
+// Whether lower is reached from upper through first children with no FLATTEN in between.
+static bool isStackedOn(const planner::LogicalOperator* upper,
+    const planner::LogicalOperator* lower) {
+    auto* op = upper->getChild(0).get();
+    while (op != lower) {
+        if (op->getOperatorType() == planner::LogicalOperatorType::FLATTEN ||
+            op->getNumChildren() == 0) {
+            return false;
+        }
+        op = op->getChild(0).get();
+    }
+    return true;
+}
+
+// One Src node reaches 4 Mid nodes; each Mid node has 3 CToDst and 2 CToDst2 neighbours.
+static void createExtendChainGraph(main::Connection& conn) {
+    ASSERT_TRUE(conn.query("CREATE NODE TABLE CSrc(id INT64, PRIMARY KEY(id));"
+                           "CREATE NODE TABLE CMid(id INT64, PRIMARY KEY(id));"
+                           "CREATE NODE TABLE CDst(id INT64, PRIMARY KEY(id));"
+                           "CREATE REL TABLE CToMid(FROM CSrc TO CMid);"
+                           "CREATE REL TABLE CToDst(FROM CMid TO CDst);"
+                           "CREATE REL TABLE CToDst2(FROM CMid TO CDst);"
+                           "CREATE (:CSrc {id: 0});"
+                           "UNWIND range(0, 3) AS i CREATE (:CMid {id: i});"
+                           "UNWIND range(0, 11) AS i CREATE (:CDst {id: i});"
+                           "UNWIND range(0, 3) AS i MATCH (s:CSrc {id: 0}), (m:CMid {id: i}) "
+                           "CREATE (s)-[:CToMid]->(m);"
+                           "UNWIND range(0, 11) AS i MATCH (m:CMid {id: i % 4}), (d:CDst {id: i}) "
+                           "CREATE (m)-[:CToDst]->(d);"
+                           "UNWIND range(0, 7) AS i MATCH (m:CMid {id: i % 4}), (d:CDst {id: i}) "
+                           "CREATE (m)-[:CToDst2]->(d);")
+                    ->isSuccess());
+    ASSERT_TRUE(conn.query("CALL enable_packed_path_extend=false")->isSuccess());
+}
+
+// The extend from b starts from the 4 Mid rows the extend from a produced, so its input is 4 rows,
+// not the 1 row of Src. The filter on a lets the planner extend from b right after the first hop.
+TEST_F(CardinalityTest, TestChainedExtendCountsPreviousHop) {
+    ASSERT_NO_FATAL_FAILURE(createExtendChainGraph(*conn));
+    auto plan = getRoot("MATCH (a:CSrc)-[:CToMid]->(b:CMid)-[:CToDst]->(c:CDst) "
+                        "WHERE a.id = 0 RETURN count(*)");
+    std::vector<planner::LogicalOperator*> extends;
+    collectExtends(plan->getLastOperator().get(), extends);
+    ASSERT_EQ(extends.size(), 2u);
+    ASSERT_EQ(boundName(extends[0]), "b");
+    ASSERT_EQ(boundName(extends[1]), "a");
+    ASSERT_TRUE(isStackedOn(extends[0], extends[1]));
+    EXPECT_EQ(extends[1]->getCardinality(), 1u);
+    EXPECT_EQ(extends[0]->getCardinality(), 4u);
+}
+
+// The first extend from b counts b's 4 rows and flattens b's group in its schema, keeping the
+// group's multiplier. A second extend from b must not multiply it in again.
+TEST_F(CardinalityTest, TestSecondExtendFromFlatBoundNode) {
+    ASSERT_NO_FATAL_FAILURE(createExtendChainGraph(*conn));
+    auto plan = getRoot("MATCH (a:CSrc)-[:CToMid]->(b:CMid)-[:CToDst]->(c:CDst), "
+                        "(b)-[:CToDst2]->(d:CDst) WHERE a.id = 0 RETURN count(*)");
+    std::vector<planner::LogicalOperator*> extends;
+    collectExtends(plan->getLastOperator().get(), extends);
+    ASSERT_EQ(extends.size(), 3u);
+    ASSERT_EQ(boundName(extends[0]), "b");
+    ASSERT_EQ(boundName(extends[1]), "b");
+    ASSERT_EQ(boundName(extends[2]), "a");
+    ASSERT_TRUE(isStackedOn(extends[0], extends[1]));
+    ASSERT_TRUE(isStackedOn(extends[1], extends[2]));
+    EXPECT_EQ(extends[1]->getCardinality(), 4u);
+    EXPECT_EQ(extends[0]->getCardinality(), 4u);
 }
 
 } // namespace testing
