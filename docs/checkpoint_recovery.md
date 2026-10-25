@@ -34,10 +34,12 @@ and recovery finishes the checkpoint. A failure before it rolls the checkpoint b
 fails too, the database refuses further writes the same way.
 
 A checkpoint that runs automatically after a commit never fails that commit, which is already in
-the WAL: its failure is printed as a warning, and a later commit tries again. The checkpoint that
-`COPY` or a large `CREATE INDEX` requires is different, since their data is not in the WAL: its
-failure fails the statement, and the changes are lost on restart unless a later `CHECKPOINT`
-succeeds.
+the WAL: its failure is printed as a warning, and a later commit tries again, or fails if the
+failure made the database refuse writes. The checkpoint that `COPY` or a large `CREATE INDEX`
+requires is different, since their data is not in the WAL: its failure fails the statement. If the
+checkpoint was rolled back, the changes are lost on restart unless a later `CHECKPOINT` succeeds;
+if it made the database refuse writes, they survive the restart only if the checkpoint's record
+reached storage.
 
 ## Checkpoint bundle format
 

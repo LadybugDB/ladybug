@@ -191,6 +191,15 @@ void TransactionManager::commit(main::ClientContext& clientContext, Transaction*
             checkpoint(clientContext);
         } catch (const std::exception& e) {
             // COPY FROM and CREATE INDEX on a large ART rely on this checkpoint instead of the WAL.
+            if (wal.isPoisoned()) {
+                // No later CHECKPOINT can run before the restart, whose recovery applies this one
+                // only if its record reached storage.
+                throw CheckpointException{std::format(
+                    "Transaction committed successfully, but the checkpoint it requires failed. "
+                    "The database refuses further writes until restart, and the changes survive "
+                    "it only if the checkpoint's record reached storage: {}",
+                    e.what())};
+            }
             throw CheckpointException{std::format(
                 "Transaction committed successfully, but the checkpoint it requires failed. Its "
                 "changes are not in the WAL and may be lost on restart unless a later CHECKPOINT "

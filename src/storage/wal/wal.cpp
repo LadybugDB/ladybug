@@ -362,6 +362,11 @@ bool WAL::mayHaveCheckpointRecord() {
     return checkpointRecordMayExist;
 }
 
+bool WAL::isPoisoned() {
+    std::unique_lock lck{mtx};
+    return poisoned;
+}
+
 void WAL::throwIfPoisoned() {
     std::unique_lock lck{mtx};
     throwIfPoisonedNoLock();

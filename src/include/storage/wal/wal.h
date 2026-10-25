@@ -62,6 +62,7 @@ public:
     // source for WAL pin observability alongside getFileSize() (active).
     uint64_t getFrozenWALFileSize();
     bool mayHaveCheckpointRecord();
+    bool isPoisoned();
     void throwIfPoisoned();
     void poison(const std::string& reason);
 
