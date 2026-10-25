@@ -299,6 +299,16 @@ std::shared_ptr<LogicalOperator> BoolFoldingOptimizer::visitOperator(
     return result;
 }
 
+// An empty result skips the whole child plan, so it can only replace a filter whose child
+// performs no writes. Otherwise keep the filter: the writes run, the filter drops the rows.
+static std::shared_ptr<LogicalOperator> emptyResultUnlessUpdating(
+    const std::shared_ptr<LogicalOperator>& op) {
+    if (op->getChild(0)->hasUpdateRecursive()) {
+        return op;
+    }
+    return std::make_shared<LogicalEmptyResult>(*op->getSchema());
+}
+
 std::shared_ptr<LogicalOperator> BoolFoldingOptimizer::visitFilterReplace(
     std::shared_ptr<LogicalOperator> op) {
     auto& filter = op->constCast<LogicalFilter>();
@@ -309,7 +319,7 @@ std::shared_ptr<LogicalOperator> BoolFoldingOptimizer::visitFilterReplace(
     if (predicate->expressionType == ExpressionType::LITERAL) {
         auto& lit = predicate->constCast<LiteralExpression>();
         if (lit.isNull() || !lit.getValue().getValue<bool>()) {
-            return std::make_shared<LogicalEmptyResult>(*op->getSchema());
+            return emptyResultUnlessUpdating(op);
         }
         return op->getChild(0); // true literal → drop filter
     }
@@ -322,7 +332,7 @@ std::shared_ptr<LogicalOperator> BoolFoldingOptimizer::visitFilterReplace(
     if (folded->expressionType == ExpressionType::LITERAL) {
         auto& lit = folded->constCast<LiteralExpression>();
         if (lit.isNull() || !lit.getValue().getValue<bool>()) {
-            return std::make_shared<LogicalEmptyResult>(*op->getSchema());
+            return emptyResultUnlessUpdating(op);
         }
         // Folded to true – the filter is redundant.
         return op->getChild(0);
