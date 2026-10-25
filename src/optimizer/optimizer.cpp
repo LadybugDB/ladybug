@@ -375,8 +375,9 @@ void Optimizer::optimize(planner::LogicalPlan* plan, main::ClientContext* contex
         auto factorizationRewriter = FactorizationRewriter();
         factorizationRewriter.rewrite(plan);
 
-        // RemoveUnnecessaryOrderByOptimizer removes ORDER BY nodes that do not
-        // affect the result (e.g., before a GROUP BY-less aggregate like COUNT(*)).
+        // RemoveUnnecessaryOrderByOptimizer removes an ORDER BY below a GROUP BY-less
+        // aggregate of only COUNT(*)s with no FILTER in between, which counts the same number
+        // of rows whichever ones the ORDER BY's LIMIT keeps.
         auto removeUnnecessaryOrderByOptimizer = RemoveUnnecessaryOrderByOptimizer();
         removeUnnecessaryOrderByOptimizer.rewrite(plan);
 

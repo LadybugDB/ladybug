@@ -1299,7 +1299,7 @@ TEST_F(OptimizerTest, RemoveUnnecessaryOrderByBeforeCountStar) {
     // COUNT(*) doesn't depend on ordering.
     //
     // Query: MATCH (n:person) WITH n ORDER BY n.ID LIMIT 5 RETURN count(*)
-    // Expected plan: AGGREGATE -> PROJECTION -> LIMIT -> ... (no ORDER BY)
+    // Expected plan: AGGREGATE -> PROJECTION -> LIMIT -> MULTIPLICITY_REDUCER -> ... (no ORDER BY)
 
     auto q1 = "MATCH (n:person) WITH n ORDER BY n.ID LIMIT 5 RETURN count(*)";
     auto plan1 = getRoot(q1);
@@ -1319,6 +1319,19 @@ TEST_F(OptimizerTest, RemoveUnnecessaryOrderByBeforeCountStar) {
     // With GROUP BY keys, ORDER BY might still be needed for LIMIT semantics
     // We don't assert on this — just verify we don't crash.
     ASSERT_TRUE(plan3 != nullptr);
+}
+
+TEST_F(OptimizerTest, KeepOrderByBeforeAggregateOfKeptRows) {
+    // The ORDER BY decides which rows its LIMIT keeps, and these aggregates read them.
+    for (auto query : {"MATCH (n:person) WITH n ORDER BY n.ID LIMIT 5 RETURN sum(n.age)",
+             "MATCH (n:person) WITH n ORDER BY n.ID LIMIT 5 RETURN count(n.age)",
+             "MATCH (n:person) WITH n ORDER BY n.ID LIMIT 5 RETURN count(*), collect(n.ID)",
+             "MATCH (n:person) WITH n ORDER BY n.ID LIMIT 5 WHERE n.age > 30 RETURN count(*)"}) {
+        auto plan = getRoot(query);
+        ASSERT_TRUE(
+            hasOperatorType(plan->getLastOperator().get(), planner::LogicalOperatorType::ORDER_BY))
+            << query;
+    }
 }
 
 TEST_F(OptimizerTest, RemoveUnnecessaryDistinctOnPrimaryKey) {
