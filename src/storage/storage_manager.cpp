@@ -533,6 +533,13 @@ void StorageManager::finalizeCheckpoint(main::ClientContext& context) {
 
 void StorageManager::rollbackCheckpoint(const Catalog& catalog, main::ClientContext* context) {
     std::unique_lock lck{mtx};
+    for (const auto entry : catalog.getRelGroupEntries(&DUMMY_CHECKPOINT_TRANSACTION)) {
+        for (auto& info : entry->getRelEntryInfos()) {
+            if (tables.contains(info.oid)) {
+                tables.at(info.oid)->rollbackCheckpoint();
+            }
+        }
+    }
     const auto nodeTableEntries = catalog.getNodeTableEntries(&DUMMY_CHECKPOINT_TRANSACTION);
     for (const auto tableEntry : nodeTableEntries) {
         // Partitioned parents hold no physical storage; only their partition subgraphs do.

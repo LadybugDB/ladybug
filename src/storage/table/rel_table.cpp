@@ -782,8 +782,16 @@ bool RelTable::checkpoint(main::ClientContext*, TableCatalogEntry* tableEntry,
         directedRelData->checkpoint(columnIDs, pageAllocator, snapshotTxn, retentionHorizon,
             openStartTSs);
     }
-    lastCheckpointedEpoch = effectiveEpoch;
+    storeCheckpointedEpoch(effectiveEpoch);
     return true;
+}
+
+void RelTable::rollbackCheckpoint() {
+    restoreCheckpointedEpoch();
+}
+
+void RelTable::finalizeCheckpoint(main::ClientContext&) {
+    commitCheckpointedEpoch();
 }
 
 row_idx_t RelTable::getNumTotalRows(const Transaction* transaction) {
