@@ -129,7 +129,7 @@ All queries and commands entered via the shell are stored in an `history.txt` fi
 Queries are added to the `linenoise` history array in the function `linenoiseHistoryAdd()`. If in `:singleline` mode, which is currently the default, all white spaces characters, including newlines and returns, are turned into spaces. Since it can be condensing multiple lines into a single line, every four spaces are turned into one space to remove tabs. Then, if the line is not a duplicate to the previous line, the query is added to the history array.
 
 #### Multiline Differences
-There are a few cases where `:multiline` mode is fundamentally different than `:singleline` mode. `:multiline` mode adds extra functionality to the shell, allowing moving between lines and editing, instead of being locked to only editting the most recent line.
+There are a few cases where `:multiline` mode is fundamentally different than `:singleline` mode. `:multiline` mode adds extra functionality to the shell, allowing moving between lines and editing, instead of being locked to only editing the most recent line.
 
 The first difference is how the queries get displayed. In the `refreshLine()` function, the input is not truncated to fit on the screen (width) as it can display the input over multiple lines. Instead, the new cursor position and row is calculated. If there are more rows of text than there are terminal rows, the rows are truncated similar to `:singleline`, removing from the beginning and the end to fit the cursor position on the screen. 
 

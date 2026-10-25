@@ -139,7 +139,7 @@ Morsel-driven parallelism is ladybug's approach to parallel query execution wher
 
 - **Morsel size**: 2048 rows (configurable)
 - **Granularity**: Fine-grained within each batch
-- **NextMorsel usage**: Called after evey morsel scan
+- **NextMorsel usage**: Called after every morsel scan
 
 ## Key Differences Summary
 
