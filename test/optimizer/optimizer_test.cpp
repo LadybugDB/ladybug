@@ -415,6 +415,98 @@ TEST_F(OptimizerTest, IntersectBuildSideMasksProbeScan) {
     EXPECT_EQ(getCount(*conn->query(taggedQuery)), 16);
 }
 
+// LDBC IC14's reply-to-comment leg. Joining pa's comments with pb's comments on pb before the
+// reply edge builds their cross product for every pair; the leg has to intersect instead.
+TEST_F(OptimizerTest, CorrelatedReplyLegIntersects) {
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE XPerson(id INT64, PRIMARY KEY(id));"
+                            "CREATE NODE TABLE XComment(id INT64, PRIMARY KEY(id));"
+                            "CREATE REL TABLE XHasCreator(FROM XComment TO XPerson, MANY_ONE);"
+                            "CREATE REL TABLE XReplyOf(FROM XComment TO XComment, MANY_ONE);"
+                            "UNWIND range(0, 999) AS i CREATE (:XPerson {id: i});"
+                            "UNWIND range(0, 19999) AS i CREATE (:XComment {id: i});")
+                    ->isSuccess());
+    // Person p writes comments p, p + 1000, ..., p + 19000. The ten from p + 10000 on reply to a
+    // comment of person p + 1.
+    ASSERT_TRUE(conn->query("UNWIND range(0, 19999) AS i "
+                            "MATCH (c:XComment {id: i}), (p:XPerson {id: i % 1000}) "
+                            "CREATE (c)-[:XHasCreator]->(p);"
+                            "UNWIND range(10000, 19999) AS i "
+                            "MATCH (c:XComment {id: i}), (r:XComment {id: i - 9999}) "
+                            "CREATE (c)-[:XReplyOf]->(r);")
+                    ->isSuccess());
+    const auto query = "UNWIND [[1, 2], [5, 9]] AS pair "
+                       "MATCH (pa:XPerson) WHERE pa.id = pair[1] "
+                       "MATCH (pb:XPerson) WHERE pb.id = pair[2] "
+                       "OPTIONAL MATCH (pa)<-[:XHasCreator]-(c:XComment)-[:XReplyOf]->(:XComment)"
+                       "-[:XHasCreator]->(pb) "
+                       "RETURN pa.id, count(c) ORDER BY pa.id";
+    auto plan = TestRunner::getLogicalPlan(query, *conn);
+    std::vector<planner::LogicalOperator*> intersects;
+    collectOperators(plan->getLastOperator().get(), planner::LogicalOperatorType::INTERSECT,
+        intersects);
+    EXPECT_EQ(intersects.size(), 1u);
+    auto result = conn->query(query);
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(result->getNumTuples(), 2u);
+    auto row = result->getNext();
+    EXPECT_EQ(row->getValue(0)->getValue<int64_t>(), 1);
+    EXPECT_EQ(row->getValue(1)->getValue<int64_t>(), 10);
+    row = result->getNext();
+    EXPECT_EQ(row->getValue(0)->getValue<int64_t>(), 5);
+    EXPECT_EQ(row->getValue(1)->getValue<int64_t>(), 0);
+    // c.id is not read by the bare scan an intersect build side starts with, so c must still
+    // be joined with its own scan.
+    auto withProperty = conn->query("UNWIND [[1, 2]] AS pair "
+                                    "MATCH (pa:XPerson) WHERE pa.id = pair[1] "
+                                    "MATCH (pb:XPerson) WHERE pb.id = pair[2] "
+                                    "OPTIONAL MATCH (pa)<-[:XHasCreator]-(c:XComment)"
+                                    "-[:XReplyOf]->(:XComment)-[:XHasCreator]->(pb) "
+                                    "RETURN min(c.id), max(c.id)");
+    ASSERT_TRUE(withProperty->isSuccess()) << withProperty->getErrorMessage();
+    row = withProperty->getNext();
+    EXPECT_EQ(row->getValue(0)->getValue<int64_t>(), 10001);
+    EXPECT_EQ(row->getValue(1)->getValue<int64_t>(), 19001);
+}
+
+// LDBC q30's shape outside a subquery: the probe starts from the post scan, which the reply
+// build side masks. Counting the build side's bare post scan as a match moves the probe to the
+// person scan and loses that mask.
+TEST_F(OptimizerTest, PlainMatchIntersectKeepsMaskedPostScan) {
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE QPerson(id INT64, PRIMARY KEY(id));"
+                            "CREATE NODE TABLE QPost(id INT64, PRIMARY KEY(id));"
+                            "CREATE NODE TABLE QComment(id INT64, PRIMARY KEY(id));"
+                            "CREATE REL TABLE QPostCreator(FROM QPost TO QPerson, MANY_ONE);"
+                            "CREATE REL TABLE QCommentCreator(FROM QComment TO QPerson, MANY_ONE);"
+                            "CREATE REL TABLE QReplyOf(FROM QComment TO QPost, MANY_ONE);"
+                            "UNWIND range(0, 99) AS i CREATE (:QPerson {id: i});"
+                            "UNWIND range(0, 9999) AS i CREATE (:QPost {id: i});"
+                            "UNWIND range(0, 19999) AS i CREATE (:QComment {id: i});")
+                    ->isSuccess());
+    ASSERT_TRUE(conn->query("UNWIND range(0, 9999) AS i "
+                            "MATCH (p:QPost {id: i}), (a:QPerson {id: i % 100}) "
+                            "CREATE (p)-[:QPostCreator]->(a);"
+                            "UNWIND range(0, 19999) AS i "
+                            "MATCH (m:QComment {id: i}), (a:QPerson {id: (i * 7) % 100}) "
+                            "CREATE (m)-[:QCommentCreator]->(a);"
+                            "UNWIND range(0, 9999) AS i "
+                            "MATCH (m:QComment {id: i}), (p:QPost {id: (i * 3) % 10000}) "
+                            "CREATE (m)-[:QReplyOf]->(p);")
+                    ->isSuccess());
+    const auto query = "MATCH (m:QComment)-[:QCommentCreator]->(a:QPerson), "
+                       "(m)-[:QReplyOf]->(post:QPost)-[:QPostCreator]->(a) RETURN count(*)";
+    auto plan = TestRunner::getLogicalPlan(query, *conn);
+    std::vector<planner::LogicalOperator*> intersects;
+    collectOperators(plan->getLastOperator().get(), planner::LogicalOperatorType::INTERSECT,
+        intersects);
+    EXPECT_EQ(intersects.size(), 1u);
+    std::vector<planner::LogicalOperator*> maskers;
+    collectOperators(plan->getLastOperator().get(), planner::LogicalOperatorType::SEMI_MASKER,
+        maskers);
+    ASSERT_EQ(maskers.size(), 1u);
+    EXPECT_EQ(maskers[0]->constCast<planner::LogicalSemiMasker>().getKey()->toString(), "post._ID");
+    EXPECT_EQ(getCount(*conn->query(query)), 400);
+}
+
 TEST_F(OptimizerTest, IndexScanTest) {
     auto q1 = "MATCH (a:person) "
               "WHERE a.ID = 0 AND a.fName='Alice' "
