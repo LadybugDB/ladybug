@@ -19,8 +19,13 @@ jobs:
           
       - name: Pull ghcr extensions and run container
         run: |
-          docker pull ghcr.io/ladybugdb/extension-repo:latest
-          docker run --rm -d --name lbug-extensions ghcr.io/ladybugdb/extension-repo:latest tail -f /dev/null
+          # HACK(one-time 0.22.0 rerun): pinned to the image pushed by the
+          # 0.21.2 release build (run 36818419211) instead of :latest, which
+          # currently holds the corrupted 0.22.0 build that damaged the
+          # 0.21.0 extensions. REVERT to :latest once we have a working
+          # extension build.
+          docker pull ghcr.io/ladybugdb/extension-repo@sha256:28a44c71ebd342838666c5457d6ef7fd6c597d50c92f46f8e6babc9da4e1627d
+          docker run --rm -d --name lbug-extensions ghcr.io/ladybugdb/extension-repo@sha256:28a44c71ebd342838666c5457d6ef7fd6c597d50c92f46f8e6babc9da4e1627d tail -f /dev/null
       
       - name: Copy ghcr extensions
         run: |

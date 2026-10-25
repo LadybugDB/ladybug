@@ -47,4 +47,9 @@ jobs:
           context: .
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ghcr.io/ladybugdb/extension-repo:latest
+          # HACK(one-time 0.22.0 rerun): also tag 0.22.0 alongside latest so
+          # future runs can pin to a versioned tag instead of the mutable
+          # :latest. REVERT once we have a working extension build.
+          tags: |
+            ghcr.io/ladybugdb/extension-repo:latest
+            ghcr.io/ladybugdb/extension-repo:0.22.0
