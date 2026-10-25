@@ -5718,6 +5718,23 @@ protected:
     std::unique_ptr<main::Connection> reader;
 };
 
+// Dies where WAL::logAndFlushCheckpoint has removed the pinned-checkpoint marker and not yet
+// written the CHECKPOINT record: the shadow is complete, and the marker no longer vouches for the
+// WAL's last CHECKPOINT.
+class FlakyCheckpointerKilledAfterMarkerRemoval final : public Checkpointer {
+public:
+    explicit FlakyCheckpointerKilledAfterMarkerRemoval(main::ClientContext& context)
+        : Checkpointer(context) {}
+
+    void logCheckpointAndApplyShadowPages(bool /*walRotated*/) override {
+        const auto storageManager = mainStorageManager;
+        auto& shadowFile = storageManager->getShadowFile();
+        shadowFile.flushAll(storageManager->getOrInitDatabaseID(clientContext));
+        WAL::Get(clientContext)->removePinnedCheckpointMarker(&clientContext);
+        throw RuntimeException("checkpoint failed.");
+    }
+};
+
 // The next checkpoint dies after its storage phase wrote shadow pages, before it logged a record.
 TEST_F(PinnedCheckpointCrashTest, LeftoverShadowKeepsCommitsAfterPinnedCheckpoint) {
     query("CREATE NODE TABLE P(id INT64 PRIMARY KEY);");
@@ -5974,6 +5991,55 @@ TEST_F(PinnedCheckpointCrashTest, PartitionedTableReopensAfterPinnedCheckpoint) 
         std::filesystem::directory_iterator{std::filesystem::path{databasePath}.parent_path()}) {
         ASSERT_NE(entry.path().extension(), ".shadow") << entry.path();
     }
+    createDBAndConn();
+    EXPECT_EQ(ids("L"), (std::vector<int64_t>{5}));
+}
+
+// Nothing committed since the pinned checkpoint, and the next one dies after removing the marker:
+// the WAL ends in the applied CHECKPOINT, and the complete shadow beside it is the next one's.
+TEST_F(PinnedCheckpointCrashTest, CrashAfterMarkerRemovalReopens) {
+    query("CREATE NODE TABLE P(id INT64 PRIMARY KEY);");
+    createRows(1, 3);
+    pinWAL();
+    query("CHECKPOINT;");
+    ASSERT_TRUE(std::filesystem::exists(markerPath()));
+    failCheckpoint<FlakyCheckpointerKilledAfterMarkerRemoval>();
+    EXPECT_FALSE(std::filesystem::exists(markerPath()));
+    ASSERT_TRUE(std::filesystem::exists(shadowPath()));
+    crash();
+    createDBAndConn();
+    EXPECT_EQ(ids(), (std::vector<int64_t>{1, 2, 3}));
+    createRows(4, 4);
+    crash();
+    createDBAndConn();
+    EXPECT_EQ(ids(), (std::vector<int64_t>{1, 2, 3, 4}));
+}
+
+TEST_F(PinnedCheckpointCrashTest, CrashAfterMarkerRemovalKeepsLaterCommits) {
+    query("CREATE NODE TABLE P(id INT64 PRIMARY KEY);");
+    createRows(1, 3);
+    pinWAL();
+    query("CHECKPOINT;");
+    createRows(4, 5);
+    failCheckpoint<FlakyCheckpointerKilledAfterMarkerRemoval>();
+    EXPECT_FALSE(std::filesystem::exists(markerPath()));
+    ASSERT_TRUE(std::filesystem::exists(shadowPath()));
+    crash();
+    createDBAndConn();
+    EXPECT_EQ(ids(), (std::vector<int64_t>{1, 2, 3, 4, 5}));
+}
+
+// The dying checkpoint wrote no partition shadows; recovery must not require them.
+TEST_F(PinnedCheckpointCrashTest, CrashAfterMarkerRemovalWithPartitionedTableReopens) {
+    query("CREATE NODE TABLE L(id INT64, cluster INT64, PRIMARY KEY(id)) PARTITION BY LIST "
+          "(cluster);");
+    query("CREATE (:L {id: 5, cluster: 1});");
+    query("CHECKPOINT;");
+    pinWAL();
+    query("CHECKPOINT;");
+    failCheckpoint<FlakyCheckpointerKilledAfterMarkerRemoval>();
+    EXPECT_FALSE(std::filesystem::exists(markerPath()));
+    crash();
     createDBAndConn();
     EXPECT_EQ(ids("L"), (std::vector<int64_t>{5}));
 }
