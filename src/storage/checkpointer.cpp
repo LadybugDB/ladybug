@@ -278,11 +278,11 @@ void Checkpointer::beginCheckpoint(common::transaction_t snapshotTimestamp,
     // snapshot may still need, and the next checkpoint refuses to overwrite a leftover
     // frozen WAL. The checkpoint proceeds without rotation; the CHECKPOINT record lands in
     // the active WAL and retirement below is skipped the same way.
-    // Independently, an active WAL that already holds a CHECKPOINT record (left by an
-    // earlier pinned checkpoint) is never rotated into a frozen WAL: the frozen recovery
-    // path requires the CHECKPOINT record to be final, so a rotated mid-file CHECKPOINT
-    // would break crash recovery. The record stays in the active WAL, whose recovery
-    // replays the suffix after the last CHECKPOINT.
+    // Independently, an active WAL holding a CHECKPOINT record this process logged (left by
+    // an earlier pinned checkpoint) is not rotated either: the record stays in the active
+    // WAL, whose recovery replays only the suffix after the last CHECKPOINT. The flag does
+    // not survive a restart, after which such a WAL can be rotated; frozen recovery then
+    // skips through its last CHECKPOINT the same way (see replayFrozenWAL).
     const bool pinWAL = retentionHorizon != common::INVALID_TRANSACTION;
     const bool activeWALHasCheckpoint = mainStorageManager->getWAL().mayHaveCheckpointRecord();
     for (const auto& target : checkpointTargets) {
