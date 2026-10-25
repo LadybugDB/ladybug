@@ -43,9 +43,16 @@ therefore means that every `CHECKPOINT` record in the active WAL has been applie
 A transaction committed after a `CHECKPOINT` record proves that checkpoint completed, since the
 write gate is held until a checkpoint's cleanup ends and a failure after its record poisons the
 WAL. Recovery then replays only the records after the last `CHECKPOINT` and removes a remaining
-shadow file, which belongs to a later checkpoint that never logged its record. Records after a
-`CHECKPOINT` that form no whole transaction leave the earlier rule in place: with a shadow file,
-only the records before the first `CHECKPOINT` replay.
+shadow file, which belongs to a later checkpoint that never logged its record. A `COMMIT` after a
+`CHECKPOINT` without its `BEGIN`, which the engine never writes, leaves the earlier rule in place:
+with a shadow file, only the records before the first `CHECKPOINT` replay. Records that end in no
+`COMMIT`, such as a torn commit, are a torn tail of the last `CHECKPOINT`, and the WAL counts as
+ending in that record.
+
+Recovering a WAL that ends in a `CHECKPOINT` record writes: it applies or removes the shadow files
+and retires the WAL. A read-only open therefore refuses such a database with `Cannot open database
+in read-only mode while checkpoint recovery is pending`, also when the `CHECKPOINT` is followed by
+a torn commit; opening it read-write once recovers it.
 
 When nothing was committed after the last `CHECKPOINT` record, the marker decides. With it,
 recovery discards the shadow files of the main database and partition children. Without it, a
