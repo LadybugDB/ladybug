@@ -1,6 +1,7 @@
 #include "common/serializer/buffered_file.h"
 
 #include <cstring>
+#include <utility>
 
 #include "common/assert.h"
 #include "common/exception/runtime.h"
@@ -52,9 +53,11 @@ void BufferedFileWriter::flush() {
     if (bufferOffset == 0) {
         return;
     }
-    fileInfo.writeFile(buffer.get(), bufferOffset, fileOffset);
-    fileOffset += bufferOffset;
-    bufferOffset = 0;
+    // The bytes leave the buffer even when the write fails: neither a later flush nor the
+    // destructor may write them after the caller has seen the failure.
+    const auto size = std::exchange(bufferOffset, 0);
+    fileInfo.writeFile(buffer.get(), size, fileOffset);
+    fileOffset += size;
     memset(buffer.get(), 0, BUFFER_SIZE);
 }
 
