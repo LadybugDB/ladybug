@@ -147,9 +147,23 @@ static std::vector<ScanRelTableInfo> populateRelTableCollectionScanner(table_id_
 }
 
 static bool scanSingleRelTable(const RelExpression& rel, const NodeExpression& boundNode,
-    ExtendDirection extendDirection) {
-    return !rel.isMultiLabeled() && !boundNode.isMultiLabeled() &&
-           extendDirection != ExtendDirection::BOTH;
+    const NodeExpression& nbrNode, ExtendDirection extendDirection) {
+    if (rel.getNumEntries() != 1 || boundNode.getNumEntries() != 1 ||
+        extendDirection == ExtendDirection::BOTH) {
+        return false;
+    }
+    // Several FROM/TO pairs, or none left after ALTER TABLE ... DROP FROM ... TO, take the
+    // generic path.
+    auto& relGroupEntry = rel.getEntry(0)->constCast<RelGroupCatalogEntry>();
+    if (relGroupEntry.getNumRelTables() != 1) {
+        return false;
+    }
+    // OPTIONAL MATCH and subquery patterns aren't label-pruned, so the rel table's FROM/TO pair
+    // may not be (bound, neighbour) in this direction. This path would scan the rel table at the
+    // bound node's offset regardless; the generic path builds no scanner for such a pair.
+    auto& nodePair = relGroupEntry.getSingleRelEntryInfo().nodePair;
+    return isRelTableQualifies(extendDirection, nodePair.srcTableID, nodePair.dstTableID,
+        boundNode.getEntry(0)->getTableID(), nbrNode.getTableIDsSet());
 }
 
 // Nbr-node semi masks backing hash-join SIP on extend output (SemiMaskTargetType::
@@ -230,7 +244,7 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapExtend(const LogicalOperator* l
     }
     auto printInfo = std::make_unique<ScanRelTablePrintInfo>(tableNames, extend->getProperties(),
         boundNode, rel, nbrNode, extendDirection, rel->getVariableName());
-    if (scanSingleRelTable(*rel, *boundNode, extendDirection)) {
+    if (scanSingleRelTable(*rel, *boundNode, *nbrNode, extendDirection)) {
         DASSERT(rel->getNumEntries() == 1);
         auto entry = rel->getEntry(0)->ptrCast<RelGroupCatalogEntry>();
         auto relDataDirection = ExtendDirectionUtil::getRelDataDirection(extendDirection);
