@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "binder/query/query_graph.h"
+#include "common/enums/join_type.h"
 #include "common/enums/rel_direction.h"
 #include "common/enums/table_type.h"
 #include "planner/operator/logical_plan.h"
@@ -56,10 +57,16 @@ public:
     }
 
     cardinality_t estimateScanNode(const LogicalOperator& op) const;
+    // Inner-join estimates; callers that build a join of another type use the overload below.
     cardinality_t estimateHashJoin(const std::vector<binder::expression_pair>& joinConditions,
         const LogicalOperator& probeOp, const LogicalOperator& buildOp) const;
     cardinality_t estimateHashJoin(const binder::expression_vector& joinNodeIDs,
         const LogicalOperator& probeOp, const LogicalOperator& buildOp) const;
+    // A LEFT join emits at least one row per probe row, MARK and COUNT joins exactly one per
+    // probe row.
+    cardinality_t estimateHashJoin(const std::vector<binder::expression_pair>& joinConditions,
+        common::JoinType joinType, const LogicalOperator& probeOp,
+        const LogicalOperator& buildOp) const;
     cardinality_t estimateCrossProduct(const LogicalOperator& probeOp,
         const LogicalOperator& buildOp) const;
     cardinality_t estimateIntersect(const binder::expression_vector& joinNodeIDs,
