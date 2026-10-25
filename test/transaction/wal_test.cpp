@@ -373,6 +373,35 @@ TEST_F(WalTest, CheckpointRecordWriteFailurePoisonsWAL) {
         RuntimeException);
 }
 
+// A failed write of the CHECKPOINT record into the frozen WAL is reported as a write failure.
+TEST_F(WalTest, FrozenCheckpointRecordWriteFailurePoisonsWAL) {
+    VirtualFileSystem vfs;
+    auto failingFS = std::make_unique<FailingSyncFileSystem>(false /* failSync */);
+    auto* failingFSPtr = failingFS.get();
+    vfs.registerFileSystem(std::move(failingFS));
+
+    lbug::storage::WAL wal("failing-sync://db", false /* readOnly */, false /* enableChecksums */,
+        &vfs);
+    lbug::storage::LocalWAL localWAL(*lbug::storage::MemoryManager::Get(*conn->getClientContext()),
+        false /* enableChecksums */);
+    localWAL.logLoadExtension("" /* main */, "dummy");
+    localWAL.logCommit();
+    uint64_t walCommitSequence = 0;
+    ASSERT_NO_THROW(wal.logCommittedWAL(localWAL, conn->getClientContext(), walCommitSequence));
+    ASSERT_NO_THROW(wal.rotateForCheckpoint(conn->getClientContext()));
+
+    failingFSPtr->setFailWrite(true);
+    std::string error;
+    try {
+        wal.logAndFlushCheckpointToFrozen(conn->getClientContext());
+    } catch (const Exception& e) {
+        error = e.what();
+    }
+    failingFSPtr->setFailWrite(false);
+    EXPECT_NE(error.find("WAL write failed"), std::string::npos) << error;
+    EXPECT_THROW(wal.throwIfPoisoned(), RuntimeException);
+}
+
 TEST_F(WalTest, CheckpointSyncFailureReportsPossibleCommitRecord) {
     VirtualFileSystem vfs;
     auto failingFS = std::make_unique<FailingSyncFileSystem>(true /* failSync */);

@@ -192,6 +192,14 @@ void WAL::logAndFlushCheckpointToFrozen(main::ClientContext* context) {
     frozenSerializer->getWriter()->onObjectEnd();
     try {
         frozenSerializer->getWriter()->flush();
+    } catch (const std::exception& e) {
+        std::unique_lock lck{mtx};
+        failWriteNoLock(e.what());
+    } catch (...) {
+        std::unique_lock lck{mtx};
+        failWriteNoLock("unknown exception");
+    }
+    try {
         frozenSerializer->getWriter()->sync();
     } catch (const std::exception& e) {
         std::unique_lock lck{mtx};

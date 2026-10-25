@@ -58,7 +58,6 @@ void BufferedFileWriter::flush() {
     const auto size = std::exchange(bufferOffset, 0);
     fileInfo.writeFile(buffer.get(), size, fileOffset);
     fileOffset += size;
-    memset(buffer.get(), 0, BUFFER_SIZE);
 }
 
 void BufferedFileWriter::sync() {
