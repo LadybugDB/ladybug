@@ -977,6 +977,22 @@ TEST_F(PostCommitCheckpointFailureTest, FailedForcedCheckpointFailsCopy) {
     checkNodes(10);
 }
 
+TEST_F(PostCommitCheckpointFailureTest, ForcedCheckpointFailingAfterItsRecordRefusesWrites) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+    countCheckpoints<FlakyCheckpointerFailsOnApplyingShadow>();
+    auto res = conn->query("COPY test FROM (UNWIND range(0, 9) AS i RETURN i, 'n');");
+    ASSERT_FALSE(res->isSuccess());
+    const auto error = res->getErrorMessage();
+    // A later CHECKPOINT cannot run: the failure after the record poisoned the WAL.
+    EXPECT_NE(error.find("refuses further writes until restart"), std::string::npos) << error;
+    EXPECT_EQ(error.find("unless a later CHECKPOINT succeeds"), std::string::npos) << error;
+    res.reset();
+    createDBAndConn();
+    checkNodes(10);
+}
+
 TEST_F(PostCommitCheckpointFailureTest, FailedForcedCheckpointFailsCreateIndex) {
     if (inMemMode) {
         GTEST_SKIP();
