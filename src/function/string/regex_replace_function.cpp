@@ -13,8 +13,8 @@ using namespace common;
 using re2_replace_func_t =
     std::function<void(std::string* str, const RE2& re, const regex::StringPiece& rewrite)>;
 
-// A pattern that is not a literal is compiled as given, without the Cypher escape handling a
-// literal pattern gets.
+// A pattern that is not a STRING literal is compiled as given, without the Cypher escape handling
+// a STRING literal pattern gets.
 struct RegexReplaceBindData : public RegexpBindData {
     re2_replace_func_t replaceFunc;
 
@@ -107,17 +107,16 @@ scalar_func_exec_t getExecFunc(const binder::expression_vector& expr) {
 std::unique_ptr<FunctionBindData> bindFunc(ScalarBindFuncInput input) {
     auto definition = input.definition->ptrCast<ScalarFunction>();
     re2_replace_func_t replaceFunc = bindReplaceFunc(input.arguments);
-    if (input.arguments[1]->expressionType == ExpressionType::LITERAL) {
+    if (BaseRegexpOperation::isStringLiteral(*input.arguments[1])) {
         definition->execFunc = getExecFunc<RegexpReplaceStaticPattern>(input.arguments);
         auto value = evaluator::ExpressionEvaluatorUtils::evaluateConstantExpression(
             input.arguments[1], input.context);
-        return std::make_unique<RegexReplaceBindDataStaticPattern>(
-            binder::ExpressionUtil::getDataTypes(input.arguments), std::move(replaceFunc),
+        return std::make_unique<RegexReplaceBindDataStaticPattern>(logical_type_vec_t{},
+            std::move(replaceFunc),
             BaseRegexpOperation::parseCypherPattern(value.getValue<std::string>()));
     } else {
         definition->execFunc = getExecFunc<RegexpReplace>(input.arguments);
-        return std::make_unique<RegexReplaceBindData>(
-            binder::ExpressionUtil::getDataTypes(input.arguments), std::move(replaceFunc));
+        return std::make_unique<RegexReplaceBindData>(logical_type_vec_t{}, std::move(replaceFunc));
     }
 }
 
