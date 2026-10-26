@@ -9,6 +9,18 @@ person->organisation added to table knows.
 -STATEMENT ALTER TABLE KNOWS ADD FROM person to person1
 ---- error
 Binder exception: Table person1 does not exist.
+-STATEMENT ALTER TABLE person ADD FROM person TO organisation
+---- error
+Binder exception: person is not of type REL.
+-STATEMENT ALTER TABLE person DROP FROM person TO organisation
+---- error
+Binder exception: person is not of type REL.
+-STATEMENT ALTER TABLE person ADD IF NOT EXISTS FROM person TO person
+---- error
+Binder exception: person is not of type REL.
+-STATEMENT MATCH (p:person) RETURN count(*)
+---- 1
+8
 -STATEMENT ALTER TABLE KNOWS ADD FROM person to organisation
 ---- error
 Binder exception: person->organisation already exists in knows table.
