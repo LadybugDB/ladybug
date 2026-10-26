@@ -17,6 +17,13 @@ on:
         required: true
         default: false
 
+# Every run pulls the published image, replaces one releases/ directory and pushes
+# the image back, so runs that overlap would drop each other's changes. A run called
+# from Build and Deploy waits here too, while that workflow's other jobs go on.
+concurrency:
+  group: extension-image
+  queue: max
+
 jobs:
   release-target:
     runs-on: ubuntu-latest
