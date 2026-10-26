@@ -50,7 +50,8 @@ struct ListSlice {
         auto startIdx = begin;
         auto endIdx = end;
         // Negative indices count back from the last character, so they need the character
-        // count. An end of -1 does not: SubStr stops at the last character either way.
+        // count. An end of -1 does not: SubStr stops at the last character, and gives '' for a
+        // start past it, either way.
         int64_t size = str.len;
         if (begin < 0 || end < -1) {
             ListLen::operation(str, size);
