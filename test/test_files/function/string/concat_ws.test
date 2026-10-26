@@ -80,3 +80,19 @@ Binder exception: concat_ws expects at least two parameters. Got: 0.
 -STATEMENT RETURN CONCAT_WS(5)
 ---- error
 Binder exception: concat_ws expects at least two parameters. Got: 1.
+
+-CASE ConcatWSInnerNull
+-LOG A NULL between two values is skipped without dropping their separator
+-STATEMENT RETURN CONCAT_WS(',', 'a', NULL, 'b')
+---- 1
+a,b
+-STATEMENT RETURN CONCAT_WS(',', 'a', NULL, NULL, 'b', NULL, 'c')
+---- 1
+a,b,c
+-STATEMENT RETURN CONCAT_WS('--', NULL, 'a', NULL)
+---- 1
+a
+-STATEMENT UNWIND [['x', NULL, 'z'], [NULL, 'y', NULL]] AS l RETURN CONCAT_WS('/', l[1], l[2], l[3])
+---- 2
+x/z
+y
