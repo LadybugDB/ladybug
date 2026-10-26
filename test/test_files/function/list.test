@@ -835,6 +835,54 @@ d|True
 35
 
 
+-LOG ListContainsLongComputedList
+-STATEMENT CALL threads=1
+---- ok
+-STATEMENT MATCH (b:person) WITH collect(b.age) + range(100, 120) AS ages MATCH (a:person) WHERE (a.age + 5) IN ages RETURN a.ID ORDER BY a.ID
+---- 6
+0
+2
+5
+7
+8
+9
+-STATEMENT UNWIND [range(0, 20), range(21, 41), NULL, range(0, 20)] AS xs UNWIND range(0, 40) AS e WITH * WHERE e IN xs RETURN xs[1], count(*) ORDER BY xs[1]
+---- 2
+0|42
+21|20
+-STATEMENT UNWIND [range(0, 20), range(21, 41)] AS xs UNWIND range(10, 30) AS e RETURN xs[1], count(CASE WHEN e IN xs THEN 1 END) ORDER BY xs[1]
+---- 2
+0|11
+21|10
+-STATEMENT UNWIND [[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 30, NULL], [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, NULL, 45]] AS xs UNWIND range(25, 50) AS e WITH * WHERE e IN xs RETURN xs[17], e ORDER BY e
+---- 2
+30|30
+|45
+-STATEMENT UNWIND [['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'Bob'], ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'Greg']] AS xs UNWIND ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'Bob', 'Greg'] AS e WITH * WHERE e IN xs AND size(e) > 1 RETURN xs[17], e ORDER BY e
+---- 2
+Bob|Bob
+Greg|Greg
+-STATEMENT UNWIND range(1, 4) AS k WITH k, CASE k WHEN 1 THEN range(0, 99) WHEN 2 THEN range(100, 199) WHEN 3 THEN NULL ELSE range(200, 299) END AS xs UNWIND range(100, 299) AS e WITH k, xs, e WHERE e IN xs RETURN k, count(*) ORDER BY k
+---- 2
+2|100
+4|100
+-STATEMENT UNWIND range(1, 4) AS k WITH k, CASE k WHEN 1 THEN range(0, 99) WHEN 2 THEN range(100, 199) WHEN 3 THEN NULL ELSE range(200, 299) END AS xs UNWIND range(100, 299) AS e WITH k, e IN xs AS b WHERE b RETURN k, count(*) ORDER BY k
+---- 2
+2|100
+4|100
+-STATEMENT UNWIND range(1, 2) AS k WITH k, CASE k WHEN 1 THEN ['a0', 'a1', 'a2', 'a3', 'a4', 'a5', 'a6', 'a7', 'a8', 'a9'] ELSE ['b0', 'b1', 'b2', 'b3', 'b4', 'b5', 'b6', 'b7', 'b8', 'b9'] END AS xs UNWIND ['a0', 'a1', 'a2', 'a3', 'a4', 'a5', 'a6', 'a7', 'a8', 'a9', 'a0', 'a1', 'a2', 'a3', 'a4', 'a5', 'a6', 'a7', 'a8', 'a9', 'a0', 'a1', 'a2', 'a3', 'a4', 'a5', 'a6', 'a7', 'a8', 'a9', 'a0', 'a1', 'a2', 'a3', 'a4', 'a5', 'a6', 'a7', 'a8', 'a9', 'a0', 'a1', 'a2', 'a3', 'a4', 'a5', 'a6', 'a7', 'a8', 'a9', 'a0', 'a1', 'a2', 'a3', 'a4', 'a5', 'a6', 'a7', 'a8', 'a9', 'b0', 'b1', 'b2', 'b3', 'b4', 'b5', 'b6', 'b7', 'b8', 'b9', 'b0', 'b1', 'b2', 'b3', 'b4', 'b5', 'b6', 'b7', 'b8', 'b9'] AS e WITH k, xs, e WHERE e IN xs RETURN k, count(*) ORDER BY k
+---- 2
+1|60
+2|20
+-STATEMENT UNWIND range(1, 2) AS k WITH k, CASE k WHEN 1 THEN range(0, 99) ELSE range(100, 199) END AS xs UNWIND CASE k WHEN 1 THEN range(0, 199) ELSE range(100, 109) END AS e WITH k, xs, e WHERE e IN xs RETURN k, count(*) ORDER BY k
+---- 2
+1|100
+2|10
+-STATEMENT UNWIND range(1, 100) AS i WITH i, CASE WHEN i % 2 = 0 THEN [i] ELSE [i + 1] END AS l WHERE i IN l RETURN count(*)
+---- 1
+50
+
+
 -LOG ListContainsSelect
 -STATEMENT MATCH (a:person) WHERE list_contains(a.courseScoresPerTerm, [8]) RETURN a.ID
 ---- 2

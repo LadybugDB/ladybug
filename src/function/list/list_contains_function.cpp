@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <optional>
 #include <string_view>
 
 #include "binder/expression/expression_util.h"
@@ -30,13 +31,26 @@ struct ListContains {
 };
 
 // The members of a list, sorted for binary search, so a build allocates one buffer per vector
-// rather than a node per member.
+// rather than a node per member. For a list that can change between calls, the list the keys were
+// built from is kept too, to detect a change.
 struct ListContainsBindData final : FunctionBindData {
     std::vector<uint64_t> integerKeys;
     std::vector<std::string_view> stringKeys;
-    // The bytes of the string members, which stringKeys points into.
+    // The bytes of the string members, which stringKeys and builtStringList point into.
     std::string stringData;
+    // The list the keys were built from, in list order and with its NULLs.
+    std::vector<std::optional<uint64_t>> builtIntegerList;
+    std::vector<std::optional<std::string_view>> builtStringList;
     bool isBuilt = false;
+
+    template<typename T>
+    const auto& builtList() const {
+        if constexpr (std::is_same_v<T, string_t>) {
+            return builtStringList;
+        } else {
+            return builtIntegerList;
+        }
+    }
 
     ListContainsBindData(std::vector<LogicalType> paramTypes, LogicalType resultType)
         : FunctionBindData{std::move(paramTypes), std::move(resultType)} {}
@@ -109,7 +123,8 @@ struct ListContainsConstantList {
         }
     }
 
-    template<KeyedListElement T>
+    // KEEP_LIST also records the list, which only a list that can change between calls needs.
+    template<KeyedListElement T, bool KEEP_LIST = false>
     static void build(ListContainsBindData& bindData, const list_entry_t& list,
         ValueVector& listVector) {
         bindData.isBuilt = false;
@@ -118,6 +133,9 @@ struct ListContainsConstantList {
         if constexpr (std::is_same_v<T, string_t>) {
             bindData.stringData.clear();
             bindData.stringKeys.resize(list.size);
+            if constexpr (KEEP_LIST) {
+                bindData.builtStringList.assign(list.size, std::nullopt);
+            }
             uint64_t numBytes = 0;
             for (auto i = 0u; i < list.size; ++i) {
                 if (!dataVector->isNull(list.offset + i)) {
@@ -135,18 +153,27 @@ struct ListContainsConstantList {
                 const auto start = bindData.stringData.size();
                 bindData.stringData.append(value);
                 const std::string_view key{bindData.stringData.data() + start, value.size()};
+                if constexpr (KEEP_LIST) {
+                    bindData.builtStringList[i] = key;
+                }
                 bindData.stringKeys[numKeys++] = key;
             }
             bindData.stringKeys.resize(numKeys);
             std::sort(bindData.stringKeys.begin(), bindData.stringKeys.end());
         } else {
             bindData.integerKeys.resize(list.size);
+            if constexpr (KEEP_LIST) {
+                bindData.builtIntegerList.assign(list.size, std::nullopt);
+            }
             uint64_t numKeys = 0;
             for (auto i = 0u; i < list.size; ++i) {
                 if (dataVector->isNull(list.offset + i)) {
                     continue;
                 }
                 const auto key = static_cast<uint64_t>(values[i]);
+                if constexpr (KEEP_LIST) {
+                    bindData.builtIntegerList[i] = key;
+                }
                 bindData.integerKeys[numKeys++] = key;
             }
             bindData.integerKeys.resize(numKeys);
@@ -175,6 +202,97 @@ struct ListContainsConstantList {
         SelectionVector& selVector, void* dataPtr) {
         if (useKeys<T>(params, params[0]->state->getSelVector(),
                 params[1]->state->getSelVector().getSelSize(), dataPtr)) {
+            return ScalarFunction::BinarySelectWithBindData<list_entry_t, T,
+                ListContainsConstantList>(params, selVector, dataPtr);
+        }
+        return ScalarFunction::BinarySelectWithBindData<list_entry_t, T, ListContainsScan>(params,
+            selVector, dataPtr);
+    }
+};
+
+// list_contains over a list that can differ between calls. When one list applies to all rows of a
+// call (a flat list against unflat elements), its keys are used, and rebuilt when the list changes.
+struct ListContainsFlatList {
+    // A call needs this many rows to rebuild a changed list's keys; with fewer, sorting a long list
+    // costs more than scanning it per row.
+    static constexpr uint64_t MIN_ROWS_TO_BUILD_KEYS = 64;
+
+    static bool canUseKeys(const std::vector<std::shared_ptr<ValueVector>>& params, void* dataPtr) {
+        return ListContainsConstantList::canUseKeys(params, dataPtr) && !params[1]->state->isFlat();
+    }
+
+    // Returns whether the keys hold the members of the call's list, building them if the call has
+    // enough rows. The list is compared in full on every call, since a list vector can be
+    // overwritten in place between calls.
+    template<KeyedListElement T>
+    static bool refresh(ListContainsBindData& bindData, ValueVector& listVector,
+        const SelectionVector& listSelVector, uint64_t numRows) {
+        const auto pos = listSelVector[0];
+        if (listVector.isNull(pos)) {
+            return false;
+        }
+        auto& list = listVector.getValue<list_entry_t>(pos);
+        if (bindData.isBuilt && isBuiltFrom<T>(bindData, list, listVector)) {
+            return true;
+        }
+        if (numRows < MIN_ROWS_TO_BUILD_KEYS) {
+            return false;
+        }
+        ListContainsConstantList::build<T, true /* KEEP_LIST */>(bindData, list, listVector);
+        return true;
+    }
+
+    template<KeyedListElement T>
+    static bool isBuiltFrom(const ListContainsBindData& bindData, const list_entry_t& list,
+        ValueVector& listVector) {
+        const auto& built = bindData.builtList<T>();
+        if (built.size() != list.size) {
+            return false;
+        }
+        auto dataVector = ListVector::getDataVector(&listVector);
+        const auto values = reinterpret_cast<T*>(ListVector::getListValues(&listVector, list));
+        for (auto i = 0u; i < list.size; ++i) {
+            if (dataVector->isNull(list.offset + i)) {
+                if (built[i].has_value()) {
+                    return false;
+                }
+                continue;
+            }
+            if constexpr (std::is_same_v<T, string_t>) {
+                if (built[i] != values[i].getAsStringView()) {
+                    return false;
+                }
+            } else {
+                if (built[i] != static_cast<uint64_t>(values[i])) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    template<KeyedListElement T>
+    static void exec(const std::vector<std::shared_ptr<ValueVector>>& params,
+        const std::vector<SelectionVector*>& paramSelVectors, ValueVector& result,
+        SelectionVector* resultSelVector, void* dataPtr) {
+        if (canUseKeys(params, dataPtr) &&
+            refresh<T>(*static_cast<ListContainsBindData*>(dataPtr), *params[0],
+                *paramSelVectors[0], paramSelVectors[1]->getSelSize())) {
+            ScalarFunction::BinaryExecWithBindData<list_entry_t, T, uint8_t,
+                ListContainsConstantList>(params, paramSelVectors, result, resultSelVector,
+                dataPtr);
+            return;
+        }
+        ScalarFunction::BinaryExecListStructFunction<list_entry_t, T, uint8_t, ListContains>(params,
+            paramSelVectors, result, resultSelVector, dataPtr);
+    }
+
+    template<KeyedListElement T>
+    static bool select(const std::vector<std::shared_ptr<ValueVector>>& params,
+        SelectionVector& selVector, void* dataPtr) {
+        if (canUseKeys(params, dataPtr) &&
+            refresh<T>(*static_cast<ListContainsBindData*>(dataPtr), *params[0],
+                params[0]->state->getSelVector(), params[1]->state->getSelVector().getSelSize())) {
             return ScalarFunction::BinarySelectWithBindData<list_entry_t, T,
                 ListContainsConstantList>(params, selVector, dataPtr);
         }
@@ -219,12 +337,15 @@ static std::unique_ptr<FunctionBindData> bindFunc(const ScalarBindFuncInput& inp
     TypeUtils::visit(childType.getPhysicalType(), [&]<typename T>(T) {
         scalarFunction->selectFunc = nullptr;
         if constexpr (KeyedListElement<T>) {
+            useKeys = true;
             if (isConstantList(*listExpr)) {
-                useKeys = true;
                 scalarFunction->execFunc = ListContainsConstantList::exec<T>;
                 scalarFunction->selectFunc = ListContainsConstantList::select<T>;
-                return;
+            } else {
+                scalarFunction->execFunc = ListContainsFlatList::exec<T>;
+                scalarFunction->selectFunc = ListContainsFlatList::select<T>;
             }
+            return;
         }
         scalarFunction->execFunc =
             ScalarFunction::BinaryExecListStructFunction<list_entry_t, T, uint8_t, ListContains>;
