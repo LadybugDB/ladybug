@@ -1,3 +1,4 @@
+#include "function/list/functions/list_len_function.h"
 #include "function/list/vector_list_functions.h"
 #include "function/scalar_function.h"
 #include "function/string/functions/substr_function.h"
@@ -48,7 +49,13 @@ struct ListSlice {
         ValueVector&, ValueVector& resultValueVector) {
         auto startIdx = begin;
         auto endIdx = end;
-        normalizeIndices(startIdx, endIdx, str.len);
+        // Negative indices count back from the last character, so they need the character
+        // count. An end of -1 does not: SubStr stops at the last character either way.
+        int64_t size = str.len;
+        if (begin < 0 || end < -1) {
+            ListLen::operation(str, size);
+        }
+        normalizeIndices(startIdx, endIdx, static_cast<uint64_t>(size));
         SubStr::operation(str, startIdx, endIdx - startIdx + 1, result, resultValueVector);
     }
 };
