@@ -1,0 +1,126 @@
+-DATASET CSV empty
+
+--
+
+-CASE NullCheckInLambdaOverManyElements
+-STATEMENT RETURN all(v IN range(1, 3000) WHERE v IS NOT NULL), any(v IN range(1, 3000) WHERE v IS NULL), none(v IN range(1, 3000) WHERE v IS NULL);
+---- 1
+True|False|True
+-STATEMENT UNWIND range(1, 3000) AS i WITH i, [i, CASE WHEN i % 2 = 0 THEN NULL ELSE i END] AS l WHERE all(v IN l WHERE v IS NOT NULL) RETURN count(*);
+---- 1
+1500
+-STATEMENT UNWIND range(1, 3000) AS i WITH i, [i, CASE WHEN i % 2 = 0 THEN NULL ELSE i END] AS l RETURN sum(size(list_filter(l, v -> v IS NULL))), sum(size(list_filter(l, v -> v IS NOT NULL)));
+---- 1
+1500|4500
+-STATEMENT UNWIND range(1, 3000) AS i WITH i, [i, CASE WHEN i % 2 = 0 THEN NULL ELSE i END] AS l RETURN sum(size(list_filter(list_transform(l, v -> v IS NULL), b -> b)));
+---- 1
+1500
+
+-CASE CaseInLambdaOverManyElements
+-STATEMENT UNWIND range(1, 3000) AS i WITH i, [i, CASE WHEN i % 2 = 0 THEN NULL ELSE i END] AS l RETURN sum(list_sum(list_transform(l, v -> CASE WHEN v > 1500 THEN 1 ELSE 0 END)));
+---- 1
+2250
+-STATEMENT UNWIND range(1, 3000) AS i WITH i, [i, CASE WHEN i % 2 = 0 THEN NULL ELSE i END] AS l RETURN sum(list_sum(list_transform(l, v -> nullif(v, 1))));
+---- 1
+6751498
+
+-CASE CoalesceInLambdaOverManyElements
+-STATEMENT UNWIND range(1, 3000) AS i WITH i, [i, CASE WHEN i % 2 = 0 THEN NULL ELSE i END] AS l RETURN sum(list_sum(list_transform(l, v -> coalesce(v, 0))));
+---- 1
+6751500
+
+-CASE BooleanOperatorInLambdaOverManyElements
+-STATEMENT UNWIND range(1, 3000) AS i WITH [i % 2 = 0, i % 3 = 0] AS l RETURN sum(size(list_filter(l, b -> NOT b))), sum(size(list_filter(l, b -> b XOR true))), sum(size(list_filter(l, b -> b AND b))), sum(size(list_filter(l, b -> b OR b)));
+---- 1
+3500|3500|2500|2500
+
+-CASE HashAndListLiteralInLambdaOverManyElements
+-STATEMENT UNWIND range(1, 3000) AS i WITH [i, i + 1] AS l WHERE list_transform(l, v -> hash(v)) = [hash(l[1]), hash(l[2])] RETURN count(*);
+---- 1
+3000
+-STATEMENT UNWIND range(1, 3000) AS i WITH [i, i + 1] AS l WHERE list_transform(l, v -> [v, v]) = [[l[1], l[1]], [l[2], l[2]]] RETURN count(*);
+---- 1
+3000
+
+-CASE StructFieldInLambdaOverManyElements
+-STATEMENT UNWIND range(1, 3000) AS i WITH [{a: i}, {a: i + 1}] AS l RETURN sum(list_sum(list_transform(l, v -> v.a)));
+---- 1
+9006000
+-STATEMENT UNWIND range(1, 3000) AS i WITH [{a: i}, {a: i + 1}] AS l WHERE any(v IN l WHERE v.a = 3001) RETURN count(*);
+---- 1
+1
+
+-CASE NestedLambdaOverManyElements
+-STATEMENT UNWIND range(1, 3000) AS i WITH [[i], [i + 1, CASE WHEN i % 2 = 0 THEN NULL ELSE i END]] AS l RETURN sum(list_sum(list_transform(l, v -> size(list_filter(v, y -> y IS NOT NULL)))));
+---- 1
+7500
+
+-CASE StructLiteralInLambda
+-STATEMENT UNWIND [1, 2, 3] AS i WITH i, [i, i + 1] AS l RETURN i, list_transform(l, v -> {a: v}) ORDER BY i;
+---- 3
+1|[{a: 1},{a: 2}]
+2|[{a: 2},{a: 3}]
+3|[{a: 3},{a: 4}]
+
+-CASE OuterVariableInLambda
+-STATEMENT UNWIND range(1, 1000) AS i WITH i, [{a: i}, {a: i + 1}] AS l WHERE any(v IN l WHERE v.a = i + 1) RETURN count(*);
+---- 1
+1000
+-STATEMENT UNWIND range(1, 1000) AS i WITH i, [{a: i}, {a: i + 1}] AS l RETURN sum(list_sum(list_transform(l, v -> v.a - i)));
+---- 1
+1000
+
+-CASE NullNestedListInLambdaOverManyElements
+-STATEMENT UNWIND range(1, 3000) AS i WITH [[i], CASE WHEN i % 3 = 0 THEN NULL ELSE [i, i] END] AS l RETURN sum(size(list_filter(l, v -> v IS NULL))), sum(list_sum(list_transform(l, v -> coalesce(size(v), -1))));
+---- 1
+1000|6000
+-STATEMENT UNWIND range(1, 3000) AS i WITH i, [[i], CASE WHEN i % 3 = 0 THEN NULL ELSE [i, i] END] AS l WITH i, list_transform(l, v -> v IS NULL) AS isNull, list_transform(l, v -> coalesce(size(v), -1)) AS sizes WHERE isNull <> [false, i % 3 = 0] OR sizes <> [1, CASE WHEN i % 3 = 0 THEN -1 ELSE 2 END] RETURN count(*);
+---- 1
+0
+
+-CASE ElementTypesInLambdaOverManyElements
+-STATEMENT UNWIND range(1, 3000) AS i WITH [cast(i AS INT32), cast(i + 1 AS INT32)] AS l RETURN sum(list_sum(list_transform(l, v -> v * 2)));
+---- 1
+18012000
+-STATEMENT UNWIND range(1, 3000) AS i WITH [cast(i AS FLOAT) / 2, cast(i AS FLOAT)] AS l RETURN sum(size(list_filter(l, v -> v > 1000.25)));
+---- 1
+3000
+-STATEMENT UNWIND range(1, 3000) AS i WITH [cast([i, i + 1] AS INT64[2]), cast([i, 0] AS INT64[2])] AS l RETURN sum(list_sum(list_transform(l, v -> v[2])));
+---- 1
+4504500
+-STATEMENT UNWIND range(1, 3000) AS i WITH [map([i], [i + 1]), map([i + 1], [i + 2])] AS l RETURN sum(list_sum(list_transform(l, v -> map_values(v)[1])));
+---- 1
+9012000
+-STATEMENT UNWIND range(1, 3000) AS i WITH CASE WHEN i % 3 = 0 THEN NULL WHEN i % 3 = 1 THEN [] ELSE [i, i] END AS l RETURN count(list_transform(l, v -> v + 1)), sum(size(list_transform(l, v -> v + 1))), count(list_filter(l, v -> v > 0)), sum(CASE WHEN all(v IN l WHERE v > 0) THEN 1 ELSE 0 END);
+---- 1
+2000|2000|2000|2000
+
+-CASE NullStructInLambdaOverManyElements
+-STATEMENT UNWIND range(1, 3000) AS i WITH i, [{a: i}, CASE WHEN i % 3 = 0 THEN NULL ELSE {a: i} END] AS l WITH i, list_transform(l, v -> v IS NULL) AS isNull, list_transform(l, v -> coalesce(v.a, -1)) AS a WHERE isNull <> [false, i % 3 = 0] OR a <> [i, CASE WHEN i % 3 = 0 THEN -1 ELSE i END] RETURN count(*);
+---- 1
+0
+
+-CASE PathPropertiesInLambda
+-STATEMENT CREATE NODE TABLE Person(id INT64, PRIMARY KEY (id));
+---- ok
+-STATEMENT CREATE REL TABLE KNOWS(FROM Person TO Person, w INT64);
+---- ok
+-STATEMENT UNWIND range(1, 6) AS i CREATE (:Person {id: i});
+---- ok
+-STATEMENT UNWIND [[1, 2], [2, 3], [3, 4], [1, 5], [5, 6]] AS e MATCH (s:Person {id: e[1]}), (d:Person {id: e[2]}) CREATE (s)-[:KNOWS {w: e[1] * 10 + e[2]}]->(d);
+---- ok
+-STATEMENT MATCH p = (a:Person)-[:KNOWS*1..2]->(b:Person) WHERE a.id = 1 RETURN b.id, list_transform([p], q -> properties(nodes(q), 'id')), list_transform([p], q -> properties(rels(q), 'w')) ORDER BY b.id;
+---- 4
+2|[[1,2]]|[[12]]
+3|[[1,2,3]]|[[12,23]]
+5|[[1,5]]|[[15]]
+6|[[1,5,6]]|[[15,56]]
+-STATEMENT MATCH p = (a:Person)-[:KNOWS*1..2]->(b:Person) WHERE a.id = 1 RETURN b.id, list_transform([nodes(p), nodes(p)], ns -> properties(ns, 'id')) ORDER BY b.id;
+---- 4
+2|[[1,2],[1,2]]
+3|[[1,2,3],[1,2,3]]
+5|[[1,5],[1,5]]
+6|[[1,5,6],[1,5,6]]
+-STATEMENT MATCH p = (a:Person)-[:KNOWS*1..2]->(b:Person) WHERE a.id = 1 WITH collect(p) AS ps RETURN list_sum(list_transform(ps, q -> list_sum(list_transform(nodes(q), n -> n.id))));
+---- 1
+27

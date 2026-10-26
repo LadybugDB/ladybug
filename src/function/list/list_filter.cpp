@@ -93,9 +93,6 @@ static void execFunc(const std::vector<std::shared_ptr<common::ValueVector>>& in
     auto* sliceInfo = listLambdaBindData->sliceInfo;
     const auto& inputVector = *input[0];
 
-    auto savedParamStates =
-        sliceInfo->overrideAndSaveParamStates(listLambdaBindData->lambdaParamEvaluators);
-
     listLambdaBindData->rootEvaluator->evaluate();
     DASSERT(input.size() == 2);
     auto& listInputSelVector = *inputSelVectors[0];
@@ -115,9 +112,6 @@ static void execFunc(const std::vector<std::shared_ptr<common::ValueVector>>& in
             result.setNull(pos, inputVector.isNull(i));
         }
     }
-
-    sliceInfo->restoreParamStates(listLambdaBindData->lambdaParamEvaluators,
-        std::move(savedParamStates));
 }
 
 function_set ListFilterFunction::getFunctionSet() {
