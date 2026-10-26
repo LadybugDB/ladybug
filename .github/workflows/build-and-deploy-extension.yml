@@ -18,17 +18,50 @@ on:
         default: false
 
 jobs:
+  release-target:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.target.outputs.version }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            /CMakeLists.txt
+            /scripts/extension/
+          sparse-checkout-cone-mode: false
+
+      - name: Check which releases/ directory this run may write
+        id: target
+        env:
+          IS_NIGHTLY: ${{ inputs.isNightly == true || github.event.inputs.isNightly == 'true' }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}
+        run: |
+          version=$(python3 scripts/extension/release_target.py --nightly "$IS_NIGHTLY" \
+            --ref-type "$REF_TYPE" --ref-name "$REF_NAME" --repo-url "$REPO_URL")
+          echo "Deploying to releases/$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
   build-extensions:
+    needs: release-target
     uses: ./.github/workflows/build-extensions.yml
 
   get-ghcr-extensions:
+    needs: release-target
     uses: ./.github/workflows/get-extensions-from-ghcr.yml
 
   package-built-extensions:
     runs-on: ubuntu-22.04
     needs:
+      - release-target
       - build-extensions
       - get-ghcr-extensions
+    env:
+      RELEASE_VERSION: ${{ needs.release-target.outputs.version }}
     steps:
       - name: Free disk space on Ubuntu runner
         uses: kfir4444/free-disk-space@main
@@ -40,25 +73,6 @@ jobs:
           large-packages: true
           swap-storage: true
       
-      - uses: actions/checkout@v4
-
-      - name: Update submodules
-        run: git submodule update --init --recursive extension dataset
-
-      - name: Update nightly version
-        if: ${{ inputs.isNightly == true || github.event.inputs.isNightly == 'true' }}
-        run: |
-          pip3 install packaging
-          python3 update-nightly-build-version.py
-        working-directory: ./scripts
-
-      - name: Detect release version
-        run: |
-          echo "RELEASE_VERSION=v$(cat CMakeLists.txt | grep "DLBUG_EXTENSION_VERSION" | cut -d '"' -f 2 )" >> $GITHUB_ENV
-
-      - name: Delete checked out repository
-        run: rm -rf ./*
-
       - uses: actions/download-artifact@v4
         with:
           name: ghcr-extensions
