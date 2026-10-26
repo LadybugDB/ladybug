@@ -379,6 +379,25 @@ arooq
 reg
 ubert Blaine
 
+-LOG SubStrNegativeLength
+-STATEMENT RETURN substring('item_0_0', 2, -1), substring('item_0_0', 2, -2), substring('item_0_0', 2, -9223372036854775807), substring('item_0_0', 1, -9223372036854775808)
+---- 1
+|||
+-STATEMENT MATCH (p:person) RETURN substr(p.fName, 2, -9223372036854775807)
+---- 8
+
+
+
+
+
+
+
+
+-LOG SubStrExtremeArguments
+-STATEMENT RETURN substring('hello', 2, 9223372036854775807), substring('hello', -9223372036854775808, 2), substring('hello', 9223372036854775807, 2)
+---- 1
+ello||
+
 -LOG LeftPositiveIdxStrAndLiteralInt
 -STATEMENT MATCH (p:person) RETURN left(p.fName, 11)
 ---- 8
