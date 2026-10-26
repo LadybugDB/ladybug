@@ -906,6 +906,14 @@ std::unique_ptr<BoundStatement> Binder::bindAlterFromToConnection(
     auto info = alter.getInfo();
     auto extraInfo = info->extraInfo->constPtrCast<ExtraAddFromToConnection>();
     auto tableName = info->tableName;
+    // Only a rel table has FROM/TO connections; Alter would cast any other entry to one.
+    auto catalog = Catalog::Get(*clientContext);
+    auto transaction = transaction::Transaction::Get(*clientContext);
+    if (catalog->containsTable(transaction, tableName) &&
+        catalog->getTableCatalogEntry(transaction, tableName)->getType() !=
+            CatalogEntryType::REL_GROUP_ENTRY) {
+        throw BinderException(std::format("{} is not of type REL.", tableName));
+    }
     auto [srcTableEntry, srcDbName] = bindNodeTableEntry(extraInfo->srcTableName);
     auto [dstTableEntry, dstDbName] = bindNodeTableEntry(extraInfo->dstTableName);
     auto srcTableID = srcTableEntry->getTableID();
