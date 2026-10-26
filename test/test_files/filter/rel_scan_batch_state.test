@@ -1,0 +1,104 @@
+-DATASET CSV empty
+
+--
+
+# Generic graph preserves the nested-extend plan and multiple scan batches.
+-DEFINE_STATEMENT_BLOCK LOAD_BATCH_STATE_FIXTURE [
+-STATEMENT CREATE NODE TABLE Node(id INT64, key STRING, value STRING, category STRING, PRIMARY KEY(id));
+---- ok
+-STATEMENT CREATE REL TABLE Link(FROM Node TO Node, label STRING);
+---- ok
+-STATEMENT CREATE REL TABLE Member(FROM Node TO Node, label STRING);
+---- ok
+-STATEMENT COPY Node FROM "${LBUG_ROOT_DIRECTORY}/test/test_files/filter/rel_scan_batch_state_fixture/nodes.csv" (HEADER = false);
+---- ok
+-STATEMENT COPY Link FROM "${LBUG_ROOT_DIRECTORY}/test/test_files/filter/rel_scan_batch_state_fixture/links.csv" (HEADER = false);
+---- ok
+-STATEMENT COPY Member FROM "${LBUG_ROOT_DIRECTORY}/test/test_files/filter/rel_scan_batch_state_fixture/memberships.csv" (HEADER = false);
+---- ok
+]
+
+-CASE RejectsNonMatchingLabelAfterNestedExtend
+-INSERT_STATEMENT_BLOCK LOAD_BATCH_STATE_FIXTURE
+
+-STATEMENT MATCH (n:Node) RETURN count(n);
+---- 1
+1228
+
+-STATEMENT MATCH ()-[r:Link]->() RETURN count(r);
+---- 1
+114
+
+-STATEMENT MATCH ()-[r:Member]->() RETURN count(r);
+---- 1
+23
+
+-STATEMENT MATCH (left:Node)-[r:Link]->(right:Node)
+           WHERE left.key = 'node-2126' AND right.key = 'node-20425'
+           RETURN r.label, r.label = 'match';
+---- 1
+other|False
+
+-STATEMENT MATCH ()-[r:Link]->() WHERE r.label = 'match' RETURN count(r);
+---- 1
+19
+
+-STATEMENT MATCH (right:Node)-[right_member:Member]->(right_leaf:Node)
+MATCH (left_leaf:Node)<-[left_member:Member]-(left:Node)-[link:Link]->(right)
+WHERE left_leaf.category = 'leaf'
+  AND left_member.label = 'member'
+  AND left.category = 'left'
+  AND link.label = 'match'
+  AND right.category = 'right'
+  AND right_member.label = 'member'
+  AND right_leaf.category = 'leaf'
+  AND right_leaf.value = left_leaf.value
+WITH right_leaf,left_leaf,link
+WHERE right_leaf.key='node-13587' AND left_leaf.key='node-28401'
+RETURN DISTINCT offset(id(link)), link.label, link.label = 'match';
+---- 0
+
+-CASE RejectsNonMatchingLabelWithoutOptimizer
+-INSERT_STATEMENT_BLOCK LOAD_BATCH_STATE_FIXTURE
+
+-STATEMENT CALL enable_plan_optimizer = false;
+---- ok
+
+-STATEMENT MATCH (right:Node)-[right_member:Member]->(right_leaf:Node)
+MATCH (left_leaf:Node)<-[left_member:Member]-(left:Node)-[link:Link]->(right)
+WHERE left_leaf.category = 'leaf'
+  AND left_member.label = 'member'
+  AND left.category = 'left'
+  AND link.label = 'match'
+  AND right.category = 'right'
+  AND right_member.label = 'member'
+  AND right_leaf.category = 'leaf'
+  AND right_leaf.value = left_leaf.value
+WITH right_leaf,left_leaf,link
+WHERE right_leaf.key='node-13587' AND left_leaf.key='node-28401'
+RETURN DISTINCT offset(id(link)), link.label, link.label = 'match';
+---- 0
+
+-CASE PreservesMatchingLabelAfterNestedExtend
+-INSERT_STATEMENT_BLOCK LOAD_BATCH_STATE_FIXTURE
+
+-STATEMENT MATCH (left:Node), (right:Node)
+           WHERE left.key = 'node-2126' AND right.key = 'node-20425'
+           CREATE (left)-[:Link {label: 'match'}]->(right);
+---- ok
+
+-STATEMENT MATCH (right:Node)-[right_member:Member]->(right_leaf:Node)
+MATCH (left_leaf:Node)<-[left_member:Member]-(left:Node)-[link:Link]->(right)
+WHERE left_leaf.category = 'leaf'
+  AND left_member.label = 'member'
+  AND left.category = 'left'
+  AND link.label = 'match'
+  AND right.category = 'right'
+  AND right_member.label = 'member'
+  AND right_leaf.category = 'leaf'
+  AND right_leaf.value = left_leaf.value
+WITH right_leaf,left_leaf,link
+WHERE right_leaf.key='node-13587' AND left_leaf.key='node-28401'
+RETURN DISTINCT offset(id(link)), link.label, link.label = 'match';
+---- 1
+114|match|True
