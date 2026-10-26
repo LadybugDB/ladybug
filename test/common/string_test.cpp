@@ -1,6 +1,8 @@
 #include <string>
 
+#include "common/exception/runtime.h"
 #include "common/string_utils.h"
+#include "function/string/functions/base_pad_function.h"
 #include "gtest/gtest.h"
 
 using namespace lbug::common;
@@ -43,4 +45,22 @@ TEST(StringTest, extractStringBetweenNoDelimiterFound) {
     EXPECT_TRUE(result.empty());
     result = StringUtils::extractStringBetween(str, ')', '(', true);
     EXPECT_TRUE(result.empty());
+}
+
+// checkResultSize counts the bytes without building the string, so widths whose results reach
+// the maximum string size can be checked here.
+TEST(StringTest, padResultSize) {
+    using lbug::function::BasePadOperation;
+    string_t empty("", 0), hi("hi", 2), x("x", 1), wide("成", 3), mixed("x成", 4),
+        three("成成x", 7);
+    EXPECT_NO_THROW(BasePadOperation::checkResultSize(empty, 1431655765, wide));
+    EXPECT_THROW(BasePadOperation::checkResultSize(empty, 1431655766, wide), RuntimeException);
+    EXPECT_NO_THROW(BasePadOperation::checkResultSize(empty, 2147483647, mixed));
+    EXPECT_THROW(BasePadOperation::checkResultSize(empty, 2147483648, mixed), RuntimeException);
+    EXPECT_NO_THROW(BasePadOperation::checkResultSize(empty, 1840700269, three));
+    EXPECT_THROW(BasePadOperation::checkResultSize(empty, 1840700270, three), RuntimeException);
+    EXPECT_NO_THROW(BasePadOperation::checkResultSize(hi, string_t::MAX_LENGTH, x));
+    EXPECT_THROW(BasePadOperation::checkResultSize(hi, string_t::MAX_LENGTH + 1, x),
+        RuntimeException);
+    EXPECT_NO_THROW(BasePadOperation::checkResultSize(hi, string_t::MAX_LENGTH, empty));
 }
