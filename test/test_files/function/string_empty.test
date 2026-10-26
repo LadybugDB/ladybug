@@ -35,3 +35,17 @@ val:
 val:111
 val:222
 val:333
+
+-CASE ContainsEmptyAndLongerNeedle
+-LOG Every string contains the empty string, as starts_with and ends_with already report
+-STATEMENT RETURN 'abc' CONTAINS '', '' CONTAINS '', starts_with('abc', ''), ends_with('abc', '');
+---- 1
+True|True|True|True
+-STATEMENT RETURN 'ab' CONTAINS 'abc', 'abc' CONTAINS 'abcdefghijklmnop', 'abc' CONTAINS 'b', 'abc' CONTAINS 'x';
+---- 1
+False|False|True|False
+-STATEMENT UNWIND ['abc', '', 'a long string that is not inlined'] AS s RETURN s CONTAINS '' AS c, s CONTAINS 'string' AS d;
+---- 3
+True|False
+True|False
+True|True
