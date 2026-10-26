@@ -112,7 +112,7 @@ static void execFunc(const std::vector<std::shared_ptr<common::ValueVector>>& in
     if (listLambdaBindData->sliceInfo->done()) {
         for (idx_t i = 0; i < inputSelVectors[0]->getSelSize(); ++i) {
             const auto pos = (*inputSelVectors[0])[i];
-            result.setNull(pos, inputVector.isNull(i));
+            result.setNull(pos, inputVector.isNull(pos));
         }
     }
 
