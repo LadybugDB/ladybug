@@ -397,6 +397,36 @@ Hubert Bla
 
 
 
+-LOG PadOutOfRangeCount
+-STATEMENT RETURN lpad('hi', -9223372036854775808, 'x'), rpad('hi', -9223372036854775808, 'x')
+---- 1
+|
+-STATEMENT RETURN rpad('hi', 4294967296, 'x')
+---- error
+Runtime exception: lpad()/rpad(): the result would exceed the maximum string size of 4294967295 bytes.
+-STATEMENT RETURN lpad('hi', 9223372036854775807, 'x')
+---- error
+Runtime exception: lpad()/rpad(): the result would exceed the maximum string size of 4294967295 bytes.
+-STATEMENT UNWIND [4294967296] AS n RETURN rpad('hi', n, 'x')
+---- error
+Runtime exception: lpad()/rpad(): the result would exceed the maximum string size of 4294967295 bytes.
+-STATEMENT RETURN lpad('hi', 2000000000, '成')
+---- error
+Runtime exception: lpad()/rpad(): the result would exceed the maximum string size of 4294967295 bytes.
+-STATEMENT RETURN lpad('hi', 4611686018427387904, 'x')
+---- error
+Runtime exception: lpad()/rpad(): the result would exceed the maximum string size of 4294967295 bytes.
+-STATEMENT RETURN lpad('hi', 4294967296, ''), rpad('hi', 9223372036854775807, ''), lpad('hello', 2, '')
+---- 1
+hi|hi|he
+-STATEMENT RETURN rpad('成績', 1, ''), lpad('成績', 4, ''), lpad('', 5, '')
+---- 1
+成|成績|
+-STATEMENT UNWIND ['hi', 'abc'] AS s RETURN size(lpad(s, -9223372036854775808, 'x')), size(rpad(s, -9223372036854775808, 'x'))
+---- 2
+0|0
+0|0
+
 -LOG SubStrStrAndLiteralInt
 -STATEMENT MATCH (p:person) RETURN substr(p.fName, 2, 12)
 ---- 8
