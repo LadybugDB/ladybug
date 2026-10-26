@@ -48,7 +48,8 @@ bool FunctionExpressionEvaluator::selectInternal(SelectionVector& selVector) {
         child->evaluate();
     }
     // Temporary code path for function whose return type is BOOL but select interface is not
-    // implemented (e.g. list_contains). We should remove this if statement eventually.
+    // implemented (e.g. list_contains over DOUBLE elements). We should remove this if statement
+    // eventually.
     if (function->selectFunc == nullptr) {
         DASSERT(resultVector->dataType.getLogicalTypeID() == LogicalTypeID::BOOL);
         runExecFunc();

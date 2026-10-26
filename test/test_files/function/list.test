@@ -789,6 +789,52 @@ True
 0
 7
 
+-LOG ListContainsLongConstantList
+-STATEMENT MATCH (a:person) WHERE a.age IN [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 35, 45] RETURN a.ID ORDER BY a.ID
+---- 2
+0
+3
+-STATEMENT MATCH (a:person) WHERE a.fName IN ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'Bob', 'Greg'] RETURN a.ID ORDER BY a.ID
+---- 2
+2
+9
+-STATEMENT MATCH (a:person) WHERE a.ID < 4 RETURN a.ID, a.age IN [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 30, NULL] ORDER BY a.ID
+---- 3
+0|False
+2|True
+3|False
+-STATEMENT RETURN CAST(NULL AS INT64) IN range(0, 20)
+---- 1
+
+-STATEMENT RETURN 15 IN range(0, 99), 150 IN range(0, 99), 'p' IN ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'Bob'], 'q' IN ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'Bob'], CAST(NULL AS INT64) IN range(0, 99)
+---- 1
+True|False|True|False|
+-STATEMENT UNWIND range(1, 300) AS i WITH date('2020-01-01') + i AS d WHERE d IN [date('2020-01-08'), date('2020-02-01'), date('2020-12-31'), date('2021-06-01')] RETURN count(*)
+---- 1
+2
+-STATEMENT UNWIND range(1, 300) AS i WITH timestamp('2020-01-01 00:00:00') + to_minutes(i) AS t WHERE t IN [timestamp('2020-01-01 00:07:00'), timestamp('2020-01-01 01:00:00'), timestamp('2020-01-02 00:00:00')] RETURN count(*)
+---- 1
+2
+-STATEMENT UNWIND range(-300, 300) AS i WITH i WHERE i IN [-250, -100, -7, 0, 7, 250, 301] RETURN count(*)
+---- 1
+6
+-STATEMENT UNWIND [cast(18446744073709551615 AS UINT64), cast(9223372036854775808 AS UINT64), cast(1 AS UINT64)] AS u WITH u WHERE u IN [cast(18446744073709551615 AS UINT64), cast(9223372036854775808 AS UINT64), cast(2 AS UINT64)] RETURN count(*)
+---- 1
+2
+-STATEMENT UNWIND ['成績評価', '授業', '評価', 'abc'] AS s WITH s WHERE s IN ['評価', '成績評価', 'x'] RETURN count(*)
+---- 1
+2
+-STATEMENT UNWIND ['a', 'b', 'c', 'd'] AS s RETURN s, s IN ['b', 'd', 'x'] ORDER BY s
+---- 4
+a|False
+b|True
+c|False
+d|True
+-STATEMENT UNWIND range(1, 3000) AS i WITH [i, i + 1] AS l RETURN sum(size(list_filter(l, v -> v IN [7, 14, 21, 28, 35, 42, 49, 56, 63, 70, 77, 84, 91, 98, 105, 112, 2999, 3001])))
+---- 1
+35
+
+
 -LOG ListContainsSelect
 -STATEMENT MATCH (a:person) WHERE list_contains(a.courseScoresPerTerm, [8]) RETURN a.ID
 ---- 2

@@ -1173,6 +1173,47 @@ TEST_F(ApiTest, PrepareSumCaseWithTimestampParam) {
     ASSERT_EQ((std::vector<std::string>{"1"}), rows);
 }
 
+// list_contains keeps the sorted members of a list it probes for many rows. Re-executing a reused
+// plan with another list must not probe the members of the list from an earlier execution.
+TEST_F(ApiTest, RepeatedInListParameterCachedPlan) {
+    auto makeList = [](int64_t first, int64_t size, bool asStrings) {
+        std::vector<std::unique_ptr<Value>> children;
+        for (auto x = first; x < first + size; ++x) {
+            children.push_back(asStrings ? std::make_unique<Value>(std::to_string(x)) :
+                                           std::make_unique<Value>(x));
+        }
+        auto childType = asStrings ? LogicalType::STRING() : LogicalType::INT64();
+        return Value(LogicalType::LIST(std::move(childType)), std::move(children));
+    };
+    const std::vector<std::string> queries{
+        "UNWIND range(0, 4999) AS i WITH i % 100 AS v WHERE v IN $xs RETURN count(*)",
+        "UNWIND range(0, 4999) AS i WITH i % 100 AS v, (i % 100) IN $xs AS b WHERE b RETURN "
+        "count(*)",
+        "UNWIND range(0, 4999) AS i WITH cast(i % 100 AS STRING) AS v WHERE v IN $xs RETURN "
+        "count(*)"};
+    for (auto q = 0u; q < queries.size(); ++q) {
+        auto preparedStatement = conn->prepare(queries[q]);
+        ASSERT_TRUE(preparedStatement->isSuccess()) << preparedStatement->getErrorMessage();
+        for (auto numThreads : {1u, 4u}) {
+            conn->setMaxNumThreadForExec(numThreads);
+            // {first, size}: 50 rows per value in range, so the expected count is 50 x overlap.
+            const std::vector<std::pair<int64_t, int64_t>> lists{{0, 20}, {50, 20}, {200, 20},
+                {90, 20}, {0, 20}, {10, 40}, {200, 16}, {85, 16}};
+            for (const auto& [first, size] : lists) {
+                const auto overlap = std::max<int64_t>(0,
+                    std::min<int64_t>(first + size, 100) - std::max<int64_t>(first, 0));
+                auto result = conn->execute(preparedStatement.get(),
+                    std::make_pair(std::string("xs"), makeList(first, size, q == 2)));
+                ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+                ASSERT_EQ((std::vector<std::string>{std::to_string(50 * overlap)}),
+                    TestHelper::convertResultToString(*result))
+                    << queries[q] << " threads " << numThreads << " list " << first << "+" << size;
+            }
+            ASSERT_TRUE(cachedPlanExists(conn.get(), *preparedStatement));
+        }
+    }
+}
+
 // Control: the same query shape with a timestamp literal needs no parameter resolution.
 TEST_F(ApiTest, SumCaseWithTimestampLiteral) {
     ASSERT_TRUE(
