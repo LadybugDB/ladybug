@@ -273,6 +273,7 @@ bool ScanRelTable::getNextTuplesInternal(ExecutionContext* context) {
             while (tableInfo.table->scan(transaction, *scanState)) {
                 const auto outputSize = scanState->outState->getSelVector().getSelSize();
                 if (outputSize > 0) {
+                    scanState->outState->setToUnflat();
                     const auto filteredSize = applyNbrNodeMask();
                     if (filteredSize == 0) {
                         continue;
@@ -293,6 +294,7 @@ bool ScanRelTable::getNextTuplesInternal(ExecutionContext* context) {
         while (tableInfo.table->scan(transaction, *scanState)) {
             const auto outputSize = scanState->outState->getSelVector().getSelSize();
             if (outputSize > 0) {
+                scanState->outState->setToUnflat();
                 const auto filteredSize = applyNbrNodeMask();
                 if (filteredSize == 0) {
                     continue;
