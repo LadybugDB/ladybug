@@ -284,6 +284,36 @@ ABFsUni
 CsWorkCsWorkCsWorkCsWork
 DEsWorkDEsWorkDEsWorkDEsWorkDEsWorkDEsWork
 
+-LOG RepeatOutOfRangeCount
+-STATEMENT RETURN repeat('ab', -1), repeat('', -1), repeat('ab', -9223372036854775808), repeat('ab', 0)
+---- 1
+|||
+-STATEMENT MATCH (p:person) RETURN repeat(p.fName, -1)
+---- 8
+
+
+
+
+
+
+
+
+-STATEMENT RETURN repeat('ab', 9223372036854775807)
+---- error
+Runtime exception: repeat(): the result would exceed the maximum string size of 4294967295 bytes.
+-STATEMENT RETURN repeat('ab', 2147483648)
+---- error
+Runtime exception: repeat(): the result would exceed the maximum string size of 4294967295 bytes.
+-STATEMENT UNWIND [2147483648] AS n RETURN repeat('ab', n)
+---- error
+Runtime exception: repeat(): the result would exceed the maximum string size of 4294967295 bytes.
+-STATEMENT RETURN repeat('abcd', 4611686018427387904)
+---- error
+Runtime exception: repeat(): the result would exceed the maximum string size of 4294967295 bytes.
+-STATEMENT RETURN repeat('', 3), repeat('', 9223372036854775807)
+---- 1
+|
+
 -LOG LpadStrAndLiteralInt
 -STATEMENT MATCH (p:person) RETURN lpad(p.fName, 5, "<")
 ---- 8
