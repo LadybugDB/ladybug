@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
+#include "common/api.h"
 #include "common/exception/runtime.h"
 #include "common/types/internal_id_util.h"
 #include "storage/table/rel_table.h"
@@ -13,7 +14,8 @@ namespace lbug {
 namespace storage {
 
 // Abstract base class for columnar-format relationship tables (Icebug-Disk, Arrow, etc.)
-class ColumnarRelTableBase : public RelTable {
+// Exported for extensions providing columnar table storage (e.g. the lance extension).
+class LBUG_API ColumnarRelTableBase : public RelTable {
 public:
     ColumnarRelTableBase(catalog::RelGroupCatalogEntry* relGroupEntry,
         common::table_id_t fromTableID, common::table_id_t toTableID,

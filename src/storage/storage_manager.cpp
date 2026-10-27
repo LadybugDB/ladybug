@@ -24,6 +24,7 @@
 #include "storage/table/arrow_node_table.h"
 #include "storage/table/arrow_rel_table.h"
 #include "storage/table/arrow_table_support.h"
+#include "storage/table/external_table_hooks.h"
 #include "storage/table/foreign_rel_table.h"
 #include "storage/table/ice_disk_node_table.h"
 #include "storage/table/ice_disk_rel_table.h"
@@ -77,7 +78,9 @@ StorageManager::StorageManager(const std::string& databasePath, bool readOnly, b
     registerIndexType(ArtPrimaryKeyIndex::getIndexType());
 }
 
-StorageManager::~StorageManager() = default;
+StorageManager::~StorageManager() {
+    ExternalTableHookRegistry::unbindStorageManagerTables(this);
+}
 
 void StorageManager::initDataFileHandle(VirtualFileSystem* vfs, main::ClientContext* context) {
     if (dataFH != nullptr && dataFH->getFileInfo() != nullptr) {
@@ -204,10 +207,24 @@ void StorageManager::createNodeTable(NodeTableCatalogEntry* entry, main::ClientC
             // Create icebug-disk-backed node table
             tables[entry->getTableID()] =
                 std::make_unique<IceDiskNodeTable>(this, entry, &memoryManager, context);
+        } else if (auto hooks =
+                       ExternalTableHookRegistry::getFormatHooks(entry->getStorageFormat())) {
+            // Create extension-backed node table (e.g. lance). The extension must be
+            // loaded before the table is created.
+            if (!hooks->createNodeTable) {
+                throw common::RuntimeException(
+                    "Loaded extension does not provide node table storage for format: " +
+                    StorageFormatUtils::toString(entry->getStorageFormat()));
+            }
+            tables[entry->getTableID()] =
+                hooks->createNodeTable(this, entry, &memoryManager, context);
+            ExternalTableHookRegistry::bindTableHooks(this, entry->getTableID(), hooks);
         } else {
             throw common::RuntimeException(
                 "Unsupported storage format option for node table: " +
-                std::to_string(static_cast<int>(entry->getStorageFormat())));
+                StorageFormatUtils::toString(entry->getStorageFormat()) +
+                ". If this format is provided by a Ladybug extension, load the extension "
+                "and try again.");
         }
     } else if (!entry->getStorage().empty()) {
         // Check if storage is Arrow backed
@@ -253,10 +270,24 @@ void StorageManager::addRelTable(RelGroupCatalogEntry* entry, const RelTableCata
             // Create icebug-disk-backed rel table
             tables[info.oid] = std::make_unique<IceDiskRelTable>(entry, info.nodePair.srcTableID,
                 info.nodePair.dstTableID, this, &memoryManager, context);
+        } else if (auto hooks =
+                       ExternalTableHookRegistry::getFormatHooks(entry->getStorageFormat())) {
+            // Create extension-backed rel table (e.g. lance). The extension must be
+            // loaded before the table is created.
+            if (!hooks->createRelTable) {
+                throw common::RuntimeException(
+                    "Loaded extension does not provide rel table storage for format: " +
+                    StorageFormatUtils::toString(entry->getStorageFormat()));
+            }
+            tables[info.oid] = hooks->createRelTable(entry, info.nodePair.srcTableID,
+                info.nodePair.dstTableID, this, &memoryManager, context);
+            ExternalTableHookRegistry::bindTableHooks(this, info.oid, hooks);
         } else {
             throw common::RuntimeException(
                 "Unsupported storage format option for rel table: " +
-                std::to_string(static_cast<int>(entry->getStorageFormat())));
+                StorageFormatUtils::toString(entry->getStorageFormat()) +
+                ". If this format is provided by a Ladybug extension, load the extension "
+                "and try again.");
         }
     } else if (!entry->getStorage().empty()) {
         if (entry->getStorage().substr(0, 8) == "arrow://") {
@@ -391,6 +422,7 @@ void StorageManager::reclaimDroppedTables(const Catalog& catalog) {
     }
     for (auto tableID : droppedTables) {
         tables.erase(tableID);
+        ExternalTableHookRegistry::unbindTableHooks(this, tableID);
         clearCachedPlannerTableStats(tableID);
     }
 }

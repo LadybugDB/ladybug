@@ -19,7 +19,9 @@ namespace storage {
 
 enum class IceDiskRelTableLayout : uint8_t { CSR, FLAT };
 
-struct IceDiskRelTableScanState final : RelTableScanState {
+// Exported: the lance extension extends this state so one shared scan state can serve
+// lance, icebug-disk, Arrow, and native rel tables in multi-rel scans.
+struct LBUG_API IceDiskRelTableScanState : RelTableScanState {
     std::unique_ptr<processor::ParquetReaderScanState> parquetScanState;
 
     // cached data for the current batch in current row group

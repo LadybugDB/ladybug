@@ -9,6 +9,7 @@
 #include "storage/local_storage/local_rel_table.h"
 #include "storage/table/arrow_node_table.h"
 #include "storage/table/arrow_rel_table.h"
+#include "storage/table/external_table_hooks.h"
 #include "storage/table/foreign_rel_table.h"
 #include "storage/table/ice_disk_node_table.h"
 #include "storage/table/ice_disk_rel_table.h"
@@ -108,10 +109,18 @@ void ScanRelTable::initLocalStateInternal(ResultSet* resultSet, ExecutionContext
     auto boundNodeIDVector = resultSet->getValueVector(opInfo.nodeIDPos).get();
     auto nbrNodeIDVector = outVectors[0];
     // Check if this is an external rel table and create the corresponding scan state.
+    // Extension-backed tables (e.g. lance) create their state through registered hooks.
+    auto tableHooks = storage::ExternalTableHookRegistry::getTableHooks(
+        tableInfo.table->getStorageManager(), tableInfo.table->getTableID());
     auto* arrowTable = dynamic_cast<storage::ArrowRelTable*>(tableInfo.table);
     auto* iceDiskTable = dynamic_cast<storage::IceDiskRelTable*>(tableInfo.table);
     auto* foreignTable = dynamic_cast<storage::ForeignRelTable*>(tableInfo.table);
-    if (arrowTable) {
+    if (tableHooks) {
+        DASSERT(tableHooks->createRelScanState);
+        scanState = tableHooks->createRelScanState(tableInfo.table->ptrCast<storage::RelTable>(),
+            boundNodeIDVector, outVectors, nbrNodeIDVector->state,
+            storage::MemoryManager::Get(*clientContext));
+    } else if (arrowTable) {
         scanState =
             std::make_unique<storage::ArrowRelTableScanState>(*MemoryManager::Get(*clientContext),
                 boundNodeIDVector, outVectors, nbrNodeIDVector->state);

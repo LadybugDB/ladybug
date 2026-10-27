@@ -23,6 +23,8 @@ static void upgradeLegacyStorageFormat(const std::string& storage,
     const auto lowerStorage = common::StringUtils::getLower(storage);
     if (lowerStorage.ends_with("parquet")) {
         storageFormat = common::StorageFormat::ICEBUG_DISK;
+    } else if (lowerStorage.ends_with(".lance")) {
+        storageFormat = common::StorageFormat::LANCE;
     }
 }
 

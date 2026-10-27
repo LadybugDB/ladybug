@@ -20,6 +20,7 @@
 #include "storage/local_storage/local_storage.h"
 #include "storage/storage_manager.h"
 #include "storage/storage_utils.h"
+#include "storage/table/external_table_hooks.h"
 #include "storage/table/ice_disk_rel_table.h"
 #include "storage/table/node_table.h"
 #include "storage/table/rel_table.h"
@@ -131,7 +132,12 @@ OnDiskGraphNbrScanState::OnDiskGraphNbrScanState(ClientContext* context,
         }
 
         std::unique_ptr<RelTableScanState> scanState;
-        if (dynamic_cast<IceDiskRelTable*>(table) != nullptr) {
+        if (auto hooks = ExternalTableHookRegistry::getTableHooks(table->getStorageManager(),
+                table->getTableID())) {
+            DASSERT(hooks->createRelScanState);
+            scanState =
+                hooks->createRelScanState(table, srcNodeIDVector.get(), outVectors, state, mm);
+        } else if (dynamic_cast<IceDiskRelTable*>(table) != nullptr) {
             scanState = std::make_unique<IceDiskRelTableScanState>(*mm, srcNodeIDVector.get(),
                 outVectors, state);
         } else {
