@@ -205,7 +205,7 @@ TEST_F(EmptyDBTransactionTest, ConcurrentNodeInsertions) {
     if (systemConfig->checkpointThreshold == 0) {
         GTEST_SKIP();
     }
-    conn->query("CALL debug_enable_multi_writes=true;");
+    conn->query("CALL enable_multi_writes=true;");
     // Disable auto-checkpoint so checkpoint overhead doesn't interfere with
     // concurrent write throughput measurements. Explicit CHECKPOINT at end.
     conn->query("CALL auto_checkpoint=false;");
@@ -238,7 +238,7 @@ TEST_F(EmptyDBTransactionTest, ConcurrentNodeInsertionsRecoverFromWAL) {
     if (inMemMode || systemConfig->checkpointThreshold == 0) {
         GTEST_SKIP();
     }
-    conn->query("CALL debug_enable_multi_writes=true;");
+    conn->query("CALL enable_multi_writes=true;");
     conn->query("CALL auto_checkpoint=false;");
     conn->query("CALL force_checkpoint_on_close=false;");
     auto numThreads = 8;
@@ -291,7 +291,7 @@ TEST_F(EmptyDBTransactionTest, ConcurrentNodeInsertionsMixedTypes) {
     if (systemConfig->checkpointThreshold == 0) {
         GTEST_SKIP();
     }
-    conn->query("CALL debug_enable_multi_writes=true;");
+    conn->query("CALL enable_multi_writes=true;");
     auto numThreads = 4;
     auto numInsertsPerThread = 1000;
     conn->query("CREATE NODE TABLE mixed_test(id INT64 PRIMARY KEY, score DOUBLE, active BOOLEAN, "
@@ -337,7 +337,7 @@ TEST_F(EmptyDBTransactionTest, ConcurrentRelationshipInsertions) {
     if (systemConfig->checkpointThreshold == 0) {
         GTEST_SKIP();
     }
-    conn->query("CALL debug_enable_multi_writes=true;");
+    conn->query("CALL enable_multi_writes=true;");
     // Disable auto-checkpoint so checkpoint overhead doesn't interfere with
     // concurrent write throughput measurements. Explicit CHECKPOINT at end.
     conn->query("CALL auto_checkpoint=false;");
@@ -403,7 +403,7 @@ TEST_F(EmptyDBTransactionTest, ConcurrentComplexRelationshipInsertions) {
     if (systemConfig->checkpointThreshold == 0) {
         GTEST_SKIP();
     }
-    conn->query("CALL debug_enable_multi_writes=true;");
+    conn->query("CALL enable_multi_writes=true;");
     auto numThreads = 3;
     auto numInsertsPerThread = 1500;
     auto numTotalInsertions = numThreads * numInsertsPerThread;
@@ -463,7 +463,7 @@ TEST_F(EmptyDBTransactionTest, ConcurrentNodeUpdates) {
     if (systemConfig->checkpointThreshold == 0) {
         GTEST_SKIP();
     }
-    conn->query("CALL debug_enable_multi_writes=true;");
+    conn->query("CALL enable_multi_writes=true;");
     // Disable auto-checkpoint so checkpoint overhead doesn't interfere with
     // concurrent write throughput measurements. Explicit CHECKPOINT at end.
     conn->query("CALL auto_checkpoint=false;");
@@ -527,7 +527,7 @@ TEST_F(EmptyDBTransactionTest, ConcurrentMixedTypeUpdates) {
     if (systemConfig->checkpointThreshold == 0) {
         GTEST_SKIP();
     }
-    conn->query("CALL debug_enable_multi_writes=true;");
+    conn->query("CALL enable_multi_writes=true;");
     auto numThreads = 4;
     auto numUpdatesPerThread = 2500;
     auto numTotalNodes = numThreads * numUpdatesPerThread;
@@ -604,7 +604,7 @@ TEST_F(EmptyDBTransactionTest, ConcurrentRelationshipUpdates) {
     if (systemConfig->checkpointThreshold == 0) {
         GTEST_SKIP();
     }
-    conn->query("CALL debug_enable_multi_writes=true;");
+    conn->query("CALL enable_multi_writes=true;");
     // Disable auto-checkpoint so checkpoint overhead doesn't interfere with
     // concurrent write throughput measurements. Explicit CHECKPOINT at end.
     conn->query("CALL auto_checkpoint=false;");
@@ -685,7 +685,7 @@ TEST_F(EmptyDBTransactionTest, ConcurrentNodeUpdatesWithMixedTransactions) {
     if (systemConfig->checkpointThreshold == 0) {
         GTEST_SKIP();
     }
-    conn->query("CALL debug_enable_multi_writes=true;");
+    conn->query("CALL enable_multi_writes=true;");
     auto numThreads = 4;
     auto numUpdatesPerThread = 100;
     auto numTotalNodes = numThreads * numUpdatesPerThread;
@@ -757,7 +757,7 @@ TEST_F(EmptyDBTransactionTest, ConcurrentRelationshipUpdatesWithMixedTransaction
     if (systemConfig->checkpointThreshold == 0) {
         GTEST_SKIP();
     }
-    conn->query("CALL debug_enable_multi_writes=true;");
+    conn->query("CALL enable_multi_writes=true;");
     auto numThreads = 4;
     auto numUpdatesPerThread = 1000;
     auto numTotalUpdates = numThreads * numUpdatesPerThread;
