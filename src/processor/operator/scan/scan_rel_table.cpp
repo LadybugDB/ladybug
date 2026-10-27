@@ -96,6 +96,11 @@ common::sel_t ScanRelTable::applyNbrNodeMask() {
     return applyNbrMaskFilter(scanState->outState->getSelVectorUnsafe(), outVectors[0]);
 }
 
+common::sel_t ScanRelTable::getFilteredOutputSize() {
+    scanState->outState->setToUnflat();
+    return applyNbrNodeMask();
+}
+
 void ScanRelTable::initLocalStateInternal(ResultSet* resultSet, ExecutionContext* context) {
     ScanTable::initLocalStateInternal(resultSet, context);
     refreshNbrMaskCache();
@@ -273,8 +278,7 @@ bool ScanRelTable::getNextTuplesInternal(ExecutionContext* context) {
             while (tableInfo.table->scan(transaction, *scanState)) {
                 const auto outputSize = scanState->outState->getSelVector().getSelSize();
                 if (outputSize > 0) {
-                    scanState->outState->setToUnflat();
-                    const auto filteredSize = applyNbrNodeMask();
+                    const auto filteredSize = getFilteredOutputSize();
                     if (filteredSize == 0) {
                         continue;
                     }
@@ -294,8 +298,7 @@ bool ScanRelTable::getNextTuplesInternal(ExecutionContext* context) {
         while (tableInfo.table->scan(transaction, *scanState)) {
             const auto outputSize = scanState->outState->getSelVector().getSelSize();
             if (outputSize > 0) {
-                scanState->outState->setToUnflat();
-                const auto filteredSize = applyNbrNodeMask();
+                const auto filteredSize = getFilteredOutputSize();
                 if (filteredSize == 0) {
                     continue;
                 }
