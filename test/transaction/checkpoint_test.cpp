@@ -3226,7 +3226,7 @@ TEST_F(FlakyCheckpointerTest, ConcurrentDropGraphDuringCommitKeepsCatalogsAlive)
     }
     ASSERT_TRUE(conn->query("CALL force_checkpoint_on_close=false;")->isSuccess());
     ASSERT_TRUE(conn->query("CALL auto_checkpoint=false;")->isSuccess());
-    ASSERT_TRUE(conn->query("CALL debug_enable_multi_writes=true;")->isSuccess());
+    ASSERT_TRUE(conn->query("CALL enable_multi_writes=true;")->isSuccess());
     main::Connection dropConn(database.get());
     constexpr auto iterations = 100;
     for (auto i = 0; i < iterations; ++i) {
@@ -4162,7 +4162,7 @@ TEST_F(FlakyCheckpointerTest, ConcurrentDropGraphDuringStagedInsertCommitFailsCl
     }
     ASSERT_TRUE(conn->query("CALL force_checkpoint_on_close=false;")->isSuccess());
     ASSERT_TRUE(conn->query("CALL auto_checkpoint=false;")->isSuccess());
-    ASSERT_TRUE(conn->query("CALL debug_enable_multi_writes=true;")->isSuccess());
+    ASSERT_TRUE(conn->query("CALL enable_multi_writes=true;")->isSuccess());
     main::Connection dropConn(database.get());
 
     auto stageRelInsert = [&] {
@@ -5185,7 +5185,7 @@ TEST_F(ReviewFixesTest, CheckpointDrainWaitsForInFlightWrite) {
         GTEST_SKIP();
     }
     conn->query("CALL auto_checkpoint=false;");
-    conn->query("CALL debug_enable_multi_writes=true;");
+    conn->query("CALL enable_multi_writes=true;");
     conn->query("CREATE NODE TABLE drain_test(id INT64 PRIMARY KEY);");
 
     // Pre-load N committed rows so the table is non-trivial.
@@ -8008,7 +8008,7 @@ TEST_F(ReviewFixesTest, DroppedGraphLivenessIdentityRemovedAtDrop) {
 TEST_F(ReviewFixesTest, RollbackSkipsDroppedGraphCatalogEntryUndo) {
     conn->query("CALL auto_checkpoint=false;");
     conn->query("CALL force_checkpoint_on_close=false;");
-    conn->query("CALL debug_enable_multi_writes=true;");
+    conn->query("CALL enable_multi_writes=true;");
     ASSERT_TRUE(conn->query("CREATE GRAPH live_graph;")->isSuccess());
     ASSERT_TRUE(conn->query("CREATE GRAPH doomed_graph;")->isSuccess());
 
@@ -8049,7 +8049,7 @@ TEST_F(ReviewFixesTest, RollbackSkipsDroppedGraphCatalogEntryUndo) {
 TEST_F(ReviewFixesTest, RollbackSkipsDroppedGraphSequenceUndo) {
     conn->query("CALL auto_checkpoint=false;");
     conn->query("CALL force_checkpoint_on_close=false;");
-    conn->query("CALL debug_enable_multi_writes=true;");
+    conn->query("CALL enable_multi_writes=true;");
     ASSERT_TRUE(conn->query("CREATE GRAPH live_graph;")->isSuccess());
     ASSERT_TRUE(conn->query("CREATE GRAPH doomed_graph;")->isSuccess());
     ASSERT_TRUE(conn->query("USE GRAPH live_graph;")->isSuccess());
