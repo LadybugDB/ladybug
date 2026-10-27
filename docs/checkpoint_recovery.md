@@ -77,6 +77,8 @@ opened on its own may be opened with either checksum setting: its committed chan
 or its committed checkpoint recovered when the parent database is reopened. The database's own
 WAL must instead match the configured setting. A mismatch is a configuration error, not a torn
 tail, so it fails the open even with `throwOnWalReplayFailure` false and leaves the WAL untouched.
+An all-zero header, which a power loss before the WAL's first write reaches disk can leave, was
+never written and counts as a torn WAL instead.
 
 ## Downgrades
 

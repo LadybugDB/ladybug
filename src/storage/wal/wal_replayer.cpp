@@ -237,12 +237,21 @@ static Deserializer initDeserializer(FileInfo& fileInfo, main::ClientContext& cl
 static void checkWALHeader(const WALHeader& walHeader, bool enableChecksums) {
     if (enableChecksums != walHeader.enableChecksums) {
         throw RuntimeException(std::format(
-            "The database you are trying to open was serialized with enableChecksums={} but you "
-            "are trying to open it with enableChecksums={}. Please open your database using the "
+            "The database you are trying to open was serialized with enableChecksums={0} but you "
+            "are trying to open it with enableChecksums={1}. Please open your database using the "
             "correct enableChecksums config. If you wish to change this for your database, please "
-            "use the export/import functionality.",
+            "use the export/import functionality. If this database never used "
+            "enableChecksums={0}, the WAL file is corrupted or belongs to another database.",
             TypeUtils::toString(walHeader.enableChecksums), TypeUtils::toString(enableChecksums)));
     }
+}
+
+// UUID::generateRandomUUID sets the version and variant bits, so no header the engine writes is
+// all zeros. A zero header was never written, as a power loss before the WAL's first write
+// reaches disk can leave it, or was wiped; either way recovery cannot replay past it.
+static bool isZeroWALHeader(const WALHeader& walHeader) {
+    const uuid nullID{0};
+    return walHeader.databaseID.value == nullID.value && !walHeader.enableChecksums;
 }
 
 static uint64_t getReadOffset(Deserializer& deSer, bool enableChecksums) {
@@ -932,11 +941,11 @@ void WALReplayer::replayCommittedCheckpoint(Checkpointer& checkpointer,
 
 WALReplayer::WALReplayInfo WALReplayer::dryReplay(FileInfo& fileInfo, bool throwOnWalReplayFailure,
     bool enableChecksums) const {
-    // A readable header with the other checksum setting is a configuration error, not a torn
-    // tail: the non-strict path below would drop every commit in the WAL, so it throws in both
-    // modes. A header too short to read is left to the path below.
+    // A header with the other checksum setting is a configuration error, not a torn tail: the
+    // non-strict path below would drop every commit in the WAL, so it throws in both modes. A
+    // header too short to read, or all zeros, is left to the path below.
     const auto persistedHeader = tryReadWALHeader(fileInfo, clientContext, false);
-    if (persistedHeader.has_value()) {
+    if (persistedHeader.has_value() && !isZeroWALHeader(*persistedHeader)) {
         checkWALHeader(*persistedHeader, enableChecksums);
     }
     WALReplayInfo replayInfo;
