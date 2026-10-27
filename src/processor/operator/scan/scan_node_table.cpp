@@ -8,6 +8,8 @@
 #include "storage/local_storage/local_node_table.h"
 #include "storage/local_storage/local_storage.h"
 #include "storage/table/arrow_node_table.h"
+#include "storage/table/columnar_node_table_base.h"
+#include "storage/table/external_table_hooks.h"
 #include "storage/table/ice_disk_node_table.h"
 
 using namespace lbug::common;
@@ -21,6 +23,12 @@ static constexpr double MORSELS_PER_THREAD_TARGET = 8.0;
 std::unique_ptr<TableScanState> createNodeTableScanState(NodeTable* table,
     ValueVector* nodeIDVector, const std::vector<ValueVector*>& outVectors,
     MemoryManager* memoryManager) {
+    if (auto hooks = ExternalTableHookRegistry::getTableHooks(table->getStorageManager(),
+            table->getTableID())) {
+        DASSERT(hooks->createNodeScanState);
+        return hooks->createNodeScanState(table, nodeIDVector, outVectors, nodeIDVector->state,
+            memoryManager);
+    }
     if (dynamic_cast<IceDiskNodeTable*>(table) != nullptr) {
         return std::make_unique<IceDiskNodeTableScanState>(*memoryManager, nodeIDVector, outVectors,
             nodeIDVector->state);
@@ -71,7 +79,12 @@ void ScanNodeTableSharedState::initialize(const transaction::Transaction* transa
     // Initialize table-specific scan coordination (e.g., for IceDiskNodeTable)
     table->initializeScanCoordination(transaction);
 
-    if (const auto iceDiskTable = dynamic_cast<IceDiskNodeTable*>(table)) {
+    if (const auto hooks = ExternalTableHookRegistry::getTableHooks(table->getStorageManager(),
+            table->getTableID())) {
+        // Extension-backed columnar table (e.g. lance): morsels are counted by the extension.
+        DASSERT(hooks->getNumScanMorsels);
+        this->numCommittedNodeGroups = hooks->getNumScanMorsels(transaction, table);
+    } else if (const auto iceDiskTable = dynamic_cast<IceDiskNodeTable*>(table)) {
         // For ice-disk tables, set numCommittedNodeGroups to number of row groups
         std::vector<bool> columnSkips;
         try {
@@ -106,8 +119,7 @@ void ScanNodeTableSharedState::initialize(const transaction::Transaction* transa
         context == nullptr || context->isSubNodeGroupMorselEnabled(
                                   transaction != nullptr && transaction->isWriteTransaction());
     if (subMorselEnabled && numCommittedNodeGroups > 0 &&
-        dynamic_cast<ArrowNodeTable*>(table) == nullptr &&
-        dynamic_cast<IceDiskNodeTable*>(table) == nullptr) {
+        dynamic_cast<ColumnarNodeTableBase*>(table) == nullptr) {
         const auto maxNumThreads = context != nullptr ? context->getMaxNumThreadForExec() : 1;
         if (numCommittedNodeGroups < maxNumThreads) {
             common::row_idx_t totalRows = 0;
@@ -222,9 +234,14 @@ void ScanNodeTable::initCurrentTable(ExecutionContext* context) {
         outVectors, MemoryManager::Get(*context->clientContext));
     currentInfo.initScanState(*scanState, outVectors, context->clientContext);
     scanState->semiMask = sharedStates[currentTableIdx]->getSemiMask();
-    // Call table->initScanState for IceDiskNodeTable or ArrowNodeTable
-    if (dynamic_cast<IceDiskNodeTable*>(tableInfos[currentTableIdx].table) ||
-        dynamic_cast<ArrowNodeTable*>(tableInfos[currentTableIdx].table)) {
+    // Call table->initScanState for columnar tables (IceDiskNodeTable, ArrowNodeTable) and
+    // extension-backed tables, which set up their readers in initScanState rather than in
+    // per-morsel node-group state.
+    auto* currentTable = tableInfos[currentTableIdx].table;
+    if (ExternalTableHookRegistry::getTableHooks(currentTable->getStorageManager(),
+            currentTable->getTableID()) != nullptr ||
+        dynamic_cast<IceDiskNodeTable*>(currentTable) ||
+        dynamic_cast<ArrowNodeTable*>(currentTable)) {
         auto transaction = transaction::Transaction::Get(*context->clientContext);
         tableInfos[currentTableIdx].table->initScanState(transaction, *scanState);
     }

@@ -6,10 +6,11 @@
 namespace lbug {
 namespace common {
 
-enum class StorageFormat : uint8_t { NONE, ICEBUG_DISK };
+enum class StorageFormat : uint8_t { NONE, ICEBUG_DISK, LANCE };
 
 struct StorageFormatUtils {
     static StorageFormat fromString(const std::string& str);
+    static std::string toString(StorageFormat format);
 };
 
 } // namespace common

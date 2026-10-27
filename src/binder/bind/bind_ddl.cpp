@@ -324,10 +324,11 @@ BoundCreateTableInfo Binder::bindCreateRelTableGroupInfo(const CreateTableInfo* 
     if (!storage.empty()) {
         auto dotPos = storage.find('.');
         // Check if storage is database.table format by verifying the attached database exists
-        // Handle special case where icebug-disk storage could contain a dot
+        // Handle special case where columnar storage paths (e.g. icebug-disk, lance)
+        // could contain a dot. Only unformatted storage is probed as database.table.
         // Otherwise, treat as file path (e.g., "dataset/demo-db/icebug-disk/demo" or
         // "data.parquet")
-        if (storageFormat != StorageFormat::ICEBUG_DISK && dotPos != std::string::npos) {
+        if (storageFormat == StorageFormat::NONE && dotPos != std::string::npos) {
             std::string dbName = storage.substr(0, dotPos);
             std::string tableName = storage.substr(dotPos + 1);
             if (!dbName.empty()) {
@@ -422,22 +423,25 @@ BoundCreateTableInfo Binder::bindCreateRelTableGroupInfo(const CreateTableInfo* 
             }
         }
 
-        bool isSrcIcebugDisk = srcEntry->getType() == CatalogEntryType::NODE_TABLE_ENTRY ?
-                                   srcEntry->ptrCast<NodeTableCatalogEntry>()->getStorageFormat() ==
-                                       StorageFormat::ICEBUG_DISK :
-                                   false;
-        bool isDstIcebugDisk = dstEntry->getType() == CatalogEntryType::NODE_TABLE_ENTRY ?
-                                   dstEntry->ptrCast<NodeTableCatalogEntry>()->getStorageFormat() ==
-                                       StorageFormat::ICEBUG_DISK :
-                                   false;
-        bool isRelIcebugDisk = (storageFormat == StorageFormat::ICEBUG_DISK);
+        auto getEntryStorageFormat = [](TableCatalogEntry* entry) {
+            return entry->getType() == CatalogEntryType::NODE_TABLE_ENTRY ?
+                       entry->ptrCast<NodeTableCatalogEntry>()->getStorageFormat() :
+                       StorageFormat::NONE;
+        };
+        const auto srcStorageFormat = getEntryStorageFormat(srcEntry);
+        const auto dstStorageFormat = getEntryStorageFormat(dstEntry);
 
-        // We don't allow mixing icebug-disk tables with non-icebug-disk tables
-        // We only allow icebug-disk rel tables to connect icebug-disk node tables
-        if ((!isRelIcebugDisk && (isSrcIcebugDisk || isDstIcebugDisk)) ||
-            (isRelIcebugDisk && (!isSrcIcebugDisk || !isDstIcebugDisk))) {
-            throw BinderException(
-                "Cannot mix icebug-disk tables with non-icebug-disk tables in CREATE REL TABLE.");
+        // We don't allow mixing columnar-format tables (e.g. icebug-disk, lance) with
+        // tables of another format. A rel table must use the same storage format as the
+        // node tables it connects.
+        if (storageFormat != srcStorageFormat || storageFormat != dstStorageFormat) {
+            const auto oddFormat = storageFormat != StorageFormat::NONE    ? storageFormat :
+                                   srcStorageFormat != StorageFormat::NONE ? srcStorageFormat :
+                                                                             dstStorageFormat;
+            const auto oddName = StorageFormatUtils::toString(oddFormat);
+            throw BinderException(std::format("Cannot mix {} tables with non-{} tables in CREATE "
+                                              "REL TABLE.",
+                oddName, oddName));
         }
 
         // Use the actual shadow table IDs, not FOREIGN_TABLE_ID

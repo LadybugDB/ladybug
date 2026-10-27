@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
+#include "common/api.h"
 #include "storage/table/rel_table_data.h"
 #include "storage/table/table.h"
 
@@ -18,7 +19,8 @@ namespace storage {
 class MemoryManager;
 
 struct LocalRelTableScanState;
-struct RelTableScanState : TableScanState {
+// Exported for extensions providing columnar table storage (e.g. the lance extension).
+struct LBUG_API RelTableScanState : TableScanState {
     common::RelDataDirection direction;
     common::sel_t currBoundNodeIdx;
     Column* csrOffsetColumn;
