@@ -1,0 +1,38 @@
+-DATASET CSV empty
+
+--
+
+-CASE ThreadsZeroUsesDatabaseThreadCount
+-LOG threads=0 means the database's thread count, as Connection::setMaxNumThreadForExec(0) does
+-STATEMENT CALL threads=0
+---- ok
+-STATEMENT UNWIND range(1, 100000) AS x RETURN sum(x)
+---- 1
+5000050000
+
+-CASE UnsignedSettingsRejectValuesThatWrap
+-STATEMENT CALL checkpoint_threshold=-1
+---- error
+Runtime exception: checkpoint_threshold must be >= 0, got -1.
+-STATEMENT CALL sparse_frontier_threshold=-1
+---- error
+Runtime exception: sparse_frontier_threshold must be >= 0, got -1.
+-STATEMENT CALL var_length_extend_max_depth=-1
+---- error
+Runtime exception: var_length_extend_max_depth must be >= 0, got -1.
+-STATEMENT CALL var_length_extend_max_depth=4294967296
+---- error
+Runtime exception: var_length_extend_max_depth must be <= 4294967295, got 4294967296.
+-STATEMENT CALL recursive_pattern_factor=-5
+---- error
+Runtime exception: recursive_pattern_factor must be >= 0, got -5.
+-STATEMENT CALL var_length_extend_max_depth=7
+---- ok
+-STATEMENT CALL current_setting('var_length_extend_max_depth') RETURN *
+---- 1
+7
+-STATEMENT CALL checkpoint_threshold=0
+---- ok
+-STATEMENT CALL current_setting('checkpoint_threshold') RETURN *
+---- 1
+0
