@@ -1,5 +1,7 @@
 #include "main/settings.h"
 
+#include <limits>
+
 #include "common/assert.h"
 #include "common/exception/runtime.h"
 #include "common/string_utils.h"
@@ -34,11 +36,30 @@ void setDefaultHashIndexEnabledOnStorageManagers(ClientContext* context, bool en
     }
 }
 
+// The INT64 settings below are stored unsigned; a value that doesn't fit would wrap.
+template<typename T>
+T toUnsignedSetting(const char* name, const common::Value& parameter) {
+    const auto value = parameter.getValue<int64_t>();
+    if (value < 0) {
+        throw common::RuntimeException(std::format("{} must be >= 0, got {}.", name, value));
+    }
+    if constexpr (sizeof(T) < sizeof(int64_t)) {
+        if (static_cast<uint64_t>(value) > std::numeric_limits<T>::max()) {
+            throw common::RuntimeException(std::format("{} must be <= {}, got {}.", name,
+                std::numeric_limits<T>::max(), value));
+        }
+    }
+    return static_cast<T>(value);
+}
+
 } // namespace
 
 void ThreadsSetting::setContext(ClientContext* context, const common::Value& parameter) {
     parameter.validateType(inputType);
-    context->getClientConfigUnsafe()->numThreads = parameter.getValue<uint64_t>();
+    // 0 means the database's thread count, as in ClientContext::setMaxNumThreadForExec.
+    const auto numThreads = parameter.getValue<uint64_t>();
+    context->getClientConfigUnsafe()->numThreads =
+        numThreads == 0 ? context->getDBConfig()->maxNumThreads : numThreads;
 }
 
 common::Value ThreadsSetting::getSetting(const ClientContext* context) {
@@ -76,7 +97,8 @@ common::Value ProgressBarSetting::getSetting(const ClientContext* context) {
 void VarLengthExtendMaxDepthSetting::setContext(ClientContext* context,
     const common::Value& parameter) {
     parameter.validateType(inputType);
-    context->getClientConfigUnsafe()->varLengthMaxDepth = parameter.getValue<int64_t>();
+    context->getClientConfigUnsafe()->varLengthMaxDepth =
+        toUnsignedSetting<uint32_t>(name, parameter);
 }
 
 common::Value VarLengthExtendMaxDepthSetting::getSetting(const ClientContext* context) {
@@ -86,7 +108,8 @@ common::Value VarLengthExtendMaxDepthSetting::getSetting(const ClientContext* co
 void SparseFrontierThresholdSetting::setContext(ClientContext* context,
     const common::Value& parameter) {
     parameter.validateType(inputType);
-    context->getClientConfigUnsafe()->sparseFrontierThreshold = parameter.getValue<int64_t>();
+    context->getClientConfigUnsafe()->sparseFrontierThreshold =
+        toUnsignedSetting<uint64_t>(name, parameter);
 }
 
 common::Value SparseFrontierThresholdSetting::getSetting(const ClientContext* context) {
@@ -156,7 +179,7 @@ void RecursivePatternFactorSetting::setContext(ClientContext* context,
     const common::Value& parameter) {
     parameter.validateType(inputType);
     context->getClientConfigUnsafe()->recursivePatternCardinalityScaleFactor =
-        parameter.getValue<std::int64_t>();
+        toUnsignedSetting<uint32_t>(name, parameter);
 }
 
 common::Value RecursivePatternFactorSetting::getSetting(const ClientContext* context) {
@@ -177,7 +200,8 @@ common::Value EnableMVCCSetting::getSetting(const ClientContext* context) {
 void CheckpointThresholdSetting::setContext(ClientContext* context,
     const common::Value& parameter) {
     parameter.validateType(inputType);
-    context->getDBConfigUnsafe()->checkpointThreshold = parameter.getValue<int64_t>();
+    context->getDBConfigUnsafe()->checkpointThreshold =
+        toUnsignedSetting<uint64_t>(name, parameter);
 }
 
 common::Value CheckpointThresholdSetting::getSetting(const ClientContext* context) {
