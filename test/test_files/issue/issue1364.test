@@ -1,0 +1,76 @@
+-DATASET CSV empty
+
+--
+
+-CASE Issue1364MultiLabelPrimaryKeyIsNotUnique
+# Reproduction for github issue #1364:
+# When a node variable spans several node tables, PropertyExpression::isPrimaryKey() was true as
+# soon as the property was the primary key of every one of them. The optimizers read that as a
+# uniqueness guarantee, but the same key value can exist once in each table, so
+# RemoveUnnecessaryDistinctOptimizer dropped a DISTINCT that still had work to do and
+# AggKeyDependencyOptimizer moved the variable's other properties out of the grouping keys,
+# merging rows that belong apart. With the plan optimizer off both queries were already right.
+#
+# id 1 exists in P (flag true) and in Q (flag false); id 2 exists only in P.
+
+-STATEMENT CREATE NODE TABLE P(id INT64 PRIMARY KEY, flag BOOLEAN);
+---- ok
+
+-STATEMENT CREATE NODE TABLE Q(id INT64 PRIMARY KEY, flag BOOLEAN);
+---- ok
+
+-STATEMENT CREATE (:P {id: 1, flag: true});
+---- ok
+
+-STATEMENT CREATE (:P {id: 2, flag: false});
+---- ok
+
+-STATEMENT CREATE (:Q {id: 1, flag: false});
+---- ok
+
+-STATEMENT MATCH (n) RETURN DISTINCT n.id ORDER BY n.id;
+---- 2
+1
+2
+
+-STATEMENT MATCH (n) RETURN n.id, n.flag, count(*) ORDER BY n.id, n.flag;
+---- 3
+1|False|1
+1|True|1
+2|False|1
+
+# A property that is not the primary key of every spanned table was already never treated as
+# unique, so the DISTINCT here is kept for the right reason either way.
+-STATEMENT MATCH (n) RETURN DISTINCT n.flag ORDER BY n.flag;
+---- 2
+False
+True
+
+# A single-label variable does keep the uniqueness guarantee, so the optimizers may still act on
+# its key: the queries above must stay right for it too.
+-STATEMENT MATCH (p:P) RETURN DISTINCT p.id ORDER BY p.id;
+---- 2
+1
+2
+
+-STATEMENT MATCH (p:P) RETURN p.id, p.flag, count(*) ORDER BY p.id;
+---- 2
+1|True|1
+2|False|1
+
+# The same queries with the plan optimizer off, which is the reference the optimized plan has to
+# agree with.
+
+-STATEMENT CALL enable_plan_optimizer=false;
+---- ok
+
+-STATEMENT MATCH (n) RETURN DISTINCT n.id ORDER BY n.id;
+---- 2
+1
+2
+
+-STATEMENT MATCH (n) RETURN n.id, n.flag, count(*) ORDER BY n.id, n.flag;
+---- 3
+1|False|1
+1|True|1
+2|False|1
