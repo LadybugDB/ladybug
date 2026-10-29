@@ -552,7 +552,7 @@ a
 ---- 3
 F
 k
-k
+
 
 -LOG ArrayExtractNegativeIdxStrAndInt
 -STATEMENT MATCH (o:organisation) RETURN array_extract(o.name, o.ID - 5)
@@ -566,14 +566,14 @@ D
 ---- 3
 c
 😃
-a
+
 
 -LOG ArrayExtractUTF8NegativeIdx
 -STATEMENT MATCH (m:movies) RETURN array_extract(m.name, -5)
 ---- 3
 á
 m
-R
+
 
 -LOG ArrayExtractUTF8ZeroIdx
 -STATEMENT MATCH (m:movies) RETURN array_extract(m.name, 0)
@@ -581,6 +581,23 @@ R
 
 
 
+
+-LOG ArrayExtractUTF8MultiCodePoint
+-STATEMENT MATCH (m:movies) RETURN array_extract(m.name, -9)
+---- 3
+t
+🌦️
+
+
+-LOG ArrayExtractOutOfRange
+-STATEMENT RETURN array_extract('hello', 5), array_extract('hello', 6), array_extract('hello', -5), array_extract('hello', -6), array_extract('hello', 9223372036854775807), array_extract('hello', -9223372036854775808)
+---- 1
+o||h|||
+
+-LOG ArrayExtractEmptyString
+-STATEMENT RETURN size(array_extract('', 1)), size(array_extract('', -1)), size(''[1]), size(''[-1])
+---- 1
+0|0|0|0
 
 -LOG ListExtractString
 -STATEMENT MATCH (o:organisation) RETURN o.name[2]
@@ -620,7 +637,7 @@ o
 ---- 3
 á
 m
-R
+
 
 -LOG ListExtractUTF8ZeroIdx
 -STATEMENT MATCH (m:movies) RETURN m.name[0]
@@ -628,6 +645,16 @@ R
 
 
 
+
+-LOG ListExtractStringOutOfRange
+-STATEMENT RETURN 'hello'[5], 'hello'[6], 'hello'[-5], 'hello'[-6], list_extract('hello', -9223372036854775808)
+---- 1
+o||h||
+
+-LOG ListExtractStringAgreesWithSize
+-STATEMENT RETURN '\r\nab'[size('\r\nab')], '\r\nab成'[size('\r\nab成')], '\r\nab'[size('\r\nab') + 1] = '', '\r\nab成'[size('\r\nab成') + 1] = ''
+---- 1
+b|成|True|True
 
 -LOG SuffixStr
 -STATEMENT MATCH (o:organisation) RETURN suffix(o.name, "Work")
