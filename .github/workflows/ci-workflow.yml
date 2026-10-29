@@ -376,8 +376,8 @@ jobs:
           activate-environment: true
 
       # The icebug 13.5 prebuilt (vendored by extension/algo) is linked
-      # against libarrow.so.2600, which conda-forge does not ship yet
-      # (pixi still provides libarrow 25.x for libadbc-driver-manager).
+      # against libarrow.so.2600, which the pixi env must not ship
+      # (pixi.toml pins conda libarrow to 25.x for libadbc-driver-manager).
       # Install Arrow 26 from Apache's apt repo so the algo extension builds
       # and loads against 2600. The 26.* pin keeps a future Arrow 27 from
       # silently changing the SONAME again; the libarrow.so.2600 assertion
@@ -395,6 +395,13 @@ jobs:
           sudo apt-get install -y libarrow-dev
           test -e /usr/lib/x86_64-linux-gnu/libarrow.so.2600
           ldconfig -p | grep -q 'libarrow.so.2600'
+          # LD_LIBRARY_PATH puts $CONDA_PREFIX/lib first, so a conda
+          # libarrow.so.2600 would shadow the system one at load time.
+          # (conda-forge's libarrow 26.0.0 + simdjson 5.0.8 combo is
+          # SONAME-incoherent: it needs libsimdjson.so.34 but ships .so.35,
+          # which broke `LOAD EXTENSION 'algo'`.) Fail loudly if the pin
+          # in pixi.toml ever lets a conda 2600 back in.
+          test ! -e "${CONDA_PREFIX}/lib/libarrow.so.2600"
 
       - name: Configure ADBC runtime
         run: |
