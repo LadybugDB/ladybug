@@ -2,6 +2,7 @@
 
 #include "function/list/vector_list_functions.h"
 #include "function/scalar_function.h"
+#include "function/string/functions/array_extract_function.h"
 
 using namespace lbug::common;
 
@@ -42,7 +43,7 @@ function_set ListExtractFunction::getFunctionSet() {
     func = std::make_unique<ScalarFunction>(name,
         std::vector<LogicalTypeID>{LogicalTypeID::STRING, LogicalTypeID::INT64},
         LogicalTypeID::STRING,
-        ScalarFunction::BinaryExecFunction<string_t, int64_t, string_t, ListExtract>);
+        ScalarFunction::BinaryExecFunction<string_t, int64_t, string_t, ArrayExtract>);
     result.push_back(std::move(func));
     func = std::make_unique<ScalarFunction>(name,
         std::vector<LogicalTypeID>{LogicalTypeID::ARRAY, LogicalTypeID::INT64}, LogicalTypeID::ANY);
