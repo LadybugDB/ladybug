@@ -40,6 +40,7 @@ public:
         common::sel_t pos, common::offset_t& result) const;
 
     TableStats getStats() const { return nodeGroups.getStats(); }
+    const std::vector<common::column_id_t>& getColumnIDs() const { return columnIDs; }
     common::offset_t getStartOffset() const { return startOffset; }
     bool isVisible(const transaction::Transaction* transaction, common::offset_t offset) const;
 
@@ -57,6 +58,10 @@ private:
     OverflowFileHandle* overflowFileHandle;
     std::unique_ptr<LocalHashIndex> hashIndex;
     NodeGroupCollection nodeGroups;
+    // Storage column of each local column, taken from the entry the table was built from. A
+    // column dropped later in the transaction keeps its local column, so the entry seen at read
+    // time can't map the local columns.
+    std::vector<common::column_id_t> columnIDs;
 };
 
 } // namespace storage

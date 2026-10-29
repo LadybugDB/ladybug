@@ -45,7 +45,8 @@ void WALReplayer::replayAlterTableEntryRecord(const WALRecord& walRecord) const 
         defaultValueEvaluator->init(ResultSet(0) /* dummy ResultSet */, &clientContext);
         const auto entry = catalog->getTableCatalogEntry(transaction, ownedAlterInfo->tableName);
         const auto& addedProp = entry->getProperty(addInfo->propertyDefinition.getName());
-        TableAddColumnState state{addedProp, *defaultValueEvaluator};
+        TableAddColumnState state{addedProp, *defaultValueEvaluator,
+            entry->getColumnID(addedProp.getName())};
         DASSERT(StorageManager::Get(clientContext));
         switch (entry->getTableType()) {
         case TableType::REL: {
