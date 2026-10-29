@@ -1390,6 +1390,26 @@ TEST_F(ApiTest, PreparedStatsInfoAfterRolledBackDrop1423) {
     result = conn->execute(stats.get());
     ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
     ASSERT_EQ(std::vector<std::string>{"3|3|2"}, TestHelper::convertResultToString(*result));
+    // The pending row has a again, so its a must not be counted under b.
+    ASSERT_TRUE(conn->query("BEGIN TRANSACTION")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:U1423 {id: 4, a: 10, b: 30})")->isSuccess());
+    result = conn->execute(stats.get());
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(std::vector<std::string>{"4|4|3"}, TestHelper::convertResultToString(*result));
+    ASSERT_TRUE(conn->query("ROLLBACK")->isSuccess());
+}
+
+TEST_F(ApiTest, PreparedStatsInfoAfterUseGraph) {
+    // USE GRAPH doesn't force a rebind, so the statement must keep reading the main table.
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE T(id INT64 PRIMARY KEY, b INT64)")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:T {id: 1, b: 10}), (:T {id: 2, b: 20})")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE GRAPH g")->isSuccess());
+    auto stats = conn->prepare("CALL stats_info('T') RETURN *");
+    ASSERT_TRUE(stats->isSuccess()) << stats->getErrorMessage();
+    ASSERT_TRUE(conn->query("USE GRAPH g")->isSuccess());
+    auto result = conn->execute(stats.get());
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(std::vector<std::string>{"2|2|2"}, TestHelper::convertResultToString(*result));
 }
 
 TEST_F(ApiTest, PreparedRelScanAfterCheckpointRenumbersColumns) {
