@@ -22,6 +22,28 @@ TEST_F(ReadOnlyTest, Test) {
         conn->query("CALL _CACHE_ARRAY_COLUMN_LOCALLY('Test', 'arr')")->toString().c_str());
 }
 
+TEST_F(ReadOnlyTest, CheckpointOnReadOnlyDatabase) {
+    if (databasePath == "" || databasePath == ":memory:") {
+        return;
+    }
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE RoCkpt(id INT64 PRIMARY KEY)")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:RoCkpt {id: 1})")->isSuccess());
+    systemConfig->readOnly = true;
+    createDBAndConn();
+    ASSERT_STREQ("Connection exception: Cannot execute write operations in a read-only database!",
+        conn->query("CHECKPOINT")->toString().c_str());
+    ASSERT_EQ(conn->query("MATCH (n:RoCkpt) RETURN count(*)")
+                  ->getNext()
+                  ->getValue(0)
+                  ->getValue<int64_t>(),
+        1);
+    // A refused CHECKPOINT leaves nothing to recover, so the database still opens read-only.
+    createDBAndConn();
+    auto result = conn->query("MATCH (n:RoCkpt) RETURN count(*)");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 1);
+}
+
 TEST_F(ReadOnlyTest, ProjectGraphOnReadOnlyDatabase) {
     if (databasePath == "" || databasePath == ":memory:") {
         return;
