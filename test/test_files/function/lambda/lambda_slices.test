@@ -100,6 +100,14 @@ True|False|True
 ---- 1
 0
 
+-CASE UnionInLambdaOverManyElements
+-STATEMENT UNWIND range(1, 3000) AS i WITH [union_value(a := i), union_value(a := i + 1)] AS l RETURN sum(list_sum(list_transform(l, v -> union_extract(v, 'a'))));
+---- 1
+9006000
+-STATEMENT UNWIND range(1, 3000) AS i WITH i, [union_value(a := i), union_value(a := i + 1)] AS l WHERE any(v IN l WHERE union_extract(v, 'a') = i + 1) RETURN count(*);
+---- 1
+3000
+
 -CASE PathPropertiesInLambda
 -STATEMENT CREATE NODE TABLE Person(id INT64, PRIMARY KEY (id));
 ---- ok
