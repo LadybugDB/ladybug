@@ -877,8 +877,8 @@ void NodeTable::reclaimStorage(PageAllocator& pageAllocator) const {
 TableStats NodeTable::getStats(const Transaction* transaction) const {
     auto stats = nodeGroups->getStats();
     if (const auto localTable = transaction->getLocalStorage()->getLocalTable(*this)) {
-        const auto localStats = localTable->cast<LocalNodeTable>().getStats();
-        stats.merge(localStats);
+        const auto& localNodeTable = localTable->cast<LocalNodeTable>();
+        stats.merge(localNodeTable.getColumnIDs(), localNodeTable.getStats());
     }
     return stats;
 }

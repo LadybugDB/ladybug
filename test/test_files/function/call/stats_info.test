@@ -91,3 +91,46 @@ Binder exception: Stats from a non-node table knows is not supported yet!
 -STATEMENT CALL stats_info('U') RETURN *;
 ---- 1
 3|3|2
+
+-CASE StatsInfoWithUncommittedInsertAfterDrop
+-STATEMENT CREATE NODE TABLE T(id INT64 PRIMARY KEY, a INT64, b INT64, c INT64);
+---- ok
+-STATEMENT CREATE (:T {id: 1, a: 7, b: 10, c: 100}), (:T {id: 2, a: 7, b: 10, c: 200}),
+                  (:T {id: 3, a: 7, b: 20, c: 300});
+---- ok
+-STATEMENT ALTER TABLE T DROP a;
+---- ok
+-STATEMENT BEGIN TRANSACTION;
+---- ok
+# The pending c value repeats a committed b value, so counting it under b's column changes b's
+# count.
+-STATEMENT CREATE (:T {id: 4, b: 30, c: 10});
+---- ok
+-STATEMENT CALL stats_info('T') RETURN *;
+---- 1
+4|4|3|4
+-STATEMENT COMMIT;
+---- ok
+-STATEMENT CALL stats_info('T') RETURN *;
+---- 1
+4|4|3|4
+
+-CASE StatsInfoWithInsertThenDropInTransaction
+-STATEMENT CREATE NODE TABLE T(id INT64 PRIMARY KEY, a INT64, b INT64, c INT64);
+---- ok
+-STATEMENT CREATE (:T {id: 1, a: 7, b: 10, c: 100}), (:T {id: 2, a: 7, b: 10, c: 200}),
+                  (:T {id: 3, a: 7, b: 20, c: 300});
+---- ok
+-STATEMENT BEGIN TRANSACTION;
+---- ok
+# The pending row keeps its a value after the DROP. Its c value repeats a committed b value, so
+# counting the row's columns under the wrong storage columns changes b's count.
+-STATEMENT CREATE (:T {id: 4, a: 10, b: 30, c: 10});
+---- ok
+-STATEMENT ALTER TABLE T DROP a;
+---- ok
+-STATEMENT CALL stats_info('T') RETURN *;
+---- 1
+4|4|3|4
+-STATEMENT ROLLBACK;
+---- ok
