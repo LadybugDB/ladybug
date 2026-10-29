@@ -2,7 +2,9 @@
 #include <filesystem>
 #include <fstream>
 #include <map>
+#include <tuple>
 #include <unordered_map>
+#include <vector>
 
 #include "catalog/catalog.h"
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
@@ -200,6 +202,71 @@ TEST_F(CardinalityTest, TestOperators) {
             "LOAD FROM \"{}/dataset/npy-1d/one_dim_int64.npy\" RETURN *", LBUG_ROOT_DIRECTORY));
         EXPECT_EQ(3, plan->getCardinality());
     }
+}
+
+static int32_t sameDay(int32_t days) {
+    return days;
+}
+
+static int64_t dayNumber(int32_t days) {
+    return days;
+}
+
+TEST_F(CardinalityTest, RangeFilterAcrossTemporalUnits) {
+    // Daily holds one day per row from 2020-01-01, SameDay holds 2022-01-01 in each of 100 rows;
+    // each day is stored as a DATE and in every timestamp type.
+    for (auto [table, lastID, day] :
+        {std::tuple{"Daily", 999, "i"}, std::tuple{"SameDay", 99, "731"}}) {
+        ASSERT_TRUE(conn->query(std::format("CREATE NODE TABLE {}(id INT64 PRIMARY KEY, d DATE, "
+                                            "ts TIMESTAMP, ttz TIMESTAMP_TZ, tms TIMESTAMP_MS, "
+                                            "tns TIMESTAMP_NS, tsec TIMESTAMP_SEC);",
+                                    table))
+                        ->isSuccess());
+        ASSERT_TRUE(
+            conn->query(std::format("UNWIND range(0, {}) AS i WITH i, timestamp('2020-01-01 "
+                                    "00:00:00') + to_days({}) AS t CREATE (:{} {{id: i, d: "
+                                    "date('2020-01-01') + to_days({}), ts: t, ttz: CAST(t AS "
+                                    "TIMESTAMP_TZ), tms: CAST(t AS TIMESTAMP_MS), tns: CAST(t AS "
+                                    "TIMESTAMP_NS), tsec: CAST(t AS TIMESTAMP_SEC)}});",
+                            lastID, day, table, day))
+                ->isSuccess());
+    }
+    auto expectEstimate = [&](const std::string& table, const std::string& predicate,
+                              common::cardinality_t expected) {
+        auto plan = getRoot(
+            std::format("EXPLAIN LOGICAL MATCH (u:{}) WHERE {} RETURN u.id", table, predicate));
+        auto [parent, source] = getSource(plan->getLastOperator().get());
+        EXPECT_EQ(planner::LogicalOperatorType::FILTER, parent->getOperatorType()) << predicate;
+        EXPECT_EQ(expected, parent->getCardinality()) << predicate;
+    };
+    const std::vector<std::string> constants{"date('2022-01-01')",
+        "timestamp('2022-01-01 00:00:00')", "CAST('2022-01-01 00:00:00' AS TIMESTAMP_TZ)",
+        "CAST('2022-01-01 00:00:00' AS TIMESTAMP_MS)",
+        "CAST('2022-01-01 00:00:00' AS TIMESTAMP_NS)",
+        "CAST('2022-01-01 00:00:00' AS TIMESTAMP_SEC)"};
+    for (const auto* column : {"d", "ts", "ttz", "tms", "tns", "tsec"}) {
+        const auto prop = std::format("u.{}", column);
+        for (const auto& constant : constants) {
+            // 268 of Daily's 1,000 days lie after 2022-01-01 and 731 before it.
+            expectEstimate("Daily", prop + " > " + constant, 268);
+            expectEstimate("Daily", prop + " < " + constant, 731);
+            expectEstimate("Daily", constant + " < " + prop, 268);
+            // SameDay's one value equals the constant: >= keeps all 100 rows, > keeps none.
+            expectEstimate("SameDay", prop + " >= " + constant, 100);
+            expectEstimate("SameDay", prop + " > " + constant, 1);
+        }
+    }
+    // A user function named CAST_* is stripped like a cast: DATE to DATE keeps the range
+    // estimate, DATE to INT64 leaves a DATE range against a number of unknown unit and falls back
+    // to the fixed 10% (268 on main, 1,000 without the fallback).
+    conn->createScalarFunction("CAST_SAME",
+        std::vector<common::LogicalTypeID>{common::LogicalTypeID::DATE},
+        common::LogicalTypeID::DATE, &sameDay);
+    conn->createScalarFunction("CAST_DAYS",
+        std::vector<common::LogicalTypeID>{common::LogicalTypeID::DATE},
+        common::LogicalTypeID::INT64, &dayNumber);
+    expectEstimate("Daily", "CAST_SAME(u.d) > date('2022-01-01')", 268);
+    expectEstimate("Daily", "CAST_DAYS(u.d) > 18993", 100);
 }
 
 TEST_F(CardinalityTest, TestPopulatedAfterOptimizations) {
