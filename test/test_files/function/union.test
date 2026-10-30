@@ -47,6 +47,62 @@
 [1]
 [10,11,12,3,4,5,6,7]
 
+-LOG UnionValueInListLiteral
+-STATEMENT UNWIND range(1, 5) AS i RETURN i, [union_value(a := i)] ORDER BY i
+---- 5
+1|[1]
+2|[2]
+3|[3]
+4|[4]
+5|[5]
+-STATEMENT UNWIND range(1, 3000) AS i WITH i, [union_value(a := i)] AS l
+           WHERE union_extract(l[1], 'a') = i RETURN count(*)
+---- 1
+3000
+
+-LOG UnionValueInListAppendAndMap
+-STATEMENT UNWIND range(1, 3000) AS i
+           WITH i, list_append([union_value(a := 0)], union_value(a := i)) AS l
+           WHERE union_extract(l[2], 'a') = i RETURN count(*)
+---- 1
+3000
+-STATEMENT UNWIND range(1, 3000) AS i WITH i, map([i], [union_value(a := i)]) AS m
+           WHERE union_extract(element_at(m, i)[1], 'a') = i RETURN count(*)
+---- 1
+3000
+
+-LOG UnionValueInListMemberTypes
+-STATEMENT UNWIND range(1, 3000) AS i
+           WITH [union_value(a := CASE WHEN i % 2 = 0 THEN NULL ELSE i END)] AS l
+           WHERE union_extract(l[1], 'a') IS NULL RETURN count(*)
+---- 1
+1500
+-STATEMENT UNWIND range(1, 3000) AS i
+           WITH i, [union_value(a := 'long string number ' + CAST(i AS STRING))] AS l
+           WHERE union_extract(l[1], 'a') = 'long string number ' + CAST(i AS STRING)
+           RETURN count(*)
+---- 1
+3000
+
+-LOG UnionValueCastAndCompare
+-STATEMENT UNWIND range(1, 5) AS i
+           RETURN i, CAST(union_value(a := i) AS STRING), union_value(a := i) = union_value(a := 1)
+           ORDER BY i
+---- 5
+1|1|True
+2|2|False
+3|3|False
+4|4|False
+5|5|False
+-STATEMENT UNWIND range(1, 3000) AS i WITH i
+           WHERE CAST(union_value(a := i) AS STRING) = CAST(i AS STRING) RETURN count(*)
+---- 1
+3000
+-STATEMENT UNWIND range(1, 3000) AS i WITH i
+           WHERE union_value(a := i) = union_value(a := 300) RETURN count(*)
+---- 1
+1
+
 -LOG UnionTagOnLiteral
 -STATEMENT RETURN union_tag(union_value(numTuples := 100))
 ---- 1
