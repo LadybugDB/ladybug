@@ -85,13 +85,19 @@ static PinnedCheckpointMarker readPinnedCheckpointMarker(main::ClientContext& cl
         return PinnedCheckpointMarker::NONE;
     }
     auto fileInfo = vfs->openFile(markerPath, FileOpenFlags(FileFlags::READ_ONLY), &clientContext);
-    uint8_t content = 0;
-    if (fileInfo->getFileSize() == 1) {
-        fileInfo->readFromFile(&content, 1, 0);
+    if (fileInfo->getFileSize() != 1) {
+        return PinnedCheckpointMarker::NONE;
     }
-    return content == StorageUtils::PINNED_CHECKPOINT_MARKER_APPLIED ?
-               PinnedCheckpointMarker::APPLIED :
-               PinnedCheckpointMarker::LEGACY;
+    uint8_t content = 0;
+    fileInfo->readFromFile(&content, 1, 0);
+    switch (content) {
+    case StorageUtils::PINNED_CHECKPOINT_MARKER_APPLIED:
+        return PinnedCheckpointMarker::APPLIED;
+    case StorageUtils::PINNED_CHECKPOINT_MARKER_LEGACY:
+        return PinnedCheckpointMarker::LEGACY;
+    default:
+        return PinnedCheckpointMarker::NONE;
+    }
 }
 
 static void removePartitionChildShadowFiles(main::ClientContext& clientContext) {
@@ -620,6 +626,44 @@ void WALReplayer::removeGraphCheckpointShadow(StorageManager& storageManager) co
         StorageUtils::getShadowFilePath(storageManager.getDatabasePath()));
 }
 
+// Replays the records dryReplay found committed, then the graph WALs they queued. With
+// skipThroughLastCheckpoint, only the records after the last CHECKPOINT replay; otherwise only
+// those before the first. Both bounds exclude every CHECKPOINT record structurally, so none ever
+// reaches replayWALRecord, which rejects them. Returns the offset where replay stopped.
+uint64_t WALReplayer::replayCommittedRecords(FileInfo& fileInfo, const WALReplayInfo& replayInfo,
+    bool skipThroughLastCheckpoint, bool enableChecksums) const {
+    Deserializer deserializer = initDeserializer(fileInfo, clientContext, enableChecksums);
+    if (replayInfo.offsetDeserialized > 0) {
+        deserializer.getReader()->onObjectBegin();
+        const auto walHeader = readWALHeader(deserializer);
+        FileDBIDUtils::verifyDatabaseID(fileInfo,
+            StorageManager::Get(clientContext)->getOrInitDatabaseID(clientContext),
+            walHeader.databaseID);
+        deserializer.getReader()->onObjectEnd();
+    }
+    const auto replayEnd = !skipThroughLastCheckpoint && replayInfo.lastCheckpointOffset != 0 ?
+                               replayInfo.offsetBeforeFirstCheckpoint :
+                               replayInfo.offsetDeserialized;
+    const auto skipBefore = skipThroughLastCheckpoint ? replayInfo.lastCheckpointOffset : 0;
+    while (getReadOffset(deserializer, enableChecksums) < replayEnd) {
+        DASSERT(!deserializer.finished());
+        auto walRecord = WALRecord::deserialize(deserializer, clientContext);
+        if (getReadOffset(deserializer, enableChecksums) <= skipBefore) {
+            continue;
+        }
+        replayWALRecord(*walRecord);
+    }
+    replayPendingGraphWALs(clientContext);
+    // Graph checkpoint recovery replays loaded graphs' WALs inline through their own replayers,
+    // whose records can change graph registry membership, so the cached owner and the
+    // failed-owner set must be dropped here even when no drain ran above.
+    failedOwnerNames.clear();
+    cachedOwnerName.clear();
+    cachedOwnerCatalog = nullptr;
+    recoverGraphCheckpoints(clientContext, false, false);
+    return replayEnd;
+}
+
 void WALReplayer::replayFrozenWAL(Checkpointer& checkpointer, bool throwOnWalReplayFailure,
     bool enableChecksums) const {
     auto vfs = VirtualFileSystem::GetUnsafe(clientContext);
@@ -653,38 +697,8 @@ void WALReplayer::replayFrozenWAL(Checkpointer& checkpointer, bool throwOnWalRep
             checkpointer.readCheckpoint();
             removePartitionChildShadowFiles(clientContext);
             recoverGraphCheckpoints(clientContext, false, false);
-            Deserializer deserializer = initDeserializer(*fileInfo, clientContext, enableChecksums);
-            if (offsetDeserialized > 0) {
-                deserializer.getReader()->onObjectBegin();
-                const auto walHeader = readWALHeader(deserializer);
-                FileDBIDUtils::verifyDatabaseID(*fileInfo,
-                    StorageManager::Get(clientContext)->getOrInitDatabaseID(clientContext),
-                    walHeader.databaseID);
-                deserializer.getReader()->onObjectEnd();
-            }
-            // Both bounds exclude every CHECKPOINT record structurally, so none ever reaches
-            // replayWALRecord, which rejects them.
-            const auto replayEnd =
-                !skipThroughLastCheckpoint && replayInfo.lastCheckpointOffset != 0 ?
-                    replayInfo.offsetBeforeFirstCheckpoint :
-                    offsetDeserialized;
-            const auto skipBefore = skipThroughLastCheckpoint ? replayInfo.lastCheckpointOffset : 0;
-            while (getReadOffset(deserializer, enableChecksums) < replayEnd) {
-                DASSERT(!deserializer.finished());
-                auto walRecord = WALRecord::deserialize(deserializer, clientContext);
-                if (getReadOffset(deserializer, enableChecksums) <= skipBefore) {
-                    continue;
-                }
-                replayWALRecord(*walRecord);
-            }
-            replayPendingGraphWALs(clientContext);
-            // Graph checkpoint recovery replays loaded graphs' WALs inline through their own
-            // replayers, whose records can change graph registry membership, so the cached
-            // owner and the failed-owner set must be dropped here even when no drain ran above.
-            failedOwnerNames.clear();
-            cachedOwnerName.clear();
-            cachedOwnerCatalog = nullptr;
-            recoverGraphCheckpoints(clientContext, false, false);
+            const auto replayEnd = replayCommittedRecords(*fileInfo, replayInfo,
+                skipThroughLastCheckpoint, enableChecksums);
             if (offsetDeserialized == 0) {
                 // Nothing was committed, so the frozen WAL holds nothing to keep.
                 fileInfo.reset();
@@ -762,10 +776,11 @@ void WALReplayer::replayActiveWAL(Checkpointer& checkpointer, bool throwOnWalRep
             // record poisons the WAL before anything else can be appended. So does a missing
             // shadow, which cleanup removes only after applying it. Then the records up to the
             // last CHECKPOINT are in the data file and only the suffix replays; a remaining
-            // shadow belongs to a later checkpoint that never logged its record. Records after a
-            // CHECKPOINT that form no whole transaction are not ones the engine writes (it logs a
-            // COMMIT only after a BEGIN), so the checkpoint may not have completed: replay the
-            // prefix before the first CHECKPOINT record and discard everything from it onward.
+            // shadow belongs to a later checkpoint that never logged its record. A COMMIT after a
+            // CHECKPOINT without its BEGIN is not one the engine writes (it logs a COMMIT only
+            // after a BEGIN), so the checkpoint may not have completed: replay the prefix before
+            // the first CHECKPOINT record and discard everything from it onward. Records that end
+            // in no COMMIT do not get here: they are a torn tail of the last CHECKPOINT, above.
             // Cleanup writes the pinned-checkpoint marker before removing the shadow, so with
             // neither of them the shadow was lost out of band: throw instead of silently deleting
             // committed records. Check before deleting below.
@@ -778,7 +793,7 @@ void WALReplayer::replayActiveWAL(Checkpointer& checkpointer, bool throwOnWalRep
                 throw RuntimeException(
                     std::format("Cannot recover WAL {}: it holds CHECKPOINT records but its "
                                 "shadow file {} is missing "
-                                "with no pinned-checkpoint marker. Do not delete the WAL or "
+                                "with no valid pinned-checkpoint marker. Do not delete the WAL or "
                                 "shadow files; they hold "
                                 "committed pages. Restore both files they were written for.",
                         walPath, shadowFilePath));
@@ -789,38 +804,8 @@ void WALReplayer::replayActiveWAL(Checkpointer& checkpointer, bool throwOnWalRep
             }
             removePartitionChildShadowFiles(clientContext);
             recoverGraphCheckpoints(clientContext, false, false);
-            Deserializer deserializer = initDeserializer(*fileInfo, clientContext, enableChecksums);
-            if (offsetDeserialized > 0) {
-                deserializer.getReader()->onObjectBegin();
-                const auto walHeader = readWALHeader(deserializer);
-                FileDBIDUtils::verifyDatabaseID(*fileInfo,
-                    StorageManager::Get(clientContext)->getOrInitDatabaseID(clientContext),
-                    walHeader.databaseID);
-                deserializer.getReader()->onObjectEnd();
-            }
-            // Both bounds exclude every CHECKPOINT record structurally, so none ever reaches
-            // replayWALRecord, which rejects them.
-            const auto replayEnd =
-                !skipThroughLastCheckpoint && replayInfo.lastCheckpointOffset != 0 ?
-                    replayInfo.offsetBeforeFirstCheckpoint :
-                    offsetDeserialized;
-            const auto skipBefore = skipThroughLastCheckpoint ? replayInfo.lastCheckpointOffset : 0;
-            while (getReadOffset(deserializer, enableChecksums) < replayEnd) {
-                DASSERT(!deserializer.finished());
-                auto walRecord = WALRecord::deserialize(deserializer, clientContext);
-                if (getReadOffset(deserializer, enableChecksums) <= skipBefore) {
-                    continue;
-                }
-                replayWALRecord(*walRecord);
-            }
-            replayPendingGraphWALs(clientContext);
-            // Graph checkpoint recovery replays loaded graphs' WALs inline through their own
-            // replayers, whose records can change graph registry membership, so the cached
-            // owner and the failed-owner set must be dropped here even when no drain ran above.
-            failedOwnerNames.clear();
-            cachedOwnerName.clear();
-            cachedOwnerCatalog = nullptr;
-            recoverGraphCheckpoints(clientContext, false, false);
+            const auto replayEnd = replayCommittedRecords(*fileInfo, replayInfo,
+                skipThroughLastCheckpoint, enableChecksums);
             // Drops a torn tail, and the CHECKPOINT record onward when replay stopped before it.
             truncateWALFile(*fileInfo, replayEnd);
         }
@@ -848,7 +833,7 @@ void WALReplayer::replayPinnedActiveCheckpoint(Checkpointer& checkpointer,
     }
     if (readPinnedCheckpointMarker(clientContext) == PinnedCheckpointMarker::NONE) {
         throw RuntimeException(std::format("Cannot recover checkpoint WAL {}: shadow file {} "
-                                           "is missing with no pinned-checkpoint "
+                                           "is missing with no valid pinned-checkpoint "
                                            "marker. Do not delete the WAL or shadow files; "
                                            "they hold committed pages. Restore the "
                                            "database file they were written for.",
