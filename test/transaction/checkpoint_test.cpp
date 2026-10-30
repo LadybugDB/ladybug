@@ -6278,6 +6278,27 @@ TEST_F(PinnedCheckpointCrashTest, LeftoverShadowKeepsCommitsAfterPinnedCheckpoin
     EXPECT_EQ(ids(), (std::vector<int64_t>{1, 2, 3, 4, 5}));
 }
 
+// A COMMIT that a later ABORT undoes still shows that the pinned checkpoint before it finished:
+// its writer got past the write gate after the CHECKPOINT record. Recovery skips through that
+// record despite the next checkpoint's leftover shadow, and the ABORT keeps the transaction out.
+// The ABORT is appended after the crash, where a failed publish would have logged it.
+TEST_F(PinnedCheckpointCrashTest, AbortedCommitAfterPinnedCheckpointIsSkipped) {
+    query("CREATE NODE TABLE P(id INT64 PRIMARY KEY);");
+    query("CHECKPOINT;");
+    createRows(1, 3);
+    pinWAL();
+    query("CHECKPOINT;");
+    const auto abortedStart =
+        std::filesystem::file_size(StorageUtils::getWALFilePath(databasePath));
+    createRows(4, 5);
+    failCheckpoint<FlakyCheckpointerKilledAfterCheckpointStorage>();
+    ASSERT_TRUE(std::filesystem::exists(shadowPath()));
+    crash();
+    appendToWAL(AbortRecord{abortedStart});
+    createDBAndConn();
+    EXPECT_EQ(ids(), (std::vector<int64_t>{1, 2, 3}));
+}
+
 TEST_F(PinnedCheckpointCrashTest, LeftoverShadowKeepsTableCreatedBeforePinnedCheckpoint) {
     query("CREATE NODE TABLE P(id INT64 PRIMARY KEY);");
     createRows(1, 3);
