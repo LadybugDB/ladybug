@@ -884,7 +884,32 @@ public:
         return result->isSuccess() ? result->getNext()->getValue(0)->getValue<int64_t>() : -1;
     }
 
+    void expectFailedCommitNotAppliedAfterCrash() {
+        constructFailingDB();
+        query("CREATE NODE TABLE A(id INT64 PRIMARY KEY, b INT64)");
+        query("CREATE REL TABLE T(FROM A TO A)");
+        query("CREATE (:A {id: 0, b: 0}), (:A {id: 1, b: 0})");
+        const auto insert = "MATCH (a:A {id: 0}), (c:A {id: 1}) CREATE (a)-[:T]->(c)";
+        query(insert);
+        query("CHECKPOINT");
+        query("BEGIN TRANSACTION");
+        query("MATCH (a:A {id: 0}) SET a.b = 1");
+        query(insert);
+        commitFailingOnce();
+        crashAndReopen();
+        EXPECT_EQ(count("MATCH (:A)-[t:T]->(:A) RETURN count(t)"), 1);
+        EXPECT_EQ(count("MATCH (a:A) WHERE a.b = 1 RETURN count(a)"), 0);
+    }
+
     FailOnceInCommitBufferManager* bm = nullptr;
+};
+
+class FailedCommitWithoutChecksumsTest : public FailedCommitTest {
+public:
+    void SetUp() override {
+        FailedCommitTest::SetUp();
+        systemConfig->enableChecksums = false;
+    }
 };
 
 } // namespace
@@ -895,20 +920,16 @@ TEST_F(FailedCommitTest, FailedCommitIsNotAppliedAfterCrash) {
     if (inMemMode) {
         GTEST_SKIP();
     }
-    constructFailingDB();
-    query("CREATE NODE TABLE A(id INT64 PRIMARY KEY, b INT64)");
-    query("CREATE REL TABLE T(FROM A TO A)");
-    query("CREATE (:A {id: 0, b: 0}), (:A {id: 1, b: 0})");
-    const auto insert = "MATCH (a:A {id: 0}), (c:A {id: 1}) CREATE (a)-[:T]->(c)";
-    query(insert);
-    query("CHECKPOINT");
-    query("BEGIN TRANSACTION");
-    query("MATCH (a:A {id: 0}) SET a.b = 1");
-    query(insert);
-    commitFailingOnce();
-    crashAndReopen();
-    EXPECT_EQ(count("MATCH (:A)-[t:T]->(:A) RETURN count(t)"), 1);
-    EXPECT_EQ(count("MATCH (a:A) WHERE a.b = 1 RETURN count(a)"), 0);
+    expectFailedCommitNotAppliedAfterCrash();
+}
+
+// Without per-record checksums the transaction's records start at other offsets, which the ABORT
+// record must still name.
+TEST_F(FailedCommitWithoutChecksumsTest, FailedCommitIsNotAppliedAfterCrash) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+    expectFailedCommitNotAppliedAfterCrash();
 }
 
 // A client retrying the failed insert of a primary key left a database that no longer opened.

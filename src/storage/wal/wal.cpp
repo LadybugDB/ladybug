@@ -49,9 +49,13 @@ void WAL::logCommittedWAL(LocalWAL& localWAL, main::ClientContext* context,
     throwIfPoisonedNoLock();
     initWriter(context);
     if (blockStart != nullptr) {
+        // No checksum entry is open between records, so the writer's size is the file offset of
+        // the block's first record, the offset WALReplayer::dryReplay reads back for it.
         *blockStart = serializer->getWriter()->getSize();
     }
     localWAL.inMemWriter->flush(*serializer->getWriter());
+    DASSERT(blockStart == nullptr ||
+            serializer->getWriter()->getSize() == *blockStart + localWAL.getSize());
     commitSequence = ++appendedCommitSequence;
     waitForDurabilityNoLock(commitSequence, lck);
 }
@@ -61,6 +65,10 @@ void WAL::logAbort(main::ClientContext* context, uint64_t abortedBlockStart) {
     DASSERT(!readOnly);
     std::unique_lock lck{mtx};
     throwIfPoisonedNoLock();
+    // The aborted transaction counts as an active writer until it is rolled back, and a
+    // checkpoint rotates or retires the WAL only once no writer is active, so the file holding its
+    // COMMIT is still the open one: dryReplay matches an ABORT only within one file.
+    DASSERT(serializer != nullptr && abortedBlockStart < serializer->getWriter()->getSize());
     initWriter(context);
     addNewWALRecordNoLock(AbortRecord{abortedBlockStart});
     flushAndSyncNoLock();

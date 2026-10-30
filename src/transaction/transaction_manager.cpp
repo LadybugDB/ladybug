@@ -200,6 +200,9 @@ void TransactionManager::commit(main::ClientContext& clientContext, Transaction*
             committingWriteTransactionCount.fetch_sub(1, std::memory_order_release);
             cvForCommittingWriteTransaction.notify_all();
         }
+        // activeWriteTransactionCount still counts this transaction until the caller rolls it back,
+        // so no checkpoint can rotate the WAL between its COMMIT and this ABORT. A failed WAL sync
+        // logs no ABORT: it has poisoned the WAL, and a reopen applies the COMMIT if it is durable.
         if (publishError && walCommitSequence != 0) {
             logAbortOfDurableCommit(clientContext, walBlockStart, *publishError);
         }
