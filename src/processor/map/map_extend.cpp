@@ -15,6 +15,7 @@
 #include "processor/plan_mapper.h"
 #include "storage/partition_storage_registry.h"
 #include "storage/storage_manager.h"
+#include "storage/table/external_table_hooks.h"
 #include "storage/table/ice_disk_rel_table.h"
 #include "storage/table/node_table.h"
 
@@ -308,8 +309,13 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapExtend(const LogicalOperator* l
                             std::make_shared<ScanNodeTableSharedState>(std::move(semiMask)));
                     }
                 }
+                // Fuse the source-node scan for columnar rel tables (in-core icebug-disk
+                // or extension-backed): their ScanRelTable path serves source properties from
+                // the columnar scan. Native tables keep the existing unfused path.
                 if (!sourceNodeTables.empty() && !scanNode->getProperties().empty() &&
-                    dynamic_cast<IceDiskRelTable*>(relTable) != nullptr) {
+                    (dynamic_cast<IceDiskRelTable*>(relTable) != nullptr ||
+                        storage::ColumnarTableHookRegistry::getTableHooks(
+                            relTable->getStorageManager(), relTable->getTableID()) != nullptr)) {
                     std::vector<DataPos> sourceOutVectorsPos;
                     for (auto& expression : scanNode->getProperties()) {
                         sourceOutVectorsPos.emplace_back(getDataPos(*expression, *inFSchema));

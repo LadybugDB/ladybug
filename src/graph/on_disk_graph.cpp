@@ -132,7 +132,7 @@ OnDiskGraphNbrScanState::OnDiskGraphNbrScanState(ClientContext* context,
         }
 
         std::unique_ptr<RelTableScanState> scanState;
-        if (auto hooks = ExternalTableHookRegistry::getTableHooks(table->getStorageManager(),
+        if (auto hooks = ColumnarTableHookRegistry::getTableHooks(table->getStorageManager(),
                 table->getTableID())) {
             DASSERT(hooks->createRelScanState);
             scanState =

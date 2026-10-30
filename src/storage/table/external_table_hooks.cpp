@@ -3,6 +3,8 @@
 #include <map>
 #include <mutex>
 
+#include "common/string_utils.h"
+
 namespace lbug {
 namespace storage {
 
@@ -10,9 +12,9 @@ namespace {
 
 struct RegistryState {
     std::mutex mtx;
-    std::map<common::StorageFormat, std::shared_ptr<const ExternalTableHooks>> formatHooks;
+    std::map<std::string, std::shared_ptr<const ColumnarTableHooks>> formatHooks;
     std::map<std::pair<const StorageManager*, common::table_id_t>,
-        std::shared_ptr<const ExternalTableHooks>>
+        std::shared_ptr<const ColumnarTableHooks>>
         tableHooks;
 };
 
@@ -21,40 +23,68 @@ RegistryState& getRegistryState() {
     return state;
 }
 
+std::string normalizeKey(const std::string& name) {
+    return common::StringUtils::getLower(name);
+}
+
+std::shared_ptr<const ColumnarTableHooks> findHooksLocked(RegistryState& state,
+    const std::string& normalizedName) {
+    auto it = state.formatHooks.find(normalizedName);
+    if (it != state.formatHooks.end()) {
+        return it->second;
+    }
+    for (const auto& [_, hooks] : state.formatHooks) {
+        if (hooks->canHandle && hooks->canHandle(normalizedName)) {
+            return hooks;
+        }
+    }
+    return nullptr;
+}
+
 } // namespace
 
-void ExternalTableHookRegistry::registerHooks(common::StorageFormat format,
-    ExternalTableHooks hooks) {
+void ColumnarTableHookRegistry::registerHooks(std::string formatName, ColumnarTableHooks hooks) {
+    if (hooks.scanStateRank >= 2) {
+        hooks.supportsMixedColumnarScan = true;
+    }
+    if (hooks.formatName.empty()) {
+        hooks.formatName = normalizeKey(formatName);
+    }
     auto& state = getRegistryState();
     std::lock_guard lock{state.mtx};
-    state.formatHooks[format] = std::make_shared<const ExternalTableHooks>(std::move(hooks));
+    state.formatHooks[normalizeKey(formatName)] =
+        std::make_shared<const ColumnarTableHooks>(std::move(hooks));
 }
 
-void ExternalTableHookRegistry::unregisterHooks(common::StorageFormat format) {
+void ColumnarTableHookRegistry::unregisterHooks(const std::string& formatName) {
     auto& state = getRegistryState();
     std::lock_guard lock{state.mtx};
-    state.formatHooks.erase(format);
+    state.formatHooks.erase(normalizeKey(formatName));
 }
 
-std::shared_ptr<const ExternalTableHooks> ExternalTableHookRegistry::getFormatHooks(
-    common::StorageFormat format) {
+std::shared_ptr<const ColumnarTableHooks> ColumnarTableHookRegistry::getFormatHooks(
+    const std::string& formatName) {
     auto& state = getRegistryState();
     std::lock_guard lock{state.mtx};
-    auto it = state.formatHooks.find(format);
-    if (it == state.formatHooks.end()) {
+    return findHooksLocked(state, normalizeKey(formatName));
+}
+
+std::shared_ptr<const ColumnarTableHooks> ColumnarTableHookRegistry::getFormatHooks(
+    common::StorageFormat format, const std::string& formatName) {
+    if (format != common::StorageFormat::EXTERNAL) {
         return nullptr;
     }
-    return it->second;
+    return getFormatHooks(formatName);
 }
 
-void ExternalTableHookRegistry::bindTableHooks(const StorageManager* storageManager,
-    common::table_id_t tableID, std::shared_ptr<const ExternalTableHooks> hooks) {
+void ColumnarTableHookRegistry::bindTableHooks(const StorageManager* storageManager,
+    common::table_id_t tableID, std::shared_ptr<const ColumnarTableHooks> hooks) {
     auto& state = getRegistryState();
     std::lock_guard lock{state.mtx};
     state.tableHooks[{storageManager, tableID}] = std::move(hooks);
 }
 
-std::shared_ptr<const ExternalTableHooks> ExternalTableHookRegistry::getTableHooks(
+std::shared_ptr<const ColumnarTableHooks> ColumnarTableHookRegistry::getTableHooks(
     const StorageManager* storageManager, common::table_id_t tableID) {
     auto& state = getRegistryState();
     std::lock_guard lock{state.mtx};
@@ -65,14 +95,14 @@ std::shared_ptr<const ExternalTableHooks> ExternalTableHookRegistry::getTableHoo
     return it->second;
 }
 
-void ExternalTableHookRegistry::unbindTableHooks(const StorageManager* storageManager,
+void ColumnarTableHookRegistry::unbindTableHooks(const StorageManager* storageManager,
     common::table_id_t tableID) {
     auto& state = getRegistryState();
     std::lock_guard lock{state.mtx};
     state.tableHooks.erase({storageManager, tableID});
 }
 
-void ExternalTableHookRegistry::unbindStorageManagerTables(const StorageManager* storageManager) {
+void ColumnarTableHookRegistry::unbindStorageManagerTables(const StorageManager* storageManager) {
     auto& state = getRegistryState();
     std::lock_guard lock{state.mtx};
     for (auto it = state.tableHooks.begin(); it != state.tableHooks.end();) {

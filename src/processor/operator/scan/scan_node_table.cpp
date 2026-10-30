@@ -23,7 +23,7 @@ static constexpr double MORSELS_PER_THREAD_TARGET = 8.0;
 std::unique_ptr<TableScanState> createNodeTableScanState(NodeTable* table,
     ValueVector* nodeIDVector, const std::vector<ValueVector*>& outVectors,
     MemoryManager* memoryManager) {
-    if (auto hooks = ExternalTableHookRegistry::getTableHooks(table->getStorageManager(),
+    if (auto hooks = ColumnarTableHookRegistry::getTableHooks(table->getStorageManager(),
             table->getTableID())) {
         DASSERT(hooks->createNodeScanState);
         return hooks->createNodeScanState(table, nodeIDVector, outVectors, nodeIDVector->state,
@@ -79,9 +79,9 @@ void ScanNodeTableSharedState::initialize(const transaction::Transaction* transa
     // Initialize table-specific scan coordination (e.g., for IceDiskNodeTable)
     table->initializeScanCoordination(transaction);
 
-    if (const auto hooks = ExternalTableHookRegistry::getTableHooks(table->getStorageManager(),
+    if (const auto hooks = ColumnarTableHookRegistry::getTableHooks(table->getStorageManager(),
             table->getTableID())) {
-        // Extension-backed columnar table (e.g. lance): morsels are counted by the extension.
+        // Extension-backed columnar table: morsels are counted by the extension.
         DASSERT(hooks->getNumScanMorsels);
         this->numCommittedNodeGroups = hooks->getNumScanMorsels(transaction, table);
     } else if (const auto iceDiskTable = dynamic_cast<IceDiskNodeTable*>(table)) {
@@ -234,11 +234,10 @@ void ScanNodeTable::initCurrentTable(ExecutionContext* context) {
         outVectors, MemoryManager::Get(*context->clientContext));
     currentInfo.initScanState(*scanState, outVectors, context->clientContext);
     scanState->semiMask = sharedStates[currentTableIdx]->getSemiMask();
-    // Call table->initScanState for columnar tables (IceDiskNodeTable, ArrowNodeTable) and
-    // extension-backed tables, which set up their readers in initScanState rather than in
-    // per-morsel node-group state.
+    // Call table->initScanState for columnar tables (in-core and extension-backed),
+    // which set up their readers in initScanState rather than in per-morsel node-group state.
     auto* currentTable = tableInfos[currentTableIdx].table;
-    if (ExternalTableHookRegistry::getTableHooks(currentTable->getStorageManager(),
+    if (ColumnarTableHookRegistry::getTableHooks(currentTable->getStorageManager(),
             currentTable->getTableID()) != nullptr ||
         dynamic_cast<IceDiskNodeTable*>(currentTable) ||
         dynamic_cast<ArrowNodeTable*>(currentTable)) {
