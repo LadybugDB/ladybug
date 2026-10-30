@@ -58,10 +58,7 @@ void FilterPushDownOptimizer::prunePartitions(LogicalScanNodeTable& scan) {
                 }
                 const auto typeID = keyType.getLogicalTypeID();
                 // Floating equality (NaNs and signed zero) need not imply identical hashes.
-                // LIST UUID encoding is not supported by the write router yet either.
-                if (typeID == LogicalTypeID::FLOAT || typeID == LogicalTypeID::DOUBLE ||
-                    (typeID == LogicalTypeID::UUID &&
-                        parent->getPartitionMethod() == BoundPartitionMethod::LIST)) {
+                if (typeID == LogicalTypeID::FLOAT || typeID == LogicalTypeID::DOUBLE) {
                     continue;
                 }
                 if (parent->getPartitionMethod() != BoundPartitionMethod::HASH &&

@@ -300,6 +300,11 @@ Parameter-dependent routes are replanned when executing a prepared statement. A 
 with no matching key produces an empty result. Conjunctions can narrow the scan further;
 unrelated labels in a multi-label scan remain candidates.
 
+UUID keys support both HASH and LIST routing and equality pruning. LIST encodes the parsed
+128-bit UUID value, so equivalent uppercase and lowercase UUID literals reuse the same partition.
+Use a UUID-typed literal (for example, `UUID('a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11')`) or a
+UUID-typed parameter for the equality predicate; the existing pruning eligibility rules still apply.
+
 Prepared plans are also rebound after catalog changes within an explicit transaction and after
 leaving a transaction whose catalog changes they observed. A cached empty result must not hide
 a newly created LIST partition or retain a partition that was rolled back.

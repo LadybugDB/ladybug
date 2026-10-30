@@ -8197,6 +8197,47 @@ TEST_F(PartitionCrashRecoveryTest, ListParentSurvivesCrashRecovery) {
     EXPECT_EQ(listPlan->toString().find("L_p1"), std::string::npos);
 }
 
+TEST_F(PartitionCrashRecoveryTest, UUIDListKeysSurviveWALReplay) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    runQuery("CREATE NODE TABLE U(id INT64 PRIMARY KEY, k UUID) PARTITION BY LIST(k);");
+    runQuery("CREATE (:U {id:1, k:UUID('a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11')});");
+    runQuery("CREATE (:U {id:2, k:UUID('00000000-0000-0000-0000-000000000000')});");
+    crashAndReopen();
+    EXPECT_EQ(scanIDs("MATCH (n:U) RETURN n.id ORDER BY n.id;"), std::vector<int64_t>({1, 2}));
+    EXPECT_EQ(scanIDs("MATCH (n:U_p1) RETURN n.id ORDER BY n.id;"), std::vector<int64_t>({1}));
+    EXPECT_EQ(scanIDs("MATCH (n:U_p2) RETURN n.id ORDER BY n.id;"), std::vector<int64_t>({2}));
+
+    // Replayed binary keys must match the parsed UUID regardless of its textual case. Use
+    // CREATE for the second WAL recovery: bulk COPY needs a checkpoint to make its rows durable.
+    runQuery("CALL force_checkpoint_on_close=false;");
+    runQuery("CALL auto_checkpoint=false;");
+    runQuery("CREATE (:U {id:3, k:UUID('A0EEBC99-9C0B-4EF8-BB6D-6BB9BD380A11')});");
+    runQuery("CREATE (:U {id:4, k:UUID('ffffffff-ffff-ffff-ffff-ffffffffffff')});");
+    EXPECT_EQ(scanIDs("MATCH (n:U_p1) RETURN n.id ORDER BY n.id;"), std::vector<int64_t>({1, 3}));
+    EXPECT_EQ(scanIDs("MATCH (n:U_p3) RETURN n.id ORDER BY n.id;"), std::vector<int64_t>({4}));
+    crashAndReopen();
+    EXPECT_EQ(scanIDs("MATCH (n:U) RETURN n.id ORDER BY n.id;"),
+        std::vector<int64_t>({1, 2, 3, 4}));
+    const auto knownKey = "MATCH(n:U) WHERE n.k=UUID('a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11') "
+                          "RETURN n.id ORDER BY n.id;";
+    EXPECT_EQ(scanIDs(knownKey), std::vector<int64_t>({1, 3}));
+    const auto plan = conn->query(std::string{"EXPLAIN "} + knownKey);
+    ASSERT_TRUE(plan->isSuccess()) << plan->getErrorMessage();
+    EXPECT_NE(plan->toString().find("Tables: U_p1"), std::string::npos);
+    EXPECT_EQ(plan->toString().find("U_p0"), std::string::npos);
+    EXPECT_EQ(plan->toString().find("U_p2"), std::string::npos);
+    EXPECT_EQ(plan->toString().find("U_p3"), std::string::npos);
+    const auto newKey = "MATCH(n:U) WHERE n.k=UUID('ffffffff-ffff-ffff-ffff-ffffffffffff') "
+                        "RETURN n.id;";
+    EXPECT_EQ(scanIDs(newKey), std::vector<int64_t>({4}));
+    const auto newPlan = conn->query(std::string{"EXPLAIN "} + newKey);
+    ASSERT_TRUE(newPlan->isSuccess()) << newPlan->getErrorMessage();
+    EXPECT_NE(newPlan->toString().find("Tables: U_p3"), std::string::npos);
+    EXPECT_EQ(newPlan->toString().find("U_p1"), std::string::npos);
+}
+
 TEST_F(PartitionCrashRecoveryTest, HashParentSurvivesCrashRecovery) {
     if (inMemMode || systemConfig->checkpointThreshold == 0) {
         GTEST_SKIP();
