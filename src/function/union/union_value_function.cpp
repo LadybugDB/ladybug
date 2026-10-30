@@ -6,6 +6,9 @@ using namespace lbug::common;
 namespace lbug {
 namespace function {
 
+// union_value builds a one-member union.
+static constexpr union_field_idx_t MEMBER_IDX = 0;
+
 static std::unique_ptr<FunctionBindData> bindFunc(const ScalarBindFuncInput& input) {
     DASSERT(input.arguments.size() == 1);
     std::vector<StructField> fields;
@@ -20,7 +23,7 @@ static std::unique_ptr<FunctionBindData> bindFunc(const ScalarBindFuncInput& inp
 static void execFunc(const std::vector<std::shared_ptr<common::ValueVector>>&,
     const std::vector<common::SelectionVector*>&, common::ValueVector& result,
     common::SelectionVector* resultSelVector, void* /*dataPtr*/) {
-    UnionVector::setTagField(result, *resultSelVector, UnionType::TAG_FIELD_IDX);
+    UnionVector::setTagField(result, *resultSelVector, MEMBER_IDX);
 }
 
 static void valueCompileFunc(FunctionBindData* /*bindData*/,
@@ -29,7 +32,7 @@ static void valueCompileFunc(FunctionBindData* /*bindData*/,
     DASSERT(parameters.size() == 1);
     result->setState(parameters[0]->state);
     UnionVector::getTagVector(result.get())->setState(parameters[0]->state);
-    UnionVector::referenceVector(result.get(), UnionType::TAG_FIELD_IDX, parameters[0]);
+    UnionVector::referenceVector(result.get(), MEMBER_IDX, parameters[0]);
 }
 
 function_set UnionValueFunction::getFunctionSet() {
