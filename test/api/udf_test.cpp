@@ -491,5 +491,21 @@ TEST_F(ApiTest, CreateUDFExceptionTest) {
     }
 }
 
+static int64_t parity(int64_t x) {
+    return x % 2;
+}
+
+// MERGE keeps the repeated keys' rows only if it doesn't take CAST_PARITY(i) for a cast of i.
+TEST_F(ApiTest, MergeKeyFromCastNamedUDF) {
+    conn->createScalarFunction("CAST_PARITY", &parity);
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE Bit(id INT64 PRIMARY KEY)")->isSuccess());
+    auto actualResult = TestHelper::convertResultToString(
+        *conn->query("UNWIND range(1, 4) AS i MERGE (b:Bit {id: CAST_PARITY(i)}) RETURN i"));
+    auto expectedResult = std::vector<std::string>{"1", "2", "3", "4"};
+    sortAndCheckTestResults(actualResult, expectedResult);
+    actualResult = TestHelper::convertResultToString(*conn->query("MATCH (b:Bit) RETURN count(*)"));
+    ASSERT_EQ(actualResult, std::vector<std::string>{"2"});
+}
+
 } // namespace testing
 } // namespace lbug
