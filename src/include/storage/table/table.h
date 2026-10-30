@@ -148,10 +148,14 @@ struct LBUG_API TableDeleteState {
 struct TableAddColumnState final {
     const binder::PropertyDefinition& propertyDefinition;
     evaluator::ExpressionEvaluator& defaultEvaluator;
+    // The catalog's column ID for the property. After a rolled-back ADD this is not the position
+    // of the storage column being appended.
+    common::column_id_t columnID;
 
     TableAddColumnState(const binder::PropertyDefinition& propertyDefinition,
-        evaluator::ExpressionEvaluator& defaultEvaluator)
-        : propertyDefinition{propertyDefinition}, defaultEvaluator{defaultEvaluator} {}
+        evaluator::ExpressionEvaluator& defaultEvaluator, common::column_id_t columnID)
+        : propertyDefinition{propertyDefinition}, defaultEvaluator{defaultEvaluator},
+          columnID{columnID} {}
     ~TableAddColumnState() = default;
 };
 

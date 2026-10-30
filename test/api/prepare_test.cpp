@@ -1370,6 +1370,35 @@ TEST_F(ApiTest, PreparedNodeScanAfterCheckpointRenumbersColumns) {
     }
 }
 
+TEST_F(ApiTest, PreparedStatsInfoAfterRolledBackDrop1423) {
+    // A ROLLBACK frees the catalog entry the statement was bound against without forcing a
+    // rebind, so re-executing it must not read that entry.
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE U1423(id INT64 PRIMARY KEY, a INT64, b INT64)")
+                    ->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:U1423 {id: 1, a: 7, b: 10}), (:U1423 {id: 2, a: 7, b: 10}), "
+                            "(:U1423 {id: 3, a: 7, b: 20})")
+                    ->isSuccess());
+    ASSERT_TRUE(conn->query("BEGIN TRANSACTION")->isSuccess());
+    ASSERT_TRUE(conn->query("ALTER TABLE U1423 DROP a")->isSuccess());
+    auto stats = conn->prepare("CALL stats_info('U1423') RETURN *");
+    ASSERT_TRUE(stats->isSuccess()) << stats->getErrorMessage();
+    auto result = conn->execute(stats.get());
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(std::vector<std::string>{"3|3|2"}, TestHelper::convertResultToString(*result));
+    ASSERT_TRUE(conn->query("ROLLBACK")->isSuccess());
+    ASSERT_TRUE(conn->query("MATCH (u:U1423) RETURN count(*)")->isSuccess());
+    result = conn->execute(stats.get());
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(std::vector<std::string>{"3|3|2"}, TestHelper::convertResultToString(*result));
+    // The pending row has a again, so its a must not be counted under b.
+    ASSERT_TRUE(conn->query("BEGIN TRANSACTION")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:U1423 {id: 4, a: 10, b: 30})")->isSuccess());
+    result = conn->execute(stats.get());
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(std::vector<std::string>{"4|4|3"}, TestHelper::convertResultToString(*result));
+    ASSERT_TRUE(conn->query("ROLLBACK")->isSuccess());
+}
+
 TEST_F(ApiTest, PreparedRelScanAfterCheckpointRenumbersColumns) {
     ASSERT_TRUE(conn->query("CREATE NODE TABLE N1220(id INT64 PRIMARY KEY)")->isSuccess());
     ASSERT_TRUE(conn->query("CREATE REL TABLE R1220(FROM N1220 TO N1220, tmp INT64)")->isSuccess());

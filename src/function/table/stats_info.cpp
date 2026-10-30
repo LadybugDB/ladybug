@@ -18,17 +18,21 @@ namespace lbug {
 namespace function {
 
 struct StatsInfoBindData final : TableFuncBindData {
-    TableCatalogEntry* tableEntry;
+    // Storage column of each property, in output-column order. Storage can hold columns that no
+    // property maps to (dropped, or left by a rolled-back ADD), so the output can't follow
+    // storage positions. The IDs are taken at bind because a prepared statement can run again
+    // after a ROLLBACK has freed the catalog entry it was bound against.
+    std::vector<column_id_t> columnIDs;
     storage::Table* table;
     const ClientContext* context;
 
-    StatsInfoBindData(binder::expression_vector columns, TableCatalogEntry* tableEntry,
+    StatsInfoBindData(binder::expression_vector columns, std::vector<column_id_t> columnIDs,
         storage::Table* table, const ClientContext* context)
-        : TableFuncBindData{std::move(columns), 1 /*numRows*/}, tableEntry{tableEntry},
+        : TableFuncBindData{std::move(columns), 1 /*numRows*/}, columnIDs{std::move(columnIDs)},
           table{table}, context{context} {}
 
     std::unique_ptr<TableFuncBindData> copy() const override {
-        return std::make_unique<StatsInfoBindData>(columns, tableEntry, table, context);
+        return std::make_unique<StatsInfoBindData>(columns, columnIDs, table, context);
     }
 };
 
@@ -41,8 +45,9 @@ static offset_t internalTableFunc(const TableFuncMorsel& /*morsel*/, const Table
         const auto& nodeTable = table->cast<storage::NodeTable>();
         const auto stats = nodeTable.getStats(transaction::Transaction::Get(*bindData->context));
         output.getValueVectorMutable(0).setValue<cardinality_t>(0, stats.getTableCard());
-        for (auto i = 0u; i < nodeTable.getNumColumns(); ++i) {
-            output.getValueVectorMutable(i + 1).setValue(0, stats.getNumDistinctValues(i));
+        for (auto i = 0u; i < bindData->columnIDs.size(); ++i) {
+            output.getValueVectorMutable(i + 1).setValue(0,
+                stats.getNumDistinctValues(bindData->columnIDs[i]));
         }
     } break;
     default: {
@@ -69,15 +74,17 @@ static std::unique_ptr<TableFuncBindData> bindFunc(const ClientContext* context,
     std::vector<std::string> columnNames = {"cardinality"};
     std::vector<LogicalType> columnTypes;
     columnTypes.push_back(LogicalType::INT64());
+    std::vector<column_id_t> columnIDs;
     for (auto& propDef : tableEntry->getProperties()) {
         columnNames.push_back(propDef.getName() + "_distinct_count");
         columnTypes.push_back(LogicalType::INT64());
+        columnIDs.push_back(tableEntry->getColumnID(propDef.getName()));
     }
     auto table = storage::PartitionStorageRegistry::resolveNodeTableByID(
         const_cast<main::ClientContext*>(context), tableEntry->getTableID());
     columnNames = TableFunction::extractYieldVariables(columnNames, input->yieldVariables);
     auto columns = input->binder->createVariables(columnNames, columnTypes);
-    return std::make_unique<StatsInfoBindData>(columns, tableEntry, table, context);
+    return std::make_unique<StatsInfoBindData>(columns, std::move(columnIDs), table, context);
 }
 
 function_set StatsInfoFunction::getFunctionSet() {

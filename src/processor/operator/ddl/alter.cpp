@@ -371,7 +371,8 @@ void Alter::alterTable(main::ClientContext* clientContext, const TableCatalogEnt
         DASSERT(defaultValueEvaluator);
         auto* alteredEntry = catalog->getTableCatalogEntry(transaction, alterInfo.tableName);
         auto& addedProp = alteredEntry->getProperty(boundAddPropInfo.propertyDefinition.getName());
-        storage::TableAddColumnState state{addedProp, *defaultValueEvaluator};
+        storage::TableAddColumnState state{addedProp, *defaultValueEvaluator,
+            alteredEntry->getColumnID(addedProp.getName())};
         switch (alteredEntry->getTableType()) {
         case TableType::NODE: {
             storageManager->getTable(alteredEntry->getTableID())
