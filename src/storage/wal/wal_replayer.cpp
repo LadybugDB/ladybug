@@ -788,8 +788,11 @@ void WALReplayer::replayActiveWAL(Checkpointer& checkpointer, bool throwOnWalRep
             const bool shadowExists = vfs->fileOrPathExists(shadowFilePath, &clientContext);
             const bool skipThroughLastCheckpoint =
                 !shadowExists || replayInfo.hasTransactionAfterLastCheckpoint;
+            const auto marker = replayInfo.lastCheckpointOffset != 0 ?
+                                    readPinnedCheckpointMarker(clientContext) :
+                                    PinnedCheckpointMarker::NONE;
             if (replayInfo.lastCheckpointOffset != 0 && !shadowExists &&
-                readPinnedCheckpointMarker(clientContext) == PinnedCheckpointMarker::NONE) {
+                marker == PinnedCheckpointMarker::NONE) {
                 throw RuntimeException(
                     std::format("Cannot recover WAL {}: it holds CHECKPOINT records but its "
                                 "shadow file {} is missing "
@@ -797,6 +800,15 @@ void WALReplayer::replayActiveWAL(Checkpointer& checkpointer, bool throwOnWalRep
                                 "shadow files; they hold "
                                 "committed pages. Restore both files they were written for.",
                         walPath, shadowFilePath));
+            }
+            // The CHECKPOINT records stay in the WAL. When the transaction after the last one is
+            // the only proof that they were applied, the marker records it before the shadow goes:
+            // a later crash would otherwise find neither.
+            if (replayInfo.lastCheckpointOffset != 0 && skipThroughLastCheckpoint &&
+                marker == PinnedCheckpointMarker::NONE) {
+                StorageManager::Get(clientContext)
+                    ->getWAL()
+                    .writePinnedCheckpointMarker(&clientContext);
             }
             removeFileAndSyncParentDirectory(shadowFilePath);
             if (!checkpointRead) {
