@@ -6216,6 +6216,8 @@ TEST_F(PinnedCheckpointCrashTest, CrashAfterMarkerRemovalSurvivesASecondCrash) {
     query("CHECKPOINT;");
     createRows(4, 5);
     failCheckpoint<FlakyCheckpointerKilledAfterMarkerRemoval>();
+    EXPECT_FALSE(std::filesystem::exists(markerPath()));
+    ASSERT_TRUE(std::filesystem::exists(shadowPath()));
     crash();
     createDBAndConn();
     EXPECT_FALSE(std::filesystem::exists(shadowPath()));
@@ -6226,6 +6228,30 @@ TEST_F(PinnedCheckpointCrashTest, CrashAfterMarkerRemovalSurvivesASecondCrash) {
     crash();
     createDBAndConn();
     EXPECT_EQ(ids(), (std::vector<int64_t>{1, 2, 3, 4, 5, 6}));
+}
+
+// A WAL from another database proves nothing: recovery refuses it before writing the marker or
+// removing the shadow.
+TEST_F(PinnedCheckpointCrashTest, ForeignWALAfterMarkerRemovalGetsNoMarker) {
+    query("CREATE NODE TABLE P(id INT64 PRIMARY KEY);");
+    createRows(1, 3);
+    pinWAL();
+    query("CHECKPOINT;");
+    createRows(4, 5);
+    failCheckpoint<FlakyCheckpointerKilledAfterMarkerRemoval>();
+    auto* context = getClientContext(*conn);
+    const auto databaseID = StorageManager::Get(*context)->getOrInitDatabaseID(*context);
+    writeWALHeaderDatabaseID(*context, StorageUtils::getWALFilePath(databasePath), databaseID,
+        foreignDatabaseID(databaseID), context->getDBConfig()->enableChecksums);
+    crash();
+    try {
+        createDBAndConn();
+        FAIL() << "recovered a WAL from another database";
+    } catch (const std::exception& e) {
+        EXPECT_NE(std::string{e.what()}.find("Database ID"), std::string::npos) << e.what();
+    }
+    EXPECT_TRUE(std::filesystem::exists(shadowPath()));
+    EXPECT_FALSE(std::filesystem::exists(markerPath()));
 }
 
 // The dying checkpoint wrote no partition shadows; recovery must not require them.

@@ -821,12 +821,16 @@ void WALReplayer::replayActiveWAL(Checkpointer& checkpointer, bool throwOnWalRep
             }
             // The CHECKPOINT records stay in the WAL. When the transaction after the last one is
             // the only proof that they were applied, the marker records it before the shadow goes:
-            // a later crash would otherwise find neither.
+            // a later crash would otherwise find neither. A shadow is present here, so this is a
+            // read-write open (a read-only one refuses a shadow earlier), and the WAL must belong
+            // to this database before anything vouches for it.
+            auto* mainStorageManager = clientContext.getDatabase()->getStorageManager();
             if (replayInfo.lastCheckpointOffset != 0 && skipThroughLastCheckpoint &&
-                marker == PinnedCheckpointMarker::NONE) {
-                StorageManager::Get(clientContext)
-                    ->getWAL()
-                    .writePinnedCheckpointMarker(&clientContext);
+                marker == PinnedCheckpointMarker::NONE &&
+                mainStorageManager->getDataFH() != nullptr) {
+                FileDBIDUtils::verifyDatabaseID(*fileInfo,
+                    readPersistedDatabaseID(*mainStorageManager), replayInfo.walDatabaseID);
+                WAL::Get(clientContext)->writePinnedCheckpointMarker(&clientContext);
             }
             removeFileAndSyncParentDirectory(shadowFilePath);
             if (!checkpointRead) {
