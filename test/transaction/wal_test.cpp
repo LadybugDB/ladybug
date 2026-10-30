@@ -304,7 +304,7 @@ TEST_F(WalTest, AbortSyncFailurePoisonsWAL) {
     EXPECT_GT(blockStart, 0);
 
     failingFSPtr->setFailSync(true);
-    EXPECT_THROW(wal.logAbort(conn->getClientContext(), blockStart), RuntimeException);
+    EXPECT_THROW(wal.logAbort(blockStart), RuntimeException);
     EXPECT_THROW(wal.throwIfPoisoned(), RuntimeException);
 }
 
@@ -315,7 +315,7 @@ TEST_F(WalTest, AbortOutsideTheOpenWALFileIsRefused) {
     vfs.registerFileSystem(std::make_unique<FailingSyncFileSystem>(false /* failSync */));
     lbug::storage::WAL wal("failing-sync://db", false /* readOnly */, false /* enableChecksums */,
         &vfs);
-    EXPECT_THROW(wal.logAbort(conn->getClientContext(), 0), RuntimeException);
+    EXPECT_THROW(wal.logAbort(0), RuntimeException);
 
     lbug::storage::LocalWAL localWAL(*lbug::storage::MemoryManager::Get(*conn->getClientContext()),
         false /* enableChecksums */);
@@ -325,9 +325,8 @@ TEST_F(WalTest, AbortOutsideTheOpenWALFileIsRefused) {
     uint64_t blockStart = 0;
     ASSERT_NO_THROW(
         wal.logCommittedWAL(localWAL, conn->getClientContext(), walCommitSequence, &blockStart));
-    EXPECT_THROW(wal.logAbort(conn->getClientContext(), blockStart + localWAL.getSize()),
-        RuntimeException);
-    EXPECT_NO_THROW(wal.logAbort(conn->getClientContext(), blockStart));
+    EXPECT_THROW(wal.logAbort(blockStart + localWAL.getSize()), RuntimeException);
+    EXPECT_NO_THROW(wal.logAbort(blockStart));
 }
 
 TEST_F(WalTest, FailureAfterCheckpointRenamePoisonsWAL) {
