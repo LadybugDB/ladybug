@@ -61,3 +61,33 @@ Binder exception: Stats from a non-node table knows is not supported yet!
 -STATEMENT CALL stats_info('Comment') RETURN cardinality, propx_distinct_count, propy_distinct_count
 ---- 1
 215488|1|1
+
+-CASE StatsInfoAfterDropAndRolledBackAdd
+-STATEMENT CREATE NODE TABLE T(id INT64 PRIMARY KEY, a INT64, b INT64, c INT64);
+---- ok
+-STATEMENT CREATE (:T {id: 1, a: 7, b: 10, c: 100}), (:T {id: 2, a: 7, b: 10, c: 200}),
+                  (:T {id: 3, a: 7, b: 20, c: 300}), (:T {id: 4, a: 7, b: 20, c: 300});
+---- ok
+-STATEMENT ALTER TABLE T DROP a;
+---- ok
+-STATEMENT CALL stats_info('T') RETURN *;
+---- 1
+4|4|2|3
+-STATEMENT ALTER TABLE T ADD d INT64 DEFAULT 5;
+---- ok
+-STATEMENT CALL stats_info('T') RETURN *;
+---- 1
+4|4|2|3|1
+-STATEMENT CREATE NODE TABLE U(id INT64 PRIMARY KEY, b INT64);
+---- ok
+-STATEMENT CREATE (:U {id: 1, b: 10}), (:U {id: 2, b: 10}), (:U {id: 3, b: 20});
+---- ok
+-STATEMENT BEGIN TRANSACTION;
+---- ok
+-STATEMENT ALTER TABLE U ADD e INT64;
+---- ok
+-STATEMENT ROLLBACK;
+---- ok
+-STATEMENT CALL stats_info('U') RETURN *;
+---- 1
+3|3|2
