@@ -97,6 +97,8 @@ private:
     WALReplayInfo dryReplay(common::FileInfo& fileInfo, bool throwOnWalReplayFailure,
         bool enableChecksums) const;
 
+    uint64_t replayCommittedRecords(common::FileInfo& fileInfo, const WALReplayInfo& replayInfo,
+        bool skipThroughLastCheckpoint, bool enableChecksums) const;
     void replayFrozenWAL(Checkpointer& checkpointer, bool throwOnWalReplayFailure,
         bool enableChecksums) const;
     void replayActiveWAL(Checkpointer& checkpointer, bool throwOnWalReplayFailure,
