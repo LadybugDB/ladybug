@@ -6122,6 +6122,28 @@ TEST_F(PinnedCheckpointCrashTest, ForeignWALAfterMarkerRemovalGetsNoMarker) {
     EXPECT_FALSE(std::filesystem::exists(markerPath()));
 }
 
+// Without its data file the marker would vouch for nothing; recovery refuses before touching the
+// shadow.
+TEST_F(PinnedCheckpointCrashTest, MissingDataFileAfterMarkerRemovalRefusesToOpen) {
+    query("CREATE NODE TABLE P(id INT64 PRIMARY KEY);");
+    createRows(1, 3);
+    pinWAL();
+    query("CHECKPOINT;");
+    createRows(4, 5);
+    failCheckpoint<FlakyCheckpointerKilledAfterMarkerRemoval>();
+    crash();
+    std::filesystem::remove(databasePath);
+    try {
+        createDBAndConn();
+        FAIL() << "recovered without the data file";
+    } catch (const std::exception& e) {
+        EXPECT_NE(std::string{e.what()}.find("database file"), std::string::npos) << e.what();
+    }
+    EXPECT_TRUE(std::filesystem::exists(shadowPath()));
+    EXPECT_TRUE(std::filesystem::exists(StorageUtils::getWALFilePath(databasePath)));
+    EXPECT_FALSE(std::filesystem::exists(markerPath()));
+}
+
 // The dying checkpoint wrote no partition shadows; recovery must not require them.
 TEST_F(PinnedCheckpointCrashTest, CrashAfterMarkerRemovalWithPartitionedTableReopens) {
     query("CREATE NODE TABLE L(id INT64, cluster INT64, PRIMARY KEY(id)) PARTITION BY LIST "
