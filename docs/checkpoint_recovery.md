@@ -56,7 +56,8 @@ in read-only mode while checkpoint recovery is pending`, also when the `CHECKPOI
 a torn commit; opening it read-write once recovers it.
 
 When nothing was committed after the last `CHECKPOINT` record, the marker decides. With it,
-recovery discards the shadow files of the main database, partition children and named graphs.
+recovery discards the shadow files of the main database and partition children, and those of named
+graphs as described below.
 Without it, a remaining shadow is replayed as the committed checkpoint's, and a missing one is an
 error. A marker written by an older build holds `1` instead of `2` and only proves that a missing
 shadow was applied. A marker that is not exactly one of these bytes, such as the empty file a crash
@@ -65,8 +66,10 @@ while writing it can leave, counts as no marker.
 A pinned checkpoint retires every named graph's WAL anyway. A named graph's commits go to the main
 WAL; its own WAL holds only the records of a session that opened the graph's file on its own, which
 the checkpoint has applied. A graph WAL found at recovery is therefore newer and is replayed.
-Older builds kept those graph WALs, so under an older build's marker graphs recover through their
-own shadow files, as there.
+Older builds kept those graph WALs. Under an older build's marker, graphs therefore load this way
+only when no named graph has a WAL of its own; otherwise they recover through their own shadow
+files, which refuses to open once those are gone. When transactions follow the last `CHECKPOINT`,
+a graph WAL replays regardless of the marker, as in older builds.
 
 ## Checkpoint bundle format
 

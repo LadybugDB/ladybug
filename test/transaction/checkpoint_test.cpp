@@ -6138,6 +6138,24 @@ TEST_F(PinnedCheckpointCrashTest, LegacyMarkerDoesNotReplayAppliedGraphWAL) {
     }
 }
 
+// Without a graph WAL nothing can replay twice, so under an older build's marker a named graph
+// still loads as after a completed checkpoint once that build removed its shadow.
+TEST_F(PinnedCheckpointCrashTest, LegacyMarkerReopensNamedGraphWithoutGraphWAL) {
+    query("CREATE GRAPH g;");
+    query("USE GRAPH g;");
+    query("CREATE NODE TABLE Q(id INT64 PRIMARY KEY);");
+    query("CREATE (:Q {id: 1});");
+    query("CHECKPOINT;");
+    pinWAL();
+    query("CREATE (:Q {id: 2});");
+    query("CHECKPOINT;");
+    crash();
+    writeMarker("\x01");
+    createDBAndConn();
+    query("USE GRAPH g;");
+    EXPECT_EQ(ids("Q"), (std::vector<int64_t>{1, 2}));
+}
+
 TEST_F(PinnedCheckpointCrashTest, PartitionedTableReopensAfterPinnedCheckpoint) {
     query("CREATE NODE TABLE L(id INT64, cluster INT64, PRIMARY KEY(id)) PARTITION BY LIST "
           "(cluster);");

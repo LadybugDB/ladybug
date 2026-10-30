@@ -100,6 +100,24 @@ static PinnedCheckpointMarker readPinnedCheckpointMarker(main::ClientContext& cl
     }
 }
 
+// Whether a named graph has a WAL of its own; partition subgraphs share the main WAL.
+static bool anyGraphHasWAL(main::ClientContext& clientContext) {
+    auto* catalog = clientContext.getDatabase()->getCatalog();
+    auto* vfs = VirtualFileSystem::GetUnsafe(clientContext);
+    for (auto* graphEntry : catalog->getGraphEntries(&DUMMY_CHECKPOINT_TRANSACTION)) {
+        const auto& graphName = graphEntry->getName();
+        if (catalog->containsTable(&DUMMY_CHECKPOINT_TRANSACTION, graphName)) {
+            continue;
+        }
+        const auto graphPath =
+            StorageUtils::getGraphPath(clientContext.getDatabasePath(), graphName);
+        if (vfs->fileOrPathExists(StorageUtils::getWALFilePath(graphPath), &clientContext)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 static void removePartitionChildShadowFiles(main::ClientContext& clientContext) {
     auto* dbManager = main::DatabaseManager::Get(clientContext);
     if (dbManager == nullptr) {
@@ -858,18 +876,27 @@ void WALReplayer::replayPinnedActiveCheckpoint(Checkpointer& checkpointer,
             walPath, clientContext.getDatabasePath()));
     }
     checkpointer.readCheckpoint();
-    if (marker == PinnedCheckpointMarker::APPLIED) {
-        // Graph shadows were applied too, so graphs load as after a completed checkpoint; any
-        // graph WAL is newer than it (cleanup retires graph WALs) and replays.
+    // Graph shadows were applied too, so graphs load as after a completed checkpoint, and a graph
+    // WAL is newer than it: this build's cleanup retires graph WALs. Older builds kept the graph
+    // WALs their checkpoint applied, so under their marker a graph WAL may replay a second time;
+    // graphs then recover through their own shadows instead, which refuses once those are gone.
+    switch (marker) {
+    case PinnedCheckpointMarker::APPLIED: {
         recoverGraphCheckpoints(clientContext, false, false);
-    } else {
-        // Older builds kept the graph WALs a pinned checkpoint applied, so graphs recover through
-        // their own shadows, as there.
+    } break;
+    case PinnedCheckpointMarker::LEGACY: {
+        if (!anyGraphHasWAL(clientContext)) {
+            recoverGraphCheckpoints(clientContext, false, false);
+            break;
+        }
         std::optional<uuid> checkpointDatabaseID = std::nullopt;
         if (checkpointBundle) {
             checkpointDatabaseID = ShadowFile::CHECKPOINT_BUNDLE_DATABASE_ID;
         }
         recoverGraphCheckpoints(clientContext, true, checkpointBundle, checkpointDatabaseID);
+    } break;
+    case PinnedCheckpointMarker::NONE:
+        UNREACHABLE_CODE;
     }
 
     truncateWALFile(*fileInfo, 0);
