@@ -45,6 +45,9 @@ struct StorageVersionInfo {
     // the generic StorageFormat::EXTERNAL on node/rel-group catalog entries, so extension
     // formats no longer need core changes.
     static constexpr storage_version_t STORAGE_VERSION_50 = 50;
+    // Storage version 51 uses the high bit of the serialized partition method to record
+    // enforced write constraints. Legacy parents remain ineligible for partition pruning.
+    static constexpr storage_version_t STORAGE_VERSION_51 = 51;
 
     static std::unordered_map<std::string, storage_version_t> getStorageVersionInfo() {
         return {{"0.12.0", STORAGE_VERSION_40}, {"0.12.2", STORAGE_VERSION_40},
@@ -60,7 +63,7 @@ struct StorageVersionInfo {
             {"0.20.1", STORAGE_VERSION_47}, {"0.20.2", STORAGE_VERSION_47},
             {"0.21.0", STORAGE_VERSION_47}, {"0.21.1", STORAGE_VERSION_47},
             {"0.21.2", STORAGE_VERSION_47}, {"0.22.0", STORAGE_VERSION_49},
-            {"0.22.1", STORAGE_VERSION_49}, {"0.23.0", STORAGE_VERSION_50}};
+            {"0.22.1", STORAGE_VERSION_49}, {"0.23.0", STORAGE_VERSION_51}};
     }
 
     static LBUG_API storage_version_t getStorageVersion();
@@ -70,7 +73,7 @@ struct StorageVersionInfo {
                storageVersion == STORAGE_VERSION_44 || storageVersion == STORAGE_VERSION_45 ||
                storageVersion == STORAGE_VERSION_46 || storageVersion == STORAGE_VERSION_47 ||
                storageVersion == STORAGE_VERSION_48 || storageVersion == STORAGE_VERSION_49 ||
-               storageVersion == getStorageVersion();
+               storageVersion == STORAGE_VERSION_50 || storageVersion == getStorageVersion();
     }
 
     static constexpr const char* MAGIC_BYTES = "LBUG";

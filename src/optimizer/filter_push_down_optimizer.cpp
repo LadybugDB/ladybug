@@ -262,6 +262,10 @@ popSecondaryARTEqualityComparison(PredicateSet& predicateSet, const Expression& 
 std::shared_ptr<LogicalOperator> FilterPushDownOptimizer::visitScanNodeTableReplace(
     const std::shared_ptr<LogicalOperator>& op) {
     auto& scan = op->cast<LogicalScanNodeTable>();
+    prunePartitions(scan);
+    if (scan.getTableIDs().empty()) {
+        return std::make_shared<LogicalEmptyResult>(*scan.getSchema());
+    }
     auto nodeID = scan.getNodeID();
     // Apply column predicates.
     if (context->getClientConfig()->enableZoneMap) {

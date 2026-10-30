@@ -8,6 +8,7 @@ class ClientContext;
 }
 namespace planner {
 class CardinalityEstimator;
+class LogicalScanNodeTable;
 } // namespace planner
 namespace optimizer {
 
@@ -76,6 +77,7 @@ private:
     // Push FILTER into SCAN_NODE_TABLE, and turn index lookup into INDEX_SCAN.
     std::shared_ptr<planner::LogicalOperator> visitScanNodeTableReplace(
         const std::shared_ptr<planner::LogicalOperator>& op);
+    void prunePartitions(planner::LogicalScanNodeTable& scan);
     // Push Filter into EXTEND.
     std::shared_ptr<planner::LogicalOperator> visitExtendReplace(
         const std::shared_ptr<planner::LogicalOperator>& op);

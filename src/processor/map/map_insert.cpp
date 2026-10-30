@@ -3,6 +3,7 @@
 #include "catalog/catalog_entry/node_table_catalog_entry.h"
 #include "common/partition_routing.h"
 #include "common/partition_routing_hook.h"
+#include "common/string_utils.h"
 #include "main/client_context.h"
 #include "planner/operator/persistent/logical_insert.h"
 #include "processor/expression_mapper.h"
@@ -53,20 +54,22 @@ NodeInsertExecutor PlanMapper::getNodeInsertExecutor(const LogicalInsertInfo* bo
     // parent link rather than the expanded-entry count: rows must still route through the
     // list router so new partitions are created on first sight of a key value.
     const auto* firstEntry = node.getEntry(0)->ptrCast<NodeTableCatalogEntry>();
-    bool isListParent = false;
+    bool namesParent = false;
     if (firstEntry->isPartitionChild()) {
         auto transaction = transaction::Transaction::Get(*clientContext);
         const auto* parentEntry =
             Catalog::Get(*clientContext)
                 ->getTableCatalogEntry(transaction, firstEntry->getParentTableID())
                 ->ptrCast<NodeTableCatalogEntry>();
-        isListParent = parentEntry->isPartitioned() &&
-                       static_cast<common::PartitionMethod>(*parentEntry->getPartitionMethod()) ==
-                           common::PartitionMethod::LIST;
+        // The child link alone does not distinguish LIST parent writes from explicit child
+        // writes. Preserve the label's meaning even while the parent has only its seed child.
+        for (const auto& label : node.getOriginalLabels()) {
+            namesParent |= StringUtils::caseInsensitiveEquals(label, parentEntry->getName());
+        }
     }
     const bool parentPattern =
         firstEntry->isPartitionChild() &&
-        (node.getNumEntries() > 1 || firstEntry->getScanFunction().has_value() || isListParent);
+        (node.getNumEntries() > 1 || firstEntry->getScanFunction().has_value() || namesParent);
     if (parentPattern) {
         const auto parentID = firstEntry->getParentTableID();
         DASSERT(parentID != INVALID_TABLE_ID);
@@ -114,6 +117,14 @@ NodeInsertExecutor PlanMapper::getNodeInsertExecutor(const LogicalInsertInfo* bo
     auto table =
         storage::PartitionStorageRegistry::resolveNodeTable(clientContext, *node.getEntry(0));
     auto tableInfo = NodeTableInsertInfo(table, std::move(evaluators));
+    if (firstEntry->isPartitionChild()) {
+        tableInfo.partitionConstraint = firstEntry;
+        auto* parent = Catalog::Get(*clientContext)
+                           ->getTableCatalogEntry(transaction::Transaction::Get(*clientContext),
+                               firstEntry->getParentTableID())
+                           ->ptrCast<NodeTableCatalogEntry>();
+        tableInfo.partitionKeyColumnID = parent->getPartitionColumnID();
+    }
     return NodeInsertExecutor(std::move(info), std::move(tableInfo));
 }
 
