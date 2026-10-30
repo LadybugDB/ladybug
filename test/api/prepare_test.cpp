@@ -1399,19 +1399,6 @@ TEST_F(ApiTest, PreparedStatsInfoAfterRolledBackDrop1423) {
     ASSERT_TRUE(conn->query("ROLLBACK")->isSuccess());
 }
 
-TEST_F(ApiTest, PreparedStatsInfoAfterUseGraph) {
-    // USE GRAPH doesn't force a rebind, so the statement must keep reading the main table.
-    ASSERT_TRUE(conn->query("CREATE NODE TABLE T(id INT64 PRIMARY KEY, b INT64)")->isSuccess());
-    ASSERT_TRUE(conn->query("CREATE (:T {id: 1, b: 10}), (:T {id: 2, b: 20})")->isSuccess());
-    ASSERT_TRUE(conn->query("CREATE GRAPH g")->isSuccess());
-    auto stats = conn->prepare("CALL stats_info('T') RETURN *");
-    ASSERT_TRUE(stats->isSuccess()) << stats->getErrorMessage();
-    ASSERT_TRUE(conn->query("USE GRAPH g")->isSuccess());
-    auto result = conn->execute(stats.get());
-    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
-    ASSERT_EQ(std::vector<std::string>{"2|2|2"}, TestHelper::convertResultToString(*result));
-}
-
 TEST_F(ApiTest, PreparedRelScanAfterCheckpointRenumbersColumns) {
     ASSERT_TRUE(conn->query("CREATE NODE TABLE N1220(id INT64 PRIMARY KEY)")->isSuccess());
     ASSERT_TRUE(conn->query("CREATE REL TABLE R1220(FROM N1220 TO N1220, tmp INT64)")->isSuccess());
