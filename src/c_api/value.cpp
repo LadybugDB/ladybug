@@ -1795,7 +1795,7 @@ lbug_state lbug_timestamp_from_tm(struct tm tm, lbug_timestamp_t* out_result) {
 
 lbug_state lbug_date_to_tm(lbug_date_t date, struct tm* out_result) {
     LBUG_C_API_GUARD_BEGIN
-    time_t time = date.days * 86400;
+    time_t time = static_cast<time_t>(date.days) * 86400;
 #ifdef _WIN32
     if (convertTimeToTm(time, out_result) != 0) {
         return LbugError;
