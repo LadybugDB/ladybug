@@ -2590,6 +2590,20 @@ TEST_F(CApiValueTest, GetTmFromDate) {
     ASSERT_EQ(tm.tm_sec, 0);
 }
 
+TEST_F(CApiValueTest, GetTmFromDateAfter2038) {
+    // 2040-01-01: days * 86400 no longer fits in 32 bits.
+    lbug_date_t date = lbug_date_t{25567};
+    struct tm tm;
+    ASSERT_EQ(lbug_date_to_tm(date, &tm), LbugSuccess);
+    ASSERT_EQ(tm.tm_year, 140);
+    ASSERT_EQ(tm.tm_mon, 0);
+    ASSERT_EQ(tm.tm_mday, 1);
+    char* str;
+    ASSERT_EQ(lbug_date_to_string(lbug_date_t{376365}, &str), LbugSuccess);
+    ASSERT_STREQ(str, "3000-06-15");
+    lbug_destroy_string(str);
+}
+
 TEST_F(CApiValueTest, GetTimestampFromTm) {
     struct tm tm;
     tm.tm_year = 75;
