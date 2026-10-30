@@ -164,13 +164,12 @@ common::Value RecursivePatternFactorSetting::getSetting(const ClientContext* con
         context->getClientConfig()->recursivePatternCardinalityScaleFactor);
 }
 
-void EnableMVCCSetting::setContext(ClientContext* context, const common::Value& parameter) {
+void EnableMultiWritesSetting::setContext(ClientContext* context, const common::Value& parameter) {
     DASSERT(parameter.getDataType().getLogicalTypeID() == common::LogicalTypeID::BOOL);
-    // TODO: This is a temporary solution to make tests of multiple write transactions easier.
     context->getDBConfigUnsafe()->enableMultiWrites = parameter.getValue<bool>();
 }
 
-common::Value EnableMVCCSetting::getSetting(const ClientContext* context) {
+common::Value EnableMultiWritesSetting::getSetting(const ClientContext* context) {
     return common::Value(context->getDBConfig()->enableMultiWrites);
 }
 
