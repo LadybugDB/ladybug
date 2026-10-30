@@ -4,6 +4,7 @@
 
 #include "catalog/catalog.h"
 #include "catalog/catalog_entry/node_table_catalog_entry.h"
+#include "common/types/uuid.h"
 #include "graph_test/private_graph_test.h"
 #include "planner/operator/logical_plan.h"
 #include "planner/operator/scan/logical_scan_node_table.h"
@@ -12,6 +13,16 @@
 
 namespace lbug {
 namespace testing {
+
+static constexpr auto UUID_A = "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11";
+static constexpr auto UUID_A_UPPER = "A0EEBC99-9C0B-4EF8-BB6D-6BB9BD380A11";
+static constexpr auto UUID_B = "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12";
+static constexpr auto UUID_ZERO = "00000000-0000-0000-0000-000000000000";
+static constexpr auto UUID_MAX = "ffffffff-ffff-ffff-ffff-ffffffffffff";
+
+static std::string uuidLiteral(const char* value) {
+    return "UUID('" + std::string{value} + "')";
+}
 
 class PartitionPruningTest : public EmptyDBTest {
 public:
@@ -84,6 +95,13 @@ public:
         run("CREATE (:L {id:3,k:'east'})");
     }
 
+    void uuidListTable() {
+        run("CREATE NODE TABLE U(id INT64 PRIMARY KEY, k UUID) PARTITION BY LIST(k)");
+        run("CREATE (:U {id:1,k:" + uuidLiteral(UUID_A) + "})");
+        run("CREATE (:U {id:2,k:" + uuidLiteral(UUID_B) + "})");
+        run("CREATE (:U {id:3,k:" + uuidLiteral(UUID_A_UPPER) + "})");
+    }
+
     void rejected(const std::string& query) {
         auto result = conn->query(query);
         ASSERT_FALSE(result->isSuccess()) << query;
@@ -137,6 +155,143 @@ TEST_F(PartitionPruningTest, TypedKeysUseTheWriteHashAndEncoding) {
     const auto date = "MATCH(n:D) WHERE n.k=date('2026-10-26') RETURN n.id";
     EXPECT_EQ(tables(date), std::vector<std::string>{"D_p1"});
     EXPECT_EQ(ids(date), std::vector<int64_t>{1});
+}
+
+TEST_F(PartitionPruningTest, UUIDListCreateCopyAndEqualityPruning) {
+    uuidListTable();
+    // COPY both previously seen keys and new keys, including UUIDs containing zero bytes.
+    run("COPY U FROM (UNWIND [4,5,6,7] AS i RETURN i AS id, "
+        "CASE i WHEN 4 THEN " +
+        uuidLiteral(UUID_A_UPPER) + " WHEN 5 THEN " + uuidLiteral(UUID_B) + " WHEN 6 THEN " +
+        uuidLiteral(UUID_ZERO) + " ELSE " + uuidLiteral(UUID_MAX) + " END AS k)");
+    const std::vector<std::pair<const char*, std::vector<int64_t>>> expected{{UUID_A, {1, 3, 4}},
+        {UUID_B, {2, 5}}, {UUID_ZERO, {6}}, {UUID_MAX, {7}}};
+    for (auto i = 0u; i < expected.size(); ++i) {
+        const auto& [key, rows] = expected[i];
+        for (const auto& predicate : {"n.k=" + uuidLiteral(key), uuidLiteral(key) + "=n.k"}) {
+            const auto query = "MATCH(n:U) WHERE " + predicate + " RETURN n.id";
+            EXPECT_EQ(tables(query), std::vector<std::string>{"U_p" + std::to_string(i + 1)});
+            EXPECT_EQ(ids(query), rows);
+        }
+    }
+    EXPECT_EQ(ids("MATCH(n:U_p0) RETURN count(*)"), std::vector<int64_t>{0});
+    EXPECT_EQ(tables("MATCH(n:U) RETURN n.id").size(), 5u);
+    const auto missing = "MATCH(n:U) WHERE n.k=UUID('00000000-0000-0000-0000-000000000001') "
+                         "RETURN n.id";
+    EXPECT_TRUE(tables(missing).empty());
+    EXPECT_TRUE(ids(missing).empty());
+}
+
+TEST_F(PartitionPruningTest, UUIDListDirectChildWritesEnforceRouting) {
+    uuidListTable();
+    rejected("CREATE (:U_p0 {id:9,k:" + uuidLiteral(UUID_A) + "})");
+    rejected("CREATE (:U_p1 {id:9,k:" + uuidLiteral(UUID_B) + "})");
+    rejected("MERGE (:U_p1 {id:9,k:" + uuidLiteral(UUID_B) + "})");
+    rejected("COPY U_p1 FROM (UNWIND [9,10] AS i RETURN i AS id, CASE WHEN i=9 THEN " +
+             uuidLiteral(UUID_A) + " ELSE " + uuidLiteral(UUID_B) + " END AS k)");
+    rejected("CREATE (:U_p1 {id:9,k:NULL})");
+    for (const auto& query :
+        {"CREATE (:U {id:9,k:NULL})", "COPY U FROM (RETURN 9 AS id, CAST(NULL AS UUID) AS k)"}) {
+        auto result = conn->query(query);
+        ASSERT_FALSE(result->isSuccess()) << query;
+        EXPECT_NE(result->getErrorMessage().find("NULL"), std::string::npos)
+            << result->getErrorMessage();
+    }
+    EXPECT_EQ(ids("MATCH(n:U) RETURN n.id"), (std::vector<int64_t>{1, 2, 3}));
+    run("CREATE (:U_p1 {id:4,k:" + uuidLiteral(UUID_A_UPPER) + "})");
+    run("COPY U_p1 FROM (RETURN 5 AS id, " + uuidLiteral(UUID_A) + " AS k)");
+    run("MERGE (:U {id:6,k:" + uuidLiteral(UUID_B) + "})");
+    EXPECT_EQ(ids("MATCH(n:U_p1) RETURN n.id"), (std::vector<int64_t>{1, 3, 4, 5}));
+    EXPECT_EQ(ids("MATCH(n:U_p2) RETURN n.id"), (std::vector<int64_t>{2, 6}));
+}
+
+TEST_F(PartitionPruningTest, UUIDPartitionPrimaryKeyLookup) {
+    for (const auto& method : {std::string{"LIST(k)"}, std::string{"HASH(k) PARTITIONS 4"}}) {
+        const auto table = method.starts_with("LIST") ? "UL" : "UH";
+        run("CREATE NODE TABLE " + std::string{table} +
+            "(k UUID PRIMARY KEY, id INT64) PARTITION BY " + method);
+        run("CREATE (:" + std::string{table} + " {k:" + uuidLiteral(UUID_A) + ",id:1})");
+        run("CREATE (:" + std::string{table} + " {k:" + uuidLiteral(UUID_B) + ",id:2})");
+        const auto query = "MATCH(n:" + std::string{table} +
+                           ") WHERE n.k=" + uuidLiteral(UUID_A_UPPER) + " RETURN n.id";
+        EXPECT_EQ(tables(query).size(), 1u);
+        EXPECT_EQ(ids(query), std::vector<int64_t>{1});
+        auto plan = conn->query("EXPLAIN " + query);
+        ASSERT_TRUE(plan->isSuccess()) << plan->getErrorMessage();
+        EXPECT_NE(plan->toString().find("PRIMARY_KEY_SCAN_NODE_TABLE"), std::string::npos);
+    }
+}
+
+TEST_F(PartitionPruningTest, UUIDListPreparedParametersAndCatalogChanges) {
+    uuidListTable();
+    auto prepared = conn->prepare("MATCH(n:U) WHERE n.k=$key RETURN n.id");
+    ASSERT_TRUE(prepared->isSuccess()) << prepared->getErrorMessage();
+    auto executeUUID = [&](const char* key) {
+        return ids(*conn->execute(prepared.get(),
+            std::make_pair(std::string{"key"}, common::uuid{common::UUID::fromString(key)})));
+    };
+    EXPECT_EQ(executeUUID(UUID_A_UPPER), (std::vector<int64_t>{1, 3}));
+    EXPECT_EQ(executeUUID(UUID_B), std::vector<int64_t>{2});
+    EXPECT_TRUE(executeUUID(UUID_ZERO).empty());
+    std::unordered_map<std::string, std::unique_ptr<common::Value>> nullParams;
+    nullParams.emplace("key", std::make_unique<common::Value>(
+                                  common::Value::createNullValue(common::LogicalType::UUID())));
+    EXPECT_TRUE(ids(*conn->executeWithParams(prepared.get(), std::move(nullParams))).empty());
+    EXPECT_EQ(executeUUID(UUID_A), (std::vector<int64_t>{1, 3}));
+
+    auto missing = conn->prepare("MATCH(n:U) WHERE n.k=" + uuidLiteral(UUID_ZERO) + " RETURN n.id");
+    ASSERT_TRUE(missing->isSuccess()) << missing->getErrorMessage();
+    EXPECT_TRUE(ids(*conn->execute(missing.get())).empty());
+    run("BEGIN TRANSACTION");
+    run("CREATE (:U {id:4,k:" + uuidLiteral(UUID_ZERO) + "})");
+    EXPECT_EQ(executeUUID(UUID_ZERO), std::vector<int64_t>{4});
+    EXPECT_EQ(ids(*conn->execute(missing.get())), std::vector<int64_t>{4});
+    run("ROLLBACK");
+    EXPECT_TRUE(executeUUID(UUID_ZERO).empty());
+    EXPECT_TRUE(ids(*conn->execute(missing.get())).empty());
+    run("COPY U FROM (RETURN 5 AS id, " + uuidLiteral(UUID_ZERO) + " AS k)");
+    EXPECT_EQ(executeUUID(UUID_ZERO), std::vector<int64_t>{5});
+    EXPECT_EQ(ids(*conn->execute(missing.get())), std::vector<int64_t>{5});
+}
+
+TEST_F(PartitionPruningTest, UUIDListCheckpointReopenReusesPartitions) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+    uuidListTable();
+    run("CHECKPOINT");
+    conn.reset();
+    database.reset();
+    createDBAndConn();
+    const auto query = "MATCH(n:U) WHERE n.k=" + uuidLiteral(UUID_A_UPPER) + " RETURN n.id";
+    EXPECT_EQ(tables(query), std::vector<std::string>{"U_p1"});
+    EXPECT_EQ(ids(query), (std::vector<int64_t>{1, 3}));
+    run("COPY U FROM (RETURN 4 AS id, " + uuidLiteral(UUID_A_UPPER) + " AS k)");
+    run("COPY U FROM (RETURN 5 AS id, " + uuidLiteral(UUID_MAX) + " AS k)");
+    rejected("COPY U_p1 FROM (RETURN 6 AS id, " + uuidLiteral(UUID_B) + " AS k)");
+    run("CHECKPOINT");
+    conn.reset();
+    database.reset();
+    createDBAndConn();
+    EXPECT_EQ(tables(query), std::vector<std::string>{"U_p1"});
+    EXPECT_EQ(ids(query), (std::vector<int64_t>{1, 3, 4}));
+    EXPECT_EQ(tables("MATCH(n:U) RETURN n.id").size(), 4u);
+    const auto newKey = "MATCH(n:U) WHERE n.k=" + uuidLiteral(UUID_MAX) + " RETURN n.id";
+    EXPECT_EQ(tables(newKey), std::vector<std::string>{"U_p3"});
+    EXPECT_EQ(ids(newKey), std::vector<int64_t>{5});
+}
+
+TEST_F(PartitionPruningTest, UUIDHashCreateCopyAndEqualityPruning) {
+    run("CREATE NODE TABLE UH(id INT64 PRIMARY KEY, k UUID) PARTITION BY HASH(k) PARTITIONS 4");
+    run("CREATE (:UH {id:1,k:" + uuidLiteral(UUID_A) + "})");
+    run("COPY UH FROM (RETURN 2 AS id, " + uuidLiteral(UUID_B) + " AS k)");
+    run("COPY UH FROM (RETURN 3 AS id, " + uuidLiteral(UUID_A_UPPER) + " AS k)");
+    const auto bucket = ids("RETURN CAST(HASH(" + uuidLiteral(UUID_A) + ") % 4 AS INT64)")[0];
+    const auto query = "MATCH(n:UH) WHERE n.k=" + uuidLiteral(UUID_A_UPPER) + " RETURN n.id";
+    EXPECT_EQ(tables(query), std::vector<std::string>{"UH_p" + std::to_string(bucket)});
+    EXPECT_EQ(ids(query), (std::vector<int64_t>{1, 3}));
+    rejected("CREATE (:UH_p" + std::to_string((bucket + 1) % 4) +
+             " {id:4,k:" + uuidLiteral(UUID_A) + "})");
 }
 
 TEST_F(PartitionPruningTest, ConservativeFallbacksAndMixedLabels) {

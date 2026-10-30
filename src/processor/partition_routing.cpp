@@ -95,7 +95,9 @@ std::string encodeListPartitionKey(const common::ValueVector& keyVector, uint32_
         }
         return encodeFixed(&value, sizeof(double));
     }
+    case LogicalTypeID::UUID:
     case LogicalTypeID::INT128: {
+        // UUID literals are parsed into the same 128-bit physical representation.
         return encodeFixed(&keyVector.getValue<int128_t>(pos), sizeof(int128_t));
     }
     case LogicalTypeID::UINT8: {
