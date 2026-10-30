@@ -114,7 +114,7 @@ function_set ArrayExtractFunction::getFunctionSet() {
     functionSet.emplace_back(make_unique<ScalarFunction>(name,
         std::vector<LogicalTypeID>{LogicalTypeID::STRING, LogicalTypeID::INT64},
         LogicalTypeID::STRING,
-        ScalarFunction::BinaryExecFunction<string_t, int64_t, string_t, ArrayExtract>));
+        ScalarFunction::BinaryStringExecFunction<string_t, int64_t, string_t, ArrayExtract>));
     return functionSet;
 }
 
