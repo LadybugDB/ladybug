@@ -134,3 +134,34 @@ Binder exception: Stats from a non-node table knows is not supported yet!
 4|4|3|4
 -STATEMENT ROLLBACK;
 ---- ok
+
+-CASE StatsInfoWithAddInTransactionAfterRolledBackAdd
+-STATEMENT CREATE NODE TABLE T(id INT64 PRIMARY KEY, b INT64);
+---- ok
+-STATEMENT CREATE (:T {id: 1, b: 10}), (:T {id: 2, b: 10}), (:T {id: 3, b: 20});
+---- ok
+-STATEMENT BEGIN TRANSACTION;
+---- ok
+-STATEMENT ALTER TABLE T ADD e INT64 DEFAULT 9;
+---- ok
+-STATEMENT ROLLBACK;
+---- ok
+-STATEMENT BEGIN TRANSACTION;
+---- ok
+# The rolled-back ADD leaves a storage column behind, so z's catalog column ID is not the position
+# of the storage column the second ADD appends. e and z share a default, so the counts don't depend
+# on which of the two the committed rows read.
+-STATEMENT CREATE (:T {id: 4, b: 30});
+---- ok
+-STATEMENT ALTER TABLE T ADD z INT64 DEFAULT 9;
+---- ok
+-STATEMENT CREATE (:T {id: 5, b: 30, z: 11});
+---- ok
+-STATEMENT CALL stats_info('T') RETURN *;
+---- 1
+5|5|3|2
+-STATEMENT COMMIT;
+---- ok
+-STATEMENT CALL stats_info('T') RETURN *;
+---- 1
+5|5|3|2
