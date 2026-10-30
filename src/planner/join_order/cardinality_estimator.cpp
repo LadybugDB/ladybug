@@ -8,6 +8,7 @@
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
 #include "catalog/catalog_entry/table_catalog_entry.h"
 #include "common/enums/extend_direction_util.h"
+#include "common/types/interval_t.h"
 #include "function/list/vector_list_functions.h"
 #include "main/client_context.h"
 #include "main/database_manager.h"
@@ -342,9 +343,9 @@ static std::optional<std::pair<double, double>> getPropertyMinMax(main::ClientCo
     return tableStats.at(tableID).storageStats.value().getColumnMinMax(columnID);
 }
 
-// Converts a folded literal to double in the column's physical domain (integers, DATE
-// days, TIMESTAMP micros), matching ColumnStats::updateMinMax. Parameters and other
-// non-constant expressions stay on the fixed-selectivity path: their values are
+// Converts a folded literal to double in its type's physical domain (integers, DATE days,
+// each timestamp type in its own unit), matching ColumnStats::updateMinMax. Parameters and
+// other non-constant expressions stay on the fixed-selectivity path: their values are
 // unknown at plan time.
 static std::optional<double> literalToDouble(const Expression& expr) {
     if (expr.expressionType != ExpressionType::LITERAL) {
@@ -382,15 +383,39 @@ static std::optional<double> literalToDouble(const Expression& expr) {
     case LogicalTypeID::TIMESTAMP_MS:
     case LogicalTypeID::TIMESTAMP_NS:
     case LogicalTypeID::TIMESTAMP_SEC:
-        return static_cast<double>(value.getValue<timestamp_t>().value);
+        // The raw value in the type's own unit; getValue<timestamp_t> accepts TIMESTAMP only.
+        return static_cast<double>(value.getValue<int64_t>());
     default:
         return {};
     }
 }
 
-// Strips binder-inserted CASTs (e.g. an INT32 column vs an INT64 literal compares as
-// CAST(prop) OP literal) to the underlying property. Value-preserving numeric and
-// temporal casts keep the range fraction valid.
+// Nanoseconds per unit of the value that ColumnStats::updateMinMax and literalToDouble keep for
+// a temporal type; empty for other types.
+static std::optional<double> getNanosPerUnit(LogicalTypeID typeID) {
+    switch (typeID) {
+    case LogicalTypeID::DATE:
+        return static_cast<double>(Interval::NANOS_PER_DAY);
+    case LogicalTypeID::TIMESTAMP_SEC:
+        return static_cast<double>(Interval::NANOS_PER_SEC);
+    case LogicalTypeID::TIMESTAMP_MS:
+        return static_cast<double>(Interval::NANOS_PER_MSEC);
+    case LogicalTypeID::TIMESTAMP:
+    case LogicalTypeID::TIMESTAMP_TZ:
+        return static_cast<double>(Interval::NANOS_PER_MICRO);
+    case LogicalTypeID::TIMESTAMP_NS:
+        return 1;
+    default:
+        // Numeric types. A temporal type that updateMinMax starts tracking must be listed above.
+        return {};
+    }
+}
+
+// Strips every one-argument function named CAST* to the underlying property, so a
+// binder-inserted cast (an INT32 column vs an INT64 literal compares as CAST(prop) OP literal)
+// leaves the property's range. Widening casts keep the range fraction valid, and
+// getRangeSelectivity converts temporal units back. A narrowing, rounding or truncating cast
+// (DOUBLE to INT64, TIMESTAMP to DATE) counts as exact.
 static const Expression* unwrapCast(const Expression* expr) {
     while (expr->expressionType == ExpressionType::FUNCTION && expr->getNumChildren() == 1) {
         const auto& name = expr->constCast<ScalarFunctionExpression>().getFunction().name;
@@ -450,8 +475,22 @@ static std::optional<double> getRangeSelectivity(main::ClientContext* context,
     if (!constant.has_value() || !minMax.has_value()) {
         return {};
     }
-    const auto [minValue, maxValue] = *minMax;
-    const auto c = *constant;
+    // Stripping a cast between temporal types leaves the range and the constant in different
+    // units; both go to the finer one by a whole factor (1 for the same type). No cast converts
+    // between temporal and numeric types, but a user function named CAST_* that unwrapCast
+    // strips can, in an unknown unit, so that falls back to the fixed selectivity.
+    const auto propNanos = getNanosPerUnit(propSide->getDataType().getLogicalTypeID());
+    const auto constNanos = getNanosPerUnit(constSide->getDataType().getLogicalTypeID());
+    if (propNanos.has_value() != constNanos.has_value()) {
+        return {};
+    }
+    // Both are set (temporal) or both empty (numeric, factor 1).
+    const auto unitNanos = std::min(propNanos.value_or(1), constNanos.value_or(1));
+    const auto propScale = propNanos.value_or(1) / unitNanos;
+    const auto constScale = constNanos.value_or(1) / unitNanos;
+    const auto minValue = minMax->first * propScale;
+    const auto maxValue = minMax->second * propScale;
+    const auto c = *constant * constScale;
     double selectivity;
     if (minValue >= maxValue) {
         // Single-valued column: the predicate is decided.
