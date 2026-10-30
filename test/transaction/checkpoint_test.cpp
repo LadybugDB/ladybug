@@ -566,6 +566,28 @@ TEST_F(CheckpointRetryAfterFailureTest, FailedRetryKeepsDurableCheckpointRecord)
     checkNodes(100);
 }
 
+TEST_F(CheckpointRetryAfterFailureTest, FailedCheckpointRollsBackOverClosedPartitionShadows) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    // The first checkpoint leaves each partition's shadow file closed; a checkpoint that fails
+    // before reopening them must still roll back over them (#1396).
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE partitioned(id INT64 PRIMARY KEY, amount INT64) "
+                            "PARTITION BY HASH(amount) PARTITIONS 2;")
+                    ->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:partitioned_p0 {id: 1, amount: 10});")->isSuccess());
+    checkpoint();
+    insertNodes(0, 100);
+    failCheckpoint();
+    checkpoint();
+    checkNodes(100);
+    createDBAndConn();
+    checkNodes(100);
+    auto result = conn->query("MATCH (n:partitioned) RETURN COUNT(n);");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 1);
+}
+
 TEST_F(CheckpointRetryAfterFailureTest, MainMarkerRecoversLegacyPartitionShadows) {
     if (inMemMode || systemConfig->checkpointThreshold == 0) {
         GTEST_SKIP();
