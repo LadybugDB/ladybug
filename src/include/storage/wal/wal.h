@@ -74,6 +74,9 @@ private:
     void retireFileNoLock(const std::string& path, const char* walName);
     void throwIfPoisonedNoLock() const;
     void poisonNoLock(const std::string& reason);
+    // A failed write can leave the WAL ending in part of a record, which later appends would
+    // follow, so writes are refused until a restart, whose recovery drops that tail.
+    [[noreturn]] void failWriteNoLock(const std::string& error);
     void waitForDurabilityNoLock(uint64_t commitSequence, std::unique_lock<std::mutex>& lck);
     void flushAndSyncNoLock();
     void writeHeader(main::ClientContext& context);
