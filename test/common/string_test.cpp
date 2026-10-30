@@ -2,6 +2,7 @@
 
 #include "common/exception/runtime.h"
 #include "common/string_utils.h"
+#include "function/string/functions/array_extract_function.h"
 #include "function/string/functions/base_pad_function.h"
 #include "gtest/gtest.h"
 
@@ -63,4 +64,16 @@ TEST(StringTest, padResultSize) {
     EXPECT_THROW(BasePadOperation::checkResultSize(hi, string_t::MAX_LENGTH + 1, x),
         RuntimeException);
     EXPECT_NO_THROW(BasePadOperation::checkResultSize(hi, string_t::MAX_LENGTH, empty));
+}
+
+TEST(StringTest, arrayExtractTruncatedLastCharacter) {
+    // é and the first byte of a two-byte sequence: the grapheme walk ends the last character one
+    // byte past the string.
+    string_t str;
+    str.set("\xC3\xA9\xC3", 3);
+    int64_t idx = 2;
+    string_t result;
+    lbug::function::ArrayExtract::operation(str, idx, result);
+    ASSERT_EQ(result.len, 1u);
+    EXPECT_EQ(result.getData()[0], 0xC3);
 }
