@@ -65,6 +65,8 @@ while writing it can leave, counts as no marker.
 A pinned checkpoint retires every named graph's WAL anyway. A named graph's commits go to the main
 WAL; its own WAL holds only the records of a session that opened the graph's file on its own, which
 the checkpoint has applied. A graph WAL found at recovery is therefore newer and is replayed.
+Older builds kept those graph WALs, so under an older build's marker graphs recover through their
+own shadow files, as there.
 
 ## Checkpoint bundle format
 

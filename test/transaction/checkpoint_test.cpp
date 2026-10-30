@@ -6105,6 +6105,39 @@ TEST_F(PinnedCheckpointCrashTest, GraphWALWrittenAfterPinnedCheckpointReplays) {
     EXPECT_EQ(ids("Q"), (std::vector<int64_t>{1, 2}));
 }
 
+// Older builds kept the graph WAL a pinned checkpoint applied, so under their marker a graph WAL
+// is not known to be newer than the checkpoint. Graphs then recover through their shadows, and
+// with the shadow gone the open refuses instead of replaying the graph WAL a second time.
+TEST_F(PinnedCheckpointCrashTest, LegacyMarkerDoesNotReplayAppliedGraphWAL) {
+    query("CREATE GRAPH g;");
+    query("USE GRAPH g;");
+    query("CREATE NODE TABLE Q(id INT64 PRIMARY KEY);");
+    query("CREATE (:Q {id: 1});");
+    query("CHECKPOINT;");
+    crash();
+    writeToGraphFile("CREATE (:Q {id: 2});");
+    const auto graphWALPath =
+        StorageUtils::getWALFilePath(StorageUtils::getGraphPath(databasePath, "g"));
+    const auto appliedGraphWAL = graphWALPath + ".applied";
+    std::filesystem::copy_file(graphWALPath, appliedGraphWAL);
+    createDBAndConn();
+    query("CALL force_checkpoint_on_close=false;");
+    query("CALL auto_checkpoint=false;");
+    query("USE GRAPH g;");
+    query("CREATE (:Q {id: 3});");
+    pinWAL();
+    query("CHECKPOINT;");
+    crash();
+    std::filesystem::rename(appliedGraphWAL, graphWALPath);
+    writeMarker("\x01");
+    try {
+        createDBAndConn();
+        FAIL() << "reopened with an older build's marker and an applied graph WAL";
+    } catch (const std::exception& e) {
+        EXPECT_NE(std::string{e.what()}.find("graph shadow file"), std::string::npos) << e.what();
+    }
+}
+
 TEST_F(PinnedCheckpointCrashTest, PartitionedTableReopensAfterPinnedCheckpoint) {
     query("CREATE NODE TABLE L(id INT64, cluster INT64, PRIMARY KEY(id)) PARTITION BY LIST "
           "(cluster);");

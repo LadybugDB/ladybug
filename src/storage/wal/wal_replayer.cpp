@@ -831,7 +831,8 @@ void WALReplayer::replayPinnedActiveCheckpoint(Checkpointer& checkpointer,
         throw RuntimeException(std::format("Cannot recover checkpoint WAL {}: {}", walPath,
             unsupportedCheckpointFormatMessage(replayInfo.checkpointFormatVersion)));
     }
-    if (readPinnedCheckpointMarker(clientContext) == PinnedCheckpointMarker::NONE) {
+    const auto marker = readPinnedCheckpointMarker(clientContext);
+    if (marker == PinnedCheckpointMarker::NONE) {
         throw RuntimeException(std::format("Cannot recover checkpoint WAL {}: shadow file {} "
                                            "is missing with no valid pinned-checkpoint "
                                            "marker. Do not delete the WAL or shadow files; "
@@ -857,9 +858,19 @@ void WALReplayer::replayPinnedActiveCheckpoint(Checkpointer& checkpointer,
             walPath, clientContext.getDatabasePath()));
     }
     checkpointer.readCheckpoint();
-    // Graph shadows were applied too, so graphs load as after a completed checkpoint; any graph
-    // WAL is newer than it (cleanup retires graph WALs) and replays.
-    recoverGraphCheckpoints(clientContext, false, false);
+    if (marker == PinnedCheckpointMarker::APPLIED) {
+        // Graph shadows were applied too, so graphs load as after a completed checkpoint; any
+        // graph WAL is newer than it (cleanup retires graph WALs) and replays.
+        recoverGraphCheckpoints(clientContext, false, false);
+    } else {
+        // Older builds kept the graph WALs a pinned checkpoint applied, so graphs recover through
+        // their own shadows, as there.
+        std::optional<uuid> checkpointDatabaseID = std::nullopt;
+        if (checkpointBundle) {
+            checkpointDatabaseID = ShadowFile::CHECKPOINT_BUNDLE_DATABASE_ID;
+        }
+        recoverGraphCheckpoints(clientContext, true, checkpointBundle, checkpointDatabaseID);
+    }
 
     truncateWALFile(*fileInfo, 0);
     fileInfo.reset();
