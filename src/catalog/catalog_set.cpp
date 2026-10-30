@@ -238,6 +238,32 @@ void CatalogSet::alterTableEntry(Transaction* transaction, const binder::BoundAl
     }
 }
 
+TableCatalogEntry* CatalogSet::copyTableEntryForWrite(Transaction* transaction,
+    const std::string& name) {
+    TableCatalogEntry* oldEntry;
+    TableCatalogEntry* newEntry;
+    {
+        std::unique_lock lck{mtx};
+        oldEntry = getEntryNoLock(transaction, name)->ptrCast<TableCatalogEntry>();
+        if (checkWWConflict(transaction, entries.at(name).get())) {
+            throw CatalogException(
+                std::format("Write-write conflict on updating partitioned table {}.", name));
+        }
+        if (oldEntry->getTimestamp() == transaction->getID()) {
+            return oldEntry;
+        }
+        auto copy = oldEntry->copy();
+        copy->setTimestamp(transaction->getID());
+        newEntry = copy.get();
+        emplaceNoLock(std::move(copy));
+    }
+    if (transaction->shouldAppendToUndoBuffer()) {
+        transaction->pushCreateDropCatalogEntry(*this, *oldEntry, isInternal(),
+            true /* skipLoggingToWAL */);
+    }
+    return newEntry;
+}
+
 CatalogEntrySet CatalogSet::getEntries(const Transaction* transaction) {
     CatalogEntrySet result;
     std::shared_lock lck{mtx};

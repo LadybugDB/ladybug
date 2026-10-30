@@ -132,6 +132,8 @@ public:
     const std::vector<common::table_id_t>& getChildTableIDs() const { return childTableIDs; }
     common::table_id_t getParentTableID() const { return parentTableID; }
     uint64_t getPartitionIndex() const { return partitionIndex; }
+    bool isPartitionPruningSafe() const { return partitionPruningSafe; }
+    void setPartitionPruningSafe(bool safe) { partitionPruningSafe = safe; }
 
     // Child-side copy of the parent's encoded LIST key for this partition (empty when the
     // child is not a dynamically created LIST partition). WAL replay restores the parent's
@@ -181,6 +183,7 @@ private:
     // Partitioning state. `partitionMethod` is set only on the logical parent. `parentTableID` /
     // `partitionIndex` are set only on child partition subgraphs.
     std::optional<binder::BoundPartitionMethod> partitionMethod;
+    bool partitionPruningSafe = false;
     std::string partitionColumnName;
     common::property_id_t partitionColumnID = common::INVALID_PROPERTY_ID;
     uint64_t numPartitions = 0;

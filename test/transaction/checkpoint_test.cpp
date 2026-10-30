@@ -539,7 +539,7 @@ TEST_F(CheckpointRetryAfterFailureTest, MainMarkerRecoversLegacyPartitionShadows
                     ->isSuccess());
     checkpoint();
     ASSERT_TRUE(conn->query("CREATE (:partitioned_p0 {id: 1, amount: 10});")->isSuccess());
-    ASSERT_TRUE(conn->query("CREATE (:partitioned_p1 {id: 2, amount: 20});")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:partitioned_p1 {id: 2, amount: 6});")->isSuccess());
     failCheckpointWith<FlakyCheckpointerFailsOnApplyingShadow>();
 
     auto* context = getClientContext(*conn);
@@ -581,7 +581,7 @@ TEST_F(CheckpointRetryAfterFailureTest, LegacyMarkerRecoversAppliedChildrenWitho
                     ->isSuccess());
     checkpoint();
     ASSERT_TRUE(conn->query("CREATE (:partitioned_p0 {id: 1, amount: 10});")->isSuccess());
-    ASSERT_TRUE(conn->query("CREATE (:partitioned_p1 {id: 2, amount: 20});")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:partitioned_p1 {id: 2, amount: 6});")->isSuccess());
     failCheckpointWith<FlakyCheckpointerFailsOnApplyingShadow>();
 
     auto* context = getClientContext(*conn);
@@ -633,7 +633,7 @@ TEST_F(CheckpointRetryAfterFailureTest, BundleMarkerRequiresEveryChildShadow) {
                     ->isSuccess());
     checkpoint();
     ASSERT_TRUE(conn->query("CREATE (:partitioned_p0 {id: 1, amount: 10});")->isSuccess());
-    ASSERT_TRUE(conn->query("CREATE (:partitioned_p1 {id: 2, amount: 20});")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:partitioned_p1 {id: 2, amount: 6});")->isSuccess());
     failCheckpointWith<FlakyCheckpointerFailsOnApplyingShadow>();
 
     auto* context = getClientContext(*conn);
@@ -668,7 +668,7 @@ TEST_F(CheckpointRetryAfterFailureTest, MissingMainMarkerDiscardsPartitionShadow
                     ->isSuccess());
     checkpoint();
     ASSERT_TRUE(conn->query("CREATE (:partitioned_p0 {id: 1, amount: 10});")->isSuccess());
-    ASSERT_TRUE(conn->query("CREATE (:partitioned_p1 {id: 2, amount: 20});")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:partitioned_p1 {id: 2, amount: 6});")->isSuccess());
 
     auto* context = getClientContext(*conn);
     auto stagedCheckpoint = std::make_unique<Checkpointer>(*context);
@@ -782,7 +782,7 @@ TEST_F(CheckpointRetryAfterFailureTest, PartitionShadowsSurviveUntilMainWALRetir
                     ->isSuccess());
     checkpoint();
     ASSERT_TRUE(conn->query("CREATE (:partitioned_p0 {id: 1, amount: 10});")->isSuccess());
-    ASSERT_TRUE(conn->query("CREATE (:partitioned_p1 {id: 2, amount: 20});")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:partitioned_p1 {id: 2, amount: 6});")->isSuccess());
     failCheckpointWith<CheckpointerFailsBeforeWALRetirement>();
 
     auto* context = getClientContext(*conn);
@@ -965,7 +965,7 @@ TEST_F(CheckpointRetryAfterFailureTest, CommittedRecoverySurvivesRetriesThatAdva
     checkpoint();
     ASSERT_TRUE(conn->query("CREATE (:partitioned_p0 {id: 1, amount: 10});")->isSuccess());
     failCheckpointWith<FlakyCheckpointerFailsOnLoggingCheckpoint>();
-    ASSERT_TRUE(conn->query("CREATE (:partitioned_p1 {id: 2, amount: 20});")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:partitioned_p1 {id: 2, amount: 6});")->isSuccess());
     failCheckpointWith<FlakyCheckpointerFailsOnLoggingCheckpoint>();
     ASSERT_TRUE(conn->query("CREATE (:partitioned_p0 {id: 3, amount: 30});")->isSuccess());
     failCheckpointWith<FlakyCheckpointerFailsOnApplyingShadow>();
@@ -8191,6 +8191,10 @@ TEST_F(PartitionCrashRecoveryTest, ListParentSurvivesCrashRecovery) {
     EXPECT_EQ(scanIDs("MATCH (n:L) RETURN n.id ORDER BY n.id;"),
         std::vector<int64_t>({1, 2, 3, 4, 5}));
     EXPECT_EQ(scanIDs("MATCH (n:L_p2) RETURN n.id ORDER BY n.id;"), std::vector<int64_t>({2, 5}));
+    const auto listPlan = conn->query("EXPLAIN MATCH(n:L) WHERE n.cluster=200 RETURN n.id;");
+    ASSERT_TRUE(listPlan->isSuccess()) << listPlan->getErrorMessage();
+    EXPECT_NE(listPlan->toString().find("Tables: L_p2"), std::string::npos);
+    EXPECT_EQ(listPlan->toString().find("L_p1"), std::string::npos);
 }
 
 TEST_F(PartitionCrashRecoveryTest, HashParentSurvivesCrashRecovery) {
@@ -8208,6 +8212,10 @@ TEST_F(PartitionCrashRecoveryTest, HashParentSurvivesCrashRecovery) {
     runQuery("CREATE (:H {id: 5, amount: 50});");
     EXPECT_EQ(scanIDs("MATCH (n:H) RETURN n.id ORDER BY n.id;"),
         std::vector<int64_t>({1, 2, 3, 4, 5}));
+    const auto hashPlan = conn->query("EXPLAIN MATCH(n:H) WHERE n.amount=20 RETURN n.id;");
+    ASSERT_TRUE(hashPlan->isSuccess()) << hashPlan->getErrorMessage();
+    EXPECT_NE(hashPlan->toString().find("Tables: H_p0"), std::string::npos);
+    EXPECT_EQ(hashPlan->toString().find("H_p1"), std::string::npos);
 }
 
 } // namespace testing

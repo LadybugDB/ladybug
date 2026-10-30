@@ -5,6 +5,9 @@
 #include "storage/predicate/column_predicate.h"
 
 namespace lbug {
+namespace catalog {
+class NodeTableCatalogEntry;
+}
 namespace planner {
 
 enum class LogicalScanNodeTableType : uint8_t {
@@ -102,6 +105,15 @@ public:
 
     std::shared_ptr<binder::Expression> getNodeID() const { return nodeID; }
     std::vector<common::table_id_t> getTableIDs() const { return nodeTableIDs; }
+    void setTableIDs(std::vector<common::table_id_t> ids) { nodeTableIDs = std::move(ids); }
+    // Retain the bound entries rather than resolving bare IDs in the optimizer: IDs can
+    // overlap across catalogs, and remote wrappers can replace physical child entries.
+    void setPartitionEntries(std::vector<catalog::NodeTableCatalogEntry*> entries) {
+        partitionEntries = std::move(entries);
+    }
+    const std::vector<catalog::NodeTableCatalogEntry*>& getPartitionEntries() const {
+        return partitionEntries;
+    }
     const std::unordered_map<common::table_id_t, std::string>& getTableDBMap() const {
         return tableDBMap;
     }
@@ -134,6 +146,7 @@ private:
     LogicalScanNodeTableType scanType;
     std::shared_ptr<binder::Expression> nodeID;
     std::vector<common::table_id_t> nodeTableIDs;
+    std::vector<catalog::NodeTableCatalogEntry*> partitionEntries;
     std::unordered_map<common::table_id_t, std::string> tableDBMap;
     binder::expression_vector properties;
     std::vector<storage::ColumnPredicateSet> propertyPredicates;

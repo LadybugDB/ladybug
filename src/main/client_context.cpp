@@ -412,8 +412,11 @@ std::unique_ptr<QueryResult> ClientContext::executeWithParams(PreparedStatement*
     }
     // LCOV_EXCL_STOP
     auto cachedStatement = cachedPreparedStatementManager->getCachedStatement(name);
+    auto* activeTransaction = transactionContext->getActiveTransaction();
     const bool planStale =
-        cachedStatement->planVersion != localDatabase->getCatalog()->getPlanVersion();
+        cachedStatement->planVersion != localDatabase->getCatalog()->getPlanVersion() ||
+        cachedStatement->hasUncommittedCatalogChanges ||
+        (activeTransaction != nullptr && activeTransaction->hasCatalogChanges());
     // Statements with parameters baked into a plan (e.g. parameter-valued SKIP/LIMIT
     // frozen to uint64_t) must rebind/replan on every execution instead of reusing any
     // cached plan (https://github.com/LadybugDB/ladybug/issues/985).
@@ -442,6 +445,8 @@ std::unique_ptr<QueryResult> ClientContext::executeWithParams(PreparedStatement*
         cachedStatement->boundParameters = std::move(newCachedStatement->boundParameters);
         cachedStatement->hasBakedParameters = newCachedStatement->hasBakedParameters;
         cachedStatement->planVersion = newCachedStatement->planVersion;
+        cachedStatement->hasUncommittedCatalogChanges =
+            newCachedStatement->hasUncommittedCatalogChanges;
         cachedStatement->physicalPlanCache.reset();
         cachedStatement->sinkResultSetDescriptors.clear();
         // The pool holds operator trees cloned from the previous template (bound for the
@@ -613,6 +618,9 @@ ClientContext::PrepareResult ClientContext::prepareNoLock(
                 cachedStatement->boundParameters = expressionBinder->getBoundParameters();
                 cachedStatement->hasBakedParameters =
                     hasBakedParameters(cachedStatement->boundParameters);
+                auto* activeTransaction = transactionContext->getActiveTransaction();
+                cachedStatement->hasUncommittedCatalogChanges =
+                    activeTransaction != nullptr && activeTransaction->hasCatalogChanges();
             },
             preparedStatement->isReadOnly(),
             preparedStatement->getStatementType() == StatementType::TRANSACTION,
@@ -808,7 +816,8 @@ std::unique_ptr<QueryResult> ClientContext::executeNoLock(PreparedStatement* pre
                 // (https://github.com/LadybugDB/ladybug/issues/985).
                 const bool cachedPlanAllowed = cachePhysicalPlan &&
                                                isCachedPlanAllowedFor(*preparedStatement) &&
-                                               !cachedStatement->hasBakedParameters;
+                                               !cachedStatement->hasBakedParameters &&
+                                               !cachedStatement->hasUncommittedCatalogChanges;
                 if (cachedPlanAllowed && cachedStatement->physicalPlanCache) {
                     // Fast path: reuse a pooled plan when available, else clone the cached
                     // operator tree template. Avoids the PlanMapper::mapOperator recursion

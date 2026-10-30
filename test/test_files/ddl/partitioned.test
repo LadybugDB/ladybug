@@ -13,11 +13,11 @@ Orders_p0
 Orders_p1
 Orders_p2
 Orders_p3
--STATEMENT CREATE (:Orders_p0 {id: 1, region: 'east', amount: 10});
+-STATEMENT CREATE (:Orders_p1 {id: 1, region: 'east', amount: 10});
 ---- ok
--STATEMENT CREATE (:Orders_p0 {id: 2, region: 'east', amount: 20});
+-STATEMENT CREATE (:Orders_p1 {id: 2, region: 'east', amount: 20});
 ---- ok
--STATEMENT CREATE (:Orders_p1 {id: 3, region: 'west', amount: 30});
+-STATEMENT CREATE (:Orders_p3 {id: 3, region: 'west', amount: 30});
 ---- ok
 -STATEMENT CREATE (:Orders_p3 {id: 4, region: 'north', amount: 40});
 ---- ok
@@ -32,7 +32,7 @@ Orders_p3
 ---- 1
 4
 # A specific partition can be queried directly too.
--STATEMENT MATCH (o:Orders_p0) RETURN o.id ORDER BY o.id;
+-STATEMENT MATCH (o:Orders_p1) RETURN o.id ORDER BY o.id;
 ---- 2
 1
 2
@@ -91,7 +91,7 @@ Binder exception: Number of partitions must be greater than 0.
 Table P has been created.
 -STATEMENT CREATE (:P_p0 {id: 1, k: 'a'});
 ---- ok
--STATEMENT CREATE (:P_p1 {id: 2, k: 'b'});
+-STATEMENT CREATE (:P {id: 2, k: 'b'});
 ---- ok
 -STATEMENT MATCH (n:P) RETURN count(*);
 ---- 1
@@ -239,7 +239,7 @@ Table Orders has been created.
 Table R has been created.
 -STATEMENT CREATE (:Orders_p0 {id: 1, region: 'a'});
 ---- ok
--STATEMENT CREATE (:Orders_p1 {id: 2, region: 'b'});
+-STATEMENT CREATE (:Orders_p1 {id: 2, region: 'west'});
 ---- ok
 -STATEMENT CREATE (:Orders_p2 {id: 3, region: 'c'});
 ---- ok
