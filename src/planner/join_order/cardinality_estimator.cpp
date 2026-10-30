@@ -1,5 +1,8 @@
 #include "planner/join_order/cardinality_estimator.h"
 
+#include <cmath>
+#include <string_view>
+
 #include "binder/expression/literal_expression.h"
 #include "binder/expression/property_expression.h"
 #include "binder/expression/scalar_function_expression.h"
@@ -9,6 +12,7 @@
 #include "catalog/catalog_entry/table_catalog_entry.h"
 #include "common/enums/extend_direction_util.h"
 #include "common/types/interval_t.h"
+#include "function/cast/cast_function_bind_data.h"
 #include "function/list/vector_list_functions.h"
 #include "main/client_context.h"
 #include "main/database_manager.h"
@@ -411,20 +415,94 @@ static std::optional<double> getNanosPerUnit(LogicalTypeID typeID) {
     }
 }
 
+static bool isCast(const Expression& expr) {
+    if (expr.expressionType != ExpressionType::FUNCTION || expr.getNumChildren() != 1) {
+        return false;
+    }
+    return expr.constCast<ScalarFunctionExpression>().getFunction().name.starts_with("CAST");
+}
+
 // Strips every one-argument function named CAST* to the underlying property, so a
 // binder-inserted cast (an INT32 column vs an INT64 literal compares as CAST(prop) OP literal)
-// leaves the property's range. Widening casts keep the range fraction valid, and
-// getRangeSelectivity converts temporal units back. A narrowing, rounding or truncating cast
-// (DOUBLE to INT64, TIMESTAMP to DATE) counts as exact.
+// leaves the property's range. getRangeSelectivity converts temporal units back and accounts for
+// a cast to an integer type or to DATE (getCastGrid).
 static const Expression* unwrapCast(const Expression* expr) {
-    while (expr->expressionType == ExpressionType::FUNCTION && expr->getNumChildren() == 1) {
-        const auto& name = expr->constCast<ScalarFunctionExpression>().getFunction().name;
-        if (std::string(name).rfind("CAST", 0) != 0) {
-            break;
-        }
+    while (isCast(*expr)) {
         expr = expr->getChild(0).get();
     }
     return expr;
+}
+
+namespace {
+
+// The grid a cast snaps values to, in the comparison unit: a cast to DATE truncates to the start
+// of the day, a cast to an integer type rounds to the nearest integer (ties to even, as FLOAT and
+// DOUBLE casts do).
+struct CastGrid {
+    double step;
+    bool rounds;
+
+    double snap(double x) const {
+        return (rounds ? std::nearbyint(x / step) : std::floor(x / step)) * step;
+    }
+
+    // The x at which `snap(x) OP c` flips: >= and < split the grid at the first point at or above
+    // c, > and <= at the first point above it, and rounding reaches a point from half a step below.
+    double split(double c, ExpressionType op) const {
+        const auto cells = c / step;
+        const auto point =
+            op == ExpressionType::GREATER_THAN || op == ExpressionType::LESS_THAN_EQUALS ?
+                std::floor(cells) + 1 :
+                std::ceil(cells);
+        return (rounds ? point - 0.5 : point) * step;
+    }
+};
+
+} // namespace
+
+// The grid of a cast to `type`. Other types count as continuous: nanosecond values pass 2^53 and
+// DECIMAL steps such as 0.1 are not exact in double, so a value or constant on a step could land
+// one step off.
+static std::optional<CastGrid> getTypeGrid(const LogicalType& type, double unitNanos) {
+    if (type.getLogicalTypeID() == LogicalTypeID::DATE) {
+        return CastGrid{static_cast<double>(Interval::NANOS_PER_DAY) / unitNanos, false};
+    }
+    if (LogicalTypeUtils::isIntegral(type)) {
+        return CastGrid{1, true};
+    }
+    return {};
+}
+
+// A cast to a built-in type. A user function named CAST_*, or any CAST() to a CREATE TYPE type
+// (which may call a user CAST_TO_<name>), may do anything to the values.
+static bool isBuiltInCast(const Expression& cast) {
+    static constexpr std::string_view prefix = "CAST_TO_";
+    const auto& funcExpr = cast.constCast<ScalarFunctionExpression>();
+    const auto& name = funcExpr.getFunction().name;
+    return dynamic_cast<const function::CastFunctionBindData*>(funcExpr.getBindData()) != nullptr &&
+           name.starts_with(prefix) && LogicalType::isBuiltInType(name.substr(prefix.size()));
+}
+
+// The coarsest grid among the casts above the property. Empty when the property's own values
+// already lie on it (no cast, widening, integer narrowing), or when the chain holds a cast that is
+// not built in. A DECIMAL cast below an integer cast rounds first, which the grid ignores: a value
+// within half a DECIMAL step of a .5 boundary can land on the other side.
+static std::optional<CastGrid> getCastGrid(const Expression* expr, double unitNanos) {
+    std::optional<CastGrid> grid;
+    for (; isCast(*expr); expr = expr->getChild(0).get()) {
+        if (!isBuiltInCast(*expr)) {
+            return {};
+        }
+        const auto castGrid = getTypeGrid(expr->getDataType(), unitNanos);
+        if (castGrid.has_value() && (!grid.has_value() || castGrid->step > grid->step)) {
+            grid = castGrid;
+        }
+    }
+    const auto propGrid = getTypeGrid(expr->getDataType(), unitNanos);
+    if (!grid.has_value() || (propGrid.has_value() && propGrid->step >= grid->step)) {
+        return {};
+    }
+    return grid;
 }
 
 // Selectivity of `property OP constant` for ordered comparisons, as the fraction of the
@@ -445,13 +523,16 @@ static std::optional<double> getRangeSelectivity(main::ClientContext* context,
     auto lhs = unwrapCast(predicate.getChild(0).get());
     auto rhs = unwrapCast(predicate.getChild(1).get());
     const Expression* propSide = nullptr;
+    const Expression* propWithCasts = nullptr;
     const Expression* constSide = nullptr;
     auto effectiveOp = op;
     if (isSingleLabelledProperty(*lhs) && rhs->expressionType == ExpressionType::LITERAL) {
         propSide = lhs;
+        propWithCasts = predicate.getChild(0).get();
         constSide = rhs;
     } else if (isSingleLabelledProperty(*rhs) && lhs->expressionType == ExpressionType::LITERAL) {
         propSide = rhs;
+        propWithCasts = predicate.getChild(1).get();
         constSide = lhs;
         switch (op) {
         case ExpressionType::GREATER_THAN:
@@ -491,30 +572,36 @@ static std::optional<double> getRangeSelectivity(main::ClientContext* context,
     const auto minValue = minMax->first * propScale;
     const auto maxValue = minMax->second * propScale;
     const auto c = *constant * constScale;
+    const auto grid = getCastGrid(propWithCasts, unitNanos);
     double selectivity;
     if (minValue >= maxValue) {
-        // Single-valued column: the predicate is decided.
+        // Single-valued column: the predicate is decided on the value after the cast.
+        const auto value = grid.has_value() ? grid->snap(minValue) : minValue;
         bool keeps = false;
         switch (effectiveOp) {
         case ExpressionType::GREATER_THAN:
-            keeps = minValue > c;
+            keeps = value > c;
             break;
         case ExpressionType::GREATER_THAN_EQUALS:
-            keeps = minValue >= c;
+            keeps = value >= c;
             break;
         case ExpressionType::LESS_THAN:
-            keeps = minValue < c;
+            keeps = value < c;
             break;
         default:
-            keeps = minValue <= c;
+            keeps = value <= c;
             break;
         }
         selectivity = keeps ? 1.0 : 0.0;
-    } else if (effectiveOp == ExpressionType::GREATER_THAN ||
-               effectiveOp == ExpressionType::GREATER_THAN_EQUALS) {
-        selectivity = (maxValue - c) / (maxValue - minValue);
     } else {
-        selectivity = (c - minValue) / (maxValue - minValue);
+        // A cast that snaps the values moves the split from c to where the cast reaches it.
+        const auto split = grid.has_value() ? grid->split(c, effectiveOp) : c;
+        if (effectiveOp == ExpressionType::GREATER_THAN ||
+            effectiveOp == ExpressionType::GREATER_THAN_EQUALS) {
+            selectivity = (maxValue - split) / (maxValue - minValue);
+        } else {
+            selectivity = (split - minValue) / (maxValue - minValue);
+        }
     }
     return std::min(1.0, std::max(0.0, selectivity));
 }
