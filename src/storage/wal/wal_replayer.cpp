@@ -951,7 +951,6 @@ WALReplayer::WALReplayInfo WALReplayer::dryReplay(FileInfo& fileInfo, bool throw
     WALReplayInfo replayInfo;
     std::optional<uint64_t> openBlockStart;
     std::unordered_map<uint64_t, uint64_t> committedBlockEnds;
-    std::vector<uint64_t> abortedBlockStarts;
     try {
         Deserializer deserializer = initDeserializer(fileInfo, clientContext, enableChecksums);
 
@@ -972,10 +971,18 @@ WALReplayer::WALReplayInfo WALReplayer::dryReplay(FileInfo& fileInfo, bool throw
                 openBlockStart = recordStart;
             } break;
             case WALRecordType::ABORT_RECORD: {
-                // Ends a durable unit like a COMMIT, so a torn-tail truncation keeps it.
-                replayInfo.isLastRecordCheckpoint = false;
+                // A failed commit logs its ABORT in the file of its COMMIT, and no CHECKPOINT
+                // record comes between them: a checkpoint waits for the rollback. An ABORT naming
+                // no committed block after the last CHECKPOINT is ignored and ends nothing, so a
+                // WAL ending in a CHECKPOINT still does. A valid one ends a durable unit like a
+                // COMMIT, so a torn-tail truncation keeps it.
+                const auto start = walRecord->constCast<AbortRecord>().abortedBlockStart;
+                const auto block = committedBlockEnds.find(start);
+                if (block == committedBlockEnds.end() || start < replayInfo.lastCheckpointOffset) {
+                    break;
+                }
                 replayInfo.offsetDeserialized = getReadOffset(deserializer, enableChecksums);
-                abortedBlockStarts.push_back(walRecord->constCast<AbortRecord>().abortedBlockStart);
+                replayInfo.abortedBlocks.push_back({start, block->second});
             } break;
             case WALRecordType::CHECKPOINT_RECORD: {
                 // A CHECKPOINT record need not be final: a pinned checkpoint skips WAL
@@ -1017,13 +1024,6 @@ WALReplayer::WALReplayInfo WALReplayer::dryReplay(FileInfo& fileInfo, bool throw
         // corrupted. This should only happen for records of the last transaction recorded.
         if (throwOnWalReplayFailure) {
             throw;
-        }
-    }
-    // An ABORT record naming no committed transaction in this file is ignored.
-    for (const auto start : abortedBlockStarts) {
-        const auto block = committedBlockEnds.find(start);
-        if (block != committedBlockEnds.end()) {
-            replayInfo.abortedBlocks.push_back({start, block->second});
         }
     }
     std::sort(replayInfo.abortedBlocks.begin(), replayInfo.abortedBlocks.end(),

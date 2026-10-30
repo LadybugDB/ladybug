@@ -307,6 +307,28 @@ TEST_F(WalTest, AbortSyncFailurePoisonsWAL) {
     EXPECT_THROW(wal.throwIfPoisoned(), RuntimeException);
 }
 
+// Recovery matches an ABORT record only within the file of its COMMIT, so one whose COMMIT is not
+// in the open WAL file is refused, and the failed commit's caller poisons the WAL.
+TEST_F(WalTest, AbortOutsideTheOpenWALFileIsRefused) {
+    VirtualFileSystem vfs;
+    vfs.registerFileSystem(std::make_unique<FailingSyncFileSystem>(false /* failSync */));
+    lbug::storage::WAL wal("failing-sync://db", false /* readOnly */, false /* enableChecksums */,
+        &vfs);
+    EXPECT_THROW(wal.logAbort(conn->getClientContext(), 0), RuntimeException);
+
+    lbug::storage::LocalWAL localWAL(*lbug::storage::MemoryManager::Get(*conn->getClientContext()),
+        false /* enableChecksums */);
+    localWAL.logLoadExtension("" /* main */, "dummy");
+    localWAL.logCommit();
+    uint64_t walCommitSequence = 0;
+    uint64_t blockStart = 0;
+    ASSERT_NO_THROW(
+        wal.logCommittedWAL(localWAL, conn->getClientContext(), walCommitSequence, &blockStart));
+    EXPECT_THROW(wal.logAbort(conn->getClientContext(), blockStart + localWAL.getSize()),
+        RuntimeException);
+    EXPECT_NO_THROW(wal.logAbort(conn->getClientContext(), blockStart));
+}
+
 TEST_F(WalTest, FailureAfterCheckpointRenamePoisonsWAL) {
     VirtualFileSystem vfs;
     auto failingFS = std::make_unique<FailingSyncFileSystem>(false /* failSync */);

@@ -61,15 +61,17 @@ void WAL::logCommittedWAL(LocalWAL& localWAL, main::ClientContext* context,
 }
 
 // Holds the WAL lock across the sync, like the CHECKPOINT record: this runs only after a failure.
-void WAL::logAbort(main::ClientContext* context, uint64_t abortedBlockStart) {
+void WAL::logAbort(main::ClientContext* /*context*/, uint64_t abortedBlockStart) {
     DASSERT(!readOnly);
     std::unique_lock lck{mtx};
     throwIfPoisonedNoLock();
     // The aborted transaction counts as an active writer until it is rolled back, and a
     // checkpoint rotates or retires the WAL only once no writer is active, so the file holding its
     // COMMIT is still the open one: dryReplay matches an ABORT only within one file.
-    DASSERT(serializer != nullptr && abortedBlockStart < serializer->getWriter()->getSize());
-    initWriter(context);
+    if (serializer == nullptr || abortedBlockStart >= serializer->getWriter()->getSize()) {
+        throw RuntimeException(
+            "Cannot log an ABORT record: the WAL file holding its COMMIT is no longer open.");
+    }
     addNewWALRecordNoLock(AbortRecord{abortedBlockStart});
     flushAndSyncNoLock();
 }
