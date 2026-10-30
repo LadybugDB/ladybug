@@ -6206,6 +6206,28 @@ TEST_F(PinnedCheckpointCrashTest, CrashAfterMarkerRemovalKeepsLaterCommits) {
     EXPECT_EQ(ids(), (std::vector<int64_t>{1, 2, 3, 4, 5}));
 }
 
+// Recovery from that crash skips through the earlier CHECKPOINT on the strength of the commits
+// after it and leaves the record in the WAL, so it writes the marker: a second crash must still
+// find proof that the record was applied.
+TEST_F(PinnedCheckpointCrashTest, CrashAfterMarkerRemovalSurvivesASecondCrash) {
+    query("CREATE NODE TABLE P(id INT64 PRIMARY KEY);");
+    createRows(1, 3);
+    pinWAL();
+    query("CHECKPOINT;");
+    createRows(4, 5);
+    failCheckpoint<FlakyCheckpointerKilledAfterMarkerRemoval>();
+    crash();
+    createDBAndConn();
+    EXPECT_FALSE(std::filesystem::exists(shadowPath()));
+    EXPECT_TRUE(std::filesystem::exists(markerPath()));
+    query("CALL force_checkpoint_on_close=false;");
+    query("CALL auto_checkpoint=false;");
+    createRows(6, 6);
+    crash();
+    createDBAndConn();
+    EXPECT_EQ(ids(), (std::vector<int64_t>{1, 2, 3, 4, 5, 6}));
+}
+
 // The dying checkpoint wrote no partition shadows; recovery must not require them.
 TEST_F(PinnedCheckpointCrashTest, CrashAfterMarkerRemovalWithPartitionedTableReopens) {
     query("CREATE NODE TABLE L(id INT64, cluster INT64, PRIMARY KEY(id)) PARTITION BY LIST "
