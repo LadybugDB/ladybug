@@ -80,7 +80,9 @@ public:
     // Marker proving that every CHECKPOINT record in the active WAL (left there by pinned
     // checkpoints, which skip WAL rotation) has been applied: WAL::logAndFlushCheckpoint removes
     // it before logging a record, and a pinned checkpoint's cleanup writes it again after
-    // applying its shadows, before removing them. With the marker, any shadow file recovery finds
+    // applying its shadows, before removing them. Recovery writes it too, before removing a
+    // shadow, when a transaction after the last record is what proves the records applied and
+    // they stay in the WAL. With the marker, any shadow file recovery finds
     // belongs to a later checkpoint that never logged its record, or to an interrupted cleanup.
     // A marker from an older build (see below) only proves that a missing shadow was applied.
     // Without any marker, CHECKPOINT records with no shadow are an error, never a silent WAL
