@@ -1,6 +1,7 @@
 #pragma once
 
 #include <atomic>
+#include <optional>
 
 #include "catalog/catalog_entry/table_catalog_entry.h"
 #include "common/enums/rel_direction.h"
@@ -226,6 +227,21 @@ public:
 protected:
     virtual bool scanInternal(transaction::Transaction* transaction, TableScanState& scanState) = 0;
 
+    // A checkpoint that rolls back restores the epoch it replaced, so the next checkpoint does not
+    // skip the table as unchanged. finalizeCheckpoint drops the saved epoch (partition children
+    // are not finalized, so they keep theirs).
+    void storeCheckpointedEpoch(uint64_t epoch) {
+        epochBeforeCheckpoint = lastCheckpointedEpoch;
+        lastCheckpointedEpoch = epoch;
+    }
+    void restoreCheckpointedEpoch() {
+        if (epochBeforeCheckpoint) {
+            lastCheckpointedEpoch = *epochBeforeCheckpoint;
+            epochBeforeCheckpoint.reset();
+        }
+    }
+    void commitCheckpointedEpoch() { epochBeforeCheckpoint.reset(); }
+
 protected:
     common::TableType tableType;
     common::table_id_t tableID;
@@ -239,6 +255,7 @@ protected:
     // Epoch watermark of the last successful checkpoint for this table.
     // Only written by the checkpoint thread.
     uint64_t lastCheckpointedEpoch = 0;
+    std::optional<uint64_t> epochBeforeCheckpoint;
 };
 
 } // namespace storage

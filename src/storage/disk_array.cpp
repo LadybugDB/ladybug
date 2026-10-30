@@ -248,6 +248,13 @@ void DiskArrayInternal::checkpointOrRollbackInMemoryIfNecessaryNoLock(bool isChe
     if (!hasTransactionalUpdates) {
         return;
     }
+    if (!isCheckpoint) {
+        // The checkpoint wrote the pages already on disk to shadow pages. A later checkpoint
+        // would read its changes back from them, so drop them with the rest.
+        for (page_idx_t apIdx = 0; apIdx < getNumAPs(header); apIdx++) {
+            shadowFile->clearShadowPage(fileHandle.getFileIndex(), getAPPageIdxNoLock(apIdx));
+        }
+    }
     if (pipUpdates.updatedLastPIP.has_value()) {
         // Note: This should not cause a memory leak because PIPWrapper is a struct. So we
         // should overwrite the previous PIPWrapper's memory.
