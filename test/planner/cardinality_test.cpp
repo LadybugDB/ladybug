@@ -1,8 +1,11 @@
 #include <algorithm>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <map>
+#include <tuple>
 #include <unordered_map>
+#include <vector>
 
 #include "catalog/catalog.h"
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
@@ -59,6 +62,14 @@ public:
             result += countOpsWithType(op->getChild(i).get(), type);
         }
         return result;
+    }
+    void expectFilterEstimate(const std::string& table, const std::string& predicate,
+        common::cardinality_t expected) {
+        auto plan = getRoot(
+            std::format("EXPLAIN LOGICAL MATCH (u:{}) WHERE {} RETURN u.id", table, predicate));
+        auto [parent, source] = getSource(plan->getLastOperator().get());
+        EXPECT_EQ(planner::LogicalOperatorType::FILTER, parent->getOperatorType()) << predicate;
+        EXPECT_EQ(expected, parent->getCardinality()) << predicate;
     }
 };
 
@@ -200,6 +211,142 @@ TEST_F(CardinalityTest, TestOperators) {
             "LOAD FROM \"{}/dataset/npy-1d/one_dim_int64.npy\" RETURN *", LBUG_ROOT_DIRECTORY));
         EXPECT_EQ(3, plan->getCardinality());
     }
+}
+
+static int32_t sameDay(int32_t days) {
+    return days;
+}
+
+static int64_t dayNumber(int32_t days) {
+    return days;
+}
+
+TEST_F(CardinalityTest, RangeFilterAcrossTemporalUnits) {
+    // Daily holds one day per row from 2020-01-01, SameDay holds 2022-01-01 in each of 100 rows;
+    // each day is stored as a DATE and in every timestamp type.
+    for (auto [table, lastID, day] :
+        {std::tuple{"Daily", 999, "i"}, std::tuple{"SameDay", 99, "731"}}) {
+        ASSERT_TRUE(conn->query(std::format("CREATE NODE TABLE {}(id INT64 PRIMARY KEY, d DATE, "
+                                            "ts TIMESTAMP, ttz TIMESTAMP_TZ, tms TIMESTAMP_MS, "
+                                            "tns TIMESTAMP_NS, tsec TIMESTAMP_SEC);",
+                                    table))
+                        ->isSuccess());
+        ASSERT_TRUE(
+            conn->query(std::format("UNWIND range(0, {}) AS i WITH i, timestamp('2020-01-01 "
+                                    "00:00:00') + to_days({}) AS t CREATE (:{} {{id: i, d: "
+                                    "date('2020-01-01') + to_days({}), ts: t, ttz: CAST(t AS "
+                                    "TIMESTAMP_TZ), tms: CAST(t AS TIMESTAMP_MS), tns: CAST(t AS "
+                                    "TIMESTAMP_NS), tsec: CAST(t AS TIMESTAMP_SEC)}});",
+                            lastID, day, table, day))
+                ->isSuccess());
+    }
+    const std::vector<std::string> constants{"date('2022-01-01')",
+        "timestamp('2022-01-01 00:00:00')", "CAST('2022-01-01 00:00:00' AS TIMESTAMP_TZ)",
+        "CAST('2022-01-01 00:00:00' AS TIMESTAMP_MS)",
+        "CAST('2022-01-01 00:00:00' AS TIMESTAMP_NS)",
+        "CAST('2022-01-01 00:00:00' AS TIMESTAMP_SEC)"};
+    for (const auto* column : {"d", "ts", "ttz", "tms", "tns", "tsec"}) {
+        const auto prop = std::format("u.{}", column);
+        for (const auto& constant : constants) {
+            // 268 of Daily's 1,000 days lie after 2022-01-01 and 731 before it.
+            expectFilterEstimate("Daily", prop + " > " + constant, 268);
+            expectFilterEstimate("Daily", prop + " < " + constant, 731);
+            expectFilterEstimate("Daily", constant + " < " + prop, 268);
+            // SameDay's one value equals the constant: >= keeps all 100 rows, > keeps none.
+            expectFilterEstimate("SameDay", prop + " >= " + constant, 100);
+            expectFilterEstimate("SameDay", prop + " > " + constant, 1);
+        }
+    }
+    // A user function named CAST_* is stripped like a cast: DATE to DATE keeps the range
+    // estimate, DATE to INT64 leaves a DATE range against a number of unknown unit and falls back
+    // to the fixed 10% (268 on main, 1,000 without the fallback).
+    conn->createScalarFunction("CAST_SAME",
+        std::vector<common::LogicalTypeID>{common::LogicalTypeID::DATE},
+        common::LogicalTypeID::DATE, &sameDay);
+    conn->createScalarFunction("CAST_DAYS",
+        std::vector<common::LogicalTypeID>{common::LogicalTypeID::DATE},
+        common::LogicalTypeID::INT64, &dayNumber);
+    expectFilterEstimate("Daily", "CAST_SAME(u.d) > date('2022-01-01')", 268);
+    expectFilterEstimate("Daily", "CAST_DAYS(u.d) > 18993", 100);
+}
+
+static int16_t floorToInt16(double x) {
+    return static_cast<int16_t>(std::floor(x));
+}
+
+TEST_F(CardinalityTest, RangeFilterThroughRoundingCast) {
+    // Spread: x = i / 110 (0 to 0.9) and one timestamp per hour from 2022-01-01 00:00 (99 hours).
+    // Noon: x = 0.7 and 2022-01-01 12:00 in each of 100 rows. Edge: x = 0.5, a rounding tie, and an
+    // instant whose nanoseconds round down in double, so a microsecond grid would floor it below
+    // the constant. Each timestamp is stored in every type.
+    for (auto [table, x, t] :
+        {std::tuple{"Spread", "i / 110.0", "timestamp('2022-01-01 00:00:00') + to_hours(i)"},
+            std::tuple{"Noon", "0.7", "timestamp('2022-01-01 12:00:00')"},
+            std::tuple{"Edge", "0.5", "timestamp('2022-09-07 00:59:38.477008')"}}) {
+        ASSERT_TRUE(conn->query(std::format("CREATE NODE TABLE {}(id INT64 PRIMARY KEY, i INT32, "
+                                            "x DOUBLE, f FLOAT, ts TIMESTAMP, ttz TIMESTAMP_TZ, "
+                                            "tms TIMESTAMP_MS, tsec TIMESTAMP_SEC, "
+                                            "tns TIMESTAMP_NS);",
+                                    table))
+                        ->isSuccess());
+        ASSERT_TRUE(conn->query(std::format("UNWIND range(0, 99) AS i WITH i, {} AS x, {} AS t "
+                                            "CREATE (:{} {{id: i, i: CAST(i AS INT32), x: x, f: "
+                                            "CAST(x AS FLOAT), ts: t, ttz: CAST(t AS "
+                                            "TIMESTAMP_TZ), tms: CAST(t AS TIMESTAMP_MS), tsec: "
+                                            "CAST(t AS TIMESTAMP_SEC), tns: CAST(t AS "
+                                            "TIMESTAMP_NS)}});",
+                                    x, t, table))
+                        ->isSuccess());
+    }
+    // Rounding to an integer splits Spread's x at 0.5: 44 rows above, 56 below (estimated 55).
+    for (const auto* predicate :
+        {"CAST(u.x AS INT64) >= 1", "CAST(u.x AS INT64) > 0", "1 <= CAST(u.x AS INT64)",
+            "CAST(u.x AS INT32) > 0.2", "CAST(u.x AS int) >= 1", "CAST(u.f AS INT16) >= 1"}) {
+        expectFilterEstimate("Spread", predicate, 44);
+    }
+    expectFilterEstimate("Spread", "CAST(u.x AS INT64) < 1", 55);
+    expectFilterEstimate("Spread", "CAST(u.x AS INT64) <= 0", 55);
+    // Truncating to DATE splits Spread's timestamps at a midnight: 52 rows from 2022-01-03 on
+    // (estimated 51), 48 before it.
+    std::vector<std::string> afterSecondDay{"CAST(u.ts AS DATE) > date('2022-01-02')",
+        "CAST(u.ts AS DATE) >= timestamp('2022-01-02 12:00:00')",
+        "CAST(CAST(u.ts AS TIMESTAMP_SEC) AS DATE) > date('2022-01-02')"};
+    for (const auto* column : {"ttz", "tms", "tsec", "tns"}) {
+        afterSecondDay.push_back(std::format("CAST(u.{} AS DATE) > date('2022-01-02')", column));
+    }
+    for (const auto& predicate : afterSecondDay) {
+        expectFilterEstimate("Spread", predicate, 51);
+    }
+    expectFilterEstimate("Spread", "CAST(u.ts AS DATE) <= date('2022-01-02')", 48);
+    // These keep the plain estimate. An INT32 property compares as CAST(u.i AS INT64) and is
+    // already on that grid: 49 as for an INT64 column, though 50 rows match. DECIMAL counts as
+    // continuous (61 match). A user function named like a built-in cast, or the one CAST() calls
+    // for a CREATE TYPE type, does something unknown (none match).
+    for (const auto* name : {"CAST_TO_INT16", "CAST_TO_FLOORED"}) {
+        conn->createScalarFunction(name,
+            std::vector<common::LogicalTypeID>{common::LogicalTypeID::DOUBLE},
+            common::LogicalTypeID::INT16, &floorToInt16);
+    }
+    ASSERT_TRUE(conn->query("CREATE TYPE FLOORED AS INT16;")->isSuccess());
+    expectFilterEstimate("Spread", "u.i >= 50", 49);
+    expectFilterEstimate("Spread", "CAST(u.x AS DECIMAL(2,1)) > 0.3", 66);
+    expectFilterEstimate("Spread", "CAST_TO_INT16(u.x) >= 1", 1);
+    expectFilterEstimate("Spread", "CAST(u.x AS FLOORED) >= 1", 1);
+    auto floored = conn->query("MATCH (u:Spread) WHERE CAST(u.x AS FLOORED) >= 1 RETURN count(*)");
+    ASSERT_TRUE(floored->isSuccess());
+    EXPECT_EQ(0, floored->getNext()->getValue(0)->getValue<int64_t>());
+    // A single value decides the predicate after the cast. 0.5 rounds to 0, as the cast does.
+    expectFilterEstimate("Noon", "CAST(u.x AS INT64) >= 1", 100);
+    expectFilterEstimate("Noon", "CAST(u.ts AS DATE) <= date('2022-01-01')", 100);
+    expectFilterEstimate("Noon", "CAST(u.ts AS DATE) > date('2022-01-01')", 1);
+    expectFilterEstimate("Edge", "CAST(u.x AS INT64) >= 1", 1);
+    auto tie = conn->query("MATCH (u:Edge) WHERE CAST(u.x AS INT64) >= 1 RETURN count(*)");
+    ASSERT_TRUE(tie->isSuccess());
+    EXPECT_EQ(0, tie->getNext()->getValue(0)->getValue<int64_t>());
+    // TIMESTAMP_NS against TIMESTAMP compares as CAST(u.tns AS TIMESTAMP), which gets no
+    // microsecond grid.
+    expectFilterEstimate("Edge", "u.tns >= timestamp('2022-09-07 00:59:38.477008')", 100);
+    expectFilterEstimate("Edge", "u.tns < timestamp('2022-09-07 00:59:38.477008')", 1);
 }
 
 TEST_F(CardinalityTest, TestPopulatedAfterOptimizations) {
