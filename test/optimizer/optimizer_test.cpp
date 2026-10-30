@@ -2062,5 +2062,21 @@ TEST_F(OptimizerTest, BoolFoldingFlattensAnAndItProduces) {
     ASSERT_EQ(filter->getPredicate()->toString(), "EQUALS(a.age,5)");
 }
 
+// MERGE keeps its dedup only where it drops the repeated rows anyway: rows with nothing besides the
+// keys, or a relationship MERGE at the plan root (not under EXPLAIN, which becomes the root).
+TEST_F(OptimizerTest, UnwindDedupOnlyWhereMergeDropsTheRows) {
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE DedupA(id INT64 PRIMARY KEY);")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE REL TABLE DedupR(FROM DedupA TO DedupA);")->isSuccess());
+    auto hasDedup = [&](const std::string& query) {
+        return hasOperatorType(getRoot(query)->getLastOperator().get(),
+            planner::LogicalOperatorType::UNWIND_DEDUPLICATE);
+    };
+    EXPECT_TRUE(hasDedup("UNWIND [1, 1] AS i MERGE (a:DedupA {id: i})"));
+    EXPECT_FALSE(hasDedup("UNWIND [{id: 1, v: 'x'}, {id: 1, v: 'y'}] AS r "
+                          "WITH r.id AS id, r.v AS v MERGE (a:DedupA {id: id}) RETURN v"));
+    EXPECT_TRUE(hasDedup("UNWIND [{s: 1, d: 2}, {s: 1, d: 2}] AS r WITH r.s AS s, r.d AS d "
+                         "MATCH (a:DedupA {id: s}), (b:DedupA {id: d}) MERGE (a)-[:DedupR]->(b)"));
+}
+
 } // namespace testing
 } // namespace lbug
