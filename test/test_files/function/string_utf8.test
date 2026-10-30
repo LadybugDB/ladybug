@@ -204,3 +204,14 @@ roma
 -STATEMENT RETURN array_extract("成績評価の甘い授業が高く評価", 4)
 ---- 1
 価
+
+-LOG strIndexLongCharacter
+-STATEMENT RETURN '🧘🏻‍♂️'[1], list_extract('🧘🏻‍♂️', 1), array_extract('🧘🏻‍♂️', 1)
+---- 1
+🧘🏻‍♂️|🧘🏻‍♂️|🧘🏻‍♂️
+-STATEMENT UNWIND ['a🧘🏻‍♂️b', 'abc', '成績評価の甘い授業が高く評価', '😃🧘🏻‍♂️🌍'] AS s RETURN s[2], s[-2]
+---- 4
+b|b
+績|評
+🧘🏻‍♂️|🧘🏻‍♂️
+🧘🏻‍♂️|🧘🏻‍♂️
