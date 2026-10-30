@@ -824,12 +824,23 @@ void WALReplayer::replayActiveWAL(Checkpointer& checkpointer, bool throwOnWalRep
             // a later crash would otherwise find neither. A shadow is present here, so this is a
             // read-write open (a read-only one refuses a shadow earlier), and the WAL must belong
             // to this database before anything vouches for it.
-            auto* mainStorageManager = clientContext.getDatabase()->getStorageManager();
             if (replayInfo.lastCheckpointOffset != 0 && skipThroughLastCheckpoint &&
-                marker == PinnedCheckpointMarker::NONE &&
-                mainStorageManager->getDataFH() != nullptr) {
-                FileDBIDUtils::verifyDatabaseID(*fileInfo,
-                    readPersistedDatabaseID(*mainStorageManager), replayInfo.walDatabaseID);
+                marker == PinnedCheckpointMarker::NONE) {
+                auto* mainStorageManager = clientContext.getDatabase()->getStorageManager();
+                if (mainStorageManager->getDataFH() == nullptr) {
+                    throw RuntimeException(
+                        std::format("Cannot recover committed checkpoint: database file {} is "
+                                    "missing.",
+                            clientContext.getDatabasePath()));
+                }
+                if (replayInfo.walDatabaseID.value !=
+                    readPersistedDatabaseID(*mainStorageManager).value) {
+                    throw RuntimeException(std::format(
+                        "Cannot recover committed checkpoint: WAL {} does not match the Database "
+                        "ID of {}. Do not delete the WAL or shadow files; they hold committed "
+                        "pages. Restore the database file they were written for.",
+                        walPath, clientContext.getDatabasePath()));
+                }
                 WAL::Get(clientContext)->writePinnedCheckpointMarker(&clientContext);
             }
             removeFileAndSyncParentDirectory(shadowFilePath);
