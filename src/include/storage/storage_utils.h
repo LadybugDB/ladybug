@@ -90,7 +90,10 @@ public:
         return std::format("{}.pinned.tmp", path);
     }
     // Content of the marker above. Older builds wrote 1 and kept the marker while logging a new
-    // CHECKPOINT record, so their marker does not prove a trailing record was applied.
+    // CHECKPOINT record, so their marker does not prove a trailing record was applied. A marker
+    // that is not exactly one of these bytes, such as the empty file a crash while writing it can
+    // leave, counts as no marker.
+    static constexpr uint8_t PINNED_CHECKPOINT_MARKER_LEGACY = 1;
     static constexpr uint8_t PINNED_CHECKPOINT_MARKER_APPLIED = 2;
     static std::string getCheckpointIntentLockFilePath(const std::string& path) {
         return std::format("{}.checkpoint.intent.lock", path);
