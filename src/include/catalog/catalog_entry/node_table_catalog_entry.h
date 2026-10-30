@@ -43,9 +43,11 @@ class LBUG_API NodeTableCatalogEntry final : public TableCatalogEntry {
 public:
     NodeTableCatalogEntry() = default;
     NodeTableCatalogEntry(std::string name, std::string primaryKeyName, std::string storage = "",
-        common::StorageFormat storageFormat = common::StorageFormat::NONE)
+        common::StorageFormat storageFormat = common::StorageFormat::NONE,
+        std::string storageFormatName = "")
         : TableCatalogEntry{entryType_, std::move(name)}, primaryKeyName{std::move(primaryKeyName)},
-          storage{std::move(storage)}, storageFormat{storageFormat} {}
+          storage{std::move(storage)}, storageFormat{storageFormat},
+          storageFormatName{std::move(storageFormatName)} {}
 
     // Constructor for foreign-backed tables
     NodeTableCatalogEntry(std::string name, std::string primaryKeyName,
@@ -73,6 +75,8 @@ public:
     }
     const std::string& getStorage() const { return storage; }
     common::StorageFormat getStorageFormat() const { return storageFormat; }
+    // External format name for StorageFormat::EXTERNAL (e.g. "lance"); empty otherwise.
+    const std::string& getStorageFormatName() const { return storageFormatName; }
     const std::vector<SortedByProperty>& getSortedByProperties() const {
         return sortedByProperties;
     }
@@ -168,6 +172,7 @@ private:
     uint64_t csrChangeEpoch = 0;
     std::string storage;
     common::StorageFormat storageFormat = common::StorageFormat::NONE;
+    std::string storageFormatName;
     std::optional<function::TableFunction> scanFunction;
     CreateBindDataFunc createBindDataFunc; // Callback to create bind data
     std::string foreignDatabaseName;

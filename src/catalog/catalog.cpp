@@ -301,11 +301,11 @@ CatalogEntry* Catalog::createRelGroupEntry(Transaction* transaction,
         relTableInfos.emplace_back(relTableInfo.nodePair, tables->getNextOID(),
             relTableInfo.srcMultiplicity, relTableInfo.dstMultiplicity);
     }
-    auto relGroupEntry =
-        std::make_unique<RelGroupCatalogEntry>(info.tableName, extraInfo->srcMultiplicity,
-            extraInfo->dstMultiplicity, extraInfo->storageDirection, std::move(relTableInfos),
-            extraInfo->storage, extraInfo->storageFormat, extraInfo->scanFunction,
-            std::move(extraInfo->scanBindData), extraInfo->foreignDatabaseName);
+    auto relGroupEntry = std::make_unique<RelGroupCatalogEntry>(info.tableName,
+        extraInfo->srcMultiplicity, extraInfo->dstMultiplicity, extraInfo->storageDirection,
+        std::move(relTableInfos), extraInfo->storage, extraInfo->storageFormat,
+        extraInfo->scanFunction, std::move(extraInfo->scanBindData), extraInfo->foreignDatabaseName,
+        extraInfo->storageFormatName);
     for (auto& definition : extraInfo->propertyDefinitions) {
         relGroupEntry->addProperty(definition);
     }
@@ -685,7 +685,7 @@ CatalogEntry* Catalog::createNodeTableEntry(Transaction* transaction,
     const BoundCreateTableInfo& info) {
     const auto extraInfo = info.extraInfo->constPtrCast<BoundExtraCreateNodeTableInfo>();
     auto entry = std::make_unique<NodeTableCatalogEntry>(info.tableName, extraInfo->primaryKeyName,
-        extraInfo->storage, extraInfo->storageFormat);
+        extraInfo->storage, extraInfo->storageFormat, extraInfo->storageFormatName);
     for (auto& definition : extraInfo->propertyDefinitions) {
         entry->addProperty(definition);
     }
@@ -729,8 +729,9 @@ CatalogEntry* Catalog::createNodeTableEntry(Transaction* transaction,
                 partitionInfo.numPartitions;
         for (auto i = 0u; i < numInitialPartitions; i++) {
             auto childName = std::format("{}_p{}", info.tableName, i);
-            auto child = std::make_unique<NodeTableCatalogEntry>(childName,
-                extraInfo->primaryKeyName, extraInfo->storage, extraInfo->storageFormat);
+            auto child =
+                std::make_unique<NodeTableCatalogEntry>(childName, extraInfo->primaryKeyName,
+                    extraInfo->storage, extraInfo->storageFormat, extraInfo->storageFormatName);
             for (auto& definition : extraInfo->propertyDefinitions) {
                 child->addProperty(definition.copy());
             }

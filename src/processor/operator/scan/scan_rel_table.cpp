@@ -24,6 +24,14 @@ namespace processor {
 static std::unique_ptr<TableScanState> createSourceNodeTableScanState(NodeTable* table,
     ValueVector* nodeIDVector, const std::vector<ValueVector*>& outVectors,
     MemoryManager* memoryManager) {
+    // Extension-backed columnar node tables create their state through registered hooks,
+    // mirroring createNodeTableScanState.
+    if (auto hooks = storage::ColumnarTableHookRegistry::getTableHooks(table->getStorageManager(),
+            table->getTableID())) {
+        DASSERT(hooks->createNodeScanState);
+        return hooks->createNodeScanState(table, nodeIDVector, outVectors, nodeIDVector->state,
+            memoryManager);
+    }
     if (dynamic_cast<IceDiskNodeTable*>(table) != nullptr) {
         return std::make_unique<IceDiskNodeTableScanState>(*memoryManager, nodeIDVector, outVectors,
             nodeIDVector->state);
@@ -108,9 +116,8 @@ void ScanRelTable::initLocalStateInternal(ResultSet* resultSet, ExecutionContext
     auto clientContext = context->clientContext;
     auto boundNodeIDVector = resultSet->getValueVector(opInfo.nodeIDPos).get();
     auto nbrNodeIDVector = outVectors[0];
-    // Check if this is an external rel table and create the corresponding scan state.
-    // Extension-backed tables (e.g. lance) create their state through registered hooks.
-    auto tableHooks = storage::ExternalTableHookRegistry::getTableHooks(
+    // Extension-backed columnar rel tables create their state through registered hooks.
+    auto tableHooks = storage::ColumnarTableHookRegistry::getTableHooks(
         tableInfo.table->getStorageManager(), tableInfo.table->getTableID());
     auto* arrowTable = dynamic_cast<storage::ArrowRelTable*>(tableInfo.table);
     auto* iceDiskTable = dynamic_cast<storage::IceDiskRelTable*>(tableInfo.table);

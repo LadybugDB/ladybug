@@ -68,17 +68,6 @@ struct LBUG_API RelTableScanState : TableScanState {
     // exhausted. The state can be scanned again: the next initScanState pins afresh.
     void releaseScanPin();
 
-    // Optional state used by Arrow-backed relationship tables. Keep it on the common scan state so
-    // a single multi-rel scan state can scan native, icebug-disk-backed, and Arrow-backed tables.
-    size_t arrowCurrentBatchIdx = 0;
-    size_t arrowCurrentBatchOffset = 0;
-    size_t arrowCSRBoundIdx = 0;
-    common::offset_t arrowCSRCurrentRelOffset = common::INVALID_OFFSET;
-    std::unordered_map<common::offset_t, common::sel_t> arrowBoundNodeOffsetToSelPos;
-    std::unique_ptr<common::ValueVector> arrowSrcKeyVector;
-    std::unique_ptr<common::ValueVector> arrowDstKeyVector;
-    bool arrowScanCompleted = true;
-
     RelTableScanState(MemoryManager& mm, common::ValueVector* nodeIDVector,
         std::vector<common::ValueVector*> outputVectors,
         std::shared_ptr<common::DataChunkState> outChunkState, bool randomLookup = false);

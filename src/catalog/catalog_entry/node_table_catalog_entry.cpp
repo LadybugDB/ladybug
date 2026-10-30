@@ -26,13 +26,17 @@ SortedByProperty SortedByProperty::deserialize(common::Deserializer& deserialize
     return result;
 }
 
+// Infers the storage format for catalog entries written before STORAGE_VERSION_41,
+// which persisted no format field. Only the in-core icebug-disk suffix convention is
+// recognized: extension formats always require an explicit WITH (format = '<name>')
+// option (persisted as StorageFormat::EXTERNAL plus the format name), so no
+// extension-specific suffix checks belong here.
 static void upgradeLegacyStorageFormat(const std::string& storage,
-    common::StorageFormat& storageFormat) {
+    common::StorageFormat& storageFormat, std::string& storageFormatName) {
     const auto lowerStorage = common::StringUtils::getLower(storage);
     if (lowerStorage.ends_with("parquet")) {
         storageFormat = common::StorageFormat::ICEBUG_DISK;
-    } else if (lowerStorage.ends_with(".lance")) {
-        storageFormat = common::StorageFormat::LANCE;
+        storageFormatName.clear();
     }
 }
 
@@ -86,6 +90,8 @@ void NodeTableCatalogEntry::serialize(common::Serializer& serializer) const {
     serializer.write(storage);
     serializer.writeDebuggingInfo("storageFormat");
     serializer.serializeValue(storageFormat);
+    serializer.writeDebuggingInfo("storageFormatName");
+    serializer.write(storageFormatName);
     serializer.writeDebuggingInfo("partitioning");
     serializer.write(partitionMethod.has_value());
     if (partitionMethod.has_value()) {
@@ -124,6 +130,7 @@ std::unique_ptr<NodeTableCatalogEntry> NodeTableCatalogEntry::deserialize(
     uint64_t csrChangeEpoch = 0;
     std::string storage;
     auto storageFormat = StorageFormat::NONE;
+    std::string storageFormatName;
     deserializer.validateDebuggingInfo(debuggingInfo, "primaryKeyName");
     deserializer.deserializeValue(primaryKeyName);
     if (deserializer.getStorageVersion() >=
@@ -143,8 +150,13 @@ std::unique_ptr<NodeTableCatalogEntry> NodeTableCatalogEntry::deserialize(
         ::lbug::storage::StorageVersionInfo::STORAGE_VERSION_41) {
         deserializer.validateDebuggingInfo(debuggingInfo, "storageFormat");
         deserializer.deserializeValue(storageFormat);
+        if (deserializer.getStorageVersion() >=
+            ::lbug::storage::StorageVersionInfo::STORAGE_VERSION_50) {
+            deserializer.validateDebuggingInfo(debuggingInfo, "storageFormatName");
+            deserializer.deserializeValue(storageFormatName);
+        }
     } else {
-        upgradeLegacyStorageFormat(storage, storageFormat);
+        upgradeLegacyStorageFormat(storage, storageFormat, storageFormatName);
     }
     auto nodeTableEntry = std::make_unique<NodeTableCatalogEntry>();
     nodeTableEntry->primaryKeyName = primaryKeyName;
@@ -153,6 +165,7 @@ std::unique_ptr<NodeTableCatalogEntry> NodeTableCatalogEntry::deserialize(
     nodeTableEntry->csrChangeEpoch = csrChangeEpoch;
     nodeTableEntry->storage = storage;
     nodeTableEntry->storageFormat = storageFormat;
+    nodeTableEntry->storageFormatName = std::move(storageFormatName);
     if (deserializer.getStorageVersion() >=
         ::lbug::storage::StorageVersionInfo::STORAGE_VERSION_46) {
         deserializer.validateDebuggingInfo(debuggingInfo, "partitioning");
@@ -214,6 +227,9 @@ std::string NodeTableCatalogEntry::toCypher(const ToCypherInfo& /*info*/) const 
     }
     if (storageFormat == common::StorageFormat::ICEBUG_DISK) {
         base += std::format(" WITH (storage = '{}', format = 'icebug-disk')", storage);
+    } else if (storageFormat == common::StorageFormat::EXTERNAL) {
+        base += std::format(" WITH (storage = '{}', format = '{}')", storage,
+            common::StorageFormatUtils::displayName(storageFormat, storageFormatName));
     }
     return base + ";";
 }
@@ -241,6 +257,7 @@ std::unique_ptr<TableCatalogEntry> NodeTableCatalogEntry::copy() const {
     other->csrChangeEpoch = csrChangeEpoch;
     other->storage = storage;
     other->storageFormat = storageFormat;
+    other->storageFormatName = storageFormatName;
     other->scanFunction = scanFunction;
     other->createBindDataFunc = createBindDataFunc;
     other->foreignDatabaseName = foreignDatabaseName;
@@ -265,7 +282,8 @@ std::unique_ptr<BoundExtraCreateCatalogEntryInfo> NodeTableCatalogEntry::getBoun
             binder::BoundPartitionInfo(*partitionMethod, partitionColumnName, numPartitions);
     }
     auto boundExtraInfo = std::make_unique<binder::BoundExtraCreateNodeTableInfo>(primaryKeyName,
-        copyVector(getProperties()), storage, storageFormat, std::move(partitionInfo));
+        copyVector(getProperties()), storage, storageFormat, std::move(partitionInfo),
+        storageFormatName);
     if (isPartitionChild()) {
         boundExtraInfo->setPartitionParent(parentTableID, partitionIndex);
         boundExtraInfo->setListPartitionKey(listPartitionKey);

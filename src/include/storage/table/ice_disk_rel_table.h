@@ -7,7 +7,6 @@
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
 #include "common/exception/runtime.h"
 #include "common/types/internal_id_util.h"
-#include "processor/operator/persistent/reader/parquet/parquet_reader.h"
 #include "storage/table/columnar_rel_table_base.h"
 #include "transaction/transaction.h"
 
@@ -19,54 +18,13 @@ namespace storage {
 
 enum class IceDiskRelTableLayout : uint8_t { CSR, FLAT };
 
-// Exported: the lance extension extends this state so one shared scan state can serve
-// lance, icebug-disk, Arrow, and native rel tables in multi-rel scans.
-struct LBUG_API IceDiskRelTableScanState : RelTableScanState {
-    std::unique_ptr<processor::ParquetReaderScanState> parquetScanState;
-
-    // cached data for the current batch in current row group
-    std::unique_ptr<common::DataChunk> cachedBatchData;
-    common::offset_t currentBatchStartOffset =
-        0; // Global row index of the start of the current batch of the current row group
-    common::offset_t currentLocalRowIdx =
-        0; // Row index within the current batch of the current row group
-    std::unordered_map<common::offset_t, common::sel_t>
-        boundNodeOffsets; // Map from bound node offset to selection vector index
-
-    // Monotonic cursor into the indptr array for CSR scans. Since rows are examined in
-    // increasing global (CSR) order, the source node of the current row is found by advancing
-    // this cursor (O(1) amortized) instead of a binary search per row.
-    common::offset_t csrSrcNodeIdx = 0;
-
-    // Per-scan-state readers for thread safety. A single scan state is shared across all
-    // rel tables in a multi-rel scan (see RelTableCollectionScanner), so the readers must be
-    // re-created whenever the scan switches to a table backed by a different file. The paths
-    // below track which file each reader was opened for.
-    std::unique_ptr<processor::ParquetReader> indicesReader;
-    std::string indicesReaderPath;
-    std::unique_ptr<processor::ParquetReader> indptrReader;
-    std::string indptrReaderPath;
-
-    IceDiskRelTableScanState(MemoryManager& mm, common::ValueVector* nodeIDVector,
-        std::vector<common::ValueVector*> outputVectors,
-        std::shared_ptr<common::DataChunkState> outChunkState)
-        : RelTableScanState{mm, nodeIDVector, std::move(outputVectors), std::move(outChunkState)} {
-        parquetScanState = std::make_unique<processor::ParquetReaderScanState>();
-    }
-
-    void setToTable(const transaction::Transaction* transaction, Table* table_,
-        std::vector<common::column_id_t> columnIDs_,
-        std::vector<ColumnPredicateSet> columnPredicateSets_,
-        common::RelDataDirection direction_) override;
-
-    void reset(std::unordered_map<common::offset_t, common::sel_t> boundNodeOffsets_) {
-        cachedBatchData = nullptr;
-        currentBatchStartOffset = 0;
-        currentLocalRowIdx = 0;
-        boundNodeOffsets = std::move(boundNodeOffsets_);
-    }
-
-    void reloadCachedBatchData(transaction::Transaction* transaction);
+// Concrete columnar scan state for icebug-disk rel tables. Carries no fields of its own:
+// all shared cursor state lives on ColumnarRelTableScanState so one state can serve mixed
+// multi-rel scans. Kept (non-final for now) because the lance extension subclasses it;
+// new extension backends should extend ColumnarRelTableScanState directly.
+// TODO: re-final once the lance extension migrates to ColumnarRelTableScanState.
+struct LBUG_API IceDiskRelTableScanState : ColumnarRelTableScanState {
+    using ColumnarRelTableScanState::ColumnarRelTableScanState;
 };
 
 class IceDiskRelTable final : public ColumnarRelTableBase {
@@ -111,8 +69,8 @@ private:
     mutable std::atomic<common::row_idx_t> cachedRowCount{common::INVALID_ROW_IDX};
 
     void loadIndptrData(transaction::Transaction* transaction) const;
-    bool scanCSR(transaction::Transaction* transaction, IceDiskRelTableScanState& scanState);
-    bool scanFlat(transaction::Transaction* transaction, IceDiskRelTableScanState& scanState);
+    bool scanCSR(transaction::Transaction* transaction, ColumnarRelTableScanState& scanState);
+    bool scanFlat(transaction::Transaction* transaction, ColumnarRelTableScanState& scanState);
 };
 
 } // namespace storage
