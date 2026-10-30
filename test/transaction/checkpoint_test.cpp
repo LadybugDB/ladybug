@@ -1434,7 +1434,7 @@ INSTANTIATE_TEST_SUITE_P(ShadowID, LegacyMainWALDatabaseIDTest,
         return std::string{};
     });
 
-// An ABORT record only ever follows its own COMMIT, after the last CHECKPOINT record. One that
+// An ABORT record only ever follows its own COMMIT, with no CHECKPOINT between them. One that
 // names no such block is ignored and does not end the WAL: a WAL that ends in a CHECKPOINT whose
 // shadow is not applied yet still recovers through that shadow, instead of replaying the records
 // before an earlier pinned CHECKPOINT a second time.

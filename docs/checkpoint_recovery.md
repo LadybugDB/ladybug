@@ -37,8 +37,12 @@ and recovery finishes the checkpoint.
 A transaction whose changes cannot be applied after its `COMMIT` record is durable, for example
 because the buffer pool is full, is rolled back in memory and gets an `ABORT` record naming the WAL
 offset where its records start. Recovery skips the transactions such records name, so a `COMMIT`
-that reported an error is never applied. If the `ABORT` record cannot be written either, the
-database refuses further writes until it is reopened, and recovery then applies the transaction.
+that reported an error is not applied once its `ABORT` is durable. If the `ABORT` record cannot be
+written either, the database refuses further writes until it is reopened, and recovery then
+applies the transaction. The `ABORT` always lands in the WAL file of its `COMMIT` with no
+`CHECKPOINT` record between them, since a checkpoint waits for the failed transaction's rollback;
+recovery ignores an `ABORT` that names no transaction committed in its file after the last
+`CHECKPOINT` before it.
 
 ## Checkpoint bundle format
 

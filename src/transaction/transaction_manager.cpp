@@ -112,10 +112,10 @@ Transaction* TransactionManager::beginTransaction(main::ClientContext& clientCon
 // The transaction's COMMIT record is durable, but its changes were not applied and the caller
 // rolls them back: without an ABORT record recovery would apply them. If even that cannot be
 // logged, refusing writes keeps a retry from applying them twice before a reopen does.
-void TransactionManager::logAbortOfDurableCommit(main::ClientContext& clientContext,
-    uint64_t walBlockStart, const std::string& publishError) {
+void TransactionManager::logAbortOfDurableCommit(uint64_t walBlockStart,
+    const std::string& publishError) {
     try {
-        wal.logAbort(&clientContext, walBlockStart);
+        wal.logAbort(walBlockStart);
     } catch (const std::exception& e) {
         // A failed sync has poisoned the WAL already; one that failed before it has not.
         wal.poison(std::format("A transaction failed after its COMMIT record was written, and "
@@ -204,7 +204,7 @@ void TransactionManager::commit(main::ClientContext& clientContext, Transaction*
         // so no checkpoint can rotate the WAL between its COMMIT and this ABORT. A failed WAL sync
         // logs no ABORT: it has poisoned the WAL, and a reopen applies the COMMIT if it is durable.
         if (publishError && walCommitSequence != 0) {
-            logAbortOfDurableCommit(clientContext, walBlockStart, *publishError);
+            logAbortOfDurableCommit(walBlockStart, *publishError);
         }
         throw;
     }

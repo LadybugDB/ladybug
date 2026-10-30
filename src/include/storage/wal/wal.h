@@ -41,8 +41,10 @@ public:
     void logCommittedWAL(LocalWAL& localWAL, main::ClientContext* context, uint64_t& commitSequence,
         uint64_t* blockStart = nullptr);
     // Logs and syncs that the transaction whose records begin at abortedBlockStart was not
-    // applied after its COMMIT record became durable, so recovery skips it.
-    void logAbort(main::ClientContext* context, uint64_t abortedBlockStart);
+    // applied after its COMMIT record became durable, so recovery skips it. Throws when no WAL
+    // file is open or the offset lies past its end: recovery matches an ABORT only within the
+    // file of its COMMIT.
+    void logAbort(uint64_t abortedBlockStart);
     void logAndFlushCheckpoint(main::ClientContext* context);
 
     // Renames the active WAL to the frozen checkpoint WAL. Returns false if there is nothing to

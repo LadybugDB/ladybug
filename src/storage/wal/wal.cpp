@@ -61,7 +61,7 @@ void WAL::logCommittedWAL(LocalWAL& localWAL, main::ClientContext* context,
 }
 
 // Holds the WAL lock across the sync, like the CHECKPOINT record: this runs only after a failure.
-void WAL::logAbort(main::ClientContext* /*context*/, uint64_t abortedBlockStart) {
+void WAL::logAbort(uint64_t abortedBlockStart) {
     DASSERT(!readOnly);
     std::unique_lock lck{mtx};
     throwIfPoisonedNoLock();

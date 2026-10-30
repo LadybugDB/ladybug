@@ -973,9 +973,9 @@ WALReplayer::WALReplayInfo WALReplayer::dryReplay(FileInfo& fileInfo, bool throw
             case WALRecordType::ABORT_RECORD: {
                 // A failed commit logs its ABORT in the file of its COMMIT, and no CHECKPOINT
                 // record comes between them: a checkpoint waits for the rollback. An ABORT naming
-                // no committed block after the last CHECKPOINT is ignored and ends nothing, so a
-                // WAL ending in a CHECKPOINT still does. A valid one ends a durable unit like a
-                // COMMIT, so a torn-tail truncation keeps it.
+                // no block committed after the last CHECKPOINT before it is ignored and ends
+                // nothing, so a WAL ending in a CHECKPOINT still does. A valid one ends a durable
+                // unit like a COMMIT, so a torn-tail truncation keeps it.
                 const auto start = walRecord->constCast<AbortRecord>().abortedBlockStart;
                 const auto block = committedBlockEnds.find(start);
                 if (block == committedBlockEnds.end() || start < replayInfo.lastCheckpointOffset) {
