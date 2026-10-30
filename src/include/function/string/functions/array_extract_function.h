@@ -1,15 +1,16 @@
 #pragma once
 
-#include <cstring>
-
 #include "common/types/string_t.h"
+#include "common/vector/value_vector.h"
 #include "function/list/functions/list_len_function.h"
+#include "function/string/functions/substr_function.h"
 
 namespace lbug {
 namespace function {
 
 struct ArrayExtract {
-    static inline void operation(common::string_t& str, int64_t& idx, common::string_t& result) {
+    static inline void operation(common::string_t& str, int64_t& idx, common::string_t& result,
+        common::ValueVector& resultValueVector) {
         if (idx == 0) {
             result.len = 0;
             return;
@@ -28,7 +29,7 @@ struct ArrayExtract {
             }
         }
         if (isAscii) {
-            copySubstr(str, idxPos, 1 /* length */, result, isAscii);
+            SubStr::copySubstr(str, idxPos, 1 /* length */, result, resultValueVector, isAscii);
         } else {
             int64_t characterCount = 0, startBytePos = 0, endBytePos = 0;
             lbug::utf8proc::utf8proc_grapheme_callback(stringVal.c_str(), stringVal.size(),
@@ -45,17 +46,8 @@ struct ArrayExtract {
             if (endBytePos == 0) {
                 endBytePos = str.len;
             }
-            copySubstr(str, startBytePos, endBytePos - startBytePos, result, isAscii);
-        }
-    }
-
-    static inline void copySubstr(common::string_t& src, int64_t start, int64_t len,
-        common::string_t& result, bool isAscii) {
-        result.len = std::min(len, src.len - start + 1);
-        if (isAscii) {
-            memcpy((uint8_t*)result.getData(), src.getData() + start - 1, result.len);
-        } else {
-            memcpy((uint8_t*)result.getData(), src.getData() + start, result.len);
+            SubStr::copySubstr(str, startBytePos, endBytePos - startBytePos, result,
+                resultValueVector, isAscii);
         }
     }
 };

@@ -40,11 +40,12 @@ public:
         }
     }
 
-    static inline void operation(common::string_t& str, int64_t& idx, common::string_t& result) {
+    static inline void operation(common::string_t& str, int64_t& idx, common::string_t& result,
+        common::ValueVector& resultValueVector) {
         if (str.len < idx) {
             result.set("", 0);
         } else {
-            ArrayExtract::operation(str, idx, result);
+            ArrayExtract::operation(str, idx, result, resultValueVector);
         }
     }
 };
