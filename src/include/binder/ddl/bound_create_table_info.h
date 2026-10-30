@@ -82,6 +82,9 @@ struct BoundPartitionInfo {
     BoundPartitionMethod method;
     std::string columnName;
     uint64_t numPartitions;
+    // Older databases allowed rows in arbitrary child partitions. Only new parents have
+    // enforced routing constraints; preserve this flag when reconstructing a parent from WAL.
+    bool partitionPruningSafe = true;
 
     BoundPartitionInfo(BoundPartitionMethod method, std::string columnName, uint64_t numPartitions)
         : method{method}, columnName{std::move(columnName)}, numPartitions{numPartitions} {}

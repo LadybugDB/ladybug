@@ -14,6 +14,10 @@ using namespace lbug::common;
 namespace lbug {
 namespace catalog {
 
+// Keep the method byte's existing width: WAL catalog payloads have no independent storage
+// version. Old payloads have this bit clear, so they remain readable and untrusted for pruning.
+static constexpr uint8_t PARTITION_PRUNING_SAFE_FLAG = 0x80;
+
 void SortedByProperty::serialize(common::Serializer& serializer) const {
     serializer.write(propertyName);
     serializer.write(ascending);
@@ -95,7 +99,9 @@ void NodeTableCatalogEntry::serialize(common::Serializer& serializer) const {
     serializer.writeDebuggingInfo("partitioning");
     serializer.write(partitionMethod.has_value());
     if (partitionMethod.has_value()) {
-        serializer.write(static_cast<uint8_t>(*partitionMethod));
+        serializer.write(
+            static_cast<uint8_t>(static_cast<uint8_t>(*partitionMethod) |
+                                 (partitionPruningSafe ? PARTITION_PRUNING_SAFE_FLAG : 0)));
         serializer.write(partitionColumnName);
         serializer.write(partitionColumnID);
         serializer.write(numPartitions);
@@ -182,7 +188,9 @@ std::unique_ptr<NodeTableCatalogEntry> NodeTableCatalogEntry::deserialize(
             deserializer.deserializeValue(columnID);
             deserializer.deserializeValue(numPartitions);
             deserializer.deserializeVector(childTableIDs);
-            nodeTableEntry->partitionMethod = static_cast<binder::BoundPartitionMethod>(method);
+            nodeTableEntry->partitionPruningSafe = (method & PARTITION_PRUNING_SAFE_FLAG) != 0;
+            nodeTableEntry->partitionMethod =
+                static_cast<binder::BoundPartitionMethod>(method & ~PARTITION_PRUNING_SAFE_FLAG);
             nodeTableEntry->partitionColumnName = std::move(columnName);
             nodeTableEntry->partitionColumnID = columnID;
             nodeTableEntry->numPartitions = numPartitions;
@@ -262,6 +270,7 @@ std::unique_ptr<TableCatalogEntry> NodeTableCatalogEntry::copy() const {
     other->createBindDataFunc = createBindDataFunc;
     other->foreignDatabaseName = foreignDatabaseName;
     other->partitionMethod = partitionMethod;
+    other->partitionPruningSafe = partitionPruningSafe;
     other->partitionColumnName = partitionColumnName;
     other->partitionColumnID = partitionColumnID;
     other->numPartitions = numPartitions;
@@ -280,6 +289,7 @@ std::unique_ptr<BoundExtraCreateCatalogEntryInfo> NodeTableCatalogEntry::getBoun
     if (isPartitioned()) {
         partitionInfo =
             binder::BoundPartitionInfo(*partitionMethod, partitionColumnName, numPartitions);
+        partitionInfo->partitionPruningSafe = partitionPruningSafe;
     }
     auto boundExtraInfo = std::make_unique<binder::BoundExtraCreateNodeTableInfo>(primaryKeyName,
         copyVector(getProperties()), storage, storageFormat, std::move(partitionInfo),

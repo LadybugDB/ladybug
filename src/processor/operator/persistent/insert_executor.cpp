@@ -180,6 +180,10 @@ nodeID_t NodeInsertExecutor::insert(main::ClientContext* context) {
         evaluator->evaluate();
     }
     auto transaction = Transaction::Get(*context);
+    if (tableInfo.partitionConstraint != nullptr) {
+        validatePartitionKey(context, *tableInfo.partitionConstraint,
+            *tableInfo.columnDataVectors[tableInfo.partitionKeyColumnID]);
+    }
     auto* targetTable = resolveTargetTable(context);
     nodeID_t resultNodeID;
     if (targetTable == nullptr && !tableInfo.partitionTables.empty()) {

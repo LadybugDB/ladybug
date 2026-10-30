@@ -75,6 +75,8 @@ public:
     // Get table entry with id.
     TableCatalogEntry* getTableCatalogEntry(const transaction::Transaction* transaction,
         common::table_id_t tableID) const;
+    NodeTableCatalogEntry* getPartitionParentForWrite(transaction::Transaction* transaction,
+        common::table_id_t tableID);
     // Get all node table entries.
     std::vector<NodeTableCatalogEntry*> getNodeTableEntries(
         const transaction::Transaction* transaction, bool useInternal = true) const;

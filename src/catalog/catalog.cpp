@@ -157,6 +157,14 @@ TableCatalogEntry* Catalog::getTableCatalogEntry(const Transaction* transaction,
     return result->ptrCast<TableCatalogEntry>();
 }
 
+NodeTableCatalogEntry* Catalog::getPartitionParentForWrite(Transaction* transaction,
+    table_id_t tableID) {
+    auto* entry = getTableCatalogEntry(transaction, tableID)->ptrCast<NodeTableCatalogEntry>();
+    DASSERT(entry->isPartitioned());
+    return tables->copyTableEntryForWrite(transaction, entry->getName())
+        ->ptrCast<NodeTableCatalogEntry>();
+}
+
 template<TableCatalogEntryType T>
 std::vector<T*> Catalog::getTableEntries(const Transaction* transaction, bool useInternal,
     CatalogEntryType entryType) const {
@@ -702,6 +710,7 @@ CatalogEntry* Catalog::createNodeTableEntry(Transaction* transaction,
         const auto& partitionInfo = *extraInfo->partitionInfo;
         entry->setPartitionInfo(partitionInfo.method, partitionInfo.columnName,
             entry->getPropertyID(partitionInfo.columnName), partitionInfo.numPartitions);
+        entry->setPartitionPruningSafe(partitionInfo.partitionPruningSafe);
     }
     entry->setHasParent(info.hasParent);
     createSerialSequence(transaction, entry.get(), info.isInternal);

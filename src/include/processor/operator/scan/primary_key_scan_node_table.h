@@ -11,11 +11,12 @@ struct PrimaryKeyScanPrintInfo final : OPPrintInfo {
     std::string key;
     std::string alias;
     std::string indexType;
+    std::vector<std::string> tableNames;
 
     PrimaryKeyScanPrintInfo(binder::expression_vector expressions, std::string key,
-        std::string alias, std::string indexType)
+        std::string alias, std::string indexType, std::vector<std::string> tableNames)
         : expressions(std::move(expressions)), key(std::move(key)), alias{std::move(alias)},
-          indexType{std::move(indexType)} {}
+          indexType{std::move(indexType)}, tableNames{std::move(tableNames)} {}
 
     std::string toString() const override;
 
@@ -26,7 +27,7 @@ struct PrimaryKeyScanPrintInfo final : OPPrintInfo {
 private:
     PrimaryKeyScanPrintInfo(const PrimaryKeyScanPrintInfo& other)
         : OPPrintInfo(other), expressions(other.expressions), key(other.key), alias(other.alias),
-          indexType(other.indexType) {}
+          indexType(other.indexType), tableNames(other.tableNames) {}
 };
 
 struct PrimaryKeyScanSharedState {

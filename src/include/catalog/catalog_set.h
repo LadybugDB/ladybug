@@ -23,6 +23,7 @@ using CatalogEntrySet = common::case_insensitive_map_t<catalog::CatalogEntry*>;
 
 namespace catalog {
 class Catalog;
+class TableCatalogEntry;
 
 class LBUG_API CatalogSet {
     friend class storage::UndoBuffer;
@@ -40,6 +41,10 @@ public:
 
     void alterTableEntry(transaction::Transaction* transaction,
         const binder::BoundAlterInfo& alterInfo, bool skipLoggingToWAL = false);
+    // The caller supplies the WAL representation. Dynamic partition membership is
+    // reconstructed from child creation records; this copy supplies MVCC and undo.
+    TableCatalogEntry* copyTableEntryForWrite(transaction::Transaction* transaction,
+        const std::string& name);
 
     CatalogEntrySet getEntries(const transaction::Transaction* transaction);
     CatalogEntry* getEntryOfOID(const transaction::Transaction* transaction, common::oid_t oid);

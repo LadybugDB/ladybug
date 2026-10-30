@@ -169,6 +169,7 @@ public:
     static Transaction* Get(const main::ClientContext& context);
     // Records that `catalog` changed; its version is bumped when the transaction commits.
     void recordCatalogChange(catalog::Catalog* catalog);
+    bool hasCatalogChanges() const;
 
 private:
     common::offset_t getMinUncommittedNodeOffset(const storage::Table& table) const;
@@ -190,7 +191,7 @@ private:
     bool forceCheckpoint;
     std::vector<std::unique_ptr<catalog::Catalog>> retiredGraphCatalogs;
     std::unordered_set<catalog::Catalog*> changedCatalogs;
-    std::mutex changedCatalogsMutex;
+    mutable std::mutex changedCatalogsMutex;
 };
 
 // TODO(bmwinger): These shouldn't need to be exported

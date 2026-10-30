@@ -3,6 +3,7 @@
 #include "binder/ddl/bound_create_table_info.h"
 #include "catalog/catalog.h"
 #include "catalog/catalog_entry/node_table_catalog_entry.h"
+#include "common/exception/runtime.h"
 #include "common/types/date_t.h"
 #include "common/types/int128_t.h"
 #include "common/types/timestamp_t.h"
@@ -127,6 +128,37 @@ std::string encodeListPartitionKey(const common::ValueVector& keyVector, uint32_
     }
 }
 
+void validatePartitionKey(main::ClientContext* context, const NodeTableCatalogEntry& child,
+    const ValueVector& keyVector) {
+    auto* catalog = child.getOwningCatalog();
+    if (catalog == nullptr) {
+        catalog = Catalog::Get(*context);
+    }
+    const auto& parent = catalog
+                             ->getTableCatalogEntry(transaction::Transaction::Get(*context),
+                                 child.getParentTableID())
+                             ->constCast<NodeTableCatalogEntry>();
+    const auto& selection = keyVector.state->getSelVector();
+    std::vector<uint64_t> indexes;
+    if (parent.getPartitionMethod() == binder::BoundPartitionMethod::HASH) {
+        computePartitionIndexes(keyVector, parent.getNumPartitions(), indexes);
+    }
+    for (auto i = 0u; i < selection.getSelSize(); ++i) {
+        const auto pos = selection[i];
+        const auto matches =
+            parent.getPartitionMethod() == binder::BoundPartitionMethod::HASH ?
+                indexes[i] == child.getPartitionIndex() :
+                !keyVector.isNull(pos) && parent.findListPartition(encodeListPartitionKey(keyVector,
+                                              pos)) == child.getTableID();
+        if (!matches) {
+            throw RuntimeException(std::format(
+                "Partition key violates the constraint of partition {}. Insert into {} to route "
+                "the row automatically.",
+                child.getName(), parent.getName()));
+        }
+    }
+}
+
 // ---- ListPartitionRouter ----
 
 ListPartitionRouter::ListPartitionRouter(main::ClientContext* context_,
@@ -158,13 +190,16 @@ ListPartitionRouter::Route ListPartitionRouter::getOrCreatePartitionLocked(
         if (existingKeys[i].first == encodedKey) {
             auto* childEntry = catalog->getTableCatalogEntry(transaction, existingKeys[i].second);
             auto* table = storage::PartitionStorageRegistry::resolveNodeTable(context, *childEntry);
-            Route route{table, i};
+            Route route{table, childEntry->constCast<NodeTableCatalogEntry>().getPartitionIndex()};
             routesByKey.emplace(encodedKey, route);
             return route;
         }
     }
     // Create the partition: an ordinary node table with the parent's schema, via the same
     // catalog + storage machinery as CREATE NODE TABLE.
+    // The parent may have been committed by an earlier transaction. Mutating its vectors
+    // in place leaks new children to other snapshots and leaves dangling IDs on rollback.
+    parent = catalog->getPartitionParentForWrite(transaction, parent->getTableID());
     const auto ordinal = parent->getChildTableIDs().size();
     auto childName = std::format("{}_p{}", parent->getName(), ordinal);
     std::vector<binder::PropertyDefinition> propertyDefinitions;
@@ -190,6 +225,9 @@ ListPartitionRouter::Route ListPartitionRouter::getOrCreatePartitionLocked(
     storage::PartitionStorageRegistry::Get(context)
         ->getOrCreate(context, tableID, childName)
         .createTable(childEntry, context);
+    transaction->pushRollbackCallback([context = context, tableID](auto&) {
+        storage::PartitionStorageRegistry::Get(context)->dropAll(context, {tableID});
+    });
     parent->addChildTableID(tableID);
     parent->addListPartition(encodedKey, tableID);
     Route route{storage::PartitionStorageRegistry::Get(context)

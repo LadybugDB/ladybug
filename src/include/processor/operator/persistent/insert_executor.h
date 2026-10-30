@@ -67,6 +67,7 @@ struct NodeTableInsertInfo {
     common::PartitionMethod partitionMethod = common::PartitionMethod::HASH;
     common::table_id_t parentTableID = common::INVALID_TABLE_ID;
     std::unique_ptr<ListPartitionRouter> listRouter;
+    const catalog::NodeTableCatalogEntry* partitionConstraint = nullptr;
 
     NodeTableInsertInfo(storage::NodeTable* table,
         evaluator::evaluator_vector_t columnDataEvaluators)
@@ -82,7 +83,7 @@ private:
           partitionTables{other.partitionTables}, partitionChildIDs{other.partitionChildIDs},
           partitionRefs{other.partitionRefs}, partitionHandles{other.partitionHandles},
           partitionKeyColumnID{other.partitionKeyColumnID}, partitionMethod{other.partitionMethod},
-          parentTableID{other.parentTableID} {}
+          parentTableID{other.parentTableID}, partitionConstraint{other.partitionConstraint} {}
 };
 
 class NodeInsertExecutor {
