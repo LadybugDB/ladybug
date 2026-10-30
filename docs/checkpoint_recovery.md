@@ -58,7 +58,9 @@ When nothing was committed after the last `CHECKPOINT` record, the marker decide
 recovery discards the shadow files of the main database and partition children. Without it, a
 remaining shadow is replayed as the committed checkpoint's, and a missing one is an error. A marker
 written by an older build holds `1` instead of `2` and only proves that a missing shadow was
-applied. Named graphs still recover through their own shadow files.
+applied. A marker that is not exactly one of these bytes, such as the empty file a crash while
+writing it can leave, counts as no marker. Named graphs still recover through their own shadow
+files.
 
 ## Checkpoint bundle format
 

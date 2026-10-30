@@ -85,13 +85,19 @@ static PinnedCheckpointMarker readPinnedCheckpointMarker(main::ClientContext& cl
         return PinnedCheckpointMarker::NONE;
     }
     auto fileInfo = vfs->openFile(markerPath, FileOpenFlags(FileFlags::READ_ONLY), &clientContext);
-    uint8_t content = 0;
-    if (fileInfo->getFileSize() == 1) {
-        fileInfo->readFromFile(&content, 1, 0);
+    if (fileInfo->getFileSize() != 1) {
+        return PinnedCheckpointMarker::NONE;
     }
-    return content == StorageUtils::PINNED_CHECKPOINT_MARKER_APPLIED ?
-               PinnedCheckpointMarker::APPLIED :
-               PinnedCheckpointMarker::LEGACY;
+    uint8_t content = 0;
+    fileInfo->readFromFile(&content, 1, 0);
+    switch (content) {
+    case StorageUtils::PINNED_CHECKPOINT_MARKER_APPLIED:
+        return PinnedCheckpointMarker::APPLIED;
+    case StorageUtils::PINNED_CHECKPOINT_MARKER_LEGACY:
+        return PinnedCheckpointMarker::LEGACY;
+    default:
+        return PinnedCheckpointMarker::NONE;
+    }
 }
 
 static void removePartitionChildShadowFiles(main::ClientContext& clientContext) {
@@ -779,7 +785,7 @@ void WALReplayer::replayActiveWAL(Checkpointer& checkpointer, bool throwOnWalRep
                 throw RuntimeException(
                     std::format("Cannot recover WAL {}: it holds CHECKPOINT records but its "
                                 "shadow file {} is missing "
-                                "with no pinned-checkpoint marker. Do not delete the WAL or "
+                                "with no valid pinned-checkpoint marker. Do not delete the WAL or "
                                 "shadow files; they hold "
                                 "committed pages. Restore both files they were written for.",
                         walPath, shadowFilePath));
@@ -849,7 +855,7 @@ void WALReplayer::replayPinnedActiveCheckpoint(Checkpointer& checkpointer,
     }
     if (readPinnedCheckpointMarker(clientContext) == PinnedCheckpointMarker::NONE) {
         throw RuntimeException(std::format("Cannot recover checkpoint WAL {}: shadow file {} "
-                                           "is missing with no pinned-checkpoint "
+                                           "is missing with no valid pinned-checkpoint "
                                            "marker. Do not delete the WAL or shadow files; "
                                            "they hold committed pages. Restore the "
                                            "database file they were written for.",

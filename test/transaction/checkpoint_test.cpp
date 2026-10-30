@@ -5710,6 +5710,26 @@ protected:
         std::ofstream{markerPath(), std::ios::binary | std::ios::trunc} << content;
     }
 
+    // A crashed database whose shadow is gone must refuse to open with each of these markers,
+    // then open once the marker holds the current content.
+    void expectInvalidMarkersRefused() {
+        for (const auto& content :
+            {std::string{}, std::string(1, '\0'), std::string{"\x02\x02"}, std::string{"\x03"}}) {
+            writeMarker(content);
+            try {
+                createDBAndConn();
+                ADD_FAILURE() << "reopened with a marker of " << content.size() << " bytes";
+                return;
+            } catch (const std::exception& e) {
+                EXPECT_NE(std::string{e.what()}.find("no valid pinned-checkpoint marker"),
+                    std::string::npos)
+                    << e.what();
+            }
+        }
+        writeMarker(std::string(1, StorageUtils::PINNED_CHECKPOINT_MARKER_APPLIED));
+        createDBAndConn();
+    }
+
     std::string shadowPath() const { return StorageUtils::getShadowFilePath(databasePath); }
     std::string markerPath() const {
         return StorageUtils::getPinnedCheckpointMarkerPath(databasePath);
@@ -5928,7 +5948,8 @@ TEST_F(PinnedCheckpointCrashTest, MissingShadowWithoutMarkerRefusesToOpen) {
         createDBAndConn();
         FAIL() << "reopened without the marker";
     } catch (const std::exception& e) {
-        EXPECT_NE(std::string{e.what()}.find("no pinned-checkpoint marker"), std::string::npos)
+        EXPECT_NE(std::string{e.what()}.find("no valid pinned-checkpoint marker"),
+            std::string::npos)
             << e.what();
     }
 }
@@ -5945,7 +5966,8 @@ TEST_F(PinnedCheckpointCrashTest, MissingShadowWithoutMarkerRefusesToOpenWithLat
         createDBAndConn();
         FAIL() << "reopened without the marker";
     } catch (const std::exception& e) {
-        EXPECT_NE(std::string{e.what()}.find("no pinned-checkpoint marker"), std::string::npos)
+        EXPECT_NE(std::string{e.what()}.find("no valid pinned-checkpoint marker"),
+            std::string::npos)
             << e.what();
     }
 }
@@ -5964,6 +5986,29 @@ TEST_F(PinnedCheckpointCrashTest, TornCommitAfterPinnedCheckpointRetiresWAL) {
     EXPECT_EQ(ids(), (std::vector<int64_t>{1, 2, 3}));
     const auto walPath = StorageUtils::getWALFilePath(databasePath);
     EXPECT_TRUE(!std::filesystem::exists(walPath) || std::filesystem::file_size(walPath) == 0);
+}
+
+// A marker that is empty, longer than one byte or holds an unknown byte proves nothing, like a
+// missing one: a crash while it is written can leave such a file.
+TEST_F(PinnedCheckpointCrashTest, InvalidMarkerWithoutShadowRefusesToOpen) {
+    query("CREATE NODE TABLE P(id INT64 PRIMARY KEY);");
+    createRows(1, 3);
+    pinWAL();
+    query("CHECKPOINT;");
+    crash();
+    expectInvalidMarkersRefused();
+    EXPECT_EQ(ids(), (std::vector<int64_t>{1, 2, 3}));
+}
+
+TEST_F(PinnedCheckpointCrashTest, InvalidMarkerWithoutShadowRefusesToOpenWithLaterCommits) {
+    query("CREATE NODE TABLE P(id INT64 PRIMARY KEY);");
+    createRows(1, 3);
+    pinWAL();
+    query("CHECKPOINT;");
+    createRows(4, 5);
+    crash();
+    expectInvalidMarkersRefused();
+    EXPECT_EQ(ids(), (std::vector<int64_t>{1, 2, 3, 4, 5}));
 }
 
 // A marker written by an older build still proves that a missing shadow was applied.
