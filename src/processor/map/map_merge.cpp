@@ -105,6 +105,10 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapMerge(const LogicalOperator* lo
     auto storeInsertedPatternIDs = logicalMerge.getOnMatchSetNodeInfos().empty() &&
                                    logicalMerge.getOnMatchSetRelInfos().empty();
     auto suppressDuplicateCreatedOutput = logicalMerge.suppressesDuplicateCreatedOutput();
+    // UnwindDedupOptimizer drops repeated rows under a node MERGE only when MERGE suppresses them.
+    DASSERT(
+        logicalMerge.getChild(0)->getOperatorType() != LogicalOperatorType::UNWIND_DEDUPLICATE ||
+        !logicalMerge.getInsertRelInfos().empty() || suppressDuplicateCreatedOutput);
     auto numNodeIDFields = storeInsertedPatternIDs ? logicalMerge.getInsertNodeInfos().size() :
                                                      logicalMerge.getOnMatchSetNodeInfos().size();
     auto numRelIDFields = storeInsertedPatternIDs ? logicalMerge.getInsertRelInfos().size() :
