@@ -35,6 +35,9 @@
 -STATEMENT MATCH (a:P)-[:R]->(b) WHERE a.ID = 1 RETURN count(distinct a.ID);
 ---- 1
 1
+-STATEMENT MATCH (a:P)-[:R]->(b) WHERE a.ID = 1 RETURN count(distinct id(a));
+---- 1
+1
 -STATEMENT MATCH (a:P)-[:R]->(b) RETURN count(distinct a.ID);
 ---- 1
 9
@@ -91,3 +94,28 @@
 -STATEMENT MATCH (a:U)-[:F*1..5]->(b:U) WHERE a.id = 0 AND a.name = 'n0' RETURN count(distinct b);
 ---- 1
 5
+
+-CASE CountOverNodeWithoutPrimaryKeyProperty
+# The unlabeled u is bound over every node table, so its key property is named after Q's ID and
+# is not U's primary key id: the rewrites must skip instead of asking for the key.
+-STATEMENT CREATE NODE TABLE Q (ID INT64, PRIMARY KEY(ID));
+---- ok
+-STATEMENT CREATE NODE TABLE U (id INT64, PRIMARY KEY(id));
+---- ok
+-STATEMENT CREATE REL TABLE F (FROM U TO U);
+---- ok
+-STATEMENT UNWIND range(0, 6) AS i CREATE (:U {id: i});
+---- ok
+-STATEMENT MATCH (a:U), (b:U) WHERE b.id > a.id CREATE (a)-[:F]->(b);
+---- ok
+-STATEMENT ALTER TABLE U SET SORTED BY (id ASC) CSR;
+---- ok
+-STATEMENT MATCH (u)-[:F]->(v:U) RETURN count(distinct u.id);
+---- 1
+6
+-STATEMENT MATCH (u)-[:F]->(v:U) RETURN u.id, count(*) AS c ORDER BY c DESC LIMIT 1;
+---- 1
+0|6
+-STATEMENT MATCH (u)-[:F]->(v:U) WHERE u.id = 3 RETURN count(*);
+---- 1
+3

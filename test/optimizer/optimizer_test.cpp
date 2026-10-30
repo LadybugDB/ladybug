@@ -1146,13 +1146,13 @@ TEST_F(OptimizerTest, CountRelTableOptimizer) {
 }
 
 TEST_F(OptimizerTest, CountExtendChainWithParameterIndexScan) {
-    ASSERT_TRUE(conn->query("CREATE NODE TABLE ix_user(id INT64, name STRING, PRIMARY KEY(id));")
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE ix_user(ID INT64, name STRING, PRIMARY KEY(ID));")
                     ->isSuccess());
     ASSERT_TRUE(conn->query("CREATE REL TABLE ix_follows(FROM ix_user TO ix_user);")->isSuccess());
     ASSERT_TRUE(conn->query("UNWIND range(1, 10) AS i "
-                            "CREATE (:ix_user {id: i, name: 'n' + cast(i AS STRING)});")
+                            "CREATE (:ix_user {ID: i, name: 'n' + cast(i AS STRING)});")
                     ->isSuccess());
-    ASSERT_TRUE(conn->query("MATCH (a:ix_user), (b:ix_user) WHERE b.id = a.id + 1 "
+    ASSERT_TRUE(conn->query("MATCH (a:ix_user), (b:ix_user) WHERE b.ID = a.ID + 1 "
                             "CREATE (a)-[:ix_follows]->(b);")
                     ->isSuccess());
     ASSERT_TRUE(
