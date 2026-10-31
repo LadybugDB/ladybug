@@ -1653,6 +1653,40 @@ INSTANTIATE_TEST_SUITE_P(ShadowID, LegacyMainWALDatabaseIDTest,
         return std::string{};
     });
 
+// An ABORT record only ever follows its own COMMIT, with no CHECKPOINT between them. One that
+// names no such block is ignored and does not end the WAL: a WAL that ends in a CHECKPOINT whose
+// shadow is not applied yet still recovers through that shadow, instead of replaying the records
+// before an earlier pinned CHECKPOINT a second time.
+TEST_F(CheckpointRetryAfterFailureTest, StrayAbortRecordAfterCheckpointIsIgnored) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    insertNodes(0, 50);
+    auto reader = std::make_unique<main::Connection>(database.get());
+    ASSERT_TRUE(reader->query("BEGIN TRANSACTION READ ONLY;")->isSuccess());
+    checkpoint();
+    const auto walPath = StorageUtils::getWALFilePath(databasePath);
+    const auto blockBeforeLastCheckpoint = std::filesystem::file_size(walPath);
+    insertNodes(50, 100);
+    failCheckpointWith<FlakyCheckpointerFailsOnApplyingShadow>();
+    const bool enableChecksums = getClientContext(*conn)->getDBConfig()->enableChecksums;
+    reader.reset();
+    conn.reset();
+    database.reset();
+    std::ofstream wal{walPath, std::ios::binary | std::ios::app};
+    for (const auto start : {uint64_t{1}, blockBeforeLastCheckpoint}) {
+        const auto record = serializeCheckpointRecord(AbortRecord{start});
+        wal.write(reinterpret_cast<const char*>(record.data.get()), record.size);
+        if (enableChecksums) {
+            const auto recordChecksum = checksum(record.data.get(), record.size);
+            wal.write(reinterpret_cast<const char*>(&recordChecksum), sizeof(recordChecksum));
+        }
+    }
+    wal.close();
+    createDBAndConn();
+    checkNodes(100);
+}
+
 TEST_F(CheckpointRetryAfterFailureTest, LegacyMainShadowRejectsReplacementDatabase) {
     if (inMemMode || systemConfig->checkpointThreshold == 0) {
         GTEST_SKIP();

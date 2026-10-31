@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <iostream>
+#include <optional>
 #include <thread>
 
 #include "common/exception/checkpoint.h"
@@ -119,11 +120,33 @@ Transaction* TransactionManager::beginTransaction(main::ClientContext& clientCon
     }
 }
 
+// The transaction's COMMIT record is durable, but its changes were not applied and the caller
+// rolls them back: without an ABORT record recovery would apply them. If even that cannot be
+// logged, refusing writes keeps a retry from applying them twice before a reopen does.
+void TransactionManager::logAbortOfDurableCommit(uint64_t walBlockStart,
+    const std::string& publishError) {
+    try {
+        wal.logAbort(walBlockStart);
+    } catch (const std::exception& e) {
+        // A failed sync has poisoned the WAL already; one that failed before it has not.
+        wal.poison(std::format("A transaction failed after its COMMIT record was written, and "
+                               "logging its abort failed: {}",
+            e.what()));
+        throw TransactionManagerException(std::format(
+            "The transaction failed after its COMMIT record was written, and logging its abort "
+            "failed, so it is applied when the database reopens; until then the database refuses "
+            "further writes. Original error: {}. Abort error: {}",
+            publishError, e.what()));
+    }
+}
+
 void TransactionManager::commit(main::ClientContext& clientContext, Transaction* transaction) {
     bool shouldForceCheckpoint = false;
     bool shouldAutoCheckpoint = false;
     bool markedAsCommitting = false;
     uint64_t walCommitSequence = 0;
+    uint64_t walBlockStart = 0;
+    std::optional<std::string> publishError;
     try {
         {
             std::unique_lock lck{mtxForSerializingPublicFunctionCalls};
@@ -137,7 +160,7 @@ void TransactionManager::commit(main::ClientContext& clientContext, Transaction*
                 committingWriteTransactionCount.fetch_add(1, std::memory_order_release);
                 markedAsCommitting = true;
                 lck.unlock();
-                transaction->writeCommitToWAL(&wal, walCommitSequence);
+                transaction->writeCommitToWAL(&wal, walCommitSequence, walBlockStart);
                 lck.lock();
                 if (walCommitSequence != 0) {
                     cvForPublishingCommit.wait(lck,
@@ -145,7 +168,15 @@ void TransactionManager::commit(main::ClientContext& clientContext, Transaction*
                 }
                 lastTimestamp.fetch_add(1, std::memory_order_acq_rel);
                 transaction->commitTS = lastTimestamp.load(std::memory_order_acquire);
-                transaction->publishCommit();
+                try {
+                    transaction->publishCommit();
+                } catch (const std::exception& e) {
+                    publishError = e.what();
+                    throw;
+                } catch (...) {
+                    publishError = "unknown exception";
+                    throw;
+                }
                 if (walCommitSequence != 0) {
                     nextWALCommitSequenceToPublish++;
                     cvForPublishingCommit.notify_all();
@@ -179,6 +210,12 @@ void TransactionManager::commit(main::ClientContext& clientContext, Transaction*
             // in-memory publish work. The rollback path clears activeWriteTransactionCount.
             committingWriteTransactionCount.fetch_sub(1, std::memory_order_release);
             cvForCommittingWriteTransaction.notify_all();
+        }
+        // activeWriteTransactionCount still counts this transaction until the caller rolls it back,
+        // so no checkpoint can rotate the WAL between its COMMIT and this ABORT. A failed WAL sync
+        // logs no ABORT: it has poisoned the WAL, and a reopen applies the COMMIT if it is durable.
+        if (publishError && walCommitSequence != 0) {
+            logAbortOfDurableCommit(walBlockStart, *publishError);
         }
         throw;
     }

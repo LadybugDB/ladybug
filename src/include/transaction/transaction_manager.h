@@ -75,6 +75,7 @@ public:
 private:
     bool hasNoActiveTransactions() const;
     void checkpointNoLock(main::ClientContext& clientContext);
+    void logAbortOfDurableCommit(uint64_t walBlockStart, const std::string& publishError);
     // Try to checkpoint without blocking. Returns immediately if another checkpoint is in
     // progress. Used by auto-checkpoint after commit.
     void tryCheckpoint(main::ClientContext& clientContext);

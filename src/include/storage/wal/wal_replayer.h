@@ -22,10 +22,17 @@ class Checkpointer;
 class StorageManager;
 class WALReplayer {
 public:
+    // A committed transaction's records [start, end) that a later ABORT record undid.
+    struct AbortedBlock {
+        uint64_t start;
+        uint64_t end;
+    };
+
     struct GraphRecoveryState {
         struct WALReplayRange {
             std::string path;
             uint64_t endOffset;
+            std::vector<AbortedBlock> abortedBlocks;
         };
 
         std::vector<WALReplayRange> walReplayRanges;
@@ -62,6 +69,8 @@ private:
         uint64_t offsetBeforeFirstCheckpoint = 0;
         common::uuid walDatabaseID{};
         uint64_t checkpointFormatVersion = 0;
+        // Sorted by start; replay skips these transactions.
+        std::vector<AbortedBlock> abortedBlocks;
     };
 
     void replayWALRecord(WALRecord& walRecord) const;

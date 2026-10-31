@@ -1,7 +1,9 @@
 #include "storage/wal/wal_replayer.h"
 
+#include <algorithm>
 #include <optional>
 #include <string>
+#include <unordered_map>
 
 #include "catalog/catalog.h"
 #include "common/constants.h"
@@ -74,6 +76,13 @@ private:
     catalog::Catalog* previous;
 };
 } // namespace
+
+static bool isInAbortedBlock(const std::vector<WALReplayer::AbortedBlock>& abortedBlocks,
+    uint64_t offset) {
+    const auto next = std::upper_bound(abortedBlocks.begin(), abortedBlocks.end(), offset,
+        [](uint64_t value, const WALReplayer::AbortedBlock& block) { return value < block.start; });
+    return next != abortedBlocks.begin() && offset < std::prev(next)->end;
+}
 
 static void removePartitionChildShadowFiles(main::ClientContext& clientContext) {
     auto* dbManager = main::DatabaseManager::Get(clientContext);
@@ -490,7 +499,8 @@ WALReplayer::GraphRecoveryState WALReplayer::prepareGraphCheckpoint(StorageManag
             shadowDatabaseID);
         if (frozenWAL.has_value() && frozenWAL->isLastRecordCheckpoint && activeWAL.has_value() &&
             !activeWAL->isLastRecordCheckpoint) {
-            recoveryState.walReplayRanges.push_back({activeWALPath, activeWAL->offsetDeserialized});
+            recoveryState.walReplayRanges.push_back(
+                {activeWALPath, activeWAL->offsetDeserialized, activeWAL->abortedBlocks});
         } else if (activeWAL.has_value() && activeWAL->isLastRecordCheckpoint &&
                    frozenWAL.has_value() && !frozenWAL->isLastRecordCheckpoint) {
             throw RuntimeException(std::format(
@@ -501,10 +511,12 @@ WALReplayer::GraphRecoveryState WALReplayer::prepareGraphCheckpoint(StorageManag
     } else {
         removeFileAndSyncParentDirectory(graphShadowPath);
         if (frozenWAL.has_value()) {
-            recoveryState.walReplayRanges.push_back({frozenWALPath, frozenWAL->offsetDeserialized});
+            recoveryState.walReplayRanges.push_back(
+                {frozenWALPath, frozenWAL->offsetDeserialized, frozenWAL->abortedBlocks});
         }
         if (activeWAL.has_value()) {
-            recoveryState.walReplayRanges.push_back({activeWALPath, activeWAL->offsetDeserialized});
+            recoveryState.walReplayRanges.push_back(
+                {activeWALPath, activeWAL->offsetDeserialized, activeWAL->abortedBlocks});
         }
     }
     return recoveryState;
@@ -546,7 +558,12 @@ void WALReplayer::replayGraphWAL(StorageManager& storageManager,
             deserializer.getReader()->onObjectEnd();
             while (
                 getReadOffset(deserializer, persistedHeader->enableChecksums) < range.endOffset) {
+                const auto recordStart =
+                    getReadOffset(deserializer, persistedHeader->enableChecksums);
                 auto walRecord = WALRecord::deserialize(deserializer, clientContext);
+                if (isInAbortedBlock(range.abortedBlocks, recordStart)) {
+                    continue;
+                }
                 replayWALRecord(*walRecord);
             }
             truncateWALFile(*fileInfo, range.endOffset);
@@ -670,8 +687,10 @@ void WALReplayer::replayFrozenWAL(Checkpointer& checkpointer, bool throwOnWalRep
             const auto skipBefore = discardCheckpointPrefix ? replayInfo.lastCheckpointOffset : 0;
             while (getReadOffset(deserializer, enableChecksums) < replayEnd) {
                 DASSERT(!deserializer.finished());
+                const auto recordStart = getReadOffset(deserializer, enableChecksums);
                 auto walRecord = WALRecord::deserialize(deserializer, clientContext);
-                if (getReadOffset(deserializer, enableChecksums) <= skipBefore) {
+                if (getReadOffset(deserializer, enableChecksums) <= skipBefore ||
+                    isInAbortedBlock(replayInfo.abortedBlocks, recordStart)) {
                     continue;
                 }
                 replayWALRecord(*walRecord);
@@ -800,8 +819,10 @@ void WALReplayer::replayActiveWAL(Checkpointer& checkpointer, bool throwOnWalRep
             const auto skipBefore = discardCheckpointPrefix ? replayInfo.lastCheckpointOffset : 0;
             while (getReadOffset(deserializer, enableChecksums) < replayEnd) {
                 DASSERT(!deserializer.finished());
+                const auto recordStart = getReadOffset(deserializer, enableChecksums);
                 auto walRecord = WALRecord::deserialize(deserializer, clientContext);
-                if (getReadOffset(deserializer, enableChecksums) <= skipBefore) {
+                if (getReadOffset(deserializer, enableChecksums) <= skipBefore ||
+                    isInAbortedBlock(replayInfo.abortedBlocks, recordStart)) {
                     continue;
                 }
                 replayWALRecord(*walRecord);
@@ -949,6 +970,8 @@ WALReplayer::WALReplayInfo WALReplayer::dryReplay(FileInfo& fileInfo, bool throw
         checkWALHeader(*persistedHeader, enableChecksums);
     }
     WALReplayInfo replayInfo;
+    std::optional<uint64_t> openBlockStart;
+    std::unordered_map<uint64_t, uint64_t> committedBlockEnds;
     try {
         Deserializer deserializer = initDeserializer(fileInfo, clientContext, enableChecksums);
 
@@ -959,9 +982,28 @@ WALReplayer::WALReplayInfo WALReplayer::dryReplay(FileInfo& fileInfo, bool throw
 
         bool finishedDeserializing = deserializer.finished();
         while (!finishedDeserializing) {
+            const auto recordStart = getReadOffset(deserializer, enableChecksums);
             auto walRecord = WALRecord::deserialize(deserializer, clientContext);
             finishedDeserializing = deserializer.finished();
             switch (walRecord->type) {
+            case WALRecordType::BEGIN_TRANSACTION_RECORD: {
+                replayInfo.isLastRecordCheckpoint = false;
+                openBlockStart = recordStart;
+            } break;
+            case WALRecordType::ABORT_RECORD: {
+                // A failed commit logs its ABORT in the file of its COMMIT, and no CHECKPOINT
+                // record comes between them: a checkpoint waits for the rollback. An ABORT naming
+                // no block committed after the last CHECKPOINT before it is ignored and ends
+                // nothing, so a WAL ending in a CHECKPOINT still does. A valid one ends a durable
+                // unit like a COMMIT, so a torn-tail truncation keeps it.
+                const auto start = walRecord->constCast<AbortRecord>().abortedBlockStart;
+                const auto block = committedBlockEnds.find(start);
+                if (block == committedBlockEnds.end() || start < replayInfo.lastCheckpointOffset) {
+                    break;
+                }
+                replayInfo.offsetDeserialized = getReadOffset(deserializer, enableChecksums);
+                replayInfo.abortedBlocks.push_back({start, block->second});
+            } break;
             case WALRecordType::CHECKPOINT_RECORD: {
                 // A CHECKPOINT record need not be final: a pinned checkpoint skips WAL
                 // rotation, so its record lands mid-file in the active WAL (and
@@ -986,6 +1028,10 @@ WALReplayer::WALReplayInfo WALReplayer::dryReplay(FileInfo& fileInfo, bool throw
                 // Update the offset to the end of the last commit record.
                 replayInfo.isLastRecordCheckpoint = false;
                 replayInfo.offsetDeserialized = getReadOffset(deserializer, enableChecksums);
+                if (openBlockStart.has_value()) {
+                    committedBlockEnds[*openBlockStart] = replayInfo.offsetDeserialized;
+                    openBlockStart.reset();
+                }
             } break;
             default: {
                 // Any other record after a checkpoint also ends the checkpoint suffix.
@@ -1000,6 +1046,8 @@ WALReplayer::WALReplayInfo WALReplayer::dryReplay(FileInfo& fileInfo, bool throw
             throw;
         }
     }
+    std::sort(replayInfo.abortedBlocks.begin(), replayInfo.abortedBlocks.end(),
+        [](const AbortedBlock& a, const AbortedBlock& b) { return a.start < b.start; });
     return replayInfo;
 }
 
@@ -1055,6 +1103,9 @@ void WALReplayer::replayWALRecord(WALRecord& walRecord) const {
     switch (walRecord.type) {
     case WALRecordType::BEGIN_TRANSACTION_RECORD: {
         TransactionContext::Get(clientContext)->beginRecoveryTransaction();
+    } break;
+    case WALRecordType::ABORT_RECORD: {
+        // The replay loops skip the transaction it names (see dryReplay).
     } break;
     case WALRecordType::COMMIT_RECORD: {
         TransactionContext::Get(clientContext)->commit();
