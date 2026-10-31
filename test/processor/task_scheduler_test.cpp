@@ -21,17 +21,20 @@ void updatePeak(std::atomic<uint64_t>& peak, uint64_t now) {
 
 class CountingTask final : public common::Task {
 public:
-    CountingTask(std::atomic<uint64_t>& active, std::atomic<uint64_t>& peak)
-        : Task{1}, active{active}, peak{peak} {}
+    CountingTask(std::atomic<uint64_t>& active, std::atomic<uint64_t>& peak,
+        uint64_t maxNumThreads = 1)
+        : Task{maxNumThreads}, active{active}, peak{peak} {}
 
     void run() override {
         threadID = std::this_thread::get_id();
+        ++numRuns;
         updatePeak(peak, ++active);
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
         --active;
     }
 
     std::thread::id threadID;
+    std::atomic<uint64_t> numRuns{0};
 
 private:
     std::atomic<uint64_t>& active;
@@ -73,6 +76,48 @@ private:
     main::ClientContext* context;
     std::shared_ptr<common::Task> child;
     bool launchNewWorkerThread;
+};
+
+// Waits until the query's deadline has passed, then starts the next statement the way
+// executeNoLock does for each statement of an import, and runs the child as part of it.
+class NextStatementTask final : public common::Task {
+public:
+    NextStatementTask(main::ClientContext* context, std::shared_ptr<common::Task> child)
+        : Task{1}, context{context}, child{std::move(child)} {}
+
+    void run() override {
+        threadID = std::this_thread::get_id();
+        std::this_thread::sleep_for(std::chrono::milliseconds(300));
+        context->resetActiveQuery();
+        context->startTimer();
+        common::TaskScheduler::Get(*context)->scheduleTaskAndWaitOrError(child, context);
+    }
+
+    std::thread::id threadID;
+
+private:
+    main::ClientContext* context;
+    std::shared_ptr<common::Task> child;
+};
+
+class InterruptibleTask final : public common::Task {
+public:
+    explicit InterruptibleTask(main::ClientContext* context) : Task{1}, context{context} {}
+
+    void run() override {
+        threadID = std::this_thread::get_id();
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+        while (!context->interrupted() && std::chrono::steady_clock::now() < deadline) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        sawInterrupt = context->interrupted();
+    }
+
+    std::thread::id threadID;
+    std::atomic<bool> sawInterrupt{false};
+
+private:
+    main::ClientContext* context;
 };
 
 void schedule(main::Connection& conn, const std::shared_ptr<common::Task>& task) {
@@ -206,3 +251,75 @@ TEST(TaskSchedulerTest, NewWorkerThreadOfSlotlessCallerHoldsNoSlot) {
     launcher.join();
     EXPECT_EQ(peak.load(), 1u);
 }
+
+// The only slot is held by the outer task, so no worker can join the nested task: the caller
+// has to run it.
+TEST(TaskSchedulerTest, NestedTaskRunsOnCallerWhenNoSlotIsFree) {
+    main::Database db(":memory:", main::SystemConfig(-1u, 1));
+    main::Connection conn(&db);
+    std::atomic<uint64_t> active{0}, peak{0};
+    auto child = std::make_shared<CountingTask>(active, peak, 2 /* maxNumThreads */);
+    auto outer = std::make_shared<NestingTask>(conn.getClientContext(), child);
+    schedule(conn, outer);
+    EXPECT_EQ(child->threadID, outer->threadID);
+}
+
+#ifndef __SINGLE_THREADED__
+// With a timeout the outer task runs on the only worker while the caller watches the clock. The
+// nested task is not inlined up front, so the worker has to join it after queuing it.
+TEST(TaskSchedulerTest, NestedTaskWithTimeoutRunsOnWorker) {
+    main::Database db(":memory:", main::SystemConfig(-1u, 1));
+    main::Connection conn(&db);
+    conn.setQueryTimeOut(60000);
+    conn.getClientContext()->startTimer();
+    std::atomic<uint64_t> active{0}, peak{0};
+    auto child = std::make_shared<CountingTask>(active, peak);
+    auto outer = std::make_shared<NestingTask>(conn.getClientContext(), child);
+    schedule(conn, outer);
+    EXPECT_NE(outer->threadID, std::this_thread::get_id());
+    EXPECT_EQ(child->threadID, outer->threadID);
+}
+
+// A launched thread stands in for the blocked caller, so the caller must not work on the task
+// as well: that would put two threads on one slot.
+TEST(TaskSchedulerTest, LaunchedThreadStandsInForCaller) {
+    main::Database db(":memory:", main::SystemConfig(-1u, 1));
+    main::Connection conn(&db);
+    std::atomic<uint64_t> active{0}, peak{0};
+    auto child = std::make_shared<CountingTask>(active, peak, 2 /* maxNumThreads */);
+    auto outer = std::make_shared<NestingTask>(conn.getClientContext(), child,
+        true /* launchNewWorkerThread */);
+    schedule(conn, outer);
+    EXPECT_EQ(child->numRuns.load(), 1u);
+    EXPECT_NE(child->threadID, outer->threadID);
+}
+
+// A launched thread that took over the caller's only slot has to run the nested task itself.
+TEST(TaskSchedulerTest, NestedTaskRunsOnLaunchedThread) {
+    main::Database db(":memory:", main::SystemConfig(-1u, 1));
+    main::Connection conn(&db);
+    std::atomic<uint64_t> active{0}, peak{0};
+    auto child = std::make_shared<CountingTask>(active, peak, 2 /* maxNumThreads */);
+    auto inner = std::make_shared<NestingTask>(conn.getClientContext(), child);
+    auto outer = std::make_shared<NestingTask>(conn.getClientContext(), inner,
+        true /* launchNewWorkerThread */);
+    schedule(conn, outer);
+    EXPECT_NE(inner->threadID, std::this_thread::get_id());
+    EXPECT_EQ(child->threadID, inner->threadID);
+}
+
+// The deadline passes before the next statement starts, and starting it clears the interrupt.
+// The worker runs that statement itself, so the waiting caller has to keep watching the clock.
+TEST(TaskSchedulerTest, TimeoutInterruptsStatementStartedAfterDeadline) {
+    main::Database db(":memory:", main::SystemConfig(-1u, 2));
+    main::Connection conn(&db);
+    conn.setQueryTimeOut(100);
+    auto* context = conn.getClientContext();
+    context->startTimer();
+    auto child = std::make_shared<InterruptibleTask>(context);
+    auto outer = std::make_shared<NextStatementTask>(context, child);
+    schedule(conn, outer);
+    EXPECT_EQ(child->threadID, outer->threadID);
+    EXPECT_TRUE(child->sawInterrupt.load());
+}
+#endif

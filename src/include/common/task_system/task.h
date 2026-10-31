@@ -16,8 +16,9 @@ using lock_t = std::unique_lock<std::mutex>;
  * Task represents a task that can be executed by multiple threads in the TaskScheduler. Task is a
  * virtual class. Users of TaskScheduler need to extend the Task class and implement at
  * least a virtual run() function. Users can assume that before T.run() is called, a thread W (a
- * worker that grabbed T from the TaskScheduler's queue, or the caller running a one-thread T
- * inline) has registered itself to T. They can also
+ * worker that grabbed T from the TaskScheduler's queue, the caller running a one-thread T
+ * inline, or a thread holding a slot that queued T and works on it before waiting) has
+ * registered itself to T. They can also
  * assume that after run() is called W will deregister itself from T. When deregistering, if W is
  * the last worker to finish on T, i.e., once W finishes, T will be completed, the
  * finalize() will be called. So the run() and finalize() calls are separate
