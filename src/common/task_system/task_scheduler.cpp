@@ -25,6 +25,8 @@ namespace {
 // it is destroyed, and SlotGuard restores a caller's previous value.
 thread_local const TaskScheduler* busySlotOwner = nullptr;
 
+constexpr uint64_t INTERRUPT_RECHECK_INTERVAL_MS = 100;
+
 } // namespace
 
 #if defined(__APPLE__)
@@ -120,9 +122,11 @@ void TaskScheduler::scheduleTaskAndWaitOrError(const std::shared_ptr<Task>& task
             timeout = clientContext->getTimeoutRemainingInMS();
             if (timeout == 0) {
                 clientContext->interrupt();
-            } else {
-                timedWait = true;
+                // Keep watching: a nested statement (IMPORT DATABASE runs several) restarts the
+                // timer and clears the interrupt.
+                timeout = INTERRUPT_RECHECK_INTERVAL_MS;
             }
+            timedWait = true;
         } else if (task->hasExceptionNoLock()) {
             // Interrupt tasks that errored, so other threads can stop working on them early.
             clientContext->interrupt();

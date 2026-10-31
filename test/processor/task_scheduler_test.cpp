@@ -78,6 +78,48 @@ private:
     bool launchNewWorkerThread;
 };
 
+// Waits until the query's deadline has passed, then starts the next statement the way
+// executeNoLock does for each statement of an import, and runs the child as part of it.
+class NextStatementTask final : public common::Task {
+public:
+    NextStatementTask(main::ClientContext* context, std::shared_ptr<common::Task> child)
+        : Task{1}, context{context}, child{std::move(child)} {}
+
+    void run() override {
+        threadID = std::this_thread::get_id();
+        std::this_thread::sleep_for(std::chrono::milliseconds(300));
+        context->resetActiveQuery();
+        context->startTimer();
+        common::TaskScheduler::Get(*context)->scheduleTaskAndWaitOrError(child, context);
+    }
+
+    std::thread::id threadID;
+
+private:
+    main::ClientContext* context;
+    std::shared_ptr<common::Task> child;
+};
+
+class InterruptibleTask final : public common::Task {
+public:
+    explicit InterruptibleTask(main::ClientContext* context) : Task{1}, context{context} {}
+
+    void run() override {
+        threadID = std::this_thread::get_id();
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+        while (!context->interrupted() && std::chrono::steady_clock::now() < deadline) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        sawInterrupt = context->interrupted();
+    }
+
+    std::thread::id threadID;
+    std::atomic<bool> sawInterrupt{false};
+
+private:
+    main::ClientContext* context;
+};
+
 void schedule(main::Connection& conn, const std::shared_ptr<common::Task>& task) {
     auto* context = conn.getClientContext();
     common::TaskScheduler::Get(*context)->scheduleTaskAndWaitOrError(task, context);
@@ -264,5 +306,20 @@ TEST(TaskSchedulerTest, NestedTaskRunsOnLaunchedThread) {
     schedule(conn, outer);
     EXPECT_NE(inner->threadID, std::this_thread::get_id());
     EXPECT_EQ(child->threadID, inner->threadID);
+}
+
+// The deadline passes before the next statement starts, and starting it clears the interrupt.
+// The worker runs that statement itself, so the waiting caller has to keep watching the clock.
+TEST(TaskSchedulerTest, TimeoutInterruptsStatementStartedAfterDeadline) {
+    main::Database db(":memory:", main::SystemConfig(-1u, 2));
+    main::Connection conn(&db);
+    conn.setQueryTimeOut(100);
+    auto* context = conn.getClientContext();
+    context->startTimer();
+    auto child = std::make_shared<InterruptibleTask>(context);
+    auto outer = std::make_shared<NextStatementTask>(context, child);
+    schedule(conn, outer);
+    EXPECT_EQ(child->threadID, outer->threadID);
+    EXPECT_TRUE(child->sawInterrupt.load());
 }
 #endif
