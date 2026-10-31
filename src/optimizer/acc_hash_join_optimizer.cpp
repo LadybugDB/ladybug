@@ -1,5 +1,7 @@
 #include "optimizer/acc_hash_join_optimizer.h"
 
+#include <unordered_set>
+
 #include "binder/expression/expression_util.h"
 #include "catalog/catalog_entry/table_catalog_entry.h"
 #include "common/constants.h"
@@ -131,6 +133,11 @@ static std::shared_ptr<LogicalSemiMasker> appendSemiMasker(SemiMaskKeyType keyTy
     return semiMasker;
 }
 
+static void collectSemiMaskTargets(LogicalOperator* op,
+    std::unordered_set<const LogicalOperator*>& targets);
+static void applyIntersectBuildToProbeSIP(LogicalOperator* op,
+    std::unordered_set<const LogicalOperator*>& maskedScans);
+
 void HashJoinSIPOptimizer::rewrite(const LogicalPlan* plan) {
     probeLimit = nullptr;
     probeLimitTarget = nullptr;
@@ -173,6 +180,9 @@ void HashJoinSIPOptimizer::rewrite(const LogicalPlan* plan) {
         break;
     }
     visitOperator(plan->getLastOperator().get());
+    std::unordered_set<const LogicalOperator*> maskedScans;
+    collectSemiMaskTargets(plan->getLastOperator().get(), maskedScans);
+    applyIntersectBuildToProbeSIP(plan->getLastOperator().get(), maskedScans);
 }
 
 void HashJoinSIPOptimizer::visitOperator(LogicalOperator* op) {
@@ -515,14 +525,75 @@ void HashJoinSIPOptimizer::visitHashJoin(LogicalOperator* op) {
     tryProbeToBuildHJSIP(op, op == probeLimitTarget ? probeLimit : nullptr);
 }
 
-// TODO(Xiyang): we don't apply SIP from build to probe.
+// A probe row whose key is missing from any build side produces no output, so each build side's
+// keys can mask the probe's scan of that key node. Used when the probe side outweighs a build side,
+// which prohibits probe-to-build SIP. Every build pipeline runs before the probe side's pipelines,
+// so the masks are complete when the probe scans. Only node scans are targets: a rel scan's
+// neighbour mask is checked per edge, and its neighbours usually all have build-side lists.
+// A scan keeps one mask, which each semi masker targeting it replaces when it finalizes
+// (SemiMaskerSharedState::mergeToGlobal), so scans in maskedScans are skipped.
+static void tryBuildToProbeIntersectSIP(LogicalIntersect& intersect,
+    std::unordered_set<const LogicalOperator*>& maskedScans) {
+    auto probeRoot = intersect.getChild(0).get();
+    auto hasSemiMaskApplied = false;
+    for (auto i = 1u; i < intersect.getNumChildren(); ++i) {
+        auto keyNodeID = intersect.getKeyNodeID(i - 1);
+        auto candidates = getScanNodeCandidates(*keyNodeID, probeRoot);
+        std::erase_if(candidates,
+            [&](const LogicalOperator* op) { return maskedScans.contains(op); });
+        if (candidates.empty() ||
+            !sanityCheckCandidates(candidates, SemiMaskTargetType::SCAN_NODE)) {
+            continue;
+        }
+        maskedScans.insert(candidates.begin(), candidates.end());
+        intersect.setChild(i, appendSemiMasker(SemiMaskKeyType::NODE, SemiMaskTargetType::SCAN_NODE,
+                                  keyNodeID, candidates, intersect.getChild(i)));
+        hasSemiMaskApplied = true;
+    }
+    if (!hasSemiMaskApplied) {
+        return;
+    }
+    auto& sipInfo = intersect.getSIPInfoUnsafe();
+    sipInfo.position = SemiMaskPosition::ON_BUILD;
+    sipInfo.dependency = SIPDependency::BUILD_DEPENDS_ON_PROBE;
+    sipInfo.direction = SIPDirection::BUILD_TO_PROBE;
+}
+
+static void collectSemiMaskTargets(LogicalOperator* op,
+    std::unordered_set<const LogicalOperator*>& targets) {
+    if (op->getOperatorType() == LogicalOperatorType::SEMI_MASKER) {
+        for (auto target : op->constCast<LogicalSemiMasker>().getTargetOperators()) {
+            targets.insert(target);
+        }
+    }
+    for (auto i = 0u; i < op->getNumChildren(); ++i) {
+        collectSemiMaskTargets(op->getChild(i).get(), targets);
+    }
+}
+
+// Runs after every other SIP decision, so all masks the intersects must not replace are known.
+static void applyIntersectBuildToProbeSIP(LogicalOperator* op,
+    std::unordered_set<const LogicalOperator*>& maskedScans) {
+    for (auto i = 0u; i < op->getNumChildren(); ++i) {
+        applyIntersectBuildToProbeSIP(op->getChild(i).get(), maskedScans);
+    }
+    if (op->getOperatorType() == LogicalOperatorType::INTERSECT &&
+        op->constCast<LogicalIntersect>().getSIPInfo().position ==
+            SemiMaskPosition::PROHIBIT_PROBE_TO_BUILD) {
+        tryBuildToProbeIntersectSIP(op->cast<LogicalIntersect>(), maskedScans);
+    }
+}
+
 void HashJoinSIPOptimizer::visitIntersect(LogicalOperator* op) {
     auto& intersect = op->cast<LogicalIntersect>();
     switch (intersect.getSIPInfo().position) {
-    case SemiMaskPosition::PROHIBIT_PROBE_TO_BUILD:
     case SemiMaskPosition::PROHIBIT:
+    // Build-to-probe SIP for intersects runs in applyIntersectBuildToProbeSIP.
+    case SemiMaskPosition::PROHIBIT_PROBE_TO_BUILD:
         return;
-    default:
+    case SemiMaskPosition::NONE:
+    case SemiMaskPosition::ON_BUILD:
+    case SemiMaskPosition::ON_PROBE:
         break;
     }
     if (!isProbeSideQualified(op->getChild(0).get())) {

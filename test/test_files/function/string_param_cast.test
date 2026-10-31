@@ -1,0 +1,137 @@
+-DATASET CSV tinysnb
+
+--
+
+-CASE RegexpFullMatchCastsArguments
+
+-LOG ListOperandLiteralPattern
+-STATEMENT MATCH (a:person) WHERE a.usedNames =~ '.*Aida.*' RETURN a.fName
+---- 1
+Alice
+
+-LOG ListOperandRowPattern
+-STATEMENT UNWIND ['.*Fred.*'] AS p MATCH (a:person) WHERE a.usedNames =~ p RETURN a.fName
+---- 1
+Carol
+
+-LOG ListOperandProjected
+-STATEMENT MATCH (a:person) RETURN a.ID, regexp_full_match(a.usedNames, '.*Aida.*')
+---- 8
+0|True
+2|False
+3|False
+5|False
+7|False
+8|False
+9|False
+10|False
+
+-LOG IntOperand
+-STATEMENT MATCH (a:person) WHERE a.age =~ '2.*' RETURN a.fName
+---- 3
+Dan
+Elizabeth
+Farooq
+
+-LOG IntLiteralPattern
+-STATEMENT RETURN '123' =~ 123, 'a1' =~ 1
+---- 1
+True|False
+
+-LOG NullLiteralPattern
+-STATEMENT RETURN 'a' =~ NULL
+---- 1
+
+
+-LOG NullStringLiteralPattern
+-STATEMENT RETURN ('a' =~ CAST(NULL AS STRING)) IS NULL, regexp_replace('a1', CAST(NULL AS STRING), 'b') IS NULL
+---- 1
+True|True
+
+-CASE RegexpReplaceCastsArguments
+
+-LOG ListOperandLiteralPattern
+-STATEMENT MATCH (a:person) RETURN a.ID, regexp_replace(a.usedNames, 'a', 'X')
+---- 8
+0|[AidX]
+2|[Bobby]
+3|[CXrmen,Fred]
+5|[Wolfeschlegelstein,DXniel]
+7|[Ein]
+8|[Fesdwe]
+9|[GrXd]
+10|[Ad,De,Hi,Kye,OrlXn]
+
+-LOG ListOperandGlobalReplace
+-STATEMENT MATCH (a:person) WHERE a.ID = 5 RETURN regexp_replace(a.usedNames, 'e', '3', 'g')
+---- 1
+[Wolf3schl3g3lst3in,Dani3l]
+
+-LOG ListOperandRowPattern
+-STATEMENT UNWIND ['a'] AS p MATCH (a:person) WHERE a.ID = 3 RETURN regexp_replace(a.usedNames, p, 'X')
+---- 1
+[CXrmen,Fred]
+
+-LOG IntPatternAndReplacement
+-STATEMENT RETURN regexp_replace('a1', 'a', 2), regexp_replace('a1', 1, 'b')
+---- 1
+21|ab
+
+-LOG IntRowPattern
+-STATEMENT UNWIND [1] AS p RETURN regexp_replace('a1', p, 'b')
+---- 1
+ab
+
+-CASE SplitPartCastsArguments
+
+-LOG ListOperand
+-STATEMENT MATCH (a:person) WHERE a.ID = 3 RETURN split_part(a.usedNames, ',', 2)
+---- 1
+Fred]
+
+-LOG IntOperand
+-STATEMENT MATCH (a:person) RETURN a.ID, split_part(a.age, '5', 1)
+---- 8
+0|3
+2|30
+3|4
+5|20
+7|20
+8|2
+9|40
+10|83
+
+-LOG Int32Index
+-STATEMENT UNWIND [CAST(2 AS INT32), CAST(3 AS INT32)] AS i RETURN split_part('a,b,c', ',', i)
+---- 2
+b
+c
+
+-CASE StringSplitCastsArguments
+
+-LOG ListOperand
+-STATEMENT MATCH (a:person) WHERE a.ID = 3 RETURN size(string_split(a.usedNames, ',')), string_split(a.usedNames, ',')[1]
+---- 1
+2|[Carmen
+
+-LOG IntSeparator
+-STATEMENT UNWIND [1000000] AS s RETURN string_split('a1000000b1000000c', s)
+---- 1
+[a,b,c]
+
+-CASE ListSortCastsSortOrder
+
+-LOG IntSortOrder
+-STATEMENT RETURN list_sort([3, 1, 2], 100)
+---- error
+Runtime exception: Invalid sortOrder
+
+-LOG IntNullOrder
+-STATEMENT RETURN list_sort([3, NULL, 2], 'ASC', 100)
+---- error
+Runtime exception: Invalid nullOrder
+
+-LOG ReverseSortIntNullOrder
+-STATEMENT RETURN list_reverse_sort([3, NULL, 2], 100)
+---- error
+Runtime exception: Invalid nullOrder

@@ -110,8 +110,9 @@ std::shared_ptr<LogicalOperator> RemoveUnnecessaryJoinOptimizer::visitHashJoinRe
     auto hashJoin = (LogicalHashJoin*)op.get();
     switch (hashJoin->getJoinType()) {
     case JoinType::MARK:
+    case JoinType::COUNT:
     case JoinType::LEFT: {
-        // Do not prune no-trivial join type
+        // Do not prune no-trivial join type: these keep every probe row, matched or not.
         return op;
     }
     default:

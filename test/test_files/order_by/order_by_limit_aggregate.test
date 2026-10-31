@@ -1,0 +1,55 @@
+-DATASET CSV empty
+
+--
+
+-CASE AggregateOverOrderByLimit
+-STATEMENT CREATE NODE TABLE P(id INT64 PRIMARY KEY, x INT64)
+---- ok
+-STATEMENT UNWIND range(1, 4) AS i CREATE (:P {id: i, x: CASE WHEN i % 2 = 0 THEN i END})
+---- ok
+-STATEMENT MATCH (p:P) WITH p ORDER BY p.id DESC LIMIT 2 RETURN collect(p.id)
+---- 1
+[4,3]
+-STATEMENT MATCH (p:P) WITH p ORDER BY p.id DESC LIMIT 2 RETURN sum(p.id)
+---- 1
+7
+-STATEMENT MATCH (p:P) WITH p ORDER BY p.id DESC SKIP 1 LIMIT 1 RETURN max(p.id)
+---- 1
+3
+-STATEMENT MATCH (p:P) WITH p ORDER BY p.id DESC LIMIT 1 RETURN count(p.x)
+---- 1
+1
+-STATEMENT MATCH (p:P) WITH p ORDER BY p.id DESC LIMIT 2 RETURN count(*), sum(p.id)
+---- 1
+2|7
+-STATEMENT MATCH (p:P) WITH p ORDER BY p.id DESC LIMIT 2 WHERE p.id > 2 RETURN count(*)
+---- 1
+2
+-STATEMENT MATCH (p:P) WITH p ORDER BY p.id DESC LIMIT 2 RETURN count(*)
+---- 1
+2
+-STATEMENT MATCH (p:P) WITH p ORDER BY p.id DESC SKIP 3 LIMIT 2 RETURN count(*)
+---- 1
+1
+-STATEMENT UNWIND range(1, 4) AS i WITH i ORDER BY i DESC LIMIT 2 RETURN collect(i)
+---- 1
+[4,3]
+-STATEMENT UNWIND [[1], [2, 3, 4]] AS xs WITH xs ORDER BY size(xs) DESC LIMIT 1 UNWIND xs AS x RETURN count(*)
+---- 1
+3
+
+-CASE CountOverOrderByLimitOfRowsWithMultiplicity
+-STATEMENT CREATE NODE TABLE A(id INT64 PRIMARY KEY)
+---- ok
+-STATEMENT CREATE REL TABLE K(FROM A TO A)
+---- ok
+-STATEMENT CREATE (:A {id: 4})
+---- ok
+-STATEMENT MATCH (a:A {id: 4}) UNWIND range(1, 4) AS j CREATE (a)-[:K]->(:A {id: 400 + j})
+---- ok
+-STATEMENT UNWIND [1, 2, 3] AS x MATCH (a:A)-[:K]->(b:A) WHERE a.id = 4 WITH x ORDER BY x DESC LIMIT 2 RETURN count(*)
+---- 1
+2
+-STATEMENT UNWIND [1, 2, 3] AS x MATCH (a:A)-[:K]->(b:A) WHERE a.id = 4 WITH x ORDER BY x DESC SKIP 3 LIMIT 6 RETURN count(*)
+---- 1
+6

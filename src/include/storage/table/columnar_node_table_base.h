@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "catalog/catalog_entry/node_table_catalog_entry.h"
+#include "common/api.h"
 #include "common/exception/runtime.h"
 #include "common/mask.h"
 #include "common/types/internal_id_util.h"
@@ -13,7 +14,7 @@ namespace lbug {
 namespace storage {
 
 // Abstract class : State to track table scan
-struct ColumnarNodeTableScanState : NodeTableScanState {
+struct LBUG_API ColumnarNodeTableScanState : NodeTableScanState {
     bool initialized = false; // Track if this scan state has been initialized for scanning
     size_t totalRows = 0;
     bool scanCompleted = false; // Track if this scan state has finished reading
@@ -26,14 +27,15 @@ struct ColumnarNodeTableScanState : NodeTableScanState {
 
 // Interface: Shared state to coordinate morsel assignment across parallel scan states
 // batch - RowGroup for Parquet, RecordBatch for Arrow
-struct ColumnarNodeTableScanSharedState {
+struct LBUG_API ColumnarNodeTableScanSharedState {
     virtual ~ColumnarNodeTableScanSharedState() = default;
 
     virtual bool getNextMorsel(ColumnarNodeTableScanState* scanState) = 0;
 };
 
 // Abstract base class for columnar-format node tables (Icebug-Disk, Arrow, etc.)
-class ColumnarNodeTableBase : public NodeTable {
+// Exported for extensions providing columnar table storage (e.g. the lance extension).
+class LBUG_API ColumnarNodeTableBase : public NodeTable {
 public:
     ColumnarNodeTableBase(const StorageManager* storageManager,
         const catalog::NodeTableCatalogEntry* nodeTableEntry, MemoryManager* memoryManager,

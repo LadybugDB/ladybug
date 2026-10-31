@@ -1,4 +1,6 @@
 #include <atomic>
+#include <chrono>
+#include <condition_variable>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -28,13 +30,15 @@ protected:
         ASSERT_TRUE(result->isSuccess()) << query << ": " << result->getErrorMessage();
     }
 
-    // Runs `numReaders` connections that repeat `query` and expect `expected` until `write`
+    // Runs `kNumReaders` connections that repeat `query` and expect `expected` until `write`
     // returns false, then checks that they read and never failed.
     template<typename F>
     void raceReaders(const std::string& query, int64_t expected, F write) {
+        constexpr int kNumReaders = 8;
         std::atomic<bool> stop{false};
-        std::atomic<uint64_t> reads{0};
-        std::mutex failureMtx;
+        std::mutex mtx;
+        std::condition_variable cv;
+        uint64_t reads = 0;
         std::string failure;
         auto reader = [&] {
             main::Connection readConn(database.get());
@@ -47,25 +51,66 @@ protected:
                            value != std::to_string(expected)) {
                     error = "read " + value;
                 }
+                std::lock_guard<std::mutex> guard(mtx);
                 if (!error.empty()) {
-                    std::lock_guard<std::mutex> guard(failureMtx);
-                    failure = failure.empty() ? error : failure;
+                    if (failure.empty()) {
+                        failure = error;
+                    }
+                    cv.notify_all();
                     return;
                 }
                 reads++;
+                cv.notify_one();
             }
         };
         std::vector<std::thread> readers;
-        for (auto i = 0; i < 8; i++) {
+        for (auto i = 0; i < kNumReaders; i++) {
             readers.emplace_back(reader);
         }
-        while (write()) {}
+        // Startup gate: don't start the writer until every reader has finished a scan.
+        // Otherwise a fast writer can finish all ALTERs before slow reader startup (thread
+        // creation plus the first Connection/compile, slower on Windows shared-lib builds and
+        // under `ctest -j`) performs a single read, leaving the race untested.
+        uint64_t readsAtStart = 0;
+        bool runWriter = false;
+        {
+            std::unique_lock<std::mutex> lock(mtx);
+            cv.wait_for(lock, std::chrono::seconds(30),
+                [&] { return reads >= static_cast<uint64_t>(kNumReaders) || !failure.empty(); });
+            readsAtStart = reads;
+            runWriter = reads >= static_cast<uint64_t>(kNumReaders) && failure.empty();
+        }
+        if (runWriter) {
+            // Progress gate: after each write, wait for a reader to finish a scan before the
+            // next write, so scans are guaranteed to interleave with the column growth. The
+            // wait wakes immediately on notify, adding no delay on the success path; the
+            // timeout only fires if readers are stuck or failed, which the checks below
+            // report.
+            auto lastReads = readsAtStart;
+            bool more = true;
+            while (more) {
+                more = write();
+                std::unique_lock<std::mutex> lock(mtx);
+                const bool progressed = cv.wait_for(lock, std::chrono::seconds(30),
+                    [&] { return reads > lastReads || !failure.empty(); });
+                lastReads = reads;
+                if (!progressed) {
+                    if (failure.empty()) {
+                        failure = "timed out waiting for reader progress";
+                    }
+                    break;
+                }
+                if (!failure.empty()) {
+                    break;
+                }
+            }
+        }
         stop = true;
         for (auto& thread : readers) {
             thread.join();
         }
-        EXPECT_GT(reads.load(), 0u);
-        std::lock_guard<std::mutex> guard(failureMtx);
+        std::lock_guard<std::mutex> guard(mtx);
+        EXPECT_GT(reads, readsAtStart);
         EXPECT_TRUE(failure.empty()) << failure;
     }
 

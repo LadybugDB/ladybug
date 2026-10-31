@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
+#include "common/api.h"
 #include "storage/table/rel_table_data.h"
 #include "storage/table/table.h"
 
@@ -18,7 +19,8 @@ namespace storage {
 class MemoryManager;
 
 struct LocalRelTableScanState;
-struct RelTableScanState : TableScanState {
+// Exported for extensions providing columnar table storage (e.g. the lance extension).
+struct LBUG_API RelTableScanState : TableScanState {
     common::RelDataDirection direction;
     common::sel_t currBoundNodeIdx;
     Column* csrOffsetColumn;
@@ -65,17 +67,6 @@ struct RelTableScanState : TableScanState {
     // checkpoint that ran meanwhile can free the pages it replaced. Call when the scan is
     // exhausted. The state can be scanned again: the next initScanState pins afresh.
     void releaseScanPin();
-
-    // Optional state used by Arrow-backed relationship tables. Keep it on the common scan state so
-    // a single multi-rel scan state can scan native, icebug-disk-backed, and Arrow-backed tables.
-    size_t arrowCurrentBatchIdx = 0;
-    size_t arrowCurrentBatchOffset = 0;
-    size_t arrowCSRBoundIdx = 0;
-    common::offset_t arrowCSRCurrentRelOffset = common::INVALID_OFFSET;
-    std::unordered_map<common::offset_t, common::sel_t> arrowBoundNodeOffsetToSelPos;
-    std::unique_ptr<common::ValueVector> arrowSrcKeyVector;
-    std::unique_ptr<common::ValueVector> arrowDstKeyVector;
-    bool arrowScanCompleted = true;
 
     RelTableScanState(MemoryManager& mm, common::ValueVector* nodeIDVector,
         std::vector<common::ValueVector*> outputVectors,

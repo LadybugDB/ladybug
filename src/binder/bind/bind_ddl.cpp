@@ -205,12 +205,12 @@ static ExtendDirection getStorageDirection(const case_insensitive_map_t<Value>& 
     return DEFAULT_EXTEND_DIRECTION;
 }
 
-static StorageFormat getStorageFormat(const case_insensitive_map_t<Value>& options) {
+static ParsedStorageFormat getStorageFormat(const case_insensitive_map_t<Value>& options) {
     if (options.contains(TableOptionConstants::STORAGE_FORMAT_OPTION)) {
-        return StorageFormatUtils::fromString(
+        return StorageFormatUtils::parse(
             options.at(TableOptionConstants::STORAGE_FORMAT_OPTION).toString());
     }
-    return StorageFormat::NONE;
+    return ParsedStorageFormat{StorageFormat::NONE, ""};
 }
 
 static void validatePartitionColumn(const std::vector<PropertyDefinition>& propertyDefinitions,
@@ -257,7 +257,9 @@ BoundCreateTableInfo Binder::bindCreateNodeTableInfo(const CreateTableInfo* info
     validatePrimaryKey(extraInfo.pKName, propertyDefinitions);
     auto boundOptions = bindParsingOptions(extraInfo.options);
     auto storage = getStorage(boundOptions);
-    auto storageFormat = getStorageFormat(boundOptions);
+    auto parsedFormat = getStorageFormat(boundOptions);
+    auto storageFormat = parsedFormat.format;
+    auto storageFormatName = std::move(parsedFormat.externalName);
     std::optional<BoundPartitionInfo> partitionInfo;
     if (extraInfo.partitionInfo.has_value()) {
         const auto& parsed = *extraInfo.partitionInfo;
@@ -294,7 +296,7 @@ BoundCreateTableInfo Binder::bindCreateNodeTableInfo(const CreateTableInfo* info
     }
     auto boundExtraInfo = std::make_unique<BoundExtraCreateNodeTableInfo>(extraInfo.pKName,
         std::move(propertyDefinitions), std::move(storage), std::move(storageFormat),
-        std::move(partitionInfo));
+        std::move(partitionInfo), std::move(storageFormatName));
     return BoundCreateTableInfo(CatalogEntryType::NODE_TABLE_ENTRY, info->tableName,
         info->onConflict, std::move(boundExtraInfo), clientContext->useInternalCatalogEntry());
 }
@@ -317,17 +319,20 @@ BoundCreateTableInfo Binder::bindCreateRelTableGroupInfo(const CreateTableInfo* 
     auto boundOptions = bindParsingOptions(extraInfo.options);
     auto storageDirection = getStorageDirection(boundOptions);
     auto storage = getStorage(boundOptions);
-    auto storageFormat = getStorageFormat(boundOptions);
+    auto parsedFormat = getStorageFormat(boundOptions);
+    auto storageFormat = parsedFormat.format;
+    auto storageFormatName = std::move(parsedFormat.externalName);
     std::optional<function::TableFunction> scanFunction = std::nullopt;
     std::optional<std::unique_ptr<function::TableFuncBindData>> scanBindData = std::nullopt;
     std::string foreignDatabaseName;
     if (!storage.empty()) {
         auto dotPos = storage.find('.');
         // Check if storage is database.table format by verifying the attached database exists
-        // Handle special case where icebug-disk storage could contain a dot
+        // Handle special case where columnar storage paths (e.g. icebug-disk, lance)
+        // could contain a dot. Only unformatted storage is probed as database.table.
         // Otherwise, treat as file path (e.g., "dataset/demo-db/icebug-disk/demo" or
         // "data.parquet")
-        if (storageFormat != StorageFormat::ICEBUG_DISK && dotPos != std::string::npos) {
+        if (storageFormat == StorageFormat::NONE && dotPos != std::string::npos) {
             std::string dbName = storage.substr(0, dotPos);
             std::string tableName = storage.substr(dotPos + 1);
             if (!dbName.empty()) {
@@ -422,22 +427,36 @@ BoundCreateTableInfo Binder::bindCreateRelTableGroupInfo(const CreateTableInfo* 
             }
         }
 
-        bool isSrcIcebugDisk = srcEntry->getType() == CatalogEntryType::NODE_TABLE_ENTRY ?
-                                   srcEntry->ptrCast<NodeTableCatalogEntry>()->getStorageFormat() ==
-                                       StorageFormat::ICEBUG_DISK :
-                                   false;
-        bool isDstIcebugDisk = dstEntry->getType() == CatalogEntryType::NODE_TABLE_ENTRY ?
-                                   dstEntry->ptrCast<NodeTableCatalogEntry>()->getStorageFormat() ==
-                                       StorageFormat::ICEBUG_DISK :
-                                   false;
-        bool isRelIcebugDisk = (storageFormat == StorageFormat::ICEBUG_DISK);
+        auto getEntryStorageFormat = [](TableCatalogEntry* entry) {
+            if (entry->getType() == CatalogEntryType::NODE_TABLE_ENTRY) {
+                auto* nodeEntry = entry->ptrCast<NodeTableCatalogEntry>();
+                return std::pair{nodeEntry->getStorageFormat(), nodeEntry->getStorageFormatName()};
+            }
+            return std::pair{StorageFormat::NONE, std::string{}};
+        };
+        const auto [srcStorageFormat, srcStorageFormatName] = getEntryStorageFormat(srcEntry);
+        const auto [dstStorageFormat, dstStorageFormatName] = getEntryStorageFormat(dstEntry);
 
-        // We don't allow mixing icebug-disk tables with non-icebug-disk tables
-        // We only allow icebug-disk rel tables to connect icebug-disk node tables
-        if ((!isRelIcebugDisk && (isSrcIcebugDisk || isDstIcebugDisk)) ||
-            (isRelIcebugDisk && (!isSrcIcebugDisk || !isDstIcebugDisk))) {
-            throw BinderException(
-                "Cannot mix icebug-disk tables with non-icebug-disk tables in CREATE REL TABLE.");
+        // We don't allow mixing columnar-format tables with tables of another format.
+        // A rel table must use the same storage format as the node tables it connects:
+        // native with native, icebug-disk with icebug-disk, and an extension format
+        // (e.g. lance) only with the same extension format. Core compares the format
+        // enum plus the external format name without enumerating extension names.
+        if (!StorageFormatUtils::equals(storageFormat, storageFormatName, srcStorageFormat,
+                srcStorageFormatName) ||
+            !StorageFormatUtils::equals(storageFormat, storageFormatName, dstStorageFormat,
+                dstStorageFormatName)) {
+            const auto oddFormat = !StorageFormatUtils::equals(storageFormat, storageFormatName,
+                                       StorageFormat::NONE, "") ?
+                                       std::pair{storageFormat, storageFormatName} :
+                                   !StorageFormatUtils::equals(srcStorageFormat,
+                                       srcStorageFormatName, StorageFormat::NONE, "") ?
+                                       std::pair{srcStorageFormat, srcStorageFormatName} :
+                                       std::pair{dstStorageFormat, dstStorageFormatName};
+            const auto oddName = StorageFormatUtils::displayName(oddFormat.first, oddFormat.second);
+            throw BinderException(std::format("Cannot mix {} tables with non-{} tables in CREATE "
+                                              "REL TABLE.",
+                oddName, oddName));
         }
 
         // Use the actual shadow table IDs, not FOREIGN_TABLE_ID
@@ -462,10 +481,11 @@ BoundCreateTableInfo Binder::bindCreateRelTableGroupInfo(const CreateTableInfo* 
             }
         }
     }
-    auto boundExtraInfo = std::make_unique<BoundExtraCreateRelTableGroupInfo>(
-        std::move(propertyDefinitions), srcMultiplicity, dstMultiplicity, storageDirection,
-        std::move(relTableInfos), std::move(storage), std::move(storageFormat),
-        std::move(scanFunction), std::move(scanBindData), std::move(foreignDatabaseName));
+    auto boundExtraInfo =
+        std::make_unique<BoundExtraCreateRelTableGroupInfo>(std::move(propertyDefinitions),
+            srcMultiplicity, dstMultiplicity, storageDirection, std::move(relTableInfos),
+            std::move(storage), std::move(storageFormat), std::move(scanFunction),
+            std::move(scanBindData), std::move(foreignDatabaseName), std::move(storageFormatName));
     return BoundCreateTableInfo(CatalogEntryType::REL_GROUP_ENTRY, info->tableName,
         info->onConflict, std::move(boundExtraInfo), clientContext->useInternalCatalogEntry());
 }
@@ -690,7 +710,7 @@ std::unique_ptr<BoundStatement> Binder::bindDrop(const Statement& statement) {
     return std::make_unique<BoundDrop>(drop.getDropInfo());
 }
 
-static void validateNotIceDiskTable(main::ClientContext* clientContext,
+static void validateImmutableColumnarTable(main::ClientContext* clientContext,
     const std::string& tableName) {
     auto catalog = Catalog::Get(*clientContext);
     auto transaction = transaction::Transaction::Get(*clientContext);
@@ -701,24 +721,29 @@ static void validateNotIceDiskTable(main::ClientContext* clientContext,
 
     auto tableEntry = catalog->getTableCatalogEntry(transaction, tableName);
     StorageFormat storageFormat = StorageFormat::NONE;
+    std::string storageFormatName;
 
     if (tableEntry->getTableType() == common::TableType::NODE) {
-        storageFormat = tableEntry->ptrCast<NodeTableCatalogEntry>()->getStorageFormat();
+        auto* nodeEntry = tableEntry->ptrCast<NodeTableCatalogEntry>();
+        storageFormat = nodeEntry->getStorageFormat();
+        storageFormatName = nodeEntry->getStorageFormatName();
     } else if (tableEntry->getTableType() == common::TableType::REL) {
-        storageFormat = tableEntry->ptrCast<RelGroupCatalogEntry>()->getStorageFormat();
+        auto* relEntry = tableEntry->ptrCast<RelGroupCatalogEntry>();
+        storageFormat = relEntry->getStorageFormat();
+        storageFormatName = relEntry->getStorageFormatName();
     }
 
-    if (storageFormat == StorageFormat::ICEBUG_DISK) {
-        throw BinderException(
-            std::format("Cannot alter table {}: icebug-disk tables are immutable.", tableName));
+    if (storageFormat != StorageFormat::NONE) {
+        throw BinderException(std::format("Cannot alter table {}: {} tables are immutable.",
+            tableName, StorageFormatUtils::displayName(storageFormat, storageFormatName)));
     }
 }
 
 std::unique_ptr<BoundStatement> Binder::bindAlter(const Statement& statement) {
     auto& alter = statement.constCast<Alter>();
 
-    // we don't support alter operations on icebug-disk tables
-    validateNotIceDiskTable(clientContext, alter.getInfo()->tableName);
+    // we don't support alter operations on immutable columnar tables
+    validateImmutableColumnarTable(clientContext, alter.getInfo()->tableName);
 
     // Partitioned tables have restricted ALTER support until ALTER propagation to partition
     // subgraphs lands: only RENAME (which renames the <parent>_p<i> partitions along with the
@@ -906,6 +931,14 @@ std::unique_ptr<BoundStatement> Binder::bindAlterFromToConnection(
     auto info = alter.getInfo();
     auto extraInfo = info->extraInfo->constPtrCast<ExtraAddFromToConnection>();
     auto tableName = info->tableName;
+    // Only a rel table has FROM/TO connections; Alter would cast any other entry to one.
+    auto catalog = Catalog::Get(*clientContext);
+    auto transaction = transaction::Transaction::Get(*clientContext);
+    if (catalog->containsTable(transaction, tableName) &&
+        catalog->getTableCatalogEntry(transaction, tableName)->getType() !=
+            CatalogEntryType::REL_GROUP_ENTRY) {
+        throw BinderException(std::format("{} is not of type REL.", tableName));
+    }
     auto [srcTableEntry, srcDbName] = bindNodeTableEntry(extraInfo->srcTableName);
     auto [dstTableEntry, dstDbName] = bindNodeTableEntry(extraInfo->dstTableName);
     auto srcTableID = srcTableEntry->getTableID();

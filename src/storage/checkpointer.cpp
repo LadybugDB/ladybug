@@ -567,6 +567,8 @@ void Checkpointer::beforeShadowRemoval() {}
 
 void Checkpointer::beforeGraphShadowApply(StorageManager&) {}
 
+void Checkpointer::beforeRollback() {}
+
 void Checkpointer::logCheckpointAndApplyShadowPages(bool walRotated_) {
     auto& shadowFile = mainStorageManager->getShadowFile();
     shadowFile.flushAll(mainStorageManager->getOrInitDatabaseID(clientContext));
@@ -622,10 +624,11 @@ void Checkpointer::applyShadowPagesForPartitionChildren() {
     }
 }
 
-void Checkpointer::rollback() {
+void Checkpointer::rollback() try {
     if (isInMemory) {
         return;
     }
+    beforeRollback();
     // Any pages freed during the checkpoint are no longer freed
     for (const auto& target : checkpointTargets) {
         target.storageManager->rollbackCheckpoint(*target.catalog, &clientContext);
@@ -650,6 +653,20 @@ void Checkpointer::rollback() {
         }
     }
     releaseCheckpointLocks();
+} catch (const std::exception& e) {
+    // A half-undone checkpoint leaves page and WAL state that later writes must not build on.
+    releaseCheckpointLocks();
+    mainStorageManager->getWAL().poison(std::format("Checkpoint rollback failed: {}", e.what()));
+    throw common::RuntimeException(std::format(
+        "Checkpoint rollback failed; the database refuses further writes until restart. Original "
+        "error: {}",
+        e.what()));
+} catch (...) {
+    releaseCheckpointLocks();
+    mainStorageManager->getWAL().poison("Checkpoint rollback failed: unknown exception");
+    throw common::RuntimeException(
+        "Checkpoint rollback failed; the database refuses further writes until restart. Original "
+        "error: unknown exception");
 }
 
 bool Checkpointer::canAutoCheckpoint(const main::ClientContext& clientContext,

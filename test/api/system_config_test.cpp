@@ -3,6 +3,7 @@
 #include "catalog/catalog_entry/node_table_catalog_entry.h"
 #include "common/exception/buffer_manager.h"
 #include "common/system_config.h"
+#include "storage/file_handle.h"
 #include "storage/storage_manager.h"
 #include "storage/table/node_table.h"
 #include "transaction/transaction.h"
@@ -122,6 +123,31 @@ TEST_F(SystemConfigTest, testRepeatedCheckpointsDoNotExhaustMaxDBSize) {
     auto count = con->query("MATCH (n:Node) RETURN COUNT(*)");
     ASSERT_TRUE(count->isSuccess()) << count->toString();
     ASSERT_EQ(TestHelper::convertResultToString(*count), std::vector<std::string>{"10"});
+}
+
+TEST_F(SystemConfigTest, testFileHandleRefusedAtMaxDBSizeStaysRefused) {
+    // https://github.com/LadybugDB/ladybug/issues/1386: a page group refused at max_db_size
+    // stayed in the file handle's capacity, so the next page it handed out had no frame group,
+    // and pinning that page read past frameGroupIdxes.
+    if (databasePath == "" || databasePath == ":memory:") {
+        GTEST_SKIP();
+    }
+    systemConfig->maxDBSize = 4 * LBUG_PAGE_SIZE * StorageConstants::PAGE_GROUP_SIZE;
+    auto db = std::make_unique<Database>(databasePath, *systemConfig);
+    auto con = std::make_unique<Connection>(db.get());
+    auto* dataFH = StorageManager::Get(*getClientContext(*con))->getDataFH();
+    auto refused = false;
+    for (auto i = 0u; i < 8 * StorageConstants::PAGE_GROUP_SIZE && !refused; ++i) {
+        try {
+            dataFH->addNewPage();
+        } catch (const BufferManagerException&) {
+            refused = true;
+        }
+    }
+    ASSERT_TRUE(refused);
+    const auto numPages = dataFH->getNumPages();
+    EXPECT_THROW(dataFH->addNewPage(), BufferManagerException);
+    EXPECT_EQ(dataFH->getNumPages(), numPages);
 }
 
 TEST_F(SystemConfigTest, testBufferPoolSize) {

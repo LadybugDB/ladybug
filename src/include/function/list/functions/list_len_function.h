@@ -19,13 +19,13 @@ public:
 template<>
 inline void ListLen::operation(common::string_t& input, int64_t& result) {
     auto totalByteLength = input.len;
-    auto inputString = input.getAsString();
+    auto data = reinterpret_cast<const char*>(input.getData());
     for (auto i = 0u; i < totalByteLength; i++) {
-        if (inputString[i] & 0x80) {
+        if (data[i] & 0x80) {
             int64_t length = 0;
             // Use grapheme iterator to identify bytes of utf8 char and increment once for each
             // char.
-            utf8proc::utf8proc_grapheme_callback(inputString.c_str(), totalByteLength,
+            utf8proc::utf8proc_grapheme_callback(data, totalByteLength,
                 [&](size_t /*start*/, size_t /*end*/) {
                     length++;
                     return true;

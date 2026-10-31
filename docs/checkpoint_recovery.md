@@ -30,7 +30,16 @@ directory sync. There the ordering still recovers from a process crash — file 
 reached the OS — but power-loss durability of those directory entries is not guaranteed.
 
 If a step fails after the commit point, the database refuses further writes until it is reopened,
-and recovery finishes the checkpoint.
+and recovery finishes the checkpoint. A failure before it rolls the checkpoint back; if that rollback
+fails too, the database refuses further writes the same way.
+
+A checkpoint that runs automatically after a commit never fails that commit, which is already in
+the WAL: its failure is printed as a warning, and a later commit tries again, or fails if the
+failure made the database refuse writes. The checkpoint that `COPY` or a large `CREATE INDEX`
+requires is different, since their data is not in the WAL: its failure fails the statement. If the
+checkpoint was rolled back, the changes are lost on restart unless a later `CHECKPOINT` succeeds;
+if it made the database refuse writes, they survive the restart only if the checkpoint's record
+reached storage.
 
 ## Pinned checkpoints
 
@@ -105,7 +114,11 @@ its own again.
 
 Recovery reads the checksum flag of an attached-graph WAL from the WAL's own header, so a graph
 opened on its own may be opened with either checksum setting: its committed changes are replayed
-or its committed checkpoint recovered when the parent database is reopened.
+or its committed checkpoint recovered when the parent database is reopened. The database's own
+WAL must instead match the configured setting. A mismatch is a configuration error, not a torn
+tail, so it fails the open even with `throwOnWalReplayFailure` false and leaves the WAL untouched.
+An all-zero header, which a power loss before the WAL's first write reaches disk can leave, was
+never written and counts as a torn WAL instead.
 
 ## Downgrades
 
