@@ -1,5 +1,6 @@
 #pragma once
 
+#include "common/api.h"
 #include "common/types/string_t.h"
 #include "common/vector/value_vector.h"
 #include "utf8proc.h"
@@ -19,11 +20,29 @@ public:
         if (count < 0) {
             count = 0;
         }
+        // An empty pad adds nothing, so a width past the source gives the source.
+        if (characterToPad.len == 0) {
+            count = std::min<int64_t>(count, src.len);
+        }
+        // The result can exceed MAX_LENGTH only if src.len + MAX_BYTES_PER_CODEPOINT * width
+        // does. The width is checked first, so that the product cannot overflow.
+        const auto width = static_cast<uint64_t>(count);
+        if (width > common::string_t::MAX_LENGTH ||
+            src.len + MAX_BYTES_PER_CODEPOINT * width > common::string_t::MAX_LENGTH) [[unlikely]] {
+            checkResultSize(src, width, characterToPad);
+        }
         std::string paddedResult;
         padOperation(src, count, characterToPad, paddedResult);
         common::StringVector::addString(&resultValueVector, result, paddedResult.data(),
             paddedResult.size());
     }
+
+    static constexpr uint64_t MAX_BYTES_PER_CODEPOINT = 4;
+
+    // Defined in base_pad_function.cpp, apart from where Lpad and Rpad are instantiated:
+    // inlined into the per-row code above, it slows that code down although it rarely runs.
+    LBUG_API static void checkResultSize(const common::string_t& src, uint64_t width,
+        const common::string_t& pad);
 
     static std::pair<uint32_t, uint32_t> padCountChars(const uint32_t count, const char* data,
         const uint32_t size) {

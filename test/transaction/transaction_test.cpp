@@ -4,6 +4,7 @@
 #include "api_test/private_api_test.h"
 #include "common/checksum.h"
 #include "common/exception/runtime.h"
+#include "common/exception/transaction_manager.h"
 #include "common/serializer/buffer_writer.h"
 #include "common/serializer/serializer.h"
 #include "graph_test/private_graph_test.h"
@@ -48,6 +49,51 @@ TEST_F(PrivateApiTest, TransactionModes) {
     // Test rollback automatically switches the mode to AUTO_COMMIT write transaction
     conn->query("ROLLBACK;");
     ASSERT_EQ(TransactionMode::AUTO, getTransactionMode(*conn));
+}
+
+TEST_F(PrivateApiTest, RefusedBeginKeepsAutoMode) {
+    auto conn2 = std::make_unique<lbug::main::Connection>(database.get());
+    ASSERT_TRUE(conn->query("BEGIN TRANSACTION;")->isSuccess());
+    ASSERT_FALSE(conn2->query("BEGIN TRANSACTION;")->isSuccess());
+    ASSERT_EQ(TransactionMode::AUTO, getTransactionMode(*conn2));
+    EXPECT_THROW(TransactionContext::Get(*getClientContext(*conn2))->beginRecoveryTransaction(),
+        TransactionManagerException);
+    ASSERT_EQ(TransactionMode::AUTO, getTransactionMode(*conn2));
+    ASSERT_TRUE(conn2->query("RETURN 1;")->isSuccess());
+    ASSERT_TRUE(conn->query("COMMIT;")->isSuccess());
+}
+
+TEST_F(PrivateApiTest, RefusedPreparedAndMultiStatementBeginKeepAutoMode) {
+    auto conn2 = std::make_unique<lbug::main::Connection>(database.get());
+    ASSERT_TRUE(conn->query("BEGIN TRANSACTION;")->isSuccess());
+    auto prepared = conn2->prepare("BEGIN TRANSACTION;");
+    ASSERT_TRUE(prepared->isSuccess()) << prepared->getErrorMessage();
+    ASSERT_FALSE(conn2->execute(prepared.get())->isSuccess());
+    ASSERT_EQ(TransactionMode::AUTO, getTransactionMode(*conn2));
+    ASSERT_FALSE(conn2->query("BEGIN TRANSACTION; RETURN 1;")->isSuccess());
+    ASSERT_EQ(TransactionMode::AUTO, getTransactionMode(*conn2));
+    ASSERT_TRUE(conn2->query("RETURN 1;")->isSuccess());
+    ASSERT_TRUE(conn->query("COMMIT;")->isSuccess());
+}
+
+TEST_F(PrivateApiTest, BeginOnPoisonedWALKeepsAutoMode) {
+    lbug::storage::WAL::Get(*getClientContext(*conn))->poison("test");
+    auto result = conn->query("BEGIN TRANSACTION;");
+    ASSERT_FALSE(result->isSuccess());
+    EXPECT_NE(result->getErrorMessage().find("panic state"), std::string::npos)
+        << result->getErrorMessage();
+    ASSERT_EQ(TransactionMode::AUTO, getTransactionMode(*conn));
+    ASSERT_TRUE(conn->query("RETURN 1;")->isSuccess());
+}
+
+TEST_F(PrivateApiTest, ReadOnlyBeginBesideWriterSwitchesToManual) {
+    auto conn2 = std::make_unique<lbug::main::Connection>(database.get());
+    ASSERT_TRUE(conn->query("BEGIN TRANSACTION;")->isSuccess());
+    ASSERT_TRUE(conn2->query("BEGIN TRANSACTION READ ONLY;")->isSuccess());
+    ASSERT_EQ(TransactionMode::MANUAL, getTransactionMode(*conn2));
+    ASSERT_TRUE(conn2->query("COMMIT;")->isSuccess());
+    ASSERT_EQ(TransactionMode::AUTO, getTransactionMode(*conn2));
+    ASSERT_TRUE(conn->query("COMMIT;")->isSuccess());
 }
 
 TEST_F(PrivateApiTest, MultipleCallsFromSameTransaction) {

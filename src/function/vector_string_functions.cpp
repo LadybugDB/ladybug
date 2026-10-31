@@ -1,5 +1,6 @@
 #include "function/string/vector_string_functions.h"
 
+#include "common/exception/runtime.h"
 #include "function/string/functions/array_extract_function.h"
 #include "function/string/functions/contains_function.h"
 #include "function/string/functions/ends_with_function.h"
@@ -14,6 +15,7 @@
 #include "function/string/functions/rpad_function.h"
 #include "function/string/functions/starts_with_function.h"
 #include "function/string/functions/substr_function.h"
+#include <format>
 
 using namespace lbug::common;
 
@@ -49,15 +51,30 @@ void BaseStrOperation::operation(string_t& input, string_t& result, ValueVector&
     }
 }
 
+[[noreturn]] static void throwRepeatTooLong() {
+    throw RuntimeException(
+        std::format("repeat(): the result would exceed the maximum string size of {} bytes.",
+            string_t::MAX_LENGTH));
+}
+
 void Repeat::operation(string_t& left, int64_t& right, string_t& result,
     ValueVector& resultValueVector) {
-    result.len = left.len * right;
+    if (right <= 0 || left.len == 0) {
+        result.len = 0;
+        return;
+    }
+    const auto count = static_cast<uint64_t>(right);
+    // The count is checked first, so that the product cannot overflow.
+    if (count > string_t::MAX_LENGTH || left.len * count > string_t::MAX_LENGTH) {
+        throwRepeatTooLong();
+    }
+    result.len = static_cast<uint32_t>(left.len * count);
     if (result.len <= string_t::SHORT_STR_LENGTH) {
-        repeatStr((char*)result.prefix, left.getAsString(), right);
+        repeatStr((char*)result.prefix, left.getAsString(), count);
     } else {
         StringVector::reserveString(&resultValueVector, result, result.len);
         auto buffer = reinterpret_cast<char*>(result.overflowPtr);
-        repeatStr(buffer, left.getAsString(), right);
+        repeatStr(buffer, left.getAsString(), count);
         memcpy(result.prefix, buffer, string_t::PREFIX_LENGTH);
     }
 }

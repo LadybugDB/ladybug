@@ -1,0 +1,100 @@
+-DATASET CSV empty
+
+--
+
+-CASE Issue1365CopyFromSubqueryDuplicateVariable
+# Reproduction for github issue #1365:
+# COPY <node> FROM (subquery) whose RETURN reuses a variable (RETURN i, i, i)
+# failed with a spurious NULL primary key, and a reused variable in a non-key
+# position was inserted as NULL instead of its value.
+# Root cause: Binder::bindQueryScanSource renamed the subquery result columns by
+# calling setAlias on the shared Expression objects. A variable bound twice is
+# one object, so it kept only the last expected name, and the copy binder - which
+# matched table properties to columns through that name - fell back to the column
+# default. Result columns are now mapped positionally against the expected column
+# names, so no bound expression is mutated.
+
+-STATEMENT CREATE NODE TABLE q3(ID INT64 PRIMARY KEY, a INT64, b INT64);
+---- ok
+
+-STATEMENT COPY q3 FROM (UNWIND range(20, 22) AS i RETURN i, i, i);
+---- ok
+
+-STATEMENT MATCH (n:q3) RETURN n.ID, n.a, n.b ORDER BY n.ID;
+---- 3
+20|20|20
+21|21|21
+22|22|22
+
+# The same failure with a string column, reported while testing PR #1350.
+-STATEMENT CREATE NODE TABLE artist(ID INT64, name STRING, rank INT64, PRIMARY KEY(ID));
+---- ok
+
+-STATEMENT COPY artist FROM (UNWIND range(20, 22) AS i RETURN i, 'Grace', i);
+---- ok
+
+-STATEMENT MATCH (n:artist) RETURN n.ID, n.name, n.rank ORDER BY n.ID;
+---- 3
+20|Grace|20
+21|Grace|21
+22|Grace|22
+
+# The workarounds from the issue, where every RETURN expression is a distinct
+# object, already worked and must keep working.
+-STATEMENT COPY q3 FROM (UNWIND range(30, 31) AS i RETURN i, i + 0, i + 1);
+---- ok
+
+-STATEMENT MATCH (n:q3) RETURN n.ID, n.a, n.b ORDER BY n.ID;
+---- 5
+20|20|20
+21|21|21
+22|22|22
+30|30|31
+31|31|32
+
+# An aliased RETURN list keeps mapping positionally onto the table schema.
+-STATEMENT COPY q3 FROM (UNWIND range(40, 40) AS i RETURN i AS x, i + 1 AS y, i + 2 AS z);
+---- ok
+
+-STATEMENT MATCH (n:q3) RETURN n.ID, n.a, n.b ORDER BY n.ID;
+---- 6
+20|20|20
+21|21|21
+22|22|22
+30|30|31
+31|31|32
+40|41|42
+
+# A column list assigns the source positions to properties, so the property
+# order is not the source order. Before the fix the reused variable kept only
+# the last expected name and the other property took its default (NULL).
+-STATEMENT CREATE NODE TABLE r2(ID INT64 PRIMARY KEY, a INT64);
+---- ok
+
+-STATEMENT COPY r2 (a, ID) FROM (UNWIND range(1, 2) AS i RETURN i, i);
+---- ok
+
+-STATEMENT MATCH (n:r2) RETURN n.ID, n.a ORDER BY n.ID;
+---- 2
+1|1
+2|2
+
+# Relationship copy: source and destination are taken by position, the
+# remaining properties by name.
+-STATEMENT CREATE NODE TABLE person(ID INT64 PRIMARY KEY);
+---- ok
+
+-STATEMENT CREATE REL TABLE knows(FROM person TO person, w INT64, k INT64);
+---- ok
+
+-STATEMENT COPY person FROM (UNWIND range(1, 3) AS i RETURN i);
+---- ok
+
+-STATEMENT COPY knows FROM (UNWIND range(1, 3) AS i RETURN i, i, i, i);
+---- ok
+
+-STATEMENT MATCH (a:person)-[e:knows]->(b:person) RETURN e.w, e.k ORDER BY e.w, e.k;
+---- 3
+1|1
+2|2
+3|3

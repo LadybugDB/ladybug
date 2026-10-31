@@ -86,9 +86,11 @@ page_idx_t FileHandle::addNewPageWithoutLock() {
 }
 
 void FileHandle::addNewPageGroupWithoutLock() {
+    // Allocate first: at max_db_size this throws, and the handle must not claim pages that no
+    // frame group backs, or the next page it hands out indexes past frameGroupIdxes.
+    frameGroupIdxes.push_back(bm->addNewFrameGroup(pageSizeClass));
     pageCapacity += StorageConstants::PAGE_GROUP_SIZE;
     pageStates.resize(pageCapacity);
-    frameGroupIdxes.push_back(bm->addNewFrameGroup(pageSizeClass));
 }
 
 uint8_t* FileHandle::pinPage(page_idx_t pageIdx, PageReadPolicy readPolicy) {

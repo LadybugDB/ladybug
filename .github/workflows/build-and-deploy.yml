@@ -490,7 +490,16 @@ jobs:
         run: |
           for tarball in lbug-linux-x64.tar.gz lbug-linux-arm64.tar.gz lbug-darwin-arm64.tar.gz lbug-darwin-x64.tar.gz lbug-win32-x64.tar.gz lbug-source.tar.gz; do
             [ -f "$tarball" ] || continue
-            npm publish "$tarball" --provenance --access public --tag latest
+            LOG="$(mktemp)"
+            if npm publish "$tarball" --provenance --access public --tag latest >"$LOG" 2>&1; then
+              cat "$LOG"
+            elif grep -qiE "previously (published|staged) version" "$LOG"; then
+              echo "$tarball already published; skipping."
+            else
+              cat "$LOG"
+              exit 1
+            fi
+            rm -f "$LOG"
           done
         working-directory: tools/nodejs_api
   
@@ -560,7 +569,17 @@ jobs:
 
       - name: Deploy to npm.js
         if: ${{ github.event.inputs.isDeploy == 'true' && github.event.inputs.isNightly != 'true' }}
-        run: npm publish lbug-wasm.tar.gz --provenance --access public --tag latest
+        run: |
+          LOG="$(mktemp)"
+          if npm publish lbug-wasm.tar.gz --provenance --access public --tag latest >"$LOG" 2>&1; then
+            cat "$LOG"
+          elif grep -qiE "previously (published|staged) version" "$LOG"; then
+            echo "lbug-wasm.tar.gz already published; skipping."
+          else
+            cat "$LOG"
+            exit 1
+          fi
+          rm -f "$LOG"
         working-directory: tools/wasm
 
   build-precompiled-bin:

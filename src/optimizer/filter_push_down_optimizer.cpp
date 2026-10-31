@@ -84,6 +84,10 @@ std::shared_ptr<LogicalOperator> FilterPushDownOptimizer::visitFilterReplace(
         // Avoid executing child plan if literal is Null or False.
         auto& literalExpr = predicate->constCast<LiteralExpression>();
         if (literalExpr.isNull() || !literalExpr.getValue().getValue<bool>()) {
+            // Keep the filter over writes: an empty result would skip them.
+            if (filter.getChild(0)->hasUpdateRecursive()) {
+                return visitChildren(op);
+            }
             return std::make_shared<LogicalEmptyResult>(*op->getSchema());
         }
         // Ignore if literal is True.

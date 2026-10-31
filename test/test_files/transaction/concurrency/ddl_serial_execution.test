@@ -17,6 +17,38 @@ Cannot start a new write transaction in the system. Only one write transaction a
 0|a|INT32|NULL|True
 1|b|INT32|NULL|False
 
+-CASE RefusedBeginKeepsConnectionUsable
+-STATEMENT CREATE NODE TABLE t(a INT, PRIMARY KEY(a));
+---- ok
+-STATEMENT BEGIN TRANSACTION;
+---- ok
+-STATEMENT CREATE (:t {a: 1});
+---- ok
+-CREATE_CONNECTION conn2
+-STATEMENT [conn2] BEGIN TRANSACTION;
+---- error
+Cannot start a new write transaction in the system. Only one write transaction at a time is allowed in the system.
+-STATEMENT [conn2] ROLLBACK;
+---- error
+No active transaction for ROLLBACK.
+-STATEMENT [conn2] MATCH (n:t) RETURN count(*);
+---- 1
+0
+-STATEMENT [conn2] CREATE (:t {a: 3});
+---- error
+Cannot start a new write transaction in the system. Only one write transaction at a time is allowed in the system.
+-STATEMENT COMMIT;
+---- ok
+-STATEMENT [conn2] BEGIN TRANSACTION;
+---- ok
+-STATEMENT [conn2] CREATE (:t {a: 2});
+---- ok
+-STATEMENT [conn2] COMMIT;
+---- ok
+-STATEMENT MATCH (n:t) RETURN count(*);
+---- 1
+2
+
 # Test CALL debug_enable_multi_writes=true
 -CASE EnableMultiWrites
 -STATEMENT CALL debug_enable_multi_writes=true;

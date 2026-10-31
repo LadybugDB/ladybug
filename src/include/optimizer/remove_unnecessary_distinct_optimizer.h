@@ -19,13 +19,14 @@ namespace optimizer {
  *      single scanned node table (such a key uniquely identifies a row).
  *   2. The DISTINCT's input has multiplicity 1, i.e. its child subtree is a
  *      linear chain of non-multiplying operators (PROJECTION, FILTER,
- *      MULTIPLICITY_REDUCER, LIMIT, FLATTEN, ...) ending at a plain
+ *      MULTIPLICITY_REDUCER, LIMIT, ...) ending at a plain
  *      SCAN_NODE_TABLE. Joins, extends, recursive/path scans, UNWIND and
  *      materialized-subplan reads (EXPRESSIONS_SCAN/TABLE_FUNCTION_CALL) can all
  *      duplicate rows, so a DISTINCT above them is kept.
  *
- * This optimizer runs after FactorizationRewriter (the plan is in factorized
- * form), so it recomputes the factorized schema after rewrites.
+ * This optimizer runs before FactorizationRewriter (the plan is flat), so it
+ * recomputes the flat schema after rewrites, and FactorizationRewriter places
+ * flattens only for the operators that remain.
  */
 class RemoveUnnecessaryDistinctOptimizer {
 public:

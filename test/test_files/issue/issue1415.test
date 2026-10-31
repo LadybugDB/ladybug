@@ -1,0 +1,22 @@
+-DATASET CSV empty
+
+--
+
+-CASE Issue1415NullCheckOverPathNodes
+-STATEMENT CREATE NODE TABLE Person(id INT64, PRIMARY KEY (id));
+---- ok
+-STATEMENT CREATE REL TABLE KNOWS(FROM Person TO Person);
+---- ok
+-STATEMENT UNWIND [19, 20, 21, 22, 23] AS i CREATE (:Person {id: i});
+---- ok
+-STATEMENT UNWIND [[19, 20], [20, 19], [19, 21], [21, 19], [19, 22], [22, 19], [19, 23], [23, 19], [20, 21], [22, 23]] AS e MATCH (s:Person {id: e[1]}), (d:Person {id: e[2]}) CREATE (s)-[:KNOWS]->(d);
+---- ok
+-STATEMENT MATCH p1 = (n1:Person)-[*4..5]-(n2:Person) WHERE all(v1 IN nodes(p1) WHERE v1 IS NOT NULL) OPTIONAL MATCH (n2)-[:KNOWS]->(x:Person) RETURN count(*);
+---- 1
+24900
+-STATEMENT MATCH p = (n1:Person)-[*4..5]-(n2:Person) RETURN sum(list_sum(list_transform(nodes(p), n -> n.id)));
+---- 1
+1279890
+-STATEMENT MATCH p = (n1:Person)-[*4..5]-(n2:Person) WITH collect(p) AS ps RETURN sum(list_sum(list_transform(ps, q -> list_sum(properties(nodes(q), 'id'))))), sum(list_sum(list_transform(ps, q -> size(properties(rels(q), '_ID')))));
+---- 1
+1279890|51780

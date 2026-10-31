@@ -154,6 +154,11 @@ protected:
     // filtering for multi-parent packed batches (packed output violates the one-parent-
     // per-batch contract the filter assumes).
     common::sel_t applyNbrNodeMask();
+    // Restores the shared output chunk to UNFLAT before neighbour filtering and returns
+    // the filtered size. Storage scans only refill the selection vector; a downstream
+    // Flatten may have left the chunk FLAT, which would make Filter dispatch scalar
+    // (both-flat) comparison and leak non-matching rows. Mirrors ScanNodeTable.
+    common::sel_t getFilteredOutputSize();
     void refreshNbrMaskCache();
     std::shared_ptr<common::NodeOffsetMaskMap> nbrNodeMaskMap;
 
