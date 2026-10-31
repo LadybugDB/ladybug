@@ -41,6 +41,37 @@ checkpoint was rolled back, the changes are lost on restart unless a later `CHEC
 if it made the database refuse writes, they survive the restart only if the checkpoint's record
 reached storage.
 
+## Pinned checkpoints
+
+A checkpoint taken while a read-only transaction is open keeps the WAL that transaction may still
+need: it does not rotate the WAL, so its `CHECKPOINT` record stays in the active WAL and later
+commits follow it. Its cleanup writes the marker file `<db>.pinned.tmp` before removing any shadow
+file, and every `CHECKPOINT` record logged into the active WAL first removes the marker. The marker
+therefore means that every `CHECKPOINT` record in the active WAL has been applied.
+
+A transaction committed after a `CHECKPOINT` record proves that checkpoint completed, since the
+write gate is held until a checkpoint's cleanup ends and a failure after its record poisons the WAL.
+Recovery then replays only the records after the last `CHECKPOINT` and removes a remaining shadow
+file, which belongs to a later checkpoint that never logged its record. The `CHECKPOINT` records
+stay in the WAL, so when such a transaction is the only proof, recovery writes the pinned-checkpoint
+marker before it removes the shadow. A `COMMIT` after a `CHECKPOINT` without its `BEGIN`, which the
+engine never writes, leaves the earlier rule in place: with a shadow file, only the records before
+the first `CHECKPOINT` replay. Records that end in no `COMMIT`, such as a torn commit, are a torn
+tail of the last `CHECKPOINT`, and the WAL counts as ending in that record.
+
+Recovering a WAL that ends in a `CHECKPOINT` record writes: it applies or removes the shadow files
+and retires the WAL. A read-only open therefore refuses such a database with `Cannot open database
+in read-only mode while checkpoint recovery is pending`, also when the `CHECKPOINT` is followed by
+a torn commit; opening it read-write once recovers it.
+
+When nothing was committed after the last `CHECKPOINT` record, the marker decides. With it,
+recovery discards the shadow files of the main database and partition children. Without it, a
+remaining shadow is replayed as the committed checkpoint's, and a missing one is an error. A marker
+written by an older build holds `1` instead of `2` and only proves that a missing shadow was
+applied. A marker that is not exactly one of these bytes, such as the empty file a crash while
+writing it can leave, counts as no marker. Named graphs still recover through their own shadow
+files.
+
 ## Checkpoint bundle format
 
 `CheckpointRecord::bundleFormatVersion` is 2 for checkpoints written by current builds, including
