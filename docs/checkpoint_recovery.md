@@ -123,7 +123,8 @@ as `UPDATE_SEQUENCE_NAMED` or `ABORT`, is no safer: with the default non-throwin
 configuration the decoding error is treated like a corrupt WAL tail — the older build replays the
 committed prefix and truncates the WAL there, silently discarding that transaction and every
 transaction recorded after it. For `ABORT`, which marks a transaction that failed after its
-`COMMIT` record was written, the older build also applies the transaction it undoes. Setting `throwOnWalReplayFailure` to true rejects an unknown record before that WAL
+`COMMIT` record was written, the older build also applies the transaction it undoes. Setting
+`throwOnWalReplayFailure` to true rejects an unknown record before that WAL
 is applied, but it still does not make downgrading safe: a WAL containing only recognized
 record types passes validation, and its owner trailers are ignored. This is why the successful
 `CHECKPOINT`, not a clean close, is the downgrade gate.
