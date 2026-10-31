@@ -12,6 +12,7 @@ class ClientContext;
 namespace function {
 
 struct LBUG_API FunctionBindData {
+    // Types the binder casts the arguments to; empty means the declared parameter types.
     std::vector<common::LogicalType> paramTypes;
     common::LogicalType resultType;
     // TODO: the following two fields should be moved to FunctionLocalState.
@@ -26,6 +27,9 @@ struct LBUG_API FunctionBindData {
     DELETE_COPY_AND_MOVE(FunctionBindData);
     virtual ~FunctionBindData() = default;
 
+    // Keeps each argument's own type, so the binder inserts no cast. Not for a parameter declared
+    // as a fixed type such as STRING: an argument matched to it by an implicit cast would reach the
+    // kernel uncast.
     static std::unique_ptr<FunctionBindData> getSimpleBindData(
         const binder::expression_vector& params, const common::LogicalType& resultType);
 

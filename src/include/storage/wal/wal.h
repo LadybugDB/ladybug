@@ -64,6 +64,7 @@ public:
     // source for WAL pin observability alongside getFileSize() (active).
     uint64_t getFrozenWALFileSize();
     bool mayHaveCheckpointRecord();
+    bool isPoisoned();
     // See StorageUtils::getPinnedCheckpointMarkerPath.
     void writePinnedCheckpointMarker(main::ClientContext* context);
     void removePinnedCheckpointMarker(main::ClientContext* context);

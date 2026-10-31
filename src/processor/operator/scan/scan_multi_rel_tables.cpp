@@ -3,6 +3,7 @@
 #include "processor/execution_context.h"
 #include "storage/local_storage/local_storage.h"
 #include "storage/table/arrow_rel_table.h"
+#include "storage/table/external_table_hooks.h"
 #include "storage/table/ice_disk_rel_table.h"
 
 using namespace lbug::common;
@@ -75,28 +76,54 @@ void ScanMultiRelTable::initLocalStateInternal(ResultSet* resultSet, ExecutionCo
     boundNodeIDVector = resultSet->getValueVector(opInfo.nodeIDPos).get();
     auto nbrNodeIDVector = outVectors[0];
 
-    // Check if any table in any scanner is an external rel table with a custom scan state.
+    // The scan state is shared across every table in every scanner of this multi-rel scan,
+    // so it must serve every backend in the scan. Columnar backends (icebug-disk, Arrow, and
+    // extension columnar tables whose state extends ColumnarRelTableScanState) all share that
+    // state; native tables work with any state. An extension backend opts into mixed scans
+    // with ColumnarTableHooks::supportsMixedColumnarScan (its createRelScanState must return
+    // a ColumnarRelTableScanState subclass). A backend that cannot cover the in-core
+    // columnar tables may only be scanned alongside its own tables and native tables;
+    // mixing it with icebug-disk/Arrow tables is rejected with a clear error instead of
+    // hitting an invalid downcast in the table's initScanState.
     bool hasArrowTable = false;
     bool hasIceDiskTable = false;
+    storage::RelTable* hookStateOwner = nullptr;
+    bool hookStateSupportsMixed = false;
     for (auto& [_, scanner] : scanners) {
         for (auto& relInfo : scanner.relInfos) {
+            if (auto hooks = storage::ColumnarTableHookRegistry::getTableHooks(
+                    relInfo.table->getStorageManager(), relInfo.table->getTableID())) {
+                if (hooks->createRelScanState && hookStateOwner == nullptr) {
+                    hookStateOwner = relInfo.table->ptrCast<storage::RelTable>();
+                    hookStateSupportsMixed =
+                        hooks->supportsMixedColumnarScan || hooks->scanStateRank >= 2;
+                }
+                continue;
+            }
             if (dynamic_cast<storage::ArrowRelTable*>(relInfo.table) != nullptr) {
                 hasArrowTable = true;
-                break;
-            }
-            if (dynamic_cast<storage::IceDiskRelTable*>(relInfo.table) != nullptr) {
+            } else if (dynamic_cast<storage::IceDiskRelTable*>(relInfo.table) != nullptr) {
                 hasIceDiskTable = true;
-                break;
             }
-        }
-        if (hasArrowTable || hasIceDiskTable) {
-            break;
         }
     }
 
-    // IceDisk scan state extends the common rel scan state and Arrow stores its per-table state
-    // there, so one scan state can now cover IceDisk, Arrow, and native rel tables.
-    if (hasIceDiskTable) {
+    // ColumnarRelTableScanState serves icebug-disk, Arrow, native, and mixed-capable
+    // extension tables, so one shared state covers every combination below.
+    const bool hookStateCoversAll =
+        hookStateOwner != nullptr &&
+        (hookStateSupportsMixed || (!hasIceDiskTable && !hasArrowTable));
+    if (hookStateOwner != nullptr && !hookStateCoversAll) {
+        throw common::RuntimeException(
+            "Multi-rel scan mixes incompatible table backends: an extension-backed rel table "
+            "cannot share a scan with icebug-disk or Arrow rel tables.");
+    }
+    if (hookStateCoversAll) {
+        scanState = ColumnarTableHookRegistry::getTableHooks(hookStateOwner->getStorageManager(),
+            hookStateOwner->getTableID())
+                        ->createRelScanState(hookStateOwner, boundNodeIDVector, outVectors,
+                            nbrNodeIDVector->state, MemoryManager::Get(*clientContext));
+    } else if (hasIceDiskTable) {
         scanState =
             std::make_unique<storage::IceDiskRelTableScanState>(*MemoryManager::Get(*clientContext),
                 boundNodeIDVector, outVectors, nbrNodeIDVector->state);

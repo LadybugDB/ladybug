@@ -91,6 +91,8 @@ struct BoundExtraCreateNodeTableInfo final : BoundExtraCreateTableInfo {
     std::string primaryKeyName;
     std::string storage;
     common::StorageFormat storageFormat = common::StorageFormat::NONE;
+    // External format name for StorageFormat::EXTERNAL (e.g. "lance"); empty otherwise.
+    std::string storageFormatName;
     std::optional<BoundPartitionInfo> partitionInfo;
     // Set when this entry is a dynamically created LIST partition: links the child to its
     // parent and ordinal so catalog creation (including WAL replay) registers it as a
@@ -115,15 +117,17 @@ struct BoundExtraCreateNodeTableInfo final : BoundExtraCreateTableInfo {
     BoundExtraCreateNodeTableInfo(std::string primaryKeyName,
         std::vector<PropertyDefinition> definitions, std::string storage = "",
         common::StorageFormat storageFormat = common::StorageFormat::NONE,
-        std::optional<BoundPartitionInfo> partitionInfo = std::nullopt)
+        std::optional<BoundPartitionInfo> partitionInfo = std::nullopt,
+        std::string storageFormatName = "")
         : BoundExtraCreateTableInfo{std::move(definitions)},
           primaryKeyName{std::move(primaryKeyName)}, storage{std::move(storage)},
-          storageFormat{storageFormat}, partitionInfo{std::move(partitionInfo)} {}
+          storageFormat{storageFormat}, storageFormatName{std::move(storageFormatName)},
+          partitionInfo{std::move(partitionInfo)} {}
     BoundExtraCreateNodeTableInfo(const BoundExtraCreateNodeTableInfo& other)
         : BoundExtraCreateTableInfo{copyVector(other.propertyDefinitions)},
           primaryKeyName{other.primaryKeyName}, storage{other.storage},
-          storageFormat{other.storageFormat}, partitionInfo{other.partitionInfo},
-          partitionParentTableID{other.partitionParentTableID},
+          storageFormat{other.storageFormat}, storageFormatName{other.storageFormatName},
+          partitionInfo{other.partitionInfo}, partitionParentTableID{other.partitionParentTableID},
           partitionChildIndex{other.partitionChildIndex}, listPartitionKey{other.listPartitionKey},
           skipInitialPartitionCreation{other.skipInitialPartitionCreation} {}
 
@@ -149,6 +153,8 @@ struct BoundExtraCreateRelTableGroupInfo final : BoundExtraCreateTableInfo {
     std::vector<BoundRelTableInfo> relTableInfos;
     std::string storage;
     common::StorageFormat storageFormat = common::StorageFormat::NONE;
+    // External format name for StorageFormat::EXTERNAL (e.g. "lance"); empty otherwise.
+    std::string storageFormatName;
     std::optional<function::TableFunction> scanFunction;
     std::optional<std::shared_ptr<function::TableFuncBindData>> scanBindData;
     std::string foreignDatabaseName;
@@ -159,12 +165,12 @@ struct BoundExtraCreateRelTableGroupInfo final : BoundExtraCreateTableInfo {
         std::string storage = "", common::StorageFormat storageFormat = common::StorageFormat::NONE,
         std::optional<function::TableFunction> scanFunction = std::nullopt,
         std::optional<std::shared_ptr<function::TableFuncBindData>> scanBindData = std::nullopt,
-        std::string foreignDatabaseName = "")
+        std::string foreignDatabaseName = "", std::string storageFormatName = "")
         : BoundExtraCreateTableInfo{std::move(definitions)}, srcMultiplicity{srcMultiplicity},
           dstMultiplicity{dstMultiplicity}, storageDirection{storageDirection},
           relTableInfos{std::move(relTableInfos)}, storage{std::move(storage)},
-          storageFormat{storageFormat}, scanFunction{std::move(scanFunction)},
-          scanBindData{std::move(scanBindData)},
+          storageFormat{storageFormat}, storageFormatName{std::move(storageFormatName)},
+          scanFunction{std::move(scanFunction)}, scanBindData{std::move(scanBindData)},
           foreignDatabaseName{std::move(foreignDatabaseName)} {}
 
     BoundExtraCreateRelTableGroupInfo(const BoundExtraCreateRelTableGroupInfo& other)
@@ -172,8 +178,8 @@ struct BoundExtraCreateRelTableGroupInfo final : BoundExtraCreateTableInfo {
           srcMultiplicity{other.srcMultiplicity}, dstMultiplicity{other.dstMultiplicity},
           storageDirection{other.storageDirection}, relTableInfos{other.relTableInfos},
           storage{other.storage}, storageFormat{other.storageFormat},
-          scanFunction{other.scanFunction}, scanBindData{other.scanBindData},
-          foreignDatabaseName{other.foreignDatabaseName} {}
+          storageFormatName{other.storageFormatName}, scanFunction{other.scanFunction},
+          scanBindData{other.scanBindData}, foreignDatabaseName{other.foreignDatabaseName} {}
 
     std::unique_ptr<BoundExtraCreateCatalogEntryInfo> copy() const override {
         return std::make_unique<BoundExtraCreateRelTableGroupInfo>(*this);

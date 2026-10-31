@@ -39,13 +39,13 @@ enum class SIPDirection {
 /*
  *
  * We perform side way information passing in the following cases
- * 1. Inner hash join
+ * 1. Inner hash join and intersect
  *
  * If we add semi mask on build side, position is ON_BUILD, direction is BUILD_TO_PROBE and
- * dependency is PROBE_DEPENDS_ON_BUILD (because scan need to be generated before semi masker).
+ * dependency is BUILD_DEPENDS_ON_PROBE (because scan need to be generated before semi masker).
  *
  * If we add semi mask on probe side, position is ON_PROBE, direction is PROBE_TO_BUILD
- * and dependency is BUILD_DEPENDS_ON_PROBE.
+ * and dependency is PROBE_DEPENDS_ON_BUILD.
  *
  * 2. Unnesting correlated subquery
  *
@@ -64,8 +64,9 @@ enum class SIPDirection {
  *
  * We disable semi-mask-based sip in the following cases
  *
- * During join order enumeration, we might disable semi mask if probe side cardinality is large to
- * avoid large materialization probe side intermediate result.
+ * During join order enumeration, we disable probe-to-build semi mask if probe side cardinality is
+ * large to avoid large materialization probe side intermediate result. An intersect then masks its
+ * probe side's node scans from its build sides instead.
  *
  * During filter push down, we disable semi mask if join condition is not id-based
  * */

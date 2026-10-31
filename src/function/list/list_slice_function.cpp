@@ -1,3 +1,4 @@
+#include "function/list/functions/list_len_function.h"
 #include "function/list/vector_list_functions.h"
 #include "function/scalar_function.h"
 #include "function/string/functions/substr_function.h"
@@ -48,7 +49,14 @@ struct ListSlice {
         ValueVector&, ValueVector& resultValueVector) {
         auto startIdx = begin;
         auto endIdx = end;
-        normalizeIndices(startIdx, endIdx, str.len);
+        // Negative indices count back from the last character, so they need the character
+        // count. An end of -1 does not: SubStr stops at the last character, and gives '' for a
+        // start past it, either way.
+        int64_t size = str.len;
+        if (begin < 0 || end < -1) {
+            ListLen::operation(str, size);
+        }
+        normalizeIndices(startIdx, endIdx, static_cast<uint64_t>(size));
         SubStr::operation(str, startIdx, endIdx - startIdx + 1, result, resultValueVector);
     }
 };
@@ -67,9 +75,18 @@ static std::unique_ptr<FunctionBindData> bindFunc(const ScalarBindFuncInput& inp
         paramTypes.push_back(arg0Type.copy());
         resultType = LogicalType::LIST(ArrayType::getChildType(arg0Type).copy());
     } break;
-    default: {
+    case LogicalTypeID::LIST:
+    case LogicalTypeID::STRING: {
         paramTypes.push_back(arg0Type.copy());
         resultType = arg0Type.copy();
+    } break;
+    default: {
+        // Scalars (INT, DATE, TIMESTAMP, FLOAT, etc.) match the STRING overload
+        // via implicit cast. Force STRING params so the binder inserts the cast
+        // instead of running the STRING exec over a non-string payload (which
+        // segfaulted in string_t::getAsString during constant folding).
+        paramTypes.push_back(LogicalType::STRING());
+        resultType = LogicalType::STRING();
     }
     }
     paramTypes.push_back(LogicalType(input.definition->parameterTypeIDs[1]));

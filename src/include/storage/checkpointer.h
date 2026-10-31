@@ -84,6 +84,8 @@ protected:
     // Runs after the pinned-checkpoint marker is written, before cleanup removes any shadow file.
     virtual void beforeShadowRemoval();
     virtual void beforeGraphShadowApply(StorageManager& storageManager);
+    // Runs first in rollback(), so tests can make the rollback itself fail.
+    virtual void beforeRollback();
     void applyShadowPagesForPartitionChildren();
     void flushGraphShadowFiles();
     void applyGraphShadowPages();

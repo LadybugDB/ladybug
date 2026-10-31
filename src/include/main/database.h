@@ -68,7 +68,8 @@ struct LBUG_API SystemConfig {
      * Default is false: on a torn tail (e.g. after a crash), the database opens with all data
      * up to the last checkpoint, discarding only the unreplayable tail.
      * @param enableChecksums If true, the database will use checksums to detect corruption in the
-     * WAL file.
+     * WAL file. It must match the setting the database's WAL was written with: a mismatch fails
+     * the open whatever throwOnWalReplayFailure says.
      * @param enableMultiWrites If true, multiple concurrent write transactions are allowed.
      * Default to false.
      * @param enableDefaultHashIndex If true, node tables create the default primary-key hash

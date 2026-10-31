@@ -2,7 +2,6 @@
 #include "expression_evaluator/list_slice_info.h"
 
 #include "common/system_config.h"
-#include "expression_evaluator/lambda_evaluator.h"
 
 namespace lbug {
 namespace evaluator {
@@ -48,40 +47,8 @@ void ListEntryTracker::updateListEntry() {
     }
 }
 
-std::vector<std::shared_ptr<common::DataChunkState>> ListSliceInfo::overrideAndSaveParamStates(
-    std::span<LambdaParamEvaluator*> lambdaParamEvaluators) {
-    std::vector<std::shared_ptr<common::DataChunkState>> savedStates;
-
-    // The sel states of the result vectors in evaluator trees often point to the same state
-    // First set the states to the unfiltered slice size
-    // This makes sure upstream evaluators have the correct input size and don't use the sliced
-    // offset
-    for (auto& lambdaParamEvaluator : lambdaParamEvaluators) {
-        auto param = lambdaParamEvaluator->resultVector.get();
-        param->state->getSelVectorUnsafe().setToUnfiltered(getSliceSize());
-        savedStates.push_back(param->state);
-    }
-
-    // Then override the output sel state of the param's result vector
-    // This will be a list data vector that we need to get data from using the sliced offset
-    for (auto& lambdaParamEvaluator : lambdaParamEvaluators) {
-        auto param = lambdaParamEvaluator->resultVector.get();
-        param->state = sliceDataState;
-    }
-    return savedStates;
-}
-
 bool ListSliceInfo::done() const {
     return listEntryTracker.done();
-}
-
-void ListSliceInfo::restoreParamStates(
-    std::span<evaluator::LambdaParamEvaluator*> lambdaParamEvaluators,
-    std::vector<std::shared_ptr<common::DataChunkState>> savedStates) {
-    for (size_t i = 0; i < lambdaParamEvaluators.size(); ++i) {
-        auto param = lambdaParamEvaluators[i]->resultVector.get();
-        param->state = savedStates[i];
-    }
 }
 
 void ListSliceInfo::nextSlice() {

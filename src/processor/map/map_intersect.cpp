@@ -18,6 +18,11 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapIntersect(const LogicalOperator
     auto outSchema = logicalIntersect->getSchema();
     std::vector<std::shared_ptr<HashJoinSharedState>> sharedStates;
     std::vector<IntersectDataInfo> intersectDataInfos;
+    // A semi masker on a build side targets probe-side scans, which must be mapped first.
+    std::unique_ptr<PhysicalOperator> probeChild;
+    if (logicalIntersect->getSIPInfo().dependency == SIPDependency::BUILD_DEPENDS_ON_PROBE) {
+        probeChild = mapOperator(logicalIntersect->getChild(0).get());
+    }
     // Map build side children.
     std::vector<std::unique_ptr<PhysicalOperator>> buildChildren;
     for (auto i = 1u; i < logicalIntersect->getNumChildren(); i++) {
@@ -48,8 +53,9 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapIntersect(const LogicalOperator
         IntersectDataInfo info{DataPos(outSchema->getExpressionPos(*keyNodeID)), vectorsToScanPos};
         intersectDataInfos.push_back(info);
     }
-    // Map probe side child.
-    auto probeChild = mapOperator(logicalIntersect->getChild(0).get());
+    if (probeChild == nullptr) {
+        probeChild = mapOperator(logicalIntersect->getChild(0).get());
+    }
     // Map intersect.
     auto outputDataPos =
         DataPos(outSchema->getExpressionPos(*logicalIntersect->getIntersectNodeID()));

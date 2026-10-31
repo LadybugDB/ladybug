@@ -54,8 +54,6 @@ static void execFunc(const std::vector<std::shared_ptr<ValueVector>>& input,
     SelectionVector* resultSelVector, void* bindData_) {
     auto bindData = reinterpret_cast<evaluator::ListLambdaBindData*>(bindData_);
     auto* sliceInfo = bindData->sliceInfo;
-    auto savedParamStates = sliceInfo->overrideAndSaveParamStates(bindData->lambdaParamEvaluators);
-
     bindData->rootEvaluator->evaluate();
     copyEvaluatedDataToResult(result, bindData);
 
@@ -72,8 +70,6 @@ static void execFunc(const std::vector<std::shared_ptr<ValueVector>>& input,
             copyListEntriesToResult(inputVector, inputSelVector, result);
         }
     }
-
-    sliceInfo->restoreParamStates(bindData->lambdaParamEvaluators, std::move(savedParamStates));
 }
 
 function_set ListTransformFunction::getFunctionSet() {

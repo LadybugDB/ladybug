@@ -118,3 +118,32 @@
 -STATEMENT MATCH (p:B) WHERE (NOT ((p.x IS NULL OR p.x IS NOT NULL) AND NOT (p.x IS NULL AND p.id > 2)) AND p.x IS NOT NULL) OR p.id = 50 RETURN count(*);
 ---- 1
 1
+
+-CASE FalseFilterAfterWriteKeepsWrite
+# A filter that folds to false must not discard the write below it: the write still runs,
+# only the rows after the filter are dropped.
+-STATEMENT CREATE NODE TABLE W(id INT64 PRIMARY KEY, age INT64);
+---- ok
+-STATEMENT CREATE (:W {id: 1, age: 10}), (:W {id: 2, age: 20});
+---- ok
+-STATEMENT CREATE (n:W {id: 3, age: 30}) WITH n WHERE false RETURN n.id;
+---- 0
+-STATEMENT CREATE (n:W {id: 4, age: 40}) WITH n WHERE NULL RETURN n.id;
+---- 0
+-STATEMENT MATCH (n:W {id: 1}) SET n.age = 77 WITH n WHERE n.age IS NULL AND n.age IS NOT NULL RETURN n.id;
+---- 0
+-STATEMENT MERGE (n:W {id: 5}) ON CREATE SET n.age = 50 WITH n WHERE false RETURN n.id;
+---- 0
+-STATEMENT MATCH (n:W {id: 2}) DETACH DELETE n WITH n WHERE false RETURN 1;
+---- 0
+-STATEMENT MATCH (n:W) RETURN n.id, n.age ORDER BY n.id;
+-CHECK_ORDER
+---- 4
+1|77
+3|30
+4|40
+5|50
+# Read-only queries still fold to an empty result.
+-STATEMENT MATCH (n:W) WHERE false RETURN count(*);
+---- 1
+0

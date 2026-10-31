@@ -1,6 +1,7 @@
 #include "processor/operator/simple/import_db.h"
 
 #include "common/exception/runtime.h"
+#include "common/exception/transaction_manager.h"
 #include "main/client_context.h"
 #include "processor/execution_context.h"
 #include "storage/buffer_manager/memory_manager.h"
@@ -35,6 +36,11 @@ void ImportDB::executeInternal(ExecutionContext* context) {
     // Currently, we split multiple query statements into single query and execute them one by one,
     // each with an auto transaction.
     auto transactionContext = transaction::TransactionContext::Get(*clientContext);
+    // Committing a transaction the user began would commit their pending writes with it, so
+    // refuse like CHECKPOINT does.
+    if (!transactionContext->isAutoTransaction()) {
+        throw TransactionManagerException("Found active transaction for IMPORT DATABASE.");
+    }
     if (transactionContext->hasActiveTransaction()) {
         transactionContext->commit();
     }

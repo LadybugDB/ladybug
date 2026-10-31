@@ -31,7 +31,16 @@ directory sync. There the ordering still recovers from a process crash — file 
 reached the OS — but power-loss durability of those directory entries is not guaranteed.
 
 If a step fails after the commit point, the database refuses further writes until it is reopened,
-and recovery finishes the checkpoint.
+and recovery finishes the checkpoint. A failure before it rolls the checkpoint back; if that rollback
+fails too, the database refuses further writes the same way.
+
+A checkpoint that runs automatically after a commit never fails that commit, which is already in
+the WAL: its failure is printed as a warning, and a later commit tries again, or fails if the
+failure made the database refuse writes. The checkpoint that `COPY` or a large `CREATE INDEX`
+requires is different, since their data is not in the WAL: its failure fails the statement. If the
+checkpoint was rolled back, the changes are lost on restart unless a later `CHECKPOINT` succeeds;
+if it made the database refuse writes, they survive the restart only if the checkpoint's record
+reached storage.
 
 ## Pinned checkpoints
 
@@ -45,11 +54,11 @@ A transaction committed after a `CHECKPOINT` record proves that checkpoint compl
 write gate is held until a checkpoint's cleanup ends and a failure after its record poisons the WAL.
 Recovery then replays only the records after the last `CHECKPOINT` and removes a remaining shadow
 file, which belongs to a later checkpoint that never logged its record. The `CHECKPOINT` records
-stay in the WAL, so when such a transaction is the only proof, recovery writes the pinned-checkpoint marker
-before it removes the shadow. A `COMMIT` after a `CHECKPOINT` without its `BEGIN`, which the engine
-never writes, leaves the earlier rule in place: with a shadow file, only the records before the
-first `CHECKPOINT` replay. Records that end in no `COMMIT`, such as a torn commit, are a torn tail
-of the last `CHECKPOINT`, and the WAL counts as ending in that record.
+stay in the WAL, so when such a transaction is the only proof, recovery writes the pinned-checkpoint
+marker before it removes the shadow. A `COMMIT` after a `CHECKPOINT` without its `BEGIN`, which the
+engine never writes, leaves the earlier rule in place: with a shadow file, only the records before
+the first `CHECKPOINT` replay. Records that end in no `COMMIT`, such as a torn commit, are a torn
+tail of the last `CHECKPOINT`, and the WAL counts as ending in that record.
 
 Recovering a WAL that ends in a `CHECKPOINT` record writes: it applies or removes the shadow files
 and retires the WAL. A read-only open therefore refuses such a database with `Cannot open database
@@ -114,7 +123,11 @@ its own again.
 
 Recovery reads the checksum flag of an attached-graph WAL from the WAL's own header, so a graph
 opened on its own may be opened with either checksum setting: its committed changes are replayed
-or its committed checkpoint recovered when the parent database is reopened.
+or its committed checkpoint recovered when the parent database is reopened. The database's own
+WAL must instead match the configured setting. A mismatch is a configuration error, not a torn
+tail, so it fails the open even with `throwOnWalReplayFailure` false and leaves the WAL untouched.
+An all-zero header, which a power loss before the WAL's first write reaches disk can leave, was
+never written and counts as a torn WAL instead.
 
 ## Downgrades
 

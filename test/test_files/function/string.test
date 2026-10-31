@@ -284,6 +284,36 @@ ABFsUni
 CsWorkCsWorkCsWorkCsWork
 DEsWorkDEsWorkDEsWorkDEsWorkDEsWorkDEsWork
 
+-LOG RepeatOutOfRangeCount
+-STATEMENT RETURN repeat('ab', -1), repeat('', -1), repeat('ab', -9223372036854775808), repeat('ab', 0)
+---- 1
+|||
+-STATEMENT MATCH (p:person) RETURN repeat(p.fName, -1)
+---- 8
+
+
+
+
+
+
+
+
+-STATEMENT RETURN repeat('ab', 9223372036854775807)
+---- error
+Runtime exception: repeat(): the result would exceed the maximum string size of 4294967295 bytes.
+-STATEMENT RETURN repeat('ab', 2147483648)
+---- error
+Runtime exception: repeat(): the result would exceed the maximum string size of 4294967295 bytes.
+-STATEMENT UNWIND [2147483648] AS n RETURN repeat('ab', n)
+---- error
+Runtime exception: repeat(): the result would exceed the maximum string size of 4294967295 bytes.
+-STATEMENT RETURN repeat('abcd', 4611686018427387904)
+---- error
+Runtime exception: repeat(): the result would exceed the maximum string size of 4294967295 bytes.
+-STATEMENT RETURN repeat('', 3), repeat('', 9223372036854775807)
+---- 1
+|
+
 -LOG LpadStrAndLiteralInt
 -STATEMENT MATCH (p:person) RETURN lpad(p.fName, 5, "<")
 ---- 8
@@ -367,6 +397,36 @@ Hubert Bla
 
 
 
+-LOG PadOutOfRangeCount
+-STATEMENT RETURN lpad('hi', -9223372036854775808, 'x'), rpad('hi', -9223372036854775808, 'x')
+---- 1
+|
+-STATEMENT RETURN rpad('hi', 4294967296, 'x')
+---- error
+Runtime exception: lpad()/rpad(): the result would exceed the maximum string size of 4294967295 bytes.
+-STATEMENT RETURN lpad('hi', 9223372036854775807, 'x')
+---- error
+Runtime exception: lpad()/rpad(): the result would exceed the maximum string size of 4294967295 bytes.
+-STATEMENT UNWIND [4294967296] AS n RETURN rpad('hi', n, 'x')
+---- error
+Runtime exception: lpad()/rpad(): the result would exceed the maximum string size of 4294967295 bytes.
+-STATEMENT RETURN lpad('hi', 2000000000, '成')
+---- error
+Runtime exception: lpad()/rpad(): the result would exceed the maximum string size of 4294967295 bytes.
+-STATEMENT RETURN lpad('hi', 4611686018427387904, 'x')
+---- error
+Runtime exception: lpad()/rpad(): the result would exceed the maximum string size of 4294967295 bytes.
+-STATEMENT RETURN lpad('hi', 4294967296, ''), rpad('hi', 9223372036854775807, ''), lpad('hello', 2, '')
+---- 1
+hi|hi|he
+-STATEMENT RETURN rpad('成績', 1, ''), lpad('成績', 4, ''), lpad('', 5, '')
+---- 1
+成|成績|
+-STATEMENT UNWIND ['hi', 'abc'] AS s RETURN size(lpad(s, -9223372036854775808, 'x')), size(rpad(s, -9223372036854775808, 'x'))
+---- 2
+0|0
+0|0
+
 -LOG SubStrStrAndLiteralInt
 -STATEMENT MATCH (p:person) RETURN substr(p.fName, 2, 12)
 ---- 8
@@ -378,6 +438,25 @@ lizabeth
 arooq
 reg
 ubert Blaine
+
+-LOG SubStrNegativeLength
+-STATEMENT RETURN substring('item_0_0', 2, -1), substring('item_0_0', 2, -2), substring('item_0_0', 2, -9223372036854775807), substring('item_0_0', 1, -9223372036854775808)
+---- 1
+|||
+-STATEMENT MATCH (p:person) RETURN substr(p.fName, 2, -9223372036854775807)
+---- 8
+
+
+
+
+
+
+
+
+-LOG SubStrExtremeArguments
+-STATEMENT RETURN substring('hello', 2, 9223372036854775807), substring('hello', -9223372036854775808, 2), substring('hello', 9223372036854775807, 2)
+---- 1
+ello||
 
 -LOG LeftPositiveIdxStrAndLiteralInt
 -STATEMENT MATCH (p:person) RETURN left(p.fName, 11)
