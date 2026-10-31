@@ -110,6 +110,34 @@ applies the transaction. The `ABORT` always lands in the WAL file of its `COMMIT
 recovery ignores an `ABORT` that names no transaction committed in its file after the last
 `CHECKPOINT` before it.
 
+## Torn WAL tails
+
+With `throwOnWalReplayFailure` false, recovery drops a torn tail of the WAL and keeps the commits
+before it. A torn tail is what a crash or a power loss can leave in data written after the last
+sync:
+
+- a record whose frame runs past the end of the file;
+- a complete record that fails its checksum with no intact record after it, as when the unsynced
+  end is zero-filled or stale;
+- a complete record that fails its checksum and overlaps an aligned, all-zero 4 KiB block, a hole
+  the file system can leave in the unsynced end while later frames survive.
+
+A checkpoint starts only after every earlier commit was synced, so damage before an intact
+`CHECKPOINT` record is not a torn tail. Any other failure refuses the open and leaves the WAL
+untouched: a damaged record or header with an intact record after it, or a record that matches its
+checksum but cannot be replayed, such as one of a type a newer version wrote. The error gives the
+size to truncate the WAL to, which opens the database without the transactions from that point on.
+When a `CHECKPOINT` record follows, truncating would replay transactions the checkpoint already
+applied, so the error says not to truncate.
+
+The rule is a heuristic. Without checksums a record that does not decode counts as damaged. The
+next record is found through the length fields, so a damaged length field hides the records after
+it, and they are dropped with the tail, even when a `CHECKPOINT` record is among them; recovery
+then replays transactions the checkpoint already applied. A damaged record whose data holds an
+aligned 4 KiB block of zeros counts as a hole, so the records after it are dropped too. A power loss
+that leaves other damage before intact records, such as stale data or a hole smaller than 4 KiB,
+refuses the open. With `throwOnWalReplayFailure` true, every failure refuses the open.
+
 ## Checkpoint bundle format
 
 `CheckpointRecord::bundleFormatVersion` is 2 for checkpoints written by current builds, including
