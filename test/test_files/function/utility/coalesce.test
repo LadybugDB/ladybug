@@ -200,3 +200,78 @@ a
 -STATEMENT RETURN ifnull(NULL, 'a')
 ---- 1
 a
+
+-CASE ArgumentsAfterNonNullLiteral
+
+-LOG LaterArgumentsAreNotEvaluated
+-STATEMENT UNWIND [1, 2] AS x RETURN coalesce(0, x / 0) AS v, ifnull(1, x / 0) AS w
+---- 2
+0|1
+0|1
+-STATEMENT UNWIND [1, NULL] AS x RETURN coalesce(x, 5, x / 0) AS v
+---- 2
+1
+5
+-STATEMENT UNWIND [1, 2] AS x WITH x, 7 AS z RETURN x, coalesce(z, x / 0) AS v, z
+---- 2
+1|7|7
+2|7|7
+-STATEMENT UNWIND [1, 2] AS x WITH x WHERE ifnull(true, x / 0 > 0) RETURN x
+---- 2
+1
+2
+-STATEMENT UNWIND [1, 2] AS x RETURN DISTINCT coalesce(0, x / 0) AS v
+---- 1
+0
+-STATEMENT UNWIND [1, 2] AS x RETURN x ORDER BY coalesce(0, x / 0), x DESC
+-CHECK_ORDER
+---- 2
+2
+1
+-STATEMENT CREATE SEQUENCE s
+---- ok
+-STATEMENT UNWIND [1, 2] AS x RETURN coalesce(1, nextval('s')) AS v
+---- 2
+1
+1
+-STATEMENT RETURN nextval('s')
+---- 1
+1
+
+-LOG NullLiteralKeepsLaterArguments
+-STATEMENT UNWIND [1, 2] AS x RETURN coalesce(NULL, x, x / 0) AS v
+---- error
+Runtime exception: Divide by zero.
+
+-LOG SubqueryIsNotEvaluated
+-STATEMENT CREATE NODE TABLE N(id INT64 PRIMARY KEY)
+---- ok
+-STATEMENT CREATE REL TABLE R(FROM N TO N)
+---- ok
+-STATEMENT CREATE (:N {id: 1})-[:R]->(:N {id: 2})
+---- ok
+-STATEMENT MATCH (n:N) RETURN n.id, coalesce(0, COUNT { MATCH (n)-[:R]->(m:N) WHERE m.id / 0 = 1 }) AS c
+---- 2
+1|0
+2|0
+
+-LOG KeepsColumnNames
+-STATEMENT UNWIND [1] AS x RETURN coalesce(x, 0, x + 1), coalesce(0, x + 1), ifnull(0, x + 1), coalesce(0, x + 1) + 1
+-CHECK_COLUMN_NAMES
+---- 2
+COALESCE(x,0,+(x,1))|COALESCE(0,+(x,1))|IFNULL(0,+(x,1))|+(COALESCE(0,+(x,1)),1)
+1|0|0|1
+
+-LOG KeepsListTypes
+-STATEMENT UNWIND [1, 2] AS x RETURN typeof(coalesce([], [x])), typeof(coalesce([NULL], [x])), size(coalesce([NULL], [x]))
+---- 2
+INT64[]|INT64[]|1
+INT64[]|INT64[]|1
+
+-LOG KeepsTheAggregation
+-STATEMENT UNWIND [1, 2, 3] AS x RETURN coalesce(0, count(*)) AS v
+---- 1
+0
+-STATEMENT UNWIND [1, 2, 3] AS x RETURN coalesce(0, COUNT { MATCH (n:N) WHERE count(*) > 0 }) AS v
+---- 1
+0
