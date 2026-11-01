@@ -72,7 +72,10 @@ public:
         nodeGroups.clear(lock);
     }
 
-    common::column_id_t getNumColumns() const { return types.size(); }
+    common::column_id_t getNumColumns() const {
+        const auto lock = nodeGroups.lock();
+        return types.size();
+    }
 
     void addColumn(TableAddColumnState& addColumnState, PageAllocator* pageAllocator = nullptr);
 

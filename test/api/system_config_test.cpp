@@ -132,6 +132,12 @@ TEST_F(SystemConfigTest, testFileHandleRefusedAtMaxDBSizeStaysRefused) {
     if (databasePath == "" || databasePath == ":memory:") {
         GTEST_SKIP();
     }
+#if BM_MALLOC
+    // The malloc-backed buffer manager never enforces max_db_size (addNewFrameGroup is a
+    // no-op), and the nightly sanitizer jobs build with BM_MALLOC=1. There is no refusal
+    // to observe there.
+    GTEST_SKIP() << "max_db_size is not enforced under BM_MALLOC";
+#endif
     systemConfig->maxDBSize = 4 * LBUG_PAGE_SIZE * StorageConstants::PAGE_GROUP_SIZE;
     auto db = std::make_unique<Database>(databasePath, *systemConfig);
     auto con = std::make_unique<Connection>(db.get());
