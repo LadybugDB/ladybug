@@ -1145,6 +1145,30 @@ TEST_F(OptimizerTest, CountRelTableOptimizer) {
     ASSERT_EQ(tupleGapTopK->getValue(1)->getValue<int64_t>(), 2);
 }
 
+TEST_F(OptimizerTest, CountExtendChainWithParameterIndexScan) {
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE ix_user(ID INT64, name STRING, PRIMARY KEY(ID));")
+                    ->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE REL TABLE ix_follows(FROM ix_user TO ix_user);")->isSuccess());
+    ASSERT_TRUE(conn->query("UNWIND range(1, 10) AS i "
+                            "CREATE (:ix_user {ID: i, name: 'n' + cast(i AS STRING)});")
+                    ->isSuccess());
+    ASSERT_TRUE(conn->query("MATCH (a:ix_user), (b:ix_user) WHERE b.ID = a.ID + 1 "
+                            "CREATE (a)-[:ix_follows]->(b);")
+                    ->isSuccess());
+    ASSERT_TRUE(
+        conn->query("CREATE ART INDEX ix_user_name FOR (u:ix_user) ON (u.name);")->isSuccess());
+    auto unrestricted = "MATCH (u:ix_user)-[:ix_follows]->()-[:ix_follows]->() RETURN count(*);";
+    ASSERT_TRUE(hasOperatorType(getRoot(unrestricted)->getLastOperator().get(),
+        planner::LogicalOperatorType::COUNT_EXTEND_CHAIN));
+    // Unlike a literal key, a parameter key adds no zone-map predicate to the index scan.
+    auto prepared = conn->prepare("MATCH (u:ix_user)-[:ix_follows]->()-[:ix_follows]->() "
+                                  "WHERE u.name = $name RETURN count(*);");
+    auto result =
+        conn->execute(prepared.get(), std::make_pair(std::string("name"), std::string("n1")));
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 1);
+}
+
 TEST_F(StatsOptimizerTest, FilterPushDownOrdersMostSelectivePredicateFirst) {
     ASSERT_TRUE(conn->query("CREATE NODE TABLE stats_node(id INT64, common INT64, rare INT64, "
                             "PRIMARY KEY(id));")

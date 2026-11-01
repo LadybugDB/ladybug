@@ -67,6 +67,19 @@ static bool containsOp(const LogicalOperator* root, const LogicalOperator* targe
 static bool isNativeRelGroupEntry(const RelGroupCatalogEntry* entry);
 static bool isNativeNodeEntry(const NodeTableCatalogEntry* entry);
 
+// The count fast paths enumerate every node offset, so the scan must not filter nodes.
+static bool isUnrestrictedScan(const LogicalScanNodeTable& scan) {
+    if (scan.getScanType() != LogicalScanNodeTableType::SCAN) {
+        return false;
+    }
+    for (auto& predicateSet : scan.getPropertyPredicates()) {
+        if (!predicateSet.isEmpty()) {
+            return false;
+        }
+    }
+    return true;
+}
+
 std::shared_ptr<LogicalOperator> CountRelTableOptimizer::tryRewriteAntiEdgeChainCount(
     std::shared_ptr<LogicalOperator> op) {
     // Target pattern (LSQB q9 shape): COUNT(*) over an inner hash join of
@@ -111,18 +124,8 @@ std::shared_ptr<LogicalOperator> CountRelTableOptimizer::tryRewriteAntiEdgeChain
         switch (current->getOperatorType()) {
         case LogicalOperatorType::PROJECTION:
             return collect(current->getChild(0).get());
-        case LogicalOperatorType::SCAN_NODE_TABLE: {
-            auto scan = current->ptrCast<LogicalScanNodeTable>();
-            if (scan->getScanType() == LogicalScanNodeTableType::PRIMARY_KEY_SCAN) {
-                return false;
-            }
-            for (auto& predicateSet : scan->getPropertyPredicates()) {
-                if (!predicateSet.isEmpty()) {
-                    return false;
-                }
-            }
-            return true;
-        }
+        case LogicalOperatorType::SCAN_NODE_TABLE:
+            return isUnrestrictedScan(current->constCast<LogicalScanNodeTable>());
         case LogicalOperatorType::EXTEND:
         case LogicalOperatorType::PACKED_EXTEND:
             extends.push_back(current->ptrCast<LogicalExtend>());
@@ -655,7 +658,7 @@ std::shared_ptr<LogicalOperator> CountRelTableOptimizer::tryRewriteExtendChainCo
     }
 
     // Collect the extends in the subtree. Only row-count-invariant operators may appear:
-    // projections and node-ID-only inner hash joins; scans are ignored. Anything else
+    // projections and node-ID-only inner hash joins; scans must be unrestricted. Anything else
     // (filters, multiplicity reducers, ...) can change row counts and disqualifies.
     std::vector<const LogicalExtend*> extends;
     std::function<bool(const LogicalOperator*)> collect =
@@ -665,20 +668,7 @@ std::shared_ptr<LogicalOperator> CountRelTableOptimizer::tryRewriteExtendChainCo
             return collect(current->getChild(0).get());
         }
         case LogicalOperatorType::SCAN_NODE_TABLE: {
-            // The planner can fold node predicates (e.g. a name lookup) into the scan as
-            // property predicates or a primary-key scan. Such a scan yields a restricted node
-            // set, but the count chain iterates ALL node offsets, so a restricted scan
-            // disqualifies the rewrite.
-            auto& scan = current->constCast<LogicalScanNodeTable>();
-            if (scan.getScanType() == LogicalScanNodeTableType::PRIMARY_KEY_SCAN) {
-                return false;
-            }
-            for (auto& predicateSet : scan.getPropertyPredicates()) {
-                if (!predicateSet.isEmpty()) {
-                    return false;
-                }
-            }
-            return true;
+            return isUnrestrictedScan(current->constCast<LogicalScanNodeTable>());
         }
         case LogicalOperatorType::EXTEND:
         case LogicalOperatorType::PACKED_EXTEND: {
@@ -1127,8 +1117,8 @@ bool CountRelTableOptimizer::canOptimize(LogicalOperator* aggregate) const {
     }
     auto& scanNode = extendChild->constCast<LogicalScanNodeTable>();
 
-    // Check if node scan has any properties (we can only optimize when no properties needed)
-    if (!scanNode.getProperties().empty()) {
+    // The count covers every node, so the scan may neither read properties nor restrict nodes.
+    if (!scanNode.getProperties().empty() || !isUnrestrictedScan(scanNode)) {
         return false;
     }
 
@@ -1486,12 +1476,18 @@ std::shared_ptr<LogicalOperator> CountRelTableOptimizer::tryRewriteReachableCoun
         return op;
     }
     auto& scan = source->constCast<LogicalScanNodeTable>();
+    // When the destination is also pinned by its primary key, the join can put its scan here.
+    if (!(*scan.getNodeID() == *boundNode->getInternalID())) {
+        return op;
+    }
 
     // Derive the fixed source offset from a primary-key literal. CSR (primary_key == rowid) lets us
     // turn the pk literal directly into a node offset without a lookup.
     offset_t offset = INVALID_OFFSET;
     if (sourceFilter != nullptr) {
-        if (!getPrimaryKeyOffsetPredicate(*sourceFilter->getPredicate(), *boundNode, offset)) {
+        // An index scan under the filter restricts the source by another predicate.
+        if (scan.getScanType() != LogicalScanNodeTableType::SCAN ||
+            !getPrimaryKeyOffsetPredicate(*sourceFilter->getPredicate(), *boundNode, offset)) {
             return op;
         }
     } else if (scan.getScanType() == LogicalScanNodeTableType::PRIMARY_KEY_SCAN &&
@@ -1620,14 +1616,9 @@ static const LogicalScanNodeTable* asUnfilteredFullScan(LogicalOperator* op) {
         return nullptr;
     }
     auto& scan = op->constCast<LogicalScanNodeTable>();
-    if (scan.getScanType() != LogicalScanNodeTableType::SCAN || scan.getExtraInfo() != nullptr ||
+    if (!isUnrestrictedScan(scan) || scan.getExtraInfo() != nullptr ||
         scan.getTableIDs().size() != 1) {
         return nullptr;
-    }
-    for (auto& predicateSet : scan.getPropertyPredicates()) {
-        if (!predicateSet.isEmpty()) {
-            return nullptr;
-        }
     }
     return &scan;
 }
@@ -1927,7 +1918,7 @@ std::shared_ptr<LogicalOperator> CountRelTableOptimizer::tryRewriteSortedOffsetC
     if (!table || table->getChangeEpoch() != nodeEntry->getCsrChangeEpoch()) {
         return op;
     }
-    auto nodeKey = boundNode->getPrimaryKey(tableID);
+    auto nodeKey = boundNode->tryGetPrimaryKey(tableID);
     if (!nodeKey) {
         return op;
     }
@@ -1938,7 +1929,8 @@ std::shared_ptr<LogicalOperator> CountRelTableOptimizer::tryRewriteSortedOffsetC
     auto& scanNode = scan->constCast<LogicalScanNodeTable>();
     offset_t offset = INVALID_OFFSET;
     if (filter) {
-        if (!getPrimaryKeyOffsetPredicate(*filter->getPredicate(), *boundNode, offset)) {
+        if (scanNode.getScanType() != LogicalScanNodeTableType::SCAN ||
+            !getPrimaryKeyOffsetPredicate(*filter->getPredicate(), *boundNode, offset)) {
             return op;
         }
     } else {
@@ -1984,7 +1976,7 @@ std::shared_ptr<LogicalOperator> CountRelTableOptimizer::tryRewriteActiveBoundCo
     if (boundNode->isMultiLabeled()) {
         return op;
     }
-    auto boundKey = boundNode->getPrimaryKey(boundNode->getTableIDs()[0]);
+    auto boundKey = boundNode->tryGetPrimaryKey(boundNode->getTableIDs()[0]);
     // The binder turns COUNT(DISTINCT u.key) into COUNT(DISTINCT u._ID) when the key is indexed.
     if (!boundKey || !(isDistinctCountNodeKey(op.get(), boundKey) ||
                          isDistinctCountNodeKey(op.get(), boundNode->getInternalID()))) {
@@ -1998,6 +1990,9 @@ std::shared_ptr<LogicalOperator> CountRelTableOptimizer::tryRewriteActiveBoundCo
         return op;
     }
     auto& scanNode = scan->constCast<LogicalScanNodeTable>();
+    if (!isUnrestrictedScan(scanNode)) {
+        return op;
+    }
     for (auto& property : scanNode.getProperties()) {
         if (!(*property == *boundKey)) {
             return op;
@@ -2054,9 +2049,12 @@ std::shared_ptr<LogicalOperator> CountRelTableOptimizer::tryRewriteDegreeTopK(
     }
     auto& extend = aggregateChild->constCast<LogicalExtend>();
     auto boundNode = extend.getBoundNode();
-    if (boundNode->isMultiLabeled() || boundNode->getNumEntries() != 1 ||
-        !(*nodeKey == *boundNode->getPrimaryKey(boundNode->getTableIDs()[0])) ||
-        !isCountNbr(current, *extend.getNbrNode()) || !extend.getProperties().empty()) {
+    if (boundNode->isMultiLabeled() || boundNode->getNumEntries() != 1) {
+        return op;
+    }
+    auto boundKey = boundNode->tryGetPrimaryKey(boundNode->getTableIDs()[0]);
+    if (!boundKey || !(*nodeKey == *boundKey) || !isCountNbr(current, *extend.getNbrNode()) ||
+        !extend.getProperties().empty()) {
         return op;
     }
     // TOP_K_DEGREES writes raw storage offsets as the group key, so it is only valid when
@@ -2109,6 +2107,9 @@ std::shared_ptr<LogicalOperator> CountRelTableOptimizer::tryRewriteDegreeTopK(
         return op;
     }
     auto& scanNode = scan->constCast<LogicalScanNodeTable>();
+    if (!isUnrestrictedScan(scanNode)) {
+        return op;
+    }
     for (auto& property : scanNode.getProperties()) {
         if (!(*property == *nodeKey)) {
             return op;
