@@ -36,8 +36,9 @@ struct PredicateSet {
 
     void addPredicate(std::shared_ptr<binder::Expression> predicate);
     std::shared_ptr<binder::Expression> popNodePKEqualityComparison(
-        const binder::Expression& nodeID);
-    PrimaryKeyRangePredicate popNodePKRangeComparison(const binder::Expression& nodeID);
+        const binder::Expression& nodeID, common::table_id_t tableID);
+    PrimaryKeyRangePredicate popNodePKRangeComparison(const binder::Expression& nodeID,
+        common::table_id_t tableID);
     binder::expression_vector getAllPredicates();
 
 private:
