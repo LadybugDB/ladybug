@@ -304,3 +304,78 @@ Catalog exception: t does not exist in catalog.
 ---- 2
 0|a|INT32|NULL|True
 1|c|INT32|NULL|False
+
+-CASE AlterTableAddWriteWriteConflictUncommitted
+-STATEMENT CALL debug_enable_multi_writes=true;
+---- ok
+-STATEMENT CREATE NODE TABLE t(a INT, b INT, PRIMARY KEY(a));
+---- ok
+-STATEMENT BEGIN TRANSACTION;
+---- ok
+-STATEMENT ALTER TABLE t ADD x INT;
+---- ok
+-CREATE_CONNECTION conn2
+-STATEMENT [conn2] BEGIN TRANSACTION;
+---- ok
+-STATEMENT [conn2] ALTER TABLE t ADD y INT;
+---- error
+Catalog exception: Write-write conflict on altering catalog entry with name t.
+-STATEMENT COMMIT;
+---- ok
+-STATEMENT [conn2] ROLLBACK;
+---- ok
+-STATEMENT CALL table_info('t') RETURN *;
+---- 3
+0|a|INT32|NULL|True
+1|b|INT32|NULL|False
+2|x|INT32|NULL|False
+
+-CASE AlterTableAddWriteWriteConflictCommitted
+-STATEMENT CALL debug_enable_multi_writes=true;
+---- ok
+-STATEMENT CREATE NODE TABLE t(a INT, b INT, PRIMARY KEY(a));
+---- ok
+-STATEMENT BEGIN TRANSACTION;
+---- ok
+-CREATE_CONNECTION conn2
+-STATEMENT [conn2] BEGIN TRANSACTION;
+---- ok
+-STATEMENT [conn2] ALTER TABLE t ADD x INT;
+---- ok
+-STATEMENT [conn2] COMMIT;
+---- ok
+-STATEMENT ALTER TABLE t ADD y INT;
+---- error
+Catalog exception: Write-write conflict on altering catalog entry with name t.
+-STATEMENT ROLLBACK;
+---- ok
+-STATEMENT CALL table_info('t') RETURN *;
+---- 3
+0|a|INT32|NULL|True
+1|b|INT32|NULL|False
+2|x|INT32|NULL|False
+
+-CASE AlterVsDropWriteWriteConflict
+-STATEMENT CALL debug_enable_multi_writes=true;
+---- ok
+-STATEMENT CREATE NODE TABLE t(a INT, b INT, PRIMARY KEY(a));
+---- ok
+-STATEMENT BEGIN TRANSACTION;
+---- ok
+-STATEMENT ALTER TABLE t ADD x INT;
+---- ok
+-CREATE_CONNECTION conn2
+-STATEMENT [conn2] BEGIN TRANSACTION;
+---- ok
+-STATEMENT [conn2] DROP TABLE t;
+---- error
+Catalog exception: Write-write conflict on dropping catalog entry with name t.
+-STATEMENT COMMIT;
+---- ok
+-STATEMENT [conn2] ROLLBACK;
+---- ok
+-STATEMENT CALL table_info('t') RETURN *;
+---- 3
+0|a|INT32|NULL|True
+1|b|INT32|NULL|False
+2|x|INT32|NULL|False
