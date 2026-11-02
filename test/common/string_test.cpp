@@ -5,6 +5,7 @@
 #include "function/string/functions/array_extract_function.h"
 #include "function/string/functions/base_pad_function.h"
 #include "gtest/gtest.h"
+#include "main/database.h"
 
 using namespace lbug::common;
 
@@ -73,7 +74,9 @@ TEST(StringTest, arrayExtractTruncatedLastCharacter) {
     str.set("\xC3\xA9\xC3", 3);
     int64_t idx = 2;
     string_t result;
-    lbug::function::ArrayExtract::operation(str, idx, result);
+    lbug::main::Database database(":memory:");
+    ValueVector resultVector(LogicalType::STRING(), database.getMemoryManager());
+    lbug::function::ArrayExtract::operation(str, idx, result, resultVector);
     ASSERT_EQ(result.len, 1u);
     EXPECT_EQ(result.getData()[0], 0xC3);
 }
