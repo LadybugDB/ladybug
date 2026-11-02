@@ -192,7 +192,7 @@ TEST_F(TableColumnsConcurrencyTest, RelColumnsStayReadableWhileCheckpointReplace
     EXPECT_EQ(changed.load(), 0u);
 }
 
-// The two tests below rely on a sanitizer or a crash to detect the race: ADD reallocates the
+// The tests below rely on a sanitizer or a crash to detect the race: ADD reallocates the
 // vector the scans index, and a read of the freed vector usually still finds the column.
 TEST_F(TableColumnsConcurrencyTest, RelScansStartWhileAddColumnGrowsColumns) {
     createGraph();
@@ -209,6 +209,25 @@ TEST_F(TableColumnsConcurrencyTest, NodeScansStartWhileAddColumnGrowsColumns) {
     auto round = 0;
     raceReaders("MATCH (a:N {id: 5}) RETURN a.v;", 1, [&] {
         auto added = conn->query("ALTER TABLE N ADD q" + std::to_string(round) + " INT64;");
+        EXPECT_TRUE(added->isSuccess()) << added->getErrorMessage();
+        return ++round < 100;
+    });
+}
+
+// In-memory rels whose CSR list is not contiguous are looked up row by row through
+// CSRNodeGroup::scanCommittedInMemRandom, which reads the live in-memory groups without
+// holding any node-group lock while ALTER TABLE ADD grows those same groups.
+TEST_F(TableColumnsConcurrencyTest, InMemoryRelScansStartWhileAddColumnGrowsColumns) {
+    createGraph();
+    // Keeps the creates in memory even with CHECKPOINT_THRESHOLD=0.
+    run("CALL auto_checkpoint=false;");
+    // Node 5's uncheckpointed rels are not contiguous, so the scan looks them up row by row.
+    run("MATCH (a:N {id: 5}), (b:N {id: 10}) CREATE (a)-[:R {p1: 1}]->(b);");
+    run("MATCH (a:N {id: 6}), (b:N {id: 10}) CREATE (a)-[:R {p1: 1}]->(b);");
+    run("MATCH (a:N {id: 5}), (b:N {id: 11}) CREATE (a)-[:R {p1: 1}]->(b);");
+    auto round = 0;
+    raceReaders("MATCH (a:N {id: 5})-[k:R]->(:N) RETURN sum(k.p1);", 7, [&] {
+        auto added = conn->query("ALTER TABLE R ADD q" + std::to_string(round) + " INT64;");
         EXPECT_TRUE(added->isSuccess()) << added->getErrorMessage();
         return ++round < 100;
     });

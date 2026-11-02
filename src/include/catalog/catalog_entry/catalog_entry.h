@@ -117,7 +117,7 @@ protected:
     // Written once at commit without holding the CatalogSet lock while concurrent readers
     // traverse version chains under a shared lock (see TableColumnsConcurrencyTest). Atomic
     // with release/acquire so the commit publish synchronizes with reader snapshots.
-    mutable std::atomic<common::transaction_t> timestamp;
+    std::atomic<common::transaction_t> timestamp;
     bool deleted = false;
     bool hasParent_ = false;
     // Older versions.
