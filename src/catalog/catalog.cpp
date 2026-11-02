@@ -789,6 +789,12 @@ void Catalog::dropSerialSequence(Transaction* transaction, const TableCatalogEnt
             continue;
         }
         auto seqName = SequenceCatalogEntry::getSerialName(entry->getName(), definition.getName());
+        // The sequence can already be gone: DROP SEQUENCE removed it, or WAL replay applied that
+        // drop before this DROP TABLE. Dropping the table must still succeed.
+        if (!sequences->containsEntry(transaction, seqName) &&
+            !internalSequences->containsEntry(transaction, seqName)) {
+            continue;
+        }
         dropSequence(transaction, seqName);
     }
 }
