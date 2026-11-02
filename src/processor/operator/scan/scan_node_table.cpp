@@ -204,6 +204,14 @@ void ScanNodeTableSharedState::nextMorsel(TableScanState& scanState,
     nodeScanState.source = TableScanSource::NONE;
 }
 
+uint64_t ScanNodeTable::getNumMorsels() const {
+    uint64_t numMorsels = progressSharedState->numMorsels;
+    for (auto& sharedState : sharedStates) {
+        numMorsels += sharedState->getNumUnCommittedNodeGroups();
+    }
+    return numMorsels;
+}
+
 table_id_map_t<SemiMask*> ScanNodeTable::getSemiMasks() const {
     table_id_map_t<SemiMask*> result;
     DASSERT(tableInfos.size() == sharedStates.size());
