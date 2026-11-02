@@ -180,7 +180,9 @@ static std::shared_ptr<NodeOffsetMaskMap> createNbrNodeMaskMap(PlanMapper* mappe
     }
     auto maskMap = std::make_shared<NodeOffsetMaskMap>();
     for (auto tableID : nbrNode.getTableIDs()) {
-        maskMap->addMask(tableID, mapper->createSemiMask(tableID));
+        // Neighbour tables in an attached database reuse the table IDs of the main database,
+        // so the mask must be sized from the database recorded on the table's entry (#1417).
+        maskMap->addMask(tableID, mapper->createSemiMask(tableID, nbrNode.getDbName(tableID)));
     }
     return maskMap;
 }
