@@ -1,0 +1,29 @@
+-DATASET CSV empty
+-ATTACH_DATASET attach_db
+
+--
+
+# Projecting a property of both endpoints of a relationship pattern over an attached
+# database built a semi mask for the neighbour table against the main database. Table ID
+# 0 belongs to db1.Person, not to the (empty) main database, so planning threw
+# "Cannot find table catalog entry with id 0".
+
+-CASE Issue1417AttachedQualifiedNodeProperties
+-SKIP_FSM_LEAK_CHECK
+-STATEMENT ATTACH '${DATABASE_PATH}/attach_target.lbdb' AS db1 (DBTYPE lbug);
+---- ok
+-STATEMENT MATCH (a:db1.Person)-[:db1.Knows]->(b:db1.Person) RETURN a.name, b.name ORDER BY a.name;
+---- 2
+a|b
+b|c
+
+-CASE Issue1417AttachedUseNodeProperties
+-SKIP_FSM_LEAK_CHECK
+-STATEMENT ATTACH '${DATABASE_PATH}/attach_target.lbdb' AS db1 (DBTYPE lbug);
+---- ok
+-STATEMENT USE db1;
+---- ok
+-STATEMENT MATCH (a:Person)-[:Knows]->(b:Person) RETURN a.name, b.name ORDER BY a.name;
+---- 2
+a|b
+b|c
