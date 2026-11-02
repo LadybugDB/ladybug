@@ -691,7 +691,8 @@ void WALReplayer::removeGraphCheckpointShadow(StorageManager& storageManager) co
 // Replays the records dryReplay found committed, then the graph WALs they queued. With
 // skipThroughLastCheckpoint, only the records after the last CHECKPOINT replay; otherwise only
 // those before the first. Both bounds exclude every CHECKPOINT record structurally, so none ever
-// reaches replayWALRecord, which rejects them. Returns the offset where replay stopped.
+// reaches replayWALRecord, which rejects them. The records of a transaction an ABORT names are
+// skipped. Returns the offset where replay stopped.
 uint64_t WALReplayer::replayCommittedRecords(FileInfo& fileInfo, const WALReplayInfo& replayInfo,
     bool skipThroughLastCheckpoint, bool enableChecksums) const {
     Deserializer deserializer = initDeserializer(fileInfo, clientContext, enableChecksums);
@@ -1086,8 +1087,8 @@ WALReplayer::WALReplayInfo WALReplayer::dryReplay(FileInfo& fileInfo, bool throw
                 // consecutive pins leave several). Records up to and including the last one
                 // are usually durable and only the suffix after it replays; a frozen WAL may
                 // instead replay the prefix before the first one (see the replay loops).
-                // Remember the offsets and keep scanning instead of failing; a later COMMIT
-                // (or any other record) clears the last-record flag below.
+                // Remember the offsets and keep scanning instead of failing; any later record
+                // except an ABORT clears the last-record flag below.
                 replayInfo.isLastRecordCheckpoint = true;
                 replayInfo.checkpointFormatVersion =
                     walRecord->constCast<CheckpointRecord>().bundleFormatVersion;
