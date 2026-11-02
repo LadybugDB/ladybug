@@ -111,7 +111,8 @@ public:
         auto base = path.stem().string();
         auto ext = path.extension().string();
         auto graphFile = std::filesystem::path(base + "." + graphName + ext);
-        return (path.parent_path() / graphFile).string();
+        // generic_string() keeps '/' separators on all platforms, matching expandPath().
+        return (path.parent_path() / graphFile).generic_string();
     }
 
     static std::string expandPath(const main::ClientContext* context, const std::string& path);
