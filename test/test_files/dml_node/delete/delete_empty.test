@@ -173,3 +173,20 @@ photo481036337190.jpg
 -STATEMENT match(p:Post) where p.id = 1030792523146 return p.imageFile
 ---- 1
 photo1030792523146.jpg
+
+-CASE DeleteUnlabeledNodeAcrossCaseInsensitivePrimaryKeys
+-STATEMENT CREATE NODE TABLE Q (ID INT64, PRIMARY KEY(ID));
+---- ok
+-STATEMENT CREATE NODE TABLE U (id INT64, PRIMARY KEY(id));
+---- ok
+-STATEMENT CREATE REL TABLE F (FROM U TO U);
+---- ok
+-STATEMENT UNWIND range(1, 5) AS i CREATE (:U {id:i});
+---- ok
+-STATEMENT MATCH (a:U), (b:U) WHERE b.id = a.id + 1 CREATE (a)-[:F]->(b);
+---- ok
+-STATEMENT MATCH (u:U)-[:F]->(v) WHERE u.id = 4 DETACH DELETE v;
+---- ok
+-STATEMENT MATCH (v:U) RETURN count(v);
+---- 1
+4
