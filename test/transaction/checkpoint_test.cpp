@@ -5934,6 +5934,7 @@ protected:
             StorageUtils::getGraphPath(databasePath, "g"), *systemConfig);
         auto graphConn = std::make_unique<main::Connection>(graphDatabase.get());
         ASSERT_TRUE(graphConn->query("CALL force_checkpoint_on_close=false;")->isSuccess());
+        ASSERT_TRUE(graphConn->query("CALL auto_checkpoint=false;")->isSuccess());
         auto res = graphConn->query(statement);
         ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
     }
