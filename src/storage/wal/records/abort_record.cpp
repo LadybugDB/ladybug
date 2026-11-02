@@ -25,7 +25,7 @@ std::unique_ptr<AbortRecord> AbortRecord::deserialize(Deserializer& deserializer
         deserializer.deserializeValue<uint64_t>(abortedBlockStart);
     }
 
-    return std::make_unique<AbortRecord>(std::move(abortedBlockStart));
+    return std::make_unique<AbortRecord>(abortedBlockStart);
 }
 
 } // namespace storage
