@@ -320,9 +320,8 @@ Catalog exception: t does not exist in catalog.
 -STATEMENT [conn2] ALTER TABLE t ADD y INT;
 ---- error
 Catalog exception: Write-write conflict on altering catalog entry with name t.
+# The failed statement aborts conn2's transaction, so there is nothing to roll back.
 -STATEMENT COMMIT;
----- ok
--STATEMENT [conn2] ROLLBACK;
 ---- ok
 -STATEMENT CALL table_info('t') RETURN *;
 ---- 3
@@ -347,8 +346,7 @@ Catalog exception: Write-write conflict on altering catalog entry with name t.
 -STATEMENT ALTER TABLE t ADD y INT;
 ---- error
 Catalog exception: Write-write conflict on altering catalog entry with name t.
--STATEMENT ROLLBACK;
----- ok
+# The failed statement aborts the transaction, so there is nothing to roll back.
 -STATEMENT CALL table_info('t') RETURN *;
 ---- 3
 0|a|INT32|NULL|True
@@ -370,9 +368,8 @@ Catalog exception: Write-write conflict on altering catalog entry with name t.
 -STATEMENT [conn2] DROP TABLE t;
 ---- error
 Catalog exception: Write-write conflict on dropping catalog entry with name t.
+# The failed statement aborts conn2's transaction, so there is nothing to roll back.
 -STATEMENT COMMIT;
----- ok
--STATEMENT [conn2] ROLLBACK;
 ---- ok
 -STATEMENT CALL table_info('t') RETURN *;
 ---- 3
