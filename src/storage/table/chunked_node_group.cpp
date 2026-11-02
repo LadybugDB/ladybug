@@ -491,6 +491,10 @@ row_idx_t ChunkedNodeGroup::getNumUpdatedRows(const Transaction* transaction,
 bool ChunkedNodeGroup::lookup(const Transaction* transaction, const TableScanState& state,
     const NodeGroupScanState& nodeGroupScanState, offset_t rowIdxInChunk, sel_t posInOutput) const {
     DASSERT(rowIdxInChunk + 1 <= numRows);
+    // In-memory rel scans (CSRNodeGroup::scanCommittedInMemRandom) look rows up in the live
+    // in-memory groups without holding any node-group lock, while ALTER TABLE ADD grows those
+    // same groups. Hold the shared lock so the chunks vector cannot reallocate mid-lookup.
+    std::shared_lock lck{chunksMtx};
     const bool hasValuesToRead = versionInfo ? versionInfo->isSelected(transaction->getStartTS(),
                                                    transaction->getID(), rowIdxInChunk) :
                                                true;
