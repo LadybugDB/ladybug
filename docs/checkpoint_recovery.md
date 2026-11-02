@@ -73,12 +73,16 @@ error. A marker written by an older build holds `1` instead of `2` and only prov
 shadow was applied. A marker that is not exactly one of these bytes, such as the empty file a crash
 while writing it can leave, counts as no marker.
 
-A pinned checkpoint retires every named graph's WAL anyway. A named graph's commits go to the main
+A pinned checkpoint retires every checkpointed (loaded) named graph's WAL anyway; standalone
+sessions must not be open concurrently with the checkpoint. A named graph's commits go to the main
 WAL; its own WAL holds only the records of a session that opened the graph's file on its own, which
 the checkpoint has applied. A graph WAL found at recovery is therefore newer and is replayed.
 Older builds kept those graph WALs. Under an older build's marker, graphs therefore load this way
-only when no named graph has a WAL of its own; otherwise they recover through their own shadow
-files, which refuses to open once those are gone. When transactions follow the last `CHECKPOINT`,
+only when no named graph has a non-empty WAL of its own (either the active or the frozen WAL);
+otherwise they recover through their own shadow files, which refuses to open once those are gone.
+A graph WAL alongside a shadow under such a marker is treated as applied and retired without
+replaying, so a standalone write made after that checkpoint would be dropped in that window;
+upgrading and checkpointing again clears the window. When transactions follow the last `CHECKPOINT`,
 a graph WAL replays regardless of the marker, as in older builds.
 
 ## Checkpoint bundle format

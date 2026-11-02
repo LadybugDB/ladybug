@@ -100,7 +100,19 @@ static PinnedCheckpointMarker readPinnedCheckpointMarker(main::ClientContext& cl
     }
 }
 
-// Whether a named graph has a WAL of its own; partition subgraphs share the main WAL.
+// An empty WAL file counts as no WAL in prepareGraphCheckpoint, so it does here too.
+static bool hasNonEmptyFile(VirtualFileSystem* vfs, const std::string& path,
+    main::ClientContext& clientContext) {
+    if (!vfs->fileOrPathExists(path, &clientContext)) {
+        return false;
+    }
+    auto fileInfo = vfs->openFile(path, FileOpenFlags(FileFlags::READ_ONLY), &clientContext);
+    return fileInfo->getFileSize() > 0;
+}
+
+// Whether a named graph has a WAL of its own; partition subgraphs share the main WAL. Both the
+// active and frozen WALs count: prepareGraphCheckpoint inspects both. Keep in sync with the
+// partition-subgraph filter in DatabaseManager::loadGraphsFromCatalog.
 static bool anyGraphHasWAL(main::ClientContext& clientContext) {
     auto* catalog = clientContext.getDatabase()->getCatalog();
     auto* vfs = VirtualFileSystem::GetUnsafe(clientContext);
@@ -111,7 +123,9 @@ static bool anyGraphHasWAL(main::ClientContext& clientContext) {
         }
         const auto graphPath =
             StorageUtils::getGraphPath(clientContext.getDatabasePath(), graphName);
-        if (vfs->fileOrPathExists(StorageUtils::getWALFilePath(graphPath), &clientContext)) {
+        if (hasNonEmptyFile(vfs, StorageUtils::getWALFilePath(graphPath), clientContext) ||
+            hasNonEmptyFile(vfs, StorageUtils::getCheckpointWALFilePath(graphPath),
+                clientContext)) {
             return true;
         }
     }
@@ -936,7 +950,14 @@ void WALReplayer::replayPinnedActiveCheckpoint(Checkpointer& checkpointer,
         recoverGraphCheckpoints(clientContext, true, checkpointBundle, checkpointDatabaseID);
     } break;
     case PinnedCheckpointMarker::NONE:
-        UNREACHABLE_CODE;
+        // The marker was valid above; reaching here means it changed concurrently. Throw like
+        // the missing-marker case instead of aborting: the shadow may not be durable.
+        throw RuntimeException(std::format("Cannot recover checkpoint WAL {}: shadow file {} "
+                                           "is missing with no valid pinned-checkpoint "
+                                           "marker. Do not delete the WAL or shadow files; "
+                                           "they hold committed pages. Restore the "
+                                           "database file they were written for.",
+            walPath, shadowFilePath));
     }
 
     truncateWALFile(*fileInfo, 0);
