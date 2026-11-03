@@ -435,7 +435,7 @@ static bool isCast(const Expression& expr) {
     if (expr.expressionType != ExpressionType::FUNCTION || expr.getNumChildren() != 1) {
         return false;
     }
-    return expr.constCast<ScalarFunctionExpression>().getFunction().name.starts_with("CAST");
+    return expr.constCast<ScalarFunctionExpression>().isCast();
 }
 
 // Strips every one-argument function named CAST* to the underlying property, so a
