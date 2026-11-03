@@ -8,6 +8,7 @@ add_lbug_test(pk_index_checkpoint_test pk_index_checkpoint_test.cpp)
 add_lbug_test(disk_array_collection_test disk_array_collection_test.cpp)
 add_lbug_test(buffer_manager_test buffer_manager_test.cpp)
 add_lbug_test(mvcc_retention_test mvcc_retention_test.cpp)
+add_lbug_test(version_info_scan_test version_info_scan_test.cpp)
 add_lbug_test(rel_tests rel_scan_test.cpp rel_delete_test.cpp rel_degree_test.cpp
     table_columns_concurrency_test.cpp)
 add_lbug_test(node_update_test node_update_test.cpp)
