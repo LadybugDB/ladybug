@@ -358,6 +358,11 @@ jobs:
       AZURE_PUBLIC_CONTAINER: ${{ secrets.AZURE_PUBLIC_CONTAINER }}
       # Line tables only: backtraces keep file:line, objects and the ccache shrink several-fold.
       EXTRA_CMAKE_FLAGS: '-DCMAKE_C_FLAGS_RELWITHDEBINFO="-O2 -g1 -DNDEBUG" -DCMAKE_CXX_FLAGS_RELWITHDEBINFO="-O2 -g1 -DNDEBUG"'
+      # lance builds a native reader via Cargo (needs the Rust step below).
+      # Kept out of the Makefile default: its CMake FATAL_ERRORs without
+      # cargo, which would break dev builds and platforms without a Rust
+      # toolchain. Keep in sync with extension/.github/workflows/ci.yml.
+      EXTRA_EXTENSIONS: lance
       # The Makefile default (nproc * 2 / 3) builds with 2 jobs on the 4-vCPU runner.
       NUM_THREADS: 4
 
@@ -402,6 +407,39 @@ jobs:
           # which broke `LOAD EXTENSION 'algo'`.) Fail loudly if the pin
           # in pixi.toml ever lets a conda 2600 back in.
           test ! -e "${CONDA_PREFIX}/lib/libarrow.so.2600"
+
+      # The lance extension builds a native reader (lance_ladybug_ffi) via
+      # Cargo, and prost-build (via lance-core) needs protoc. Mirrors the
+      # "Install Rust toolchain and protoc" step in
+      # extension/.github/workflows/ci.yml, adapted from the manylinux
+      # container (dnf) to the ubuntu runner (apt-get). Must run before the
+      # CMake configure step; lance/CMakeLists.txt fails fast with a clear
+      # message when cargo is unavailable.
+      - name: Install Rust toolchain and protoc (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          set -e
+          if ! command -v cargo >/dev/null 2>&1; then
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+              | sh -s -- -y --profile minimal --default-toolchain stable
+          fi
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          export PATH="$HOME/.cargo/bin:$PATH"
+          cargo --version
+          # The default toolchain already carries the native triple; ensure
+          # the arch CMake maps to is installed.
+          if command -v rustup >/dev/null 2>&1; then
+            if [ "${{ runner.arch }}" = "X64" ]; then
+              rustup target add x86_64-unknown-linux-gnu
+            else
+              rustup target add aarch64-unknown-linux-gnu
+            fi
+          fi
+          if ! command -v protoc >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y protobuf-compiler
+          fi
+          protoc --version
 
       - name: Configure ADBC runtime
         run: |
