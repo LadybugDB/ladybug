@@ -17,7 +17,13 @@ class ParquetReader;
 
 typedef std::bitset<common::DEFAULT_VECTOR_CAPACITY> parquet_filter_t;
 
-class ColumnReader {
+// Exported for dynamically loaded extensions: the inline ParquetReader dtor in
+// parquet_reader.h destroys its unique_ptr<ColumnReader> member, so any extension
+// TU that constructs/destroys a ParquetReader (e.g. via the columnar scan-state
+// bases) references ColumnReader's vtable. Without this annotation the symbol is
+// hidden in shell-only builds (no BUILD_TESTS) and LOAD EXTENSION fails with
+// "undefined symbol: _ZTVN4lbug9processor12ColumnReaderE".
+class LBUG_API ColumnReader {
 public:
     ColumnReader(ParquetReader& reader, common::LogicalType type,
         const lbug_parquet::format::SchemaElement& schema, common::idx_t fileIdx,
