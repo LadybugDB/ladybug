@@ -77,6 +77,23 @@ public:
             TransactionManager::initCheckpointer;
     }
 
+    // Returns whether a COPY or CREATE INDEX commit started waiting for other writers to leave
+    // within 10 s.
+    static bool waitForForcedCheckpointPending(main::ClientContext& context) {
+        auto* transactionManager = TransactionManager::Get(context);
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+        while (std::chrono::steady_clock::now() < deadline) {
+            {
+                std::unique_lock lck{transactionManager->mtxForSerializingPublicFunctionCalls};
+                if (transactionManager->forcedCheckpointPending) {
+                    return true;
+                }
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        return false;
+    }
+
 private:
     TransactionManager::init_checkpointer_func_t initFunc;
 };
@@ -940,6 +957,119 @@ TEST_F(PostCommitCheckpointFailureTest, AutoCheckpointBlockedByOpenWriterDoesNot
     ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
     EXPECT_EQ(WAL::Get(*context)->getFileSize(), 0u);
     checkNodes(2);
+}
+
+// A COPY is durable only once its checkpoint runs, so it must not commit while another write
+// transaction could keep that checkpoint from running.
+TEST_F(PostCommitCheckpointFailureTest, CopyBesideOpenWriterCommitsNothing) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+    conn.reset();
+    createDB(10000 /* checkpoint wait timeout in microseconds */);
+    conn = std::make_unique<main::Connection>(database.get());
+    checkpointAfterEveryCommit();
+    ASSERT_TRUE(conn->query("CALL enable_multi_writes=true;")->isSuccess());
+    {
+        main::Connection other{database.get()};
+        ASSERT_TRUE(other.query("BEGIN TRANSACTION;")->isSuccess());
+        ASSERT_TRUE(other.query("CREATE (a:test {id: 10, name: 'name_10'});")->isSuccess());
+        auto res = conn->query("COPY test FROM (UNWIND range(0, 9) AS i RETURN i, 'n');");
+        ASSERT_FALSE(res->isSuccess());
+        EXPECT_NE(res->getErrorMessage().find("The transaction was rolled back"), std::string::npos)
+            << res->getErrorMessage();
+        res = conn->query("MATCH (a:test) RETURN COUNT(a);");
+        ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+        EXPECT_EQ(res->getNext()->getValue(0)->getValue<int64_t>(), 0);
+        res = other.query("COMMIT;");
+        ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+    }
+    auto res = conn->query("COPY test FROM (UNWIND range(0, 9) AS i RETURN i, 'n');");
+    ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+    // Reopen without checkpointing on close: the COPY's own checkpoint made it durable.
+    res.reset();
+    createDBAndConn();
+    checkNodes(11);
+}
+
+TEST_F(PostCommitCheckpointFailureTest, CopyWaitsForOpenWriterToFinish) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CALL enable_multi_writes=true;")->isSuccess());
+    {
+        main::Connection other{database.get()};
+        main::Connection late{database.get()};
+        ASSERT_TRUE(other.query("BEGIN TRANSACTION;")->isSuccess());
+        ASSERT_TRUE(other.query("CREATE (a:test {id: 10, name: 'name_10'});")->isSuccess());
+        std::atomic<bool> copyDone{false};
+        auto* context = getClientContext(*conn);
+        std::thread rollbackLater([&other, context]() {
+            ASSERT_TRUE(FlakyCheckpointer::waitForForcedCheckpointPending(*context));
+            // Leave the late writer time to reach its BEGIN first.
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            ASSERT_TRUE(other.query("ROLLBACK;")->isSuccess());
+        });
+        // A writer that begins while the COPY waits must not start until the COPY has
+        // checkpointed; if it did, it would hold the COPY past the timeout.
+        std::thread beginWhileCopyWaits([&late, &copyDone, context]() {
+            ASSERT_TRUE(FlakyCheckpointer::waitForForcedCheckpointPending(*context));
+            ASSERT_TRUE(late.query("BEGIN TRANSACTION;")->isSuccess());
+            while (!copyDone) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            }
+            ASSERT_TRUE(late.query("ROLLBACK;")->isSuccess());
+        });
+        const auto start = std::chrono::steady_clock::now();
+        auto res = conn->query("COPY test FROM (UNWIND range(0, 9) AS i RETURN i, 'n');");
+        const auto waited = std::chrono::steady_clock::now() - start;
+        copyDone = true;
+        rollbackLater.join();
+        beginWhileCopyWaits.join();
+        ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+        // The rollback wakes the COPY; it does not sit out the 5 s checkpoint wait timeout.
+        EXPECT_LT(waited, std::chrono::seconds(3));
+    }
+    createDBAndConn();
+    checkNodes(10);
+}
+
+// Two COPYs committing together cannot both wait for the other to leave; the second gives way
+// at once rather than both sitting out the checkpoint wait timeout.
+TEST_F(PostCommitCheckpointFailureTest, ConcurrentCopiesDoNotWaitForEachOther) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CALL enable_multi_writes=true;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE test2(id INT64 PRIMARY KEY);")->isSuccess());
+    {
+        main::Connection second{database.get()};
+        ASSERT_TRUE(second.query("BEGIN TRANSACTION;")->isSuccess());
+        auto res = second.query("COPY test2 FROM (UNWIND range(0, 4) AS i RETURN i);");
+        ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+        const auto start = std::chrono::steady_clock::now();
+        std::unique_ptr<main::QueryResult> firstRes;
+        std::thread first([this, &firstRes]() {
+            firstRes = conn->query("COPY test FROM (UNWIND range(0, 9) AS i RETURN i, 'n');");
+        });
+        // The first COPY now waits for the second transaction, which commits next.
+        const bool firstPending =
+            FlakyCheckpointer::waitForForcedCheckpointPending(*getClientContext(*conn));
+        res = second.query("COMMIT;");
+        first.join();
+        const auto waited = std::chrono::steady_clock::now() - start;
+        ASSERT_TRUE(firstPending);
+        ASSERT_TRUE(firstRes->isSuccess()) << firstRes->getErrorMessage();
+        ASSERT_FALSE(res->isSuccess());
+        EXPECT_NE(res->getErrorMessage().find("The transaction was rolled back"), std::string::npos)
+            << res->getErrorMessage();
+        EXPECT_LT(waited, std::chrono::seconds(3));
+    }
+    createDBAndConn();
+    checkNodes(10);
+    auto res = conn->query("MATCH (a:test2) RETURN COUNT(a);");
+    ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+    EXPECT_EQ(res->getNext()->getValue(0)->getValue<int64_t>(), 0);
 }
 
 TEST_F(PostCommitCheckpointFailureTest, AutoCheckpointThatPoisonsWALFailsNextWrite) {

@@ -73,6 +73,15 @@ public:
     static TransactionManager* Get(const main::ClientContext& context);
 
 private:
+    void commitAndCheckpoint(main::ClientContext& clientContext, Transaction* transaction);
+    // COPY FROM and CREATE INDEX on a large ART skip the WAL and are durable only once the
+    // checkpoint after their commit runs, which needs every other write transaction gone. So
+    // they wait for the others to leave before committing, and are rolled back if one stays
+    // open past the checkpoint wait timeout, or at once if another such commit is already
+    // waiting. New write transactions wait from then until endForcedCheckpoint, so none can
+    // block the checkpoint after the commit.
+    void waitForOtherWritersBeforeForcedCheckpoint();
+    void endForcedCheckpoint();
     bool hasNoActiveTransactions() const;
     void checkpointNoLock(main::ClientContext& clientContext);
     // Try to checkpoint without blocking. Returns immediately if another checkpoint is in
@@ -123,6 +132,10 @@ private:
     uint64_t nextWALCommitSequenceToPublish = 1;
     std::condition_variable cvForPublishingCommit;
     std::condition_variable cvForCommittingWriteTransaction;
+    // Set while a forced-checkpoint commit waits for other writers and then commits and
+    // checkpoints; cleared on timeout or by endForcedCheckpoint. Guarded by
+    // mtxForSerializingPublicFunctionCalls; changes notify cvForCommittingWriteTransaction.
+    bool forcedCheckpointPending = false;
     // This mutex serializes begin/commit/rollback calls to protect activeTransactions.
     std::mutex mtxForSerializingPublicFunctionCalls;
     std::mutex mtxForStartingNewTransactions;
