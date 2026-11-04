@@ -75,10 +75,11 @@ public:
     // Get table entry with id.
     TableCatalogEntry* getTableCatalogEntry(const transaction::Transaction* transaction,
         common::table_id_t tableID) const;
-    // Newest version-chain head for a table OID, bypassing transaction visibility (see
-    // CatalogSet::getHeadEntryOfOID). Returns null when no chain head carries the OID, and
-    // possibly a deleted tombstone or a non-table entry; the caller decides.
-    CatalogEntry* getLatestTableEntry(common::table_id_t tableID) const;
+    // Calls `read` with the newest version-chain head for a table OID, bypassing transaction
+    // visibility (see CatalogSet::readHeadEntryOfOID). The head is null when no chain head
+    // carries the OID, and may be a deleted tombstone or a non-table entry.
+    void readLatestTableEntry(common::table_id_t tableID,
+        const std::function<void(const CatalogEntry*)>& read) const;
     NodeTableCatalogEntry* getPartitionParentForWrite(transaction::Transaction* transaction,
         common::table_id_t tableID);
     // Get all node table entries.

@@ -5,12 +5,14 @@
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
 #include "common/enums/alter_type.h"
 #include "common/exception/binder.h"
+#include "common/exception/catalog.h"
 #include "common/exception/runtime.h"
 #include "common/string_utils.h"
 #include "processor/execution_context.h"
 #include "storage/storage_manager.h"
 #include "storage/table/table.h"
 #include "transaction/transaction.h"
+#include "transaction/transaction_manager.h"
 #include <format>
 
 using namespace lbug::binder;
@@ -45,6 +47,17 @@ void Alter::executeInternal(ExecutionContext* context) {
 }
 
 using on_conflict_throw_action = std::function<void()>;
+
+// Called after the catalog change, as TransactionManager::addLocalWriter requires.
+static void throwIfOthersStagedInserts(const main::ClientContext& context,
+    const storage::Table& table, const std::string& tableName) {
+    if (TransactionManager::Get(context)->hasLocalWriterOtherThan(table.getOwnerCatalogName(),
+            table.getTableID(), Transaction::Get(context)->getLocalStorage())) {
+        throw CatalogException(std::format("Write-write conflict on altering table {}: another "
+                                           "transaction has uncommitted inserts into it.",
+            tableName));
+    }
+}
 
 static void validate(ConflictAction action, const on_conflict_throw_action& throwAction) {
     switch (action) {
@@ -374,12 +387,18 @@ void Alter::alterTable(main::ClientContext* clientContext, const TableCatalogEnt
         storage::TableAddColumnState state{addedProp, *defaultValueEvaluator};
         switch (alteredEntry->getTableType()) {
         case TableType::NODE: {
-            storageManager->getTable(alteredEntry->getTableID())
-                ->addColumn(transaction, state, pageAllocator);
+            auto* table = storageManager->getTable(alteredEntry->getTableID());
+            throwIfOthersStagedInserts(*clientContext, *table, alterInfo.tableName);
+            table->addColumn(transaction, state, pageAllocator);
         } break;
         case TableType::REL: {
-            for (auto& innerRelEntry :
-                alteredEntry->cast<RelGroupCatalogEntry>().getRelEntryInfos()) {
+            const auto& relEntryInfos =
+                alteredEntry->cast<RelGroupCatalogEntry>().getRelEntryInfos();
+            for (auto& innerRelEntry : relEntryInfos) {
+                throwIfOthersStagedInserts(*clientContext,
+                    *storageManager->getTable(innerRelEntry.oid), alterInfo.tableName);
+            }
+            for (auto& innerRelEntry : relEntryInfos) {
                 auto* relTable = storageManager->getTable(innerRelEntry.oid);
                 relTable->addColumn(transaction, state, pageAllocator);
             }
@@ -393,12 +412,15 @@ void Alter::alterTable(main::ClientContext* clientContext, const TableCatalogEnt
         auto* alteredEntry = catalog->getTableCatalogEntry(transaction, alterInfo.tableName);
         switch (alteredEntry->getTableType()) {
         case TableType::NODE: {
-            storageManager->getTable(alteredEntry->getTableID())->dropColumn();
+            auto* table = storageManager->getTable(alteredEntry->getTableID());
+            throwIfOthersStagedInserts(*clientContext, *table, alterInfo.tableName);
+            table->dropColumn();
         } break;
         case TableType::REL: {
             for (auto& innerRelEntry :
                 alteredEntry->cast<RelGroupCatalogEntry>().getRelEntryInfos()) {
                 auto* relTable = storageManager->getTable(innerRelEntry.oid);
+                throwIfOthersStagedInserts(*clientContext, *relTable, alterInfo.tableName);
                 relTable->dropColumn();
             }
         } break;

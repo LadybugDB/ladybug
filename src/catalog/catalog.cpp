@@ -141,11 +141,18 @@ TableCatalogEntry* Catalog::getTableCatalogEntry(const Transaction* transaction,
     return result->ptrCast<TableCatalogEntry>();
 }
 
-CatalogEntry* Catalog::getLatestTableEntry(table_id_t tableID) const {
-    if (auto* result = tables->getHeadEntryOfOID(tableID); result != nullptr) {
-        return result;
+void Catalog::readLatestTableEntry(table_id_t tableID,
+    const std::function<void(const CatalogEntry*)>& read) const {
+    bool found = false;
+    tables->readHeadEntryOfOID(tableID, [&](const CatalogEntry* entry) {
+        if (entry != nullptr) {
+            found = true;
+            read(entry);
+        }
+    });
+    if (!found) {
+        internalTables->readHeadEntryOfOID(tableID, read);
     }
-    return internalTables->getHeadEntryOfOID(tableID);
 }
 
 TableCatalogEntry* Catalog::getTableCatalogEntry(const Transaction* transaction,
