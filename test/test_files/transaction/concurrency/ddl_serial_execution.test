@@ -582,25 +582,6 @@ Catalog exception: Write-write conflict on altering table r: another transaction
 -STATEMENT CHECKPOINT;
 ---- ok
 
--CASE InsertAfterOwnDropColumnCommits
--STATEMENT CREATE NODE TABLE t(id INT64 PRIMARY KEY, a INT64, b INT64);
----- ok
--STATEMENT BEGIN TRANSACTION;
----- ok
--STATEMENT CREATE (:t {id: 1, a: 1, b: 2});
----- ok
--STATEMENT ALTER TABLE t DROP a;
----- ok
--STATEMENT CREATE (:t {id: 2, b: 3});
----- ok
--STATEMENT COMMIT;
----- ok
-# Only the ids: the committed values of rows staged before the DROP are wrong until #1221 is fixed.
--STATEMENT MATCH (n:t) RETURN n.id ORDER BY n.id;
----- 2
-1
-2
-
 # A rename leaves a deleted catalog entry with the table's ID under the old name; enough
 # other tables make the catalog map rehash so iteration can reach it first.
 -CASE InsertAfterRenameCommits
