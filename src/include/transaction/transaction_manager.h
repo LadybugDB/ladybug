@@ -2,9 +2,13 @@
 
 #include <atomic>
 #include <condition_variable>
+#include <functional>
+#include <map>
 #include <memory>
 #include <mutex>
+#include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "common/constants.h"
@@ -72,6 +76,22 @@ public:
 
     static TransactionManager* Get(const main::ClientContext& context);
 
+    // A transaction stages its inserts in its LocalStorage, with the columns of its catalog
+    // snapshot, and appends them to the table's storage at commit. Another transaction's ADD
+    // COLUMN, DROP COLUMN, or DROP TABLE therefore conflicts with them, and the second of the
+    // two fails at statement time, before anything reaches the WAL: registering as a writer
+    // fails in `checkTableUnchanged` if the table's columns changed or it was dropped after the
+    // writer's snapshot, and the
+    // DDL fails while another writer is registered. The DDL changes the catalog before it
+    // checks, and both checks run under localWritersMtx, so one of them sees the other. Tables
+    // are keyed by owner catalog name and table ID, as LocalStorage keys them.
+    void addLocalWriter(const std::string& ownerCatalogName, common::table_id_t tableID,
+        const storage::LocalStorage* writer, const std::function<void()>& checkTableUnchanged);
+    void removeLocalWriter(const std::string& ownerCatalogName, common::table_id_t tableID,
+        const storage::LocalStorage* writer);
+    bool hasLocalWriterOtherThan(const std::string& ownerCatalogName, common::table_id_t tableID,
+        const storage::LocalStorage* writer);
+
 private:
     bool hasNoActiveTransactions() const;
     void checkpointNoLock(main::ClientContext& clientContext);
@@ -107,6 +127,12 @@ private:
 
 private:
     storage::WAL& wal;
+    // Declared before activeTransactions so it outlives the transactions destroyed with this
+    // manager, whose LocalStorage deregisters from it.
+    std::mutex localWritersMtx;
+    std::map<std::pair<std::string, common::table_id_t>,
+        std::unordered_set<const storage::LocalStorage*>>
+        localWriters;
     std::vector<std::unique_ptr<Transaction>> activeTransactions;
     // Start timestamp of every open transaction, keyed by transaction ID. Checkpoint
     // retention keeps version data committed at or after the minimum (the horizon).

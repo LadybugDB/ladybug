@@ -183,10 +183,7 @@ public:
 
     virtual void addColumn(transaction::Transaction* transaction,
         TableAddColumnState& addColumnState, PageAllocator& pageAllocator) = 0;
-    void dropColumn() {
-        setHasChanges();
-        bumpSchemaEpoch();
-    }
+    void dropColumn() { setHasChanges(); }
 
     virtual void commit(main::ClientContext* context, catalog::TableCatalogEntry* tableEntry,
         LocalTable* localTable) = 0;
@@ -205,14 +202,6 @@ public:
 
     void setHasChanges() { changeEpoch.fetch_add(1, std::memory_order_relaxed); }
     uint64_t getChangeEpoch() const { return changeEpoch.load(std::memory_order_acquire); }
-    // Schema epoch: bumped only by DDL that changes the column structure (ADD/DROP COLUMN),
-    // unlike changeEpoch which also moves on every DML write. A DML transaction snapshots this
-    // epoch when its local table is created and aborts with a write-write conflict if it moved
-    // by commit time, instead of appending snapshot-shaped rows to reshaped storage. A plain
-    // column-count comparison is unsound here: DROP followed by ADD (or a rename) can leave
-    // the count unchanged while the schema differs.
-    void bumpSchemaEpoch() { schemaEpoch.fetch_add(1, std::memory_order_relaxed); }
-    uint64_t getSchemaEpoch() const { return schemaEpoch.load(std::memory_order_acquire); }
 
     template<class TARGET>
     TARGET& cast() {
@@ -247,7 +236,6 @@ protected:
     StorageManager* storageManager;
     ShadowFile* shadowFile;
     std::atomic<uint64_t> changeEpoch;
-    std::atomic<uint64_t> schemaEpoch;
     // Epoch watermark of the last successful checkpoint for this table.
     // Only written by the checkpoint thread.
     uint64_t lastCheckpointedEpoch = 0;

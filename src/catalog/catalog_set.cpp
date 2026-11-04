@@ -305,14 +305,22 @@ CatalogEntry* CatalogSet::getEntryOfOID(const Transaction* transaction, oid_t oi
     return nullptr;
 }
 
-CatalogEntry* CatalogSet::getHeadEntryOfOID(oid_t oid) const {
+void CatalogSet::readHeadEntryOfOID(oid_t oid,
+    const std::function<void(const CatalogEntry*)>& read) const {
     std::shared_lock lck{mtx};
+    // A rename leaves a deleted head under the old name with the same OID, so a live head
+    // under the new name wins whatever the map's iteration order.
+    const CatalogEntry* head = nullptr;
     for (auto& [_, entry] : entries) {
-        if (entry->getOID() == oid) {
-            return entry.get();
+        if (entry->getOID() != oid) {
+            continue;
+        }
+        head = entry.get();
+        if (!entry->isDeleted()) {
+            break;
         }
     }
-    return nullptr;
+    read(head);
 }
 
 void CatalogSet::serialize(Serializer serializer) const {

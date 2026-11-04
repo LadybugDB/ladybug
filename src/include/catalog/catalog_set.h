@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <mutex>
 #include <shared_mutex>
 
@@ -48,10 +49,13 @@ public:
 
     CatalogEntrySet getEntries(const transaction::Transaction* transaction);
     CatalogEntry* getEntryOfOID(const transaction::Transaction* transaction, common::oid_t oid);
-    // Newest version-chain head for an OID, bypassing transaction visibility. Used to detect
-    // a concurrent DDL that committed after (or is still uncommitted relative to) the
-    // caller's snapshot. May be a deleted tombstone or null; the caller decides.
-    CatalogEntry* getHeadEntryOfOID(common::oid_t oid) const;
+    // Calls `read` with the newest version-chain head for an OID, bypassing transaction
+    // visibility, to detect DDL that committed after the caller's snapshot or is still
+    // uncommitted. The head is a deleted tombstone only when no live head carries the OID,
+    // and null when no head does. `read` runs under this set's lock, which rollback also
+    // takes, so the head cannot be freed while it is read.
+    void readHeadEntryOfOID(common::oid_t oid,
+        const std::function<void(const CatalogEntry*)>& read) const;
 
     void serialize(common::Serializer serializer) const;
     void serializeSnapshot(common::Serializer serializer,

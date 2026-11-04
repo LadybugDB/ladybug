@@ -267,6 +267,35 @@ void TransactionManager::checkpoint(main::ClientContext& clientContext) {
     checkpointNoLock(clientContext);
 }
 
+void TransactionManager::addLocalWriter(const std::string& ownerCatalogName,
+    common::table_id_t tableID, const storage::LocalStorage* writer,
+    const std::function<void()>& checkTableUnchanged) {
+    std::lock_guard lck{localWritersMtx};
+    checkTableUnchanged();
+    localWriters[{ownerCatalogName, tableID}].insert(writer);
+}
+
+void TransactionManager::removeLocalWriter(const std::string& ownerCatalogName,
+    common::table_id_t tableID, const storage::LocalStorage* writer) {
+    std::lock_guard lck{localWritersMtx};
+    const auto it = localWriters.find({ownerCatalogName, tableID});
+    if (it == localWriters.end()) {
+        return;
+    }
+    it->second.erase(writer);
+    if (it->second.empty()) {
+        localWriters.erase(it);
+    }
+}
+
+bool TransactionManager::hasLocalWriterOtherThan(const std::string& ownerCatalogName,
+    common::table_id_t tableID, const storage::LocalStorage* writer) {
+    std::lock_guard lck{localWritersMtx};
+    const auto it = localWriters.find({ownerCatalogName, tableID});
+    return it != localWriters.end() &&
+           std::ranges::any_of(it->second, [&](const auto* other) { return other != writer; });
+}
+
 TransactionManager* TransactionManager::Get(const main::ClientContext& context) {
     if (context.getAttachedDatabase() != nullptr) {
         context.getAttachedDatabase()->getTransactionManager();

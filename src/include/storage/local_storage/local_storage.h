@@ -11,6 +11,9 @@ namespace lbug {
 namespace main {
 class ClientContext;
 } // namespace main
+namespace transaction {
+class TransactionManager;
+} // namespace transaction
 namespace storage {
 // Local tables are keyed by their owning catalog as well as their table ID: table IDs are
 // per-catalog, so a transaction touching several graphs can hold uncommitted state for
@@ -36,8 +39,12 @@ class LocalStorage {
 public:
     explicit LocalStorage(main::ClientContext& clientContext) : clientContext{clientContext} {}
     DELETE_COPY_AND_MOVE(LocalStorage);
+    ~LocalStorage();
 
-    // Do nothing if the table already exists, otherwise create a new local table.
+    // Do nothing if the table already exists, otherwise create a new local table and register
+    // this transaction as a writer of `table` (see TransactionManager::addLocalWriter). Throws
+    // a write-write conflict when another transaction changed the table's columns or dropped
+    // it after this one's snapshot.
     LocalTable* getOrCreateLocalTable(Table& table);
     // Return nullptr if no local table exists.
     LocalTable* getLocalTable(const Table& table) const;
@@ -57,6 +64,8 @@ public:
 private:
     main::ClientContext& clientContext;
     std::unordered_map<LocalTableKey, std::unique_ptr<LocalTable>, LocalTableKeyHash> tables;
+    // Set with the first local table; every table in `tables` is registered with it.
+    transaction::TransactionManager* transactionManager = nullptr;
 
     // The mutex is only needed when working with the optimistic allocators
     std::mutex mtx;

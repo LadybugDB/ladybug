@@ -45,7 +45,7 @@ Table::Table(const catalog::TableCatalogEntry* tableEntry, const StorageManager*
       tableName{tableEntry->getName()}, ownerCatalogName{tableEntry->getOwningCatalogName()},
       enableCompression{storageManager->compressionEnabled()}, memoryManager{memoryManager},
       storageManager{const_cast<StorageManager*>(storageManager)},
-      shadowFile{&storageManager->getShadowFile()}, changeEpoch{0}, schemaEpoch{0} {}
+      shadowFile{&storageManager->getShadowFile()}, changeEpoch{0} {}
 
 Table::~Table() = default;
 
