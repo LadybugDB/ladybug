@@ -1,6 +1,7 @@
 #include "transaction/transaction_manager.h"
 
 #include <algorithm>
+#include <chrono>
 #include <iostream>
 #include <thread>
 
@@ -72,18 +73,28 @@ Transaction* TransactionManager::beginTransaction(main::ClientContext& clientCon
     // can start freely during checkpoint since they use snapshot isolation.
     std::unique_lock newTransactionLck{mtxForStartingNewTransactions, std::defer_lock};
     if (type != TransactionType::READ_ONLY) {
+        // Wait out a pending forced checkpoint before blocking on the start mutex: blocking there
+        // holds the public mutex, which the writers that the forced commit waits for need in
+        // order to leave.
+        cvForCommittingWriteTransaction.wait(publicFunctionLck,
+            [&]() { return !forcedCheckpointPending; });
         newTransactionLck.lock();
     }
-    while (type != TransactionType::READ_ONLY && !clientContext.getDBConfig()->enableMultiWrites &&
-           hasActiveWriteTransactionNoLock() &&
-           activeWriteTransactionCount.load(std::memory_order_acquire) ==
-               committingWriteTransactionCount.load(std::memory_order_acquire)) {
+    const auto mustWait = [&]() {
+        if (type == TransactionType::READ_ONLY) {
+            return false;
+        }
+        if (forcedCheckpointPending) {
+            return true;
+        }
+        return !clientContext.getDBConfig()->enableMultiWrites &&
+               hasActiveWriteTransactionNoLock() &&
+               activeWriteTransactionCount.load(std::memory_order_acquire) ==
+                   committingWriteTransactionCount.load(std::memory_order_acquire);
+    };
+    while (mustWait()) {
         newTransactionLck.unlock();
-        cvForCommittingWriteTransaction.wait(publicFunctionLck, [&]() {
-            return !hasActiveWriteTransactionNoLock() ||
-                   activeWriteTransactionCount.load(std::memory_order_acquire) !=
-                       committingWriteTransactionCount.load(std::memory_order_acquire);
-        });
+        cvForCommittingWriteTransaction.wait(publicFunctionLck, [&]() { return !mustWait(); });
         newTransactionLck.lock();
     }
     switch (type) {
@@ -120,6 +131,54 @@ Transaction* TransactionManager::beginTransaction(main::ClientContext& clientCon
 }
 
 void TransactionManager::commit(main::ClientContext& clientContext, Transaction* transaction) {
+    if (!transaction->shouldForceCheckpoint()) {
+        commitAndCheckpoint(clientContext, transaction);
+        return;
+    }
+    waitForOtherWritersBeforeForcedCheckpoint();
+    try {
+        commitAndCheckpoint(clientContext, transaction);
+    } catch (...) {
+        endForcedCheckpoint();
+        throw;
+    }
+    endForcedCheckpoint();
+}
+
+void TransactionManager::waitForOtherWritersBeforeForcedCheckpoint() {
+    std::unique_lock lck{mtxForSerializingPublicFunctionCalls};
+    if (forcedCheckpointPending) {
+        // The pending one waits for this transaction to leave, so waiting here would only stall
+        // both until the timeout.
+        throw TransactionManagerException(
+            "Another transaction that runs COPY FROM or CREATE INDEX is committing, and this "
+            "one, which also checkpoints as part of its commit, cannot commit beside it. The "
+            "transaction was rolled back; run it again once the other one finishes.");
+    }
+    forcedCheckpointPending = true;
+    const auto deadline =
+        std::chrono::steady_clock::now() + std::chrono::microseconds(checkpointWaitTimeoutInMicros);
+    // The committing transaction is itself one of the active write transactions.
+    if (!cvForCommittingWriteTransaction.wait_until(lck, deadline,
+            [&]() { return activeWriteTransactionCount.load(std::memory_order_acquire) == 1; })) {
+        forcedCheckpointPending = false;
+        cvForCommittingWriteTransaction.notify_all();
+        throw TransactionManagerException(
+            "Timeout waiting for other write transactions to finish before committing a "
+            "transaction that runs COPY FROM or CREATE INDEX, which checkpoints as part of its "
+            "commit. The transaction was rolled back; run it again once the other write "
+            "transactions finish.");
+    }
+}
+
+void TransactionManager::endForcedCheckpoint() {
+    std::unique_lock lck{mtxForSerializingPublicFunctionCalls};
+    forcedCheckpointPending = false;
+    cvForCommittingWriteTransaction.notify_all();
+}
+
+void TransactionManager::commitAndCheckpoint(main::ClientContext& clientContext,
+    Transaction* transaction) {
     bool shouldForceCheckpoint = false;
     bool shouldAutoCheckpoint = false;
     bool markedAsCommitting = false;
@@ -200,23 +259,11 @@ void TransactionManager::commit(main::ClientContext& clientContext, Transaction*
                     "it only if the checkpoint's record reached storage: {}",
                     e.what())};
             }
-            // The checkpoint timed out waiting for another open write transaction. The commit
-            // itself is already published, so failing the statement would invite a retry that
-            // applies it twice (duplicate PK). Downgrade to a warning like auto-checkpoints:
-            // durability is deferred to a later CHECKPOINT instead of failing a committed copy.
-            const std::string msg = e.what();
-            if (msg.find("Timeout waiting for active write transactions") != std::string::npos) {
-                std::cerr << "Warning: forced checkpoint after a commit was skipped while another "
-                             "write transaction is open; its changes are not durable yet. Run "
-                             "CHECKPOINT later instead of retrying the statement: "
-                          << e.what() << std::endl;
-            } else {
-                throw CheckpointException{std::format(
-                    "Transaction committed successfully, but the checkpoint it requires failed. "
-                    "Its changes are not in the WAL and may be lost on restart unless a later "
-                    "CHECKPOINT succeeds: {}",
-                    e.what())};
-            }
+            throw CheckpointException{std::format(
+                "Transaction committed successfully, but the checkpoint it requires failed. Its "
+                "changes are not in the WAL and may be lost on restart unless a later CHECKPOINT "
+                "succeeds; run CHECKPOINT rather than the statement again: {}",
+                e.what())};
         }
     } else if (shouldAutoCheckpoint) {
         try {
@@ -250,6 +297,7 @@ void TransactionManager::rollback(main::ClientContext& clientContext, transactio
         transaction->rollback(&wal);
         clearTransactionNoLock(transaction->getID());
         activeWriteTransactionCount.fetch_sub(1, std::memory_order_release);
+        cvForCommittingWriteTransaction.notify_all();
     } break;
     default: {
         throw TransactionManagerException("Invalid transaction type to rollback.");
