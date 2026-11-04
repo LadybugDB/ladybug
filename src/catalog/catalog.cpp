@@ -141,6 +141,13 @@ TableCatalogEntry* Catalog::getTableCatalogEntry(const Transaction* transaction,
     return result->ptrCast<TableCatalogEntry>();
 }
 
+CatalogEntry* Catalog::getLatestTableEntry(table_id_t tableID) const {
+    if (auto* result = tables->getHeadEntryOfOID(tableID); result != nullptr) {
+        return result;
+    }
+    return internalTables->getHeadEntryOfOID(tableID);
+}
+
 TableCatalogEntry* Catalog::getTableCatalogEntry(const Transaction* transaction,
     const std::string& tableName, bool useInternal) const {
     CatalogEntry* result = nullptr;

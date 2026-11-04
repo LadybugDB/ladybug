@@ -6,6 +6,7 @@
 #include <type_traits>
 
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
+#include "common/exception/catalog.h"
 #include "common/exception/message.h"
 #include "common/exception/runtime.h"
 #include "common/types/types.h"
@@ -635,12 +636,17 @@ void RelTable::detachDeleteForCSRRels(Transaction* transaction, RelTableData* ta
 
 void RelTable::addColumn(Transaction* transaction, TableAddColumnState& addColumnState,
     PageAllocator& pageAllocator) {
+    // Bump before mutating so a concurrent DML commit racing this DDL always sees the move.
+    bumpSchemaEpoch();
     LocalTable* localTable = nullptr;
     if (transaction->getLocalStorage()) {
         localTable = transaction->getLocalStorage()->getLocalTable(*this);
     }
     if (localTable) {
         localTable->addColumn(addColumnState);
+        // This transaction's own DDL: its local columns were updated in place, so refresh
+        // its snapshot instead of tripping the concurrent-DDL check at commit.
+        localTable->refreshSchemaEpoch();
     }
     for (auto& directedRelData : directedRelData) {
         directedRelData->addColumn(addColumnState, pageAllocator);

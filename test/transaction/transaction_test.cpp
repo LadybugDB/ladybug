@@ -48,6 +48,7 @@ TEST_F(PrivateApiTest, TransactionModes) {
 }
 
 TEST_F(PrivateApiTest, RefusedBeginKeepsAutoMode) {
+    ASSERT_TRUE(conn->query("CALL enable_multi_writes=false;")->isSuccess());
     auto conn2 = std::make_unique<lbug::main::Connection>(database.get());
     ASSERT_TRUE(conn->query("BEGIN TRANSACTION;")->isSuccess());
     ASSERT_FALSE(conn2->query("BEGIN TRANSACTION;")->isSuccess());
@@ -60,6 +61,7 @@ TEST_F(PrivateApiTest, RefusedBeginKeepsAutoMode) {
 }
 
 TEST_F(PrivateApiTest, RefusedPreparedAndMultiStatementBeginKeepAutoMode) {
+    ASSERT_TRUE(conn->query("CALL enable_multi_writes=false;")->isSuccess());
     auto conn2 = std::make_unique<lbug::main::Connection>(database.get());
     ASSERT_TRUE(conn->query("BEGIN TRANSACTION;")->isSuccess());
     auto prepared = conn2->prepare("BEGIN TRANSACTION;");

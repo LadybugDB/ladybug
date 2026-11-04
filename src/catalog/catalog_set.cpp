@@ -305,6 +305,16 @@ CatalogEntry* CatalogSet::getEntryOfOID(const Transaction* transaction, oid_t oi
     return nullptr;
 }
 
+CatalogEntry* CatalogSet::getHeadEntryOfOID(oid_t oid) const {
+    std::shared_lock lck{mtx};
+    for (auto& [_, entry] : entries) {
+        if (entry->getOID() == oid) {
+            return entry.get();
+        }
+    }
+    return nullptr;
+}
+
 void CatalogSet::serialize(Serializer serializer) const {
     std::vector<CatalogEntry*> entriesToSerialize;
     for (auto& [_, entry] : entries) {
