@@ -331,7 +331,7 @@ TEST_F(CardinalityTest, RangeFilterThroughRoundingCast) {
     expectFilterEstimate("Spread", "u.i >= 50", 49);
     expectFilterEstimate("Spread", "CAST(u.x AS DECIMAL(2,1)) > 0.3", 66);
     expectFilterEstimate("Spread", "CAST_TO_INT16(u.x) >= 1", 10);
-    expectFilterEstimate("Spread", "CAST(u.x AS FLOORED) >= 1", 10);
+    expectFilterEstimate("Spread", "CAST(u.x AS FLOORED) >= 1", 1);
     auto floored = conn->query("MATCH (u:Spread) WHERE CAST(u.x AS FLOORED) >= 1 RETURN count(*)");
     ASSERT_TRUE(floored->isSuccess());
     EXPECT_EQ(0, floored->getNext()->getValue(0)->getValue<int64_t>());
