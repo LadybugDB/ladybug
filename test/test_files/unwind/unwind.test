@@ -235,6 +235,22 @@ Aida|Alice|Bob|Dan
 ---- 1
 1
 
+-CASE UnwindMergeMultipleMatches
+-STATEMENT CREATE NODE TABLE Tag(id SERIAL PRIMARY KEY, v INT64, flag BOOL);
+---- ok
+-STATEMENT CREATE (:Tag {v: 1}), (:Tag {v: 1});
+---- ok
+-STATEMENT UNWIND [1] AS i MERGE (t:Tag {v: i}) RETURN t.id;
+---- 2
+0
+1
+-STATEMENT UNWIND [1] AS i MERGE (t:Tag {v: i}) SET t.flag = true;
+---- ok
+-STATEMENT MATCH (t:Tag) RETURN t.id, t.flag;
+---- 2
+0|True
+1|True
+
 -CASE UnwindNull
 -STATEMENT UNWIND NULL AS t RETURN t
 ---- 0
