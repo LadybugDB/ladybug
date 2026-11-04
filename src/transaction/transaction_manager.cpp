@@ -200,11 +200,23 @@ void TransactionManager::commit(main::ClientContext& clientContext, Transaction*
                     "it only if the checkpoint's record reached storage: {}",
                     e.what())};
             }
-            throw CheckpointException{std::format(
-                "Transaction committed successfully, but the checkpoint it requires failed. Its "
-                "changes are not in the WAL and may be lost on restart unless a later CHECKPOINT "
-                "succeeds: {}",
-                e.what())};
+            // The checkpoint timed out waiting for another open write transaction. The commit
+            // itself is already published, so failing the statement would invite a retry that
+            // applies it twice (duplicate PK). Downgrade to a warning like auto-checkpoints:
+            // durability is deferred to a later CHECKPOINT instead of failing a committed copy.
+            const std::string msg = e.what();
+            if (msg.find("Timeout waiting for active write transactions") != std::string::npos) {
+                std::cerr << "Warning: forced checkpoint after a commit was skipped while another "
+                             "write transaction is open; its changes are not durable yet. Run "
+                             "CHECKPOINT later instead of retrying the statement: "
+                          << e.what() << std::endl;
+            } else {
+                throw CheckpointException{std::format(
+                    "Transaction committed successfully, but the checkpoint it requires failed. "
+                    "Its changes are not in the WAL and may be lost on restart unless a later "
+                    "CHECKPOINT succeeds: {}",
+                    e.what())};
+            }
         }
     } else if (shouldAutoCheckpoint) {
         try {

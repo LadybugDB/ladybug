@@ -1,6 +1,7 @@
 #include "storage/local_storage/local_storage.h"
 
 #include "catalog/catalog.h"
+#include "common/exception/catalog.h"
 #include "main/client_context.h"
 #include "main/database.h"
 #include "main/database_manager.h"
@@ -12,6 +13,7 @@
 #include "storage/table/node_table.h"
 #include "storage/table/rel_table.h"
 #include "storage/table/table.h"
+#include <format>
 
 using namespace lbug::common;
 using namespace lbug::transaction;
@@ -40,6 +42,55 @@ std::unique_ptr<LocalTable> makeLocalTable(catalog::Catalog* ownerCatalog,
     } break;
     default:
         UNREACHABLE_CODE;
+    }
+}
+
+// Ordered (name, type) fingerprint of a table entry's properties. Compared instead of a
+// bare column count: DROP followed by ADD (or a rename) can leave the count unchanged
+// while the schema differs.
+bool hasSameSchema(const catalog::TableCatalogEntry& lhs, const catalog::TableCatalogEntry& rhs) {
+    // NB: getProperties() (not getProperty(i)): property IDs are non-contiguous after a
+    // DROP (the dropped ID is skipped), so positional getProperty(i) throws map::at.
+    const auto lhsProps = lhs.getProperties();
+    const auto rhsProps = rhs.getProperties();
+    if (lhsProps.size() != rhsProps.size()) {
+        return false;
+    }
+    for (auto i = 0u; i < lhsProps.size(); i++) {
+        if (lhsProps[i].getName() != rhsProps[i].getName() ||
+            lhsProps[i].getType() != rhsProps[i].getType()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+[[noreturn]] void throwConcurrentSchemaChange(const Table& table) {
+    throw common::CatalogException{
+        std::format("Write-write conflict on committing table {}: schema changed by a concurrent "
+                    "transaction.",
+            table.getTableName())};
+}
+
+// A DML commit appends snapshot-shaped local rows to shared storage, while a concurrent
+// ALTER TABLE ADD/DROP reshapes that storage in place. Either order corrupts (new rows get
+// 0 in the new column and CHECKPOINT trips), so the second committer aborts. Two signals:
+// the DDL-only schema epoch (Table::getChangeEpoch moves on every DML write, so it cannot
+// be used here) catches DDL that bumped after this local table was created, including
+// count-neutral identical rebuilds; the newest catalog head catches DDL that ran before
+// the local table was created, committed or still uncommitted. A bare column-count
+// comparison is unsound for both: DROP+ADD can preserve the count with a different schema.
+void checkNoConcurrentSchemaChange(catalog::Catalog* ownerCatalog, const Table& table,
+    const catalog::TableCatalogEntry* tableEntry, const LocalTable* localTable) {
+    if (localTable->getSchemaEpoch() != table.getSchemaEpoch()) {
+        throwConcurrentSchemaChange(table);
+    }
+    const auto* head = ownerCatalog->getLatestTableEntry(tableEntry->getTableID());
+    const auto* headTable = (head != nullptr && !head->isDeleted()) ?
+                                dynamic_cast<const catalog::TableCatalogEntry*>(head) :
+                                nullptr;
+    if (headTable == nullptr || !hasSameSchema(*tableEntry, *headTable)) {
+        throwConcurrentSchemaChange(table);
     }
 }
 } // namespace
@@ -119,6 +170,7 @@ void LocalStorage::commit() {
                     ownerCatalog->getTableCatalogEntry(transaction, key.tableID);
                 const auto table = storage::PartitionStorageRegistry::resolveNodeTableByID(
                     &clientContext, key.tableID, ownerCatalog);
+                checkNoConcurrentSchemaChange(ownerCatalog, *table, tableEntry, localTable.get());
                 table->commit(&clientContext, tableEntry, localTable.get());
             };
             if (key.ownerCatalogName.empty()) {
@@ -137,6 +189,7 @@ void LocalStorage::commit() {
                                        ->getTable(key.tableID);
                 const auto tableEntry = ownerCatalog->getTableCatalogEntry(transaction,
                     table->cast<RelTable>().getRelGroupID());
+                checkNoConcurrentSchemaChange(ownerCatalog, *table, tableEntry, localTable.get());
                 table->commit(&clientContext, tableEntry, localTable.get());
             };
             if (key.ownerCatalogName.empty()) {

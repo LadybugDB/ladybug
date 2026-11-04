@@ -5,6 +5,7 @@
 #include "catalog/catalog.h"
 #include "catalog/catalog_entry/node_table_catalog_entry.h"
 #include "common/cast.h"
+#include "common/exception/catalog.h"
 #include "common/exception/message.h"
 #include "common/exception/runtime.h"
 #include "common/task_system/progress_bar.h"
@@ -642,6 +643,8 @@ void NodeTable::addColumn(Transaction* transaction, TableAddColumnState& addColu
     auto& definition = addColumnState.propertyDefinition;
     auto column = ColumnFactory::createColumn(definition.getName(), definition.getType().copy(),
         pageAllocator.getDataFH(), memoryManager, shadowFile, enableCompression);
+    // Bump before mutating so a concurrent DML commit racing this DDL always sees the move.
+    bumpSchemaEpoch();
     {
         std::unique_lock schemaLck{schemaMtx};
         columns.push_back(std::move(column));
@@ -652,6 +655,9 @@ void NodeTable::addColumn(Transaction* transaction, TableAddColumnState& addColu
     }
     if (localTable) {
         localTable->addColumn(addColumnState);
+        // This transaction's own DDL: its local columns were updated in place, so refresh
+        // its snapshot instead of tripping the concurrent-DDL check at commit.
+        localTable->refreshSchemaEpoch();
     }
     nodeGroups->addColumn(addColumnState, &pageAllocator);
     setHasChanges();

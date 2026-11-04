@@ -928,7 +928,7 @@ TEST_F(PostCommitCheckpointFailureTest, AutoCheckpointBlockedByOpenWriterDoesNot
     createDB(10000 /* checkpoint wait timeout in microseconds */);
     conn = std::make_unique<main::Connection>(database.get());
     checkpointAfterEveryCommit();
-    ASSERT_TRUE(conn->query("CALL debug_enable_multi_writes=true;")->isSuccess());
+    ASSERT_TRUE(conn->query("CALL enable_multi_writes=true;")->isSuccess());
     auto context = getClientContext(*conn);
     main::Connection other{database.get()};
     ASSERT_TRUE(other.query("BEGIN TRANSACTION;")->isSuccess());

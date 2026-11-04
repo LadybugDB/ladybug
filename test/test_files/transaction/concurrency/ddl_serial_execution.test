@@ -20,6 +20,8 @@ Cannot start a new write transaction in the system. Only one write transaction a
 1|b|INT32|NULL|False
 
 -CASE RefusedBeginKeepsConnectionUsable
+-STATEMENT CALL enable_multi_writes=false;
+---- ok
 -STATEMENT CREATE NODE TABLE t(a INT, PRIMARY KEY(a));
 ---- ok
 -STATEMENT BEGIN TRANSACTION;
@@ -310,7 +312,7 @@ Catalog exception: t does not exist in catalog.
 1|c|INT32|NULL|False
 
 -CASE AlterTableAddWriteWriteConflictUncommitted
--STATEMENT CALL debug_enable_multi_writes=true;
+-STATEMENT CALL enable_multi_writes=true;
 ---- ok
 -STATEMENT CREATE NODE TABLE t(a INT, b INT, PRIMARY KEY(a));
 ---- ok
@@ -334,7 +336,7 @@ Catalog exception: Write-write conflict on altering catalog entry with name t.
 2|x|INT32|NULL|False
 
 -CASE AlterTableAddWriteWriteConflictCommitted
--STATEMENT CALL debug_enable_multi_writes=true;
+-STATEMENT CALL enable_multi_writes=true;
 ---- ok
 -STATEMENT CREATE NODE TABLE t(a INT, b INT, PRIMARY KEY(a));
 ---- ok
@@ -358,7 +360,7 @@ Catalog exception: Write-write conflict on altering catalog entry with name t.
 2|x|INT32|NULL|False
 
 -CASE AlterVsDropWriteWriteConflict
--STATEMENT CALL debug_enable_multi_writes=true;
+-STATEMENT CALL enable_multi_writes=true;
 ---- ok
 -STATEMENT CREATE NODE TABLE t(a INT, b INT, PRIMARY KEY(a));
 ---- ok

@@ -48,6 +48,10 @@ public:
 
     CatalogEntrySet getEntries(const transaction::Transaction* transaction);
     CatalogEntry* getEntryOfOID(const transaction::Transaction* transaction, common::oid_t oid);
+    // Newest version-chain head for an OID, bypassing transaction visibility. Used to detect
+    // a concurrent DDL that committed after (or is still uncommitted relative to) the
+    // caller's snapshot. May be a deleted tombstone or null; the caller decides.
+    CatalogEntry* getHeadEntryOfOID(common::oid_t oid) const;
 
     void serialize(common::Serializer serializer) const;
     void serializeSnapshot(common::Serializer serializer,
