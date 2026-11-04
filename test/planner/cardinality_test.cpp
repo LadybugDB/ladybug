@@ -258,16 +258,15 @@ TEST_F(CardinalityTest, RangeFilterAcrossTemporalUnits) {
             expectFilterEstimate("SameDay", prop + " > " + constant, 1);
         }
     }
-    // A user function named CAST_* is stripped like a cast: DATE to DATE keeps the range
-    // estimate, DATE to INT64 leaves a DATE range against a number of unknown unit and falls back
-    // to the fixed 10% (268 on main, 1,000 without the fallback).
+    // A user function named CAST_* is not stripped like a cast: it falls back
+    // to the fixed 10% (100).
     conn->createScalarFunction("CAST_SAME",
         std::vector<common::LogicalTypeID>{common::LogicalTypeID::DATE},
         common::LogicalTypeID::DATE, &sameDay);
     conn->createScalarFunction("CAST_DAYS",
         std::vector<common::LogicalTypeID>{common::LogicalTypeID::DATE},
         common::LogicalTypeID::INT64, &dayNumber);
-    expectFilterEstimate("Daily", "CAST_SAME(u.d) > date('2022-01-01')", 268);
+    expectFilterEstimate("Daily", "CAST_SAME(u.d) > date('2022-01-01')", 100);
     expectFilterEstimate("Daily", "CAST_DAYS(u.d) > 18993", 100);
 }
 
@@ -322,7 +321,7 @@ TEST_F(CardinalityTest, RangeFilterThroughRoundingCast) {
     // These keep the plain estimate. An INT32 property compares as CAST(u.i AS INT64) and is
     // already on that grid: 49 as for an INT64 column, though 50 rows match. DECIMAL counts as
     // continuous (61 match). A user function named like a built-in cast, or the one CAST() calls
-    // for a CREATE TYPE type, does something unknown (none match).
+    // for a CREATE TYPE type, does something unknown, so it falls back to the fixed 10% (10).
     for (const auto* name : {"CAST_TO_INT16", "CAST_TO_FLOORED"}) {
         conn->createScalarFunction(name,
             std::vector<common::LogicalTypeID>{common::LogicalTypeID::DOUBLE},
@@ -331,8 +330,8 @@ TEST_F(CardinalityTest, RangeFilterThroughRoundingCast) {
     ASSERT_TRUE(conn->query("CREATE TYPE FLOORED AS INT16;")->isSuccess());
     expectFilterEstimate("Spread", "u.i >= 50", 49);
     expectFilterEstimate("Spread", "CAST(u.x AS DECIMAL(2,1)) > 0.3", 66);
-    expectFilterEstimate("Spread", "CAST_TO_INT16(u.x) >= 1", 1);
-    expectFilterEstimate("Spread", "CAST(u.x AS FLOORED) >= 1", 1);
+    expectFilterEstimate("Spread", "CAST_TO_INT16(u.x) >= 1", 10);
+    expectFilterEstimate("Spread", "CAST(u.x AS FLOORED) >= 1", 10);
     auto floored = conn->query("MATCH (u:Spread) WHERE CAST(u.x AS FLOORED) >= 1 RETURN count(*)");
     ASSERT_TRUE(floored->isSuccess());
     EXPECT_EQ(0, floored->getNext()->getValue(0)->getValue<int64_t>());
