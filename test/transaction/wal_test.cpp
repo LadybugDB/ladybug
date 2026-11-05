@@ -62,6 +62,17 @@ public:
         failDirectorySync = fail;
     }
 
+    void setFailWrite(bool fail) {
+        std::unique_lock lck{mtx};
+        failWrite = fail;
+    }
+
+    uint64_t getFileSize(const std::string& path) const {
+        std::unique_lock lck{mtx};
+        const auto file = files.find(path);
+        return file == files.end() ? 0 : file->second.size();
+    }
+
     bool canHandleFile(const std::string_view path) const override {
         return path.starts_with("failing-sync://");
     }
@@ -168,6 +179,9 @@ protected:
     void writeFile(FileInfo& fileInfo, const uint8_t* buffer, uint64_t numBytes,
         uint64_t offset) const override {
         std::unique_lock lck{mtx};
+        if (failWrite) {
+            throw IOException{"Injected WAL write failure."};
+        }
         auto& file = files[fileInfo.path];
         if (file.size() < offset + numBytes) {
             file.resize(offset + numBytes);
@@ -197,6 +211,7 @@ private:
     bool failRemove = false;
     bool failAfterRename = false;
     bool failDirectorySync = false;
+    bool failWrite = false;
     mutable uint64_t parentDirectorySyncCount = 0;
     mutable std::string parentDirectorySyncPath;
     mutable std::string truncatedPath;
@@ -235,6 +250,157 @@ TEST_F(WalTest, WALSyncFailurePoisonsWALAndReturnsAllocatedCommitSequence) {
     EXPECT_THROW(wal.logCommittedWAL(secondLocalWAL, conn->getClientContext(), walCommitSequence),
         RuntimeException);
     EXPECT_EQ(walCommitSequence, 0);
+}
+
+// A commit whose WAL write fails must not leave the WAL waiting for that write (#1397).
+TEST_F(WalTest, WALWriteFailurePoisonsWAL) {
+    VirtualFileSystem vfs;
+    auto failingFS = std::make_unique<FailingSyncFileSystem>(false /* failSync */);
+    auto* failingFSPtr = failingFS.get();
+    vfs.registerFileSystem(std::move(failingFS));
+
+    lbug::storage::WAL wal("failing-sync://db", false /* readOnly */, false /* enableChecksums */,
+        &vfs);
+    lbug::storage::LocalWAL localWAL(*lbug::storage::MemoryManager::Get(*conn->getClientContext()),
+        false /* enableChecksums */);
+    localWAL.logLoadExtension("" /* main */, "dummy");
+    localWAL.logCommit();
+    failingFSPtr->setFailWrite(true);
+    uint64_t walCommitSequence = 0;
+    std::string error;
+    try {
+        wal.logCommittedWAL(localWAL, conn->getClientContext(), walCommitSequence);
+    } catch (const Exception& e) {
+        error = e.what();
+    }
+    failingFSPtr->setFailWrite(false);
+    ASSERT_NE(error.find("panic state"), std::string::npos) << error;
+    // The flush failed after the commit took its sequence, as a failed sync does.
+    EXPECT_EQ(walCommitSequence, 1);
+
+    lbug::storage::LocalWAL secondLocalWAL(
+        *lbug::storage::MemoryManager::Get(*conn->getClientContext()), false /* enableChecksums */);
+    secondLocalWAL.logLoadExtension("" /* main */, "dummy2");
+    secondLocalWAL.logCommit();
+    EXPECT_THROW(wal.logCommittedWAL(secondLocalWAL, conn->getClientContext(), walCommitSequence),
+        RuntimeException);
+    EXPECT_EQ(walCommitSequence, 0);
+}
+
+// A commit larger than the writer's buffer reaches the file while it is appended, before the
+// flush that waits for durability.
+TEST_F(WalTest, WALAppendFailurePoisonsWAL) {
+    VirtualFileSystem vfs;
+    auto failingFS = std::make_unique<FailingSyncFileSystem>(false /* failSync */);
+    auto* failingFSPtr = failingFS.get();
+    vfs.registerFileSystem(std::move(failingFS));
+
+    lbug::storage::WAL wal("failing-sync://db", false /* readOnly */, true /* enableChecksums */,
+        &vfs);
+    lbug::storage::LocalWAL localWAL(*lbug::storage::MemoryManager::Get(*conn->getClientContext()),
+        true /* enableChecksums */);
+    localWAL.logLoadExtension("" /* main */, std::string(3 * LBUG_PAGE_SIZE, 'x'));
+    localWAL.logCommit();
+    failingFSPtr->setFailWrite(true);
+    uint64_t walCommitSequence = 0;
+    std::string error;
+    try {
+        wal.logCommittedWAL(localWAL, conn->getClientContext(), walCommitSequence);
+    } catch (const Exception& e) {
+        error = e.what();
+    }
+    failingFSPtr->setFailWrite(false);
+    ASSERT_NE(error.find("panic state"), std::string::npos) << error;
+    EXPECT_EQ(walCommitSequence, 0);
+
+    lbug::storage::LocalWAL secondLocalWAL(
+        *lbug::storage::MemoryManager::Get(*conn->getClientContext()), true /* enableChecksums */);
+    secondLocalWAL.logLoadExtension("" /* main */, "dummy2");
+    secondLocalWAL.logCommit();
+    EXPECT_THROW(wal.logCommittedWAL(secondLocalWAL, conn->getClientContext(), walCommitSequence),
+        RuntimeException);
+}
+
+// The bytes of a commit whose WAL write failed must not reach the file later, when closing.
+TEST_F(WalTest, FailedWALWriteIsNotWrittenOnClose) {
+    VirtualFileSystem vfs;
+    auto failingFS = std::make_unique<FailingSyncFileSystem>(false /* failSync */);
+    auto* failingFSPtr = failingFS.get();
+    vfs.registerFileSystem(std::move(failingFS));
+
+    auto wal = std::make_unique<lbug::storage::WAL>("failing-sync://db", false /* readOnly */,
+        false /* enableChecksums */, &vfs);
+    lbug::storage::LocalWAL localWAL(*lbug::storage::MemoryManager::Get(*conn->getClientContext()),
+        false /* enableChecksums */);
+    localWAL.logLoadExtension("" /* main */, "dummy");
+    localWAL.logCommit();
+    failingFSPtr->setFailWrite(true);
+    uint64_t walCommitSequence = 0;
+    try {
+        wal->logCommittedWAL(localWAL, conn->getClientContext(), walCommitSequence);
+    } catch (const Exception&) {} // NOLINT(bugprone-empty-catch): the failure is expected.
+    failingFSPtr->setFailWrite(false);
+    wal.reset();
+    EXPECT_EQ(
+        failingFSPtr->getFileSize(lbug::storage::StorageUtils::getWALFilePath("failing-sync://db")),
+        0);
+}
+
+TEST_F(WalTest, CheckpointRecordWriteFailurePoisonsWAL) {
+    VirtualFileSystem vfs;
+    auto failingFS = std::make_unique<FailingSyncFileSystem>(false /* failSync */);
+    auto* failingFSPtr = failingFS.get();
+    vfs.registerFileSystem(std::move(failingFS));
+
+    lbug::storage::WAL wal("failing-sync://db", false /* readOnly */, false /* enableChecksums */,
+        &vfs);
+    failingFSPtr->setFailWrite(true);
+    std::string error;
+    try {
+        wal.logAndFlushCheckpoint(conn->getClientContext());
+    } catch (const Exception& e) {
+        error = e.what();
+    }
+    failingFSPtr->setFailWrite(false);
+    ASSERT_NE(error.find("panic state"), std::string::npos) << error;
+    EXPECT_TRUE(wal.mayHaveCheckpointRecord());
+
+    lbug::storage::LocalWAL localWAL(*lbug::storage::MemoryManager::Get(*conn->getClientContext()),
+        false /* enableChecksums */);
+    localWAL.logLoadExtension("" /* main */, "dummy");
+    localWAL.logCommit();
+    uint64_t walCommitSequence = 0;
+    EXPECT_THROW(wal.logCommittedWAL(localWAL, conn->getClientContext(), walCommitSequence),
+        RuntimeException);
+}
+
+// A failed write of the CHECKPOINT record into the frozen WAL is reported as a write failure.
+TEST_F(WalTest, FrozenCheckpointRecordWriteFailurePoisonsWAL) {
+    VirtualFileSystem vfs;
+    auto failingFS = std::make_unique<FailingSyncFileSystem>(false /* failSync */);
+    auto* failingFSPtr = failingFS.get();
+    vfs.registerFileSystem(std::move(failingFS));
+
+    lbug::storage::WAL wal("failing-sync://db", false /* readOnly */, false /* enableChecksums */,
+        &vfs);
+    lbug::storage::LocalWAL localWAL(*lbug::storage::MemoryManager::Get(*conn->getClientContext()),
+        false /* enableChecksums */);
+    localWAL.logLoadExtension("" /* main */, "dummy");
+    localWAL.logCommit();
+    uint64_t walCommitSequence = 0;
+    ASSERT_NO_THROW(wal.logCommittedWAL(localWAL, conn->getClientContext(), walCommitSequence));
+    ASSERT_NO_THROW(wal.rotateForCheckpoint(conn->getClientContext()));
+
+    failingFSPtr->setFailWrite(true);
+    std::string error;
+    try {
+        wal.logAndFlushCheckpointToFrozen(conn->getClientContext());
+    } catch (const Exception& e) {
+        error = e.what();
+    }
+    failingFSPtr->setFailWrite(false);
+    EXPECT_NE(error.find("WAL write failed"), std::string::npos) << error;
+    EXPECT_THROW(wal.throwIfPoisoned(), RuntimeException);
 }
 
 TEST_F(WalTest, CheckpointSyncFailureReportsPossibleCommitRecord) {
