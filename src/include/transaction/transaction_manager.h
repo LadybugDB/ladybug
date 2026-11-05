@@ -164,6 +164,9 @@ private:
     bool forcedCheckpointPending = false;
     // This mutex serializes begin/commit/rollback calls to protect activeTransactions.
     std::mutex mtxForSerializingPublicFunctionCalls;
+    // Held by a checkpoint for as long as it waits for write transactions to leave and then runs.
+    // Those transactions need mtxForSerializingPublicFunctionCalls to leave, so nothing may block
+    // on this mutex while holding that one: take this one first.
     std::mutex mtxForStartingNewTransactions;
     // Prevents concurrent checkpoints. Separate from mtxForSerializingPublicFunctionCalls so
     // that active writers can commit/rollback while the checkpoint is draining them.

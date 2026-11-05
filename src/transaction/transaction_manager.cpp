@@ -68,18 +68,13 @@ void warnAutoCheckpointFailed(WAL& wal, const std::exception& e) {
 
 Transaction* TransactionManager::beginTransaction(main::ClientContext& clientContext,
     TransactionType type) {
-    std::unique_lock publicFunctionLck{mtxForSerializingPublicFunctionCalls};
     // Only acquire the write gate for write/recovery transactions. Read-only transactions
     // can start freely during checkpoint since they use snapshot isolation.
     std::unique_lock newTransactionLck{mtxForStartingNewTransactions, std::defer_lock};
     if (type != TransactionType::READ_ONLY) {
-        // Wait out a pending forced checkpoint before blocking on the start mutex: blocking there
-        // holds the public mutex, which the writers that the forced commit waits for need in
-        // order to leave.
-        cvForCommittingWriteTransaction.wait(publicFunctionLck,
-            [&]() { return !forcedCheckpointPending; });
         newTransactionLck.lock();
     }
+    std::unique_lock publicFunctionLck{mtxForSerializingPublicFunctionCalls};
     const auto mustWait = [&]() {
         if (type == TransactionType::READ_ONLY) {
             return false;
@@ -95,7 +90,10 @@ Transaction* TransactionManager::beginTransaction(main::ClientContext& clientCon
     while (mustWait()) {
         newTransactionLck.unlock();
         cvForCommittingWriteTransaction.wait(publicFunctionLck, [&]() { return !mustWait(); });
+        // Nothing may block on the start mutex while holding the public one.
+        publicFunctionLck.unlock();
         newTransactionLck.lock();
+        publicFunctionLck.lock();
     }
     switch (type) {
     case TransactionType::READ_ONLY: {
