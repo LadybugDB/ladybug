@@ -56,17 +56,13 @@ public:
 
     // Minimum start timestamp over all currently open transactions (the snapshot horizon
     // that checkpoint retention must preserve). Returns INVALID_TRANSACTION when no
-    // transaction is open. Brief lock acquisition; callers holding the checkpoint write
-    // gate must use a value captured before the gate was acquired.
+    // transaction is open. Brief lock acquisition.
     common::transaction_t snapshotHorizon();
-    // Start timestamps of all currently open transactions, for CSR snapshot coverage and
-    // pruning. Brief lock acquisition; capture before the checkpoint write gate alongside
-    // the horizon (a small skew between the two snapshots is safe in both directions).
+    // Start timestamps of all currently open transactions. Brief lock acquisition.
     std::vector<common::transaction_t> snapshotOpenStartTSs();
     // Pin behind the snapshot horizon: the minimum open start timestamp, the transaction
     // holding it, and the open-transaction count (which transaction pins WAL growth).
-    // INVALID_TRANSACTION/0 when no transaction is open. Brief lock acquisition; capture
-    // before the checkpoint write gate alongside the horizon.
+    // INVALID_TRANSACTION/0 when no transaction is open. Brief lock acquisition.
     struct HorizonPinInfo {
         common::transaction_t horizon = common::INVALID_TRANSACTION;
         common::transaction_t pinningTxnID = common::INVALID_TRANSACTION;
@@ -150,10 +146,8 @@ private:
     // Open-transaction counts are small, so a full rescan on erase is trivial.
     common::transaction_t cachedHorizon = common::INVALID_TRANSACTION;
     common::transaction_t lastTransactionID;
-    // Atomic so checkpointNoLock() can snapshot it without taking
-    // mtxForSerializingPublicFunctionCalls (which would invert the lock order against
-    // beginTransaction()'s public -> start acquisition order and deadlock concurrent
-    // writers during an auto-checkpoint triggered from commit()).
+    // Atomic so checkpointNoLock() can read and bump it before taking
+    // mtxForSerializingPublicFunctionCalls.
     std::atomic<common::transaction_t> lastTimestamp{1};
     uint64_t nextWALCommitSequenceToPublish = 1;
     std::condition_variable cvForPublishingCommit;
