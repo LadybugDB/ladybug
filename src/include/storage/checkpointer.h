@@ -118,7 +118,7 @@ protected:
     bool walRotated = false;
     // Snapshot timestamp captured at drain time for MVCC catalog serialization.
     common::transaction_t snapshotTS = 0;
-    // Snapshot-horizon floor captured alongside snapshotTS (before the write gate).
+    // Snapshot-horizon floor captured alongside snapshotTS.
     // Version data committed at or after it is retained for open readers, and WAL
     // rotation/retirement is skipped while it pins (the WAL keeps the commit records the
     // pinned snapshot may still need);

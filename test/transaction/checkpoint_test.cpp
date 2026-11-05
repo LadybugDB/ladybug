@@ -114,6 +114,21 @@ public:
         return false;
     }
 
+    // Holds the mutex that every begin, commit and rollback takes for 100 ms on a new thread, and
+    // returns once it is held.
+    static std::thread holdPublicMutexBriefly(main::ClientContext& context) {
+        auto* transactionManager = TransactionManager::Get(context);
+        std::promise<void> held;
+        auto heldFuture = held.get_future();
+        std::thread holder([transactionManager, held = std::move(held)]() mutable {
+            std::unique_lock lck{transactionManager->mtxForSerializingPublicFunctionCalls};
+            held.set_value();
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        });
+        heldFuture.wait();
+        return holder;
+    }
+
 private:
     TransactionManager::init_checkpointer_func_t initFunc;
 };
@@ -1046,6 +1061,26 @@ TEST_F(PostCommitCheckpointFailureTest, WriterWaitingAtWriteGateDoesNotPinCheckp
     waiting.join();
     EXPECT_EQ(WAL::Get(*context)->getFileSize(), 0u);
     ASSERT_TRUE(waitingWriter.query("COMMIT;")->isSuccess());
+    checkNodes(1);
+}
+
+TEST_F(PostCommitCheckpointFailureTest, BusyPublicMutexDoesNotPinCheckpoint) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+    auto context = getClientContext(*conn);
+    std::thread holder;
+    // Checkpointers are created with the write gate closed.
+    FlakyCheckpointer publicMutexBusy(
+        [&holder](main::ClientContext& ctx) -> std::unique_ptr<Checkpointer> {
+            holder = FlakyCheckpointer::holdPublicMutexBriefly(ctx);
+            return std::make_unique<Checkpointer>(ctx);
+        });
+    publicMutexBusy.setCheckpointer(*context);
+    insertNodes(0, 1);
+    FlakyCheckpointer::resetCheckpointer(*context);
+    holder.join();
+    EXPECT_EQ(WAL::Get(*context)->getFileSize(), 0u);
     checkNodes(1);
 }
 
@@ -5388,16 +5423,8 @@ protected:
 
 // Fix #1 – lastTimestamp data race
 // ─────────────────────────────────────────────────────────────────────────────
-// Before the fix, checkpointNoLock() read `lastTimestamp` without holding
-// mtxForSerializingPublicFunctionCalls, which is UB when commit() concurrently
-// increments it.  The fix snapshots the value under the mutex.
-//
-// Observable invariant tested here: a write transaction committed while the
-// checkpoint drain is waiting for it must be included in the checkpoint.
-// Without the fix the snapshot could see a stale (too-low) lastTimestamp,
-// causing the MVCC catalog snapshot to exclude the final committed entry.
-// After the fix the snapshot is taken under the mutex *after* the drain, so
-// it is guaranteed to reflect all commits that happened before the gate.
+// A write transaction committed while the checkpoint drain is waiting for it must be included in
+// the checkpoint: the snapshot timestamp is read only after the drain.
 TEST_F(ReviewFixesTest, CheckpointDrainWaitsForInFlightWrite) {
     if (inMemMode || systemConfig->checkpointThreshold == 0) {
         GTEST_SKIP();
@@ -5445,13 +5472,13 @@ TEST_F(ReviewFixesTest, CheckpointDrainWaitsForInFlightWrite) {
     conn2.reset();
 
     // On reload only checkpointed data is present (WAL has been rotated/cleared).
-    // All N+1 rows must be visible because the final commit occurred before the
-    // write gate was acquired and snapshotTS must capture it.
+    // All N+1 rows must be visible because the final commit landed during the drain, and the
+    // snapshot timestamp is read after the drain sees it.
     createDBAndConn();
     auto res = conn->query("MATCH (n:drain_test) RETURN count(n) AS c;");
     ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
     const auto count = res->getNext()->getValue(0)->getValue<int64_t>();
-    ASSERT_EQ(count, N + 1) << "Row committed just before the write gate must survive checkpoint";
+    ASSERT_EQ(count, N + 1) << "Row committed during the checkpoint drain must survive checkpoint";
 }
 
 TEST_F(ReviewFixesTest, CheckpointUsesMatchingCatalogForMainAndDefaultGraph) {
