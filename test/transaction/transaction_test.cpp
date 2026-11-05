@@ -1041,6 +1041,28 @@ TEST_F(FailedCommitTest, AbortRecordSkipsOnlyTheNamedTransaction) {
     EXPECT_EQ(count("MATCH (a:A) RETURN count(a)"), 2);
 }
 
+// The other writer's commits before and after the failed one stay: the ABORT names only its block.
+TEST_F(FailedCommitTest, FailedCommitLeavesOtherWritersCommits) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+    constructFailingDB();
+    query("CREATE NODE TABLE A(id INT64 PRIMARY KEY)");
+    query("CHECKPOINT");
+    auto other = std::make_unique<lbug::main::Connection>(database.get());
+    ASSERT_TRUE(other->query("CREATE (:A {id: 1})")->isSuccess());
+    ASSERT_TRUE(other->query("BEGIN TRANSACTION")->isSuccess());
+    ASSERT_TRUE(other->query("CREATE (:A {id: 3})")->isSuccess());
+    query("BEGIN TRANSACTION");
+    query("CREATE (:A {id: 2})");
+    commitFailingOnce();
+    ASSERT_TRUE(other->query("COMMIT")->isSuccess());
+    other.reset();
+    crashAndReopen();
+    EXPECT_EQ(count("MATCH (a:A) RETURN count(a)"), 2);
+    EXPECT_EQ(count("MATCH (a:A) WHERE a.id = 2 RETURN count(a)"), 0);
+}
+
 // A crash while the ABORT record was being written leaves it torn: the transaction stands, as
 // after any crash during its COMMIT.
 TEST_F(FailedCommitTest, TornAbortRecordLeavesTheTransaction) {

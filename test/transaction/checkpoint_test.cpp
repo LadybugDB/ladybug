@@ -2638,6 +2638,48 @@ TEST_F(FlakyCheckpointerTest, RecoversLegacyFrozenGraphMarkerWithActiveWALCommit
     EXPECT_FALSE(std::filesystem::exists(graphShadowPath));
 }
 
+// Graph commits go to the main WAL, so only a standalone session on the graph's file leaves commits
+// in a graph WAL. The ABORT stands in for a failed publish's, behind a later commit, which another
+// writer can put there. The rows are asserted by id: a standalone session leaves their label and
+// data columns null.
+TEST_F(FlakyCheckpointerTest, AbortRecordSkipsTheTransactionInAGraphWAL) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    LegacyGraphMarkerRecoveryFixture{}.setUp(conn.get());
+    const auto graphPath = StorageUtils::getGraphPath(databasePath, "recovery_graph");
+    const auto graphWALPath = StorageUtils::getWALFilePath(graphPath);
+    conn.reset();
+    database.reset();
+
+    auto graphConfig = *systemConfig;
+    graphConfig.autoCheckpoint = false;
+    graphConfig.forceCheckpointOnClose = false;
+    graphConfig.enableChecksums = false;
+    auto graphDatabase = std::make_unique<main::Database>(graphPath, graphConfig);
+    auto graphConnection = std::make_unique<main::Connection>(graphDatabase.get());
+    ASSERT_TRUE(graphConnection->query("CREATE (:User {name: 'Carol'});")->isSuccess());
+    const auto abortedStart = std::filesystem::file_size(graphWALPath);
+    ASSERT_TRUE(graphConnection->query("CREATE (:User {name: 'Bob'});")->isSuccess());
+    ASSERT_TRUE(graphConnection->query("CREATE (:User {name: 'Dave'});")->isSuccess());
+    graphConnection.reset();
+    graphDatabase.reset();
+    const auto abortRecord = serializeCheckpointRecord(AbortRecord{abortedStart});
+    std::ofstream{graphWALPath, std::ios::binary | std::ios::app}.write(
+        reinterpret_cast<const char*>(abortRecord.data.get()), abortRecord.size);
+
+    createDBAndConn();
+    ASSERT_TRUE(conn->query("USE GRAPH recovery_graph;")->isSuccess());
+    const auto count = [&](const std::string& statement) {
+        auto result = conn->query(statement);
+        EXPECT_TRUE(result->isSuccess()) << result->getErrorMessage();
+        return result->isSuccess() ? result->getNext()->getValue(0)->getValue<int64_t>() : -1;
+    };
+    EXPECT_EQ(count("MATCH (n) RETURN COUNT(n);"), 3);
+    EXPECT_EQ(count("MATCH (n) WHERE n.id = 2 RETURN COUNT(n);"), 0);
+    EXPECT_EQ(count("MATCH (n) WHERE n.id = 3 RETURN COUNT(n);"), 1);
+}
+
 TEST_F(FlakyCheckpointerTest, RejectsActiveGraphMarkerWithNonCheckpointFrozenWAL) {
     if (inMemMode || systemConfig->checkpointThreshold == 0) {
         GTEST_SKIP();
