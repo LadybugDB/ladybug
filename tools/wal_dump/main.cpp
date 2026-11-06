@@ -1,9 +1,9 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <system_error>
 
 #include "catalog/catalog_entry/catalog_entry.h"
-#include "common/exception/storage.h"
 #include "common/file_system/file_system.h"
 #include "common/file_system/local_file_system.h"
 #include "common/serializer/buffered_file.h"
@@ -19,8 +19,9 @@
 using namespace lbug::common;
 using namespace lbug::storage;
 
+// ChecksumReader reports this for a failed read inside a record and for a bad checksum.
 static constexpr std::string_view checksumMismatchMessage =
-    "Checksum verification failed, the WAL file is corrupted.";
+    "The record is cut short or fails its checksum.";
 
 static WALHeader readWALHeader(Deserializer& deserializer) {
     WALHeader header{};
@@ -144,7 +145,7 @@ static void dumpRecord(const WALRecord& record) {
         std::cout << "      Type: CREATE_CATALOG_ENTRY\n";
         if (createRecord.ownedCatalogEntry) {
             std::cout << "      Entry Type: "
-                      << static_cast<uint8_t>(createRecord.ownedCatalogEntry->getType()) << "\n";
+                      << static_cast<int>(createRecord.ownedCatalogEntry->getType()) << "\n";
             std::cout << "      Entry Name: " << createRecord.ownedCatalogEntry->getName() << "\n";
         }
         std::cout << "      IsInternal: " << (createRecord.isInternal ? "true" : "false") << "\n";
@@ -164,7 +165,7 @@ static void dumpRecord(const WALRecord& record) {
         const auto& dropRecord = record.constCast<DropCatalogEntryRecord>();
         std::cout << "      Type: DROP_CATALOG_ENTRY\n";
         std::cout << "      EntryID: " << dropRecord.entryID << "\n";
-        std::cout << "      EntryType: " << static_cast<uint8_t>(dropRecord.entryType) << "\n";
+        std::cout << "      EntryType: " << static_cast<int>(dropRecord.entryType) << "\n";
         break;
     }
     case WALRecordType::ALTER_TABLE_ENTRY_RECORD: {
@@ -173,7 +174,7 @@ static void dumpRecord(const WALRecord& record) {
         if (alterRecord.ownedAlterInfo) {
             std::cout << "      TableName: " << alterRecord.ownedAlterInfo->tableName << "\n";
             std::cout << "      AlterType: "
-                      << static_cast<uint8_t>(alterRecord.ownedAlterInfo->alterType) << "\n";
+                      << static_cast<int>(alterRecord.ownedAlterInfo->alterType) << "\n";
         }
         break;
     }
@@ -202,7 +203,7 @@ static void dumpRecord(const WALRecord& record) {
         const auto& insertRecord = record.constCast<TableInsertionRecord>();
         std::cout << "      Type: TABLE_INSERTION\n";
         std::cout << "      TableID: " << insertRecord.tableID << "\n";
-        std::cout << "      TableType: " << static_cast<uint8_t>(insertRecord.tableType) << "\n";
+        std::cout << "      TableType: " << static_cast<int>(insertRecord.tableType) << "\n";
         std::cout << "      NumRows: " << insertRecord.numRows << "\n";
         std::cout << "      NumVectors: " << insertRecord.ownedVectors.size() << "\n";
         for (size_t i = 0; i < insertRecord.ownedVectors.size(); i++) {
@@ -259,7 +260,7 @@ static void dumpRecord(const WALRecord& record) {
         const auto& detachRecord = record.constCast<RelDetachDeleteRecord>();
         std::cout << "      Type: REL_DETACH_DELETE\n";
         std::cout << "      TableID: " << detachRecord.tableID << "\n";
-        std::cout << "      Direction: " << static_cast<uint8_t>(detachRecord.direction) << "\n";
+        std::cout << "      Direction: " << static_cast<int>(detachRecord.direction) << "\n";
         if (detachRecord.ownedSrcNodeIDVector) {
             printValueVector(*detachRecord.ownedSrcNodeIDVector, 1);
         }
@@ -277,32 +278,46 @@ static void dumpRecord(const WALRecord& record) {
         break;
     }
     default:
-        std::cout << "      Type: UNKNOWN (" << static_cast<uint8_t>(record.type) << ")\n";
+        std::cout << "      Type: UNKNOWN (" << static_cast<int>(record.type) << ")\n";
         break;
     }
 }
 
 int main(int argc, char** argv) {
-    if (argc != 2) {
-        std::cerr << "Usage: " << argv[0] << " <database_path>\n";
+    const bool namedWAL = argc > 1 && std::string_view{argv[1]} == "--wal";
+    if (argc != (namedWAL ? 3 : 2)) {
+        std::cerr << "Usage: " << argv[0] << " <database_path>\n"
+                  << "       " << argv[0] << " --wal <wal_file>\n";
         return 1;
     }
 
-    std::string databasePath = argv[1];
-    std::string walPath = StorageUtils::getWALFilePath(databasePath);
+    std::string walPath = namedWAL ? argv[2] : StorageUtils::getWALFilePath(argv[1]);
 
     std::cout << "WAL File: " << walPath << "\n\n";
 
-    if (!std::filesystem::exists(walPath)) {
+    std::error_code existsError;
+    const bool walExists = std::filesystem::exists(walPath, existsError);
+    if (existsError) {
+        std::cerr << "Cannot read " << walPath << ": " << existsError.message() << "\n";
+        return 1;
+    }
+    if (!walExists) {
+        if (namedWAL) {
+            std::cerr << "WAL file does not exist: " << walPath << "\n";
+            return 1;
+        }
         std::cout << "WAL file does not exist. Database was cleanly shutdown or no modifications "
                      "were made.\n";
         return 0;
     }
 
+    uint64_t fileSize = 0;
+    uint64_t recordCount = 0;
+    uint64_t lastOffset = 0;
     try {
         LocalFileSystem lfs("");
         auto fileInfo = lfs.openFile(walPath, FileOpenFlags(FileFlags::READ_ONLY));
-        auto fileSize = fileInfo->getFileSize();
+        fileSize = fileInfo->getFileSize();
         if (fileSize == 0) {
             std::cout << "WAL file is empty. Database was cleanly shutdown.\n";
             return 0;
@@ -327,9 +342,7 @@ int main(int argc, char** argv) {
         std::cout << "  File Size: " << fileSize << " bytes\n\n";
 
         std::cout << "Record offsets:\n";
-
-        uint64_t recordCount = 0;
-        uint64_t lastOffset = 0;
+        std::cout.flush();
 
         while (!deserializer.finished()) {
             lastOffset = getReadOffset(deserializer, walHeader.enableChecksums);
@@ -343,18 +356,23 @@ int main(int argc, char** argv) {
             std::cout << "      PayloadLength: " << recordLength << " bytes\n";
             std::cout << "      FramedLength: " << framedLength << " bytes\n";
             dumpRecord(*walRecord);
+            // A malformed record can crash the reader; what came before it must still reach a file.
+            std::cout.flush();
             recordCount++;
         }
 
         std::cout << "\nTotal records found: " << recordCount << "\n";
         std::cout << "Last offset: " << lastOffset << "\n";
 
-    } catch (const StorageException&) {
-        std::cerr << "Error: WAL file is corrupted - checksum verification failed.\n";
-        std::cerr << "This WAL file cannot be read.\n";
-        return 1;
     } catch (const std::exception& e) {
-        std::cerr << "Error reading WAL file: " << e.what() << "\n";
+        std::cout.flush();
+        if (fileSize == 0) {
+            std::cerr << "Cannot read " << walPath << ": " << e.what() << "\n";
+            return 1;
+        }
+        std::cerr << "Stopped at offset " << lastOffset << " after " << recordCount << " records, "
+                  << fileSize - lastOffset << " of " << fileSize << " bytes left: " << e.what()
+                  << "\n";
         return 1;
     }
 
