@@ -277,6 +277,19 @@ jobs:
         if: matrix.os == 'macos'
         run: brew install ccache
 
+      - name: Install OpenSSL 3 (macOS)
+        if: matrix.os == 'macos'
+        run: |
+          # Pin to OpenSSL 3: Homebrew now also ships openssl@4, which CMake's
+          # find_package(OpenSSL 3) (>= 3) would otherwise prefer, tripping the
+          # OpenSSL 3.x version guard in CMakeLists.txt. The wheel build runs
+          # under cibuildwheel, so export OPENSSL_ROOT_DIR both for host-side
+          # steps and inside the cibuildwheel build environment.
+          brew list openssl@3 >/dev/null 2>&1 || brew install openssl@3
+          _LBUG_OPENSSL_PREFIX="$(brew --prefix openssl@3)"
+          echo "OPENSSL_ROOT_DIR=${_LBUG_OPENSSL_PREFIX}" >> "$GITHUB_ENV"
+          echo "CIBW_ENVIRONMENT_MACOS=${CIBW_ENVIRONMENT_MACOS} OPENSSL_ROOT_DIR=${_LBUG_OPENSSL_PREFIX}" >> "$GITHUB_ENV"
+
       - name: Cache ccache directory (Linux/macOS)
         if: matrix.os != 'windows'
         uses: actions/cache@v4
