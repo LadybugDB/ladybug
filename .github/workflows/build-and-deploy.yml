@@ -337,8 +337,8 @@ jobs:
           ./gradlew publish -i
 
   build-nodejs:
-    if: ${{ always() && (github.event_name == 'schedule' || github.event.inputs.skipNodejs != 'true') && needs.build-precompiled-bin.result == 'success' && needs.build-linux-builder-image.result == 'success' && (needs.build-extension.result == 'success' || github.event.inputs.skipExtensions == 'true') }}
-    needs: [build-precompiled-bin, build-linux-builder-image, build-extension]
+    if: ${{ always() && (github.event_name == 'schedule' || github.event.inputs.skipNodejs != 'true') && needs.build-precompiled-bin.result == 'success' && needs.build-linux-builder-image.result == 'success' }}
+    needs: [build-precompiled-bin, build-linux-builder-image]
     strategy:
       fail-fast: false
       matrix:
@@ -359,7 +359,6 @@ jobs:
       nodeVersion: ${{ matrix.node-version }}
       artifactSuffix: ${{ matrix.artifact-suffix }}
       linuxBuilderImage: ${{ needs.build-linux-builder-image.outputs.image }}
-      useBuiltExtensions: ${{ needs.build-extension.result == 'success' }}
     secrets: inherit
 
   deploy-nodejs:

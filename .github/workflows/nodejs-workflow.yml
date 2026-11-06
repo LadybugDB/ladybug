@@ -17,11 +17,6 @@ on:
         required: false
         default: "ghcr.io/ladybugdb/ubuntu-22.04-gcc13:latest"
         type: string
-      useBuiltExtensions:
-        description: "Use the lbug-extensions artifact from this workflow run for Node.js tests"
-        required: false
-        default: false
-        type: boolean
   workflow_call:
     inputs:
       isNightly:
@@ -43,10 +38,6 @@ on:
         type: string
         required: false
         default: "ghcr.io/ladybugdb/ubuntu-22.04-gcc13:latest"
-      useBuiltExtensions:
-        type: boolean
-        required: false
-        default: false
 
 jobs:
   build-nodejs:
@@ -250,73 +241,6 @@ jobs:
           ccache -s
           make GEN=Ninja nodejs
           ccache -s
-
-      - name: Download built extensions for tests
-        if: ${{ inputs.useBuiltExtensions == true }}
-        uses: actions/download-artifact@v4
-        with:
-          name: lbug-extensions
-          path: nodejs-extension-repo
-
-      - name: Start built extension repository for tests (non-Windows)
-        if: ${{ inputs.useBuiltExtensions == true && matrix.platform != 'win32' }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p nodejs-extension-server
-          cp -R nodejs-extension-repo/releases/. nodejs-extension-server/
-          if [ -d nodejs-extension-repo/dataset ]; then
-            cp -R nodejs-extension-repo/dataset nodejs-extension-server/dataset
-          fi
-          extension_server="$PWD/nodejs-extension-server"
-          python3 -m http.server 8000 --bind 127.0.0.1 --directory "$extension_server" > nodejs-extension-server.log 2>&1 &
-          case "${{ matrix.platform }}-${{ matrix.arch }}" in
-            darwin-x64) platform_dir="osx_amd64" ;;
-            darwin-arm64) platform_dir="osx_arm64" ;;
-            linux-x64) platform_dir="linux_amd64" ;;
-            linux-arm64) platform_dir="linux_arm64" ;;
-            *) echo "Unsupported extension test platform: ${{ matrix.platform }}-${{ matrix.arch }}" && exit 1 ;;
-          esac
-          extension_version="$(grep 'DLBUG_EXTENSION_VERSION' CMakeLists.txt | cut -d '"' -f 2)"
-          extension_url="http://127.0.0.1:8000/v${extension_version}/${platform_dir}/json/libjson.lbug_extension"
-          for _ in {1..10}; do
-            if curl --fail --silent --show-error --noproxy '*' "$extension_url" >/dev/null; then
-              exit 0
-            fi
-            sleep 1
-          done
-          cat nodejs-extension-server.log
-          exit 1
-
-      - name: Start built extension repository for tests (Windows)
-        if: ${{ inputs.useBuiltExtensions == true && matrix.platform == 'win32' }}
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force -Path nodejs-extension-server
-          Copy-Item -Recurse nodejs-extension-repo\releases\* nodejs-extension-server\
-          if (Test-Path nodejs-extension-repo\dataset) {
-            Copy-Item -Recurse nodejs-extension-repo\dataset nodejs-extension-server\dataset
-          }
-          $extensionServer = Join-Path $PWD "nodejs-extension-server"
-          Start-Process -FilePath python -ArgumentList "-m", "http.server", "8000", "--bind", "127.0.0.1", "--directory", $extensionServer -WindowStyle Hidden
-          $platform = "win_amd64"
-          $extensionVersion = (Select-String -Path CMakeLists.txt -Pattern 'DLBUG_EXTENSION_VERSION="([^"]+)"').Matches[0].Groups[1].Value
-          $url = "http://127.0.0.1:8000/v$extensionVersion/$platform/json/libjson.lbug_extension"
-          for ($i = 0; $i -lt 10; $i++) {
-            try {
-              Invoke-WebRequest -UseBasicParsing -Uri $url -TimeoutSec 2 | Out-Null
-              exit 0
-            } catch {
-              Start-Sleep -Seconds 1
-            }
-          }
-          Invoke-WebRequest -UseBasicParsing -Uri $url -TimeoutSec 2
-
-      - name: Use built extension repository in Node.js tests
-        if: ${{ inputs.useBuiltExtensions == true }}
-        shell: bash
-        run: |
-          sed -i.bak "s|INSTALL JSON|INSTALL JSON FROM 'http://127.0.0.1:8000/'|" tools/nodejs_api/test/test_data_type.js
 
       - name: Run Node.js tests
         working-directory: tools/nodejs_api
