@@ -962,6 +962,45 @@ TEST_F(WalTest, CorruptedWALTailTruncated2) {
     ASSERT_EQ(res->getNumTuples(), 3);
 }
 
+// A torn WAL tail inside a multi-page string record (ENOSPC/power loss mid-commit) must not
+// crash the replayer: BufferedFileReader reads cross a page boundary with a short final page.
+// Non-strict recovery drops the torn transaction; strict recovery throws a catchable error.
+TEST_F(WalTest, TornWALTailInsideLargeStringRecord) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CALL force_checkpoint_on_close=false")->isSuccess());
+    ASSERT_TRUE(conn->query("CALL auto_checkpoint=false")->isSuccess());
+    ASSERT_TRUE(
+        conn->query("CREATE NODE TABLE Blob(id INT64 PRIMARY KEY, s STRING);")->isSuccess());
+    // Enough string data to span several 4KiB WAL pages, so the torn record's reads cross a
+    // page boundary into a short final page.
+    {
+        // Destroy the result before tearing down the DB below.
+        auto insertRes = conn->query("UNWIND range(0, 7) AS i CREATE (:Blob {id: i, s: "
+                                     "repeat(CAST(i AS STRING) + '-', 1500)});");
+        ASSERT_TRUE(insertRes->isSuccess()) << insertRes->getErrorMessage();
+    }
+    auto walFilePath = lbug::storage::StorageUtils::getWALFilePath(databasePath);
+    ASSERT_TRUE(std::filesystem::exists(walFilePath));
+    const auto walSize = std::filesystem::file_size(walFilePath);
+    ASSERT_GT(walSize, 8192);
+    conn.reset();
+    database.reset();
+    // Cut into the last transaction's records so the WAL ends mid-string.
+    std::filesystem::resize_file(walFilePath, walSize - 200);
+    // Strict recovery throws instead of crashing the process.
+    systemConfig->throwOnWalReplayFailure = true;
+    EXPECT_THROW(createDBAndConn(), lbug::common::Exception);
+    // Non-strict recovery drops the torn transaction instead of crashing.
+    systemConfig->throwOnWalReplayFailure = false;
+    createDBAndConn();
+    auto res = conn->query("MATCH (b:Blob) RETURN count(*);");
+    ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+    ASSERT_TRUE(res->hasNext());
+    EXPECT_EQ(res->getNext()->getValue(0)->getValue<int64_t>(), 0);
+}
+
 TEST_F(WalTest, WALFileLeftoverFromPreviousDBNewReadOnlyDB) {
     if (inMemMode || systemConfig->checkpointThreshold == 0) {
         GTEST_SKIP();
