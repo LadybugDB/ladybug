@@ -1927,7 +1927,7 @@ TEST_F(CheckpointRetryAfterFailureTest, StrayAbortRecordAfterCheckpointIsIgnored
     conn.reset();
     database.reset();
     std::ofstream wal{walPath, std::ios::binary | std::ios::app};
-    for (const auto start : {uint64_t{1}, blockBeforeLastCheckpoint}) {
+    for (const auto start : {uint64_t{1}, static_cast<uint64_t>(blockBeforeLastCheckpoint)}) {
         const auto record = serializeCheckpointRecord(AbortRecord{start});
         wal.write(reinterpret_cast<const char*>(record.data.get()), record.size);
         if (enableChecksums) {
