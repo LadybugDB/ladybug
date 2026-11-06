@@ -57,7 +57,7 @@ void Planner::appendHashJoin(const std::vector<expression_pair>& joinConditions,
     }
     // Update cost
     const auto estimatedOutputCardinality = cardinalityEstimator.estimateHashJoin(joinConditions,
-        probePlan.getLastOperatorRef(), buildPlan.getLastOperatorRef());
+        joinType, probePlan.getLastOperatorRef(), buildPlan.getLastOperatorRef());
     hashJoin->setCardinality(estimatedOutputCardinality);
     // Cost the build side with the build keys (same filter as getJoinNodeIDs, applied to
     // pair.second). For cross-variable conditions (e.g. an unnested OPTIONAL MATCH

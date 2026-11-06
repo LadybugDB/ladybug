@@ -8,6 +8,7 @@ class ClientContext;
 }
 namespace planner {
 class CardinalityEstimator;
+class LogicalScanNodeTable;
 } // namespace planner
 namespace optimizer {
 
@@ -35,8 +36,9 @@ struct PredicateSet {
 
     void addPredicate(std::shared_ptr<binder::Expression> predicate);
     std::shared_ptr<binder::Expression> popNodePKEqualityComparison(
-        const binder::Expression& nodeID);
-    PrimaryKeyRangePredicate popNodePKRangeComparison(const binder::Expression& nodeID);
+        const binder::Expression& nodeID, common::table_id_t tableID);
+    PrimaryKeyRangePredicate popNodePKRangeComparison(const binder::Expression& nodeID,
+        common::table_id_t tableID);
     binder::expression_vector getAllPredicates();
 
 private:
@@ -76,6 +78,7 @@ private:
     // Push FILTER into SCAN_NODE_TABLE, and turn index lookup into INDEX_SCAN.
     std::shared_ptr<planner::LogicalOperator> visitScanNodeTableReplace(
         const std::shared_ptr<planner::LogicalOperator>& op);
+    void prunePartitions(planner::LogicalScanNodeTable& scan);
     // Push Filter into EXTEND.
     std::shared_ptr<planner::LogicalOperator> visitExtendReplace(
         const std::shared_ptr<planner::LogicalOperator>& op);

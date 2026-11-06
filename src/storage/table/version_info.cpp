@@ -263,8 +263,16 @@ void VectorVersionInfo::getSelVectorForScan(const transaction_t startTS,
     const transaction_t transactionID, SelectionVector& selVector, const row_idx_t startRow,
     const row_idx_t numRows, sel_t startOutputPos) const {
     auto numSelected = selVector.getSelSize();
-    if (deletionStatus == DeletionStatus::NO_DELETED &&
-        insertionStatus == InsertionStatus::ALWAYS_INSERTED) {
+    // With one insert version for the whole vector, isInserted ignores the row (as in
+    // getNumInsertedRows); without deletions, a reader that sees that insert takes the whole range
+    // and an unfiltered selection stays unfiltered. That version covers only the rows appended so
+    // far, so the range must stay inside them, as ChunkedNodeGroup::scan asserts; slots after them
+    // would be selected too.
+    const auto allVisible =
+        deletionStatus == DeletionStatus::NO_DELETED &&
+        (insertionStatus == InsertionStatus::ALWAYS_INSERTED ||
+            (isSameInsertionVersion() && isInserted(startTS, transactionID, startRow)));
+    if (allVisible) {
         if (selVector.isUnfiltered()) {
             selVector.setSelSize(selVector.getSelSize() + numRows);
         } else {
@@ -358,6 +366,7 @@ row_idx_t VectorVersionInfo::getNumInsertedRows(transaction_t startTS, transacti
         return 0;
     }
     if (insertionStatus == InsertionStatus::ALWAYS_INSERTED || isSameInsertionVersion()) {
+        // The range must stay inside the appended rows, as in getSelVectorForScan.
         return isInserted(startTS, transactionID, startRow) ? numRows : 0;
     }
     // Rows are appended in commit order by one writer at a time and rolled back from the end,

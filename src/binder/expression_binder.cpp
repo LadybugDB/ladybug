@@ -1,5 +1,7 @@
 #include "binder/expression_binder.h"
 
+#include <algorithm>
+
 #include "binder/binder.h"
 #include "binder/expression/case_expression.h"
 #include "binder/expression/expression_util.h"
@@ -12,6 +14,7 @@
 #include "expression_evaluator/expression_evaluator_utils.h"
 #include "function/arithmetic/vector_arithmetic_functions.h"
 #include "function/cast/vector_cast_functions.h"
+#include "function/utility/vector_utility_functions.h"
 #include "parser/expression/parsed_expression_visitor.h"
 #include "parser/expression/parsed_parameter_expression.h"
 #include <format>
@@ -204,8 +207,13 @@ std::shared_ptr<Expression> ExpressionBinder::simplifyExpression(
         return simplifyBooleanExpression(expression);
     case ExpressionType::CASE_ELSE:
         return simplifyCaseExpression(expression);
-    case ExpressionType::FUNCTION:
+    case ExpressionType::FUNCTION: {
+        const auto& name = expression->constCast<ScalarFunctionExpression>().getFunction().name;
+        if (name == CoalesceFunction::name || name == IfNullFunction::name) {
+            return simplifyCoalesceExpression(expression);
+        }
         return simplifyArithmeticExpression(expression);
+    }
     default:
         return expression;
     }
@@ -371,6 +379,43 @@ std::shared_ptr<Expression> ExpressionBinder::simplifyCaseExpression(
         return elseExpression;
     }
     return changed ? simplifiedCaseExpression : expression;
+}
+
+static bool containsAggregate(const Expression& expression) {
+    if (expression.expressionType == ExpressionType::AGGREGATE_FUNCTION) {
+        return true;
+    }
+    return std::ranges::any_of(ExpressionChildrenCollector::collectChildren(expression),
+        [](const auto& child) { return containsAggregate(*child); });
+}
+
+std::shared_ptr<Expression> ExpressionBinder::simplifyCoalesceExpression(
+    const std::shared_ptr<Expression>& expression) {
+    // Arguments after a non-NULL literal are never returned, so they are dropped and not evaluated.
+    for (auto i = 0u; i + 1 < expression->getNumChildren(); ++i) {
+        const auto child = expression->getChild(i);
+        if (child->expressionType != ExpressionType::LITERAL ||
+            ExpressionUtil::isNullLiteral(*child)) {
+            continue;
+        }
+        // Dropping an aggregate could stop the projection from aggregating its rows.
+        for (auto j = i + 1; j < expression->getNumChildren(); ++j) {
+            if (containsAggregate(*expression->getChild(j))) {
+                return expression;
+            }
+        }
+        auto children = expression->getChildren();
+        children.resize(i + 1);
+        auto result = bindScalarFunctionExpression(children, CoalesceFunction::name);
+        // Keep the original call if the shorter one would get another result type.
+        if (result->dataType != expression->dataType) {
+            return expression;
+        }
+        // Keep the column name the call gives an unaliased projection item.
+        result->setAlias(expression->hasAlias() ? expression->getAlias() : expression->toString());
+        return result;
+    }
+    return expression;
 }
 
 std::shared_ptr<Expression> ExpressionBinder::foldExpression(

@@ -15,6 +15,7 @@
 #include "common/exception/binder.h"
 #include "common/exception/exception.h"
 #include "common/partition_routing_hook.h"
+#include "common/string_utils.h"
 #include "common/types/types.h"
 #include "common/utils.h"
 #include "function/cast/functions/cast_from_string_functions.h"
@@ -175,7 +176,8 @@ static std::shared_ptr<PropertyExpression> createPropertyExpression(const std::s
         auto isPrimaryKey = false;
         if (entry->getTableType() == TableType::NODE) {
             auto nodeEntry = entry->constPtrCast<NodeTableCatalogEntry>();
-            isPrimaryKey = nodeEntry->getPrimaryKeyName() == propertyName;
+            isPrimaryKey =
+                StringUtils::caseInsensitiveEquals(nodeEntry->getPrimaryKeyName(), propertyName);
         }
         auto info = SingleLabelPropertyInfo(exists, isPrimaryKey);
         infos.insert({entry->getTableID(), std::move(info)});

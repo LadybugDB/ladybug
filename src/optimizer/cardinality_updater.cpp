@@ -91,7 +91,7 @@ void CardinalityUpdater::visitHashJoin(planner::LogicalOperator* op) {
     auto& hashJoin = op->cast<planner::LogicalHashJoin&>();
     DASSERT(hashJoin.getNumChildren() >= 2);
     hashJoin.setCardinality(cardinalityEstimator.estimateHashJoin(hashJoin.getJoinConditions(),
-        *hashJoin.getChild(0), *hashJoin.getChild(1)));
+        hashJoin.getJoinType(), *hashJoin.getChild(0), *hashJoin.getChild(1)));
 }
 
 void CardinalityUpdater::visitCrossProduct(planner::LogicalOperator* op) {

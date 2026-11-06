@@ -101,6 +101,12 @@ std::shared_ptr<LogicalOperator> UnwindDedupOptimizer::visitMergeReplace(
     if (hasOnMatchOrOnCreate) {
         return op;
     }
+    // A repeated key with other values in its row must reach MERGE, which keeps that row (see
+    // LogicalMerge::computeSuppressDuplicateCreatedOutput); a dedup on the keys would drop it.
+    // Later passes only remove expressions from MERGE's input, so the flag never turns off.
+    if (merge->getInsertRelInfos().empty() && !merge->suppressesDuplicateCreatedOutput()) {
+        return op;
+    }
 
     auto mergeChild = merge->getChild(0);
     if (mergeChild->getOperatorType() != LogicalOperatorType::HASH_JOIN) {

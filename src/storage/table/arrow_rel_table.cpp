@@ -85,27 +85,6 @@ static bool isArrowEndpointCompatibleWithPK(const ArrowSchema* endpointSchema,
     return false;
 }
 
-void ArrowRelTableScanState::setToTable(const transaction::Transaction* transaction, Table* table_,
-    std::vector<column_id_t> columnIDs_, std::vector<ColumnPredicateSet> columnPredicateSets_,
-    RelDataDirection direction_) {
-    // Same behavior as IceDiskRelTable: no local table for external data sources.
-    TableScanState::setToTable(transaction, table_, std::move(columnIDs_),
-        std::move(columnPredicateSets_));
-    columns.resize(columnIDs.size());
-    direction = direction_;
-    for (size_t i = 0; i < columnIDs.size(); ++i) {
-        auto columnID = columnIDs[i];
-        if (columnID == INVALID_COLUMN_ID || columnID == ROW_IDX_COLUMN_ID) {
-            columns[i] = nullptr;
-        } else {
-            columns[i] = table->cast<RelTable>().getColumn(columnID, direction);
-        }
-    }
-    csrOffsetColumn = table->cast<RelTable>().getCSROffsetColumn(direction);
-    csrLengthColumn = table->cast<RelTable>().getCSRLengthColumn(direction);
-    nodeGroupIdx = INVALID_NODE_GROUP_IDX;
-}
-
 ArrowRelTable::ArrowRelTable(catalog::RelGroupCatalogEntry* relGroupEntry, table_id_t fromTableID,
     table_id_t toTableID, const StorageManager* storageManager, MemoryManager* memoryManager,
     const NodeTable* fromNodeTable, const NodeTable* toNodeTable,
@@ -228,7 +207,7 @@ ArrowRelTable::~ArrowRelTable() {
 
 void ArrowRelTable::initScanState([[maybe_unused]] transaction::Transaction* transaction,
     TableScanState& scanState, bool resetCachedBoundNodeSelVec) const {
-    auto& relScanState = scanState.cast<RelTableScanState>();
+    auto& relScanState = scanState.cast<ColumnarRelTableScanState>();
     relScanState.source = TableScanSource::COMMITTED;
     relScanState.nodeGroup = nullptr;
     relScanState.nodeGroupIdx = INVALID_NODE_GROUP_IDX;
@@ -294,7 +273,7 @@ bool ArrowRelTable::scanInternal(transaction::Transaction* transaction, TableSca
 }
 
 bool ArrowRelTable::scanFlat(transaction::Transaction* transaction, TableScanState& scanState) {
-    auto& relScanState = scanState.cast<RelTableScanState>();
+    auto& relScanState = scanState.cast<ColumnarRelTableScanState>();
     if (relScanState.arrowScanCompleted || !relScanState.arrowSrcKeyVector ||
         !relScanState.arrowDstKeyVector) {
         return false;
@@ -439,7 +418,7 @@ bool ArrowRelTable::scanFlat(transaction::Transaction* transaction, TableScanSta
 }
 
 bool ArrowRelTable::scanCSR(TableScanState& scanState) {
-    auto& relScanState = scanState.cast<RelTableScanState>();
+    auto& relScanState = scanState.cast<ColumnarRelTableScanState>();
     if (relScanState.arrowScanCompleted || !relScanState.arrowSrcKeyVector ||
         !relScanState.arrowDstKeyVector) {
         return false;

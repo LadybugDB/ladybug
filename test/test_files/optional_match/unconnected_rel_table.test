@@ -1,0 +1,123 @@
+-DATASET CSV empty
+
+--
+
+-CASE PatternFromTableTheRelTableDoesNotConnect
+-STATEMENT CREATE NODE TABLE P(id INT64 PRIMARY KEY)
+---- ok
+-STATEMENT CREATE NODE TABLE O(id INT64 PRIMARY KEY)
+---- ok
+-STATEMENT CREATE REL TABLE K(FROM P TO P)
+---- ok
+-STATEMENT UNWIND range(0, 2) AS i CREATE (:P {id: i}), (:O {id: 100 + i})
+---- ok
+-STATEMENT MATCH (a:P {id: 0}), (b:P {id: 1}) CREATE (a)-[:K]->(b)
+---- ok
+-STATEMENT MATCH (a:P {id: 2}), (b:P {id: 0}) CREATE (a)-[:K]->(b)
+---- ok
+-STATEMENT MATCH (o:O) OPTIONAL MATCH (o)-[:K]->(x:P) RETURN o.id, x.id
+---- 3
+100|
+101|
+102|
+-STATEMENT MATCH (o:O) OPTIONAL MATCH (o)<-[:K]-(x:P) RETURN o.id, x.id
+---- 3
+100|
+101|
+102|
+-STATEMENT MATCH (o:O) OPTIONAL MATCH (o)-[:K]->(x) RETURN o.id, x.id
+---- 3
+100|
+101|
+102|
+-STATEMENT MATCH (o:O) WHERE EXISTS { MATCH (o)-[:K]->(:P) } RETURN o.id
+---- 0
+-STATEMENT MATCH (o:O) WHERE (o)-[:K]->(:P) RETURN o.id
+---- 0
+-STATEMENT MATCH (o:O) RETURN o.id, COUNT { MATCH (o)-[:K]->(:P) }
+---- 3
+100|0
+101|0
+102|0
+-STATEMENT MATCH (o:O) WHERE EXISTS { MATCH (o)<-[:K]-() } RETURN o.id
+---- 0
+-STATEMENT MATCH (o:O) RETURN o.id, COUNT { MATCH (o)-[:K]->() }
+---- 3
+100|0
+101|0
+102|0
+-STATEMENT MATCH (o:O) OPTIONAL MATCH (o)-[:K]->(x:P)-[:K]->(y:P) RETURN o.id, y.id
+---- 3
+100|
+101|
+102|
+-STATEMENT MATCH (p:P) WHERE EXISTS { MATCH (p)-[:K]->(:O) } RETURN p.id
+---- 0
+-STATEMENT MATCH (p:P) OPTIONAL MATCH (p)-[:K]->(x:O) RETURN p.id, x.id
+---- 3
+0|
+1|
+2|
+-STATEMENT MATCH (p:P) OPTIONAL MATCH (p)-[:K]->(x:P) RETURN p.id, x.id
+---- 3
+0|1
+1|
+2|0
+-STATEMENT MATCH (n) OPTIONAL MATCH (n)-[:K]->(x:P) RETURN n.id, x.id
+---- 6
+0|1
+1|
+2|0
+100|
+101|
+102|
+
+-CASE PatternOverRelTableWithDifferentEnds
+-STATEMENT CREATE NODE TABLE A(id INT64 PRIMARY KEY)
+---- ok
+-STATEMENT CREATE NODE TABLE B(id INT64 PRIMARY KEY)
+---- ok
+-STATEMENT CREATE REL TABLE R(FROM A TO B)
+---- ok
+-STATEMENT UNWIND range(0, 2) AS i CREATE (:A {id: i}), (:B {id: 10 + i})
+---- ok
+-STATEMENT MATCH (a:A {id: 0}), (b:B {id: 11}) CREATE (a)-[:R]->(b)
+---- ok
+-STATEMENT MATCH (a:A) WHERE EXISTS { MATCH (a)<-[:R]-() } RETURN a.id
+---- 0
+-STATEMENT MATCH (b:B) OPTIONAL MATCH (b)-[:R]->(x:B) RETURN b.id, x.id
+---- 3
+10|
+11|
+12|
+-STATEMENT MATCH (b:B) WHERE EXISTS { MATCH (b)<-[:R]-(:B) } RETURN b.id
+---- 0
+-STATEMENT MATCH (a:A) OPTIONAL MATCH (a)-[:R]->(x:B) RETURN a.id, x.id
+---- 3
+0|11
+1|
+2|
+-STATEMENT MATCH (b:B) OPTIONAL MATCH (b)<-[:R]-(x:A) RETURN b.id, x.id
+---- 3
+10|
+11|0
+12|
+
+-CASE RelTableWithoutFromToPairs
+-STATEMENT CREATE NODE TABLE V1(id INT64 PRIMARY KEY)
+---- ok
+-STATEMENT CREATE NODE TABLE V2(id INT64 PRIMARY KEY)
+---- ok
+-STATEMENT CREATE REL TABLE E(FROM V1 TO V2)
+---- ok
+-STATEMENT CREATE (:V1 {id: 1}), (:V2 {id: 2})
+---- ok
+-STATEMENT MATCH (a:V1 {id: 1}), (b:V2 {id: 2}) CREATE (a)-[:E]->(b)
+---- ok
+-STATEMENT ALTER TABLE E DROP FROM V1 TO V2
+---- ok
+-STATEMENT MATCH (a:V1) OPTIONAL MATCH (a)-[:E]->(b) RETURN a.id, b.id
+---- 1
+1|
+-STATEMENT MATCH (a:V1) WHERE EXISTS { MATCH (a)-[:E]->() } RETURN a.id
+---- 0

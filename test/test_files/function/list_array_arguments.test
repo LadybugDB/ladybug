@@ -1,0 +1,28 @@
+-DATASET CSV empty
+
+--
+
+-CASE LengthChangingListFunctionsOnArrayReturnList
+-LOG A function whose result can be longer or shorter than its ARRAY argument returns a LIST
+-STATEMENT RETURN typeof(list_append(array_value(1, 2, 3), 9)), typeof(array_append(array_value(1, 2, 3), 9)), typeof(list_prepend(array_value(1, 2, 3), 0)), typeof(list_distinct(array_value(3, 3, 2)));
+---- 1
+INT64[]|INT64[]|INT64[]|INT64[]
+-STATEMENT RETURN list_append(array_value(1, 2, 3), 9), list_prepend(array_value(1, 2, 3), 0), list_distinct(array_value(3, 3, 2));
+---- 1
+[1,2,3,9]|[0,1,2,3]|[3,2]
+-STATEMENT RETURN typeof(array_value(1, 2, 3)), typeof(list_append([1, 2], 3));
+---- 1
+INT64[3]|INT64[]
+-LOG Writing a longer result back into the ARRAY column is refused instead of stored
+-STATEMENT CREATE NODE TABLE A(id INT64 PRIMARY KEY, arr INT64[3]);
+---- ok
+-STATEMENT CREATE (:A {id: 1, arr: [1, 2, 3]});
+---- ok
+-STATEMENT MATCH (a:A) SET a.arr = list_append(a.arr, 9);
+---- error
+Conversion exception: Unsupported casting LIST with incorrect list entry to ARRAY. Expected: 3, Actual: 4.
+-STATEMENT MATCH (a:A) SET a.arr = list_distinct([1, 1, 2, 3]);
+---- ok
+-STATEMENT MATCH (a:A) RETURN a.arr;
+---- 1
+[1,2,3]

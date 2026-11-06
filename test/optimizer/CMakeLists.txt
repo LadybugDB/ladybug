@@ -1,1 +1,2 @@
 add_lbug_test(optimizer_test optimizer_test.cpp)
+add_lbug_test(partition_pruning_test partition_pruning_test.cpp)

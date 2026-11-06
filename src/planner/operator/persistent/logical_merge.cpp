@@ -4,8 +4,9 @@
 
 #include "binder/expression/node_expression.h"
 #include "binder/expression/rel_expression.h"
-#include "binder/expression_visitor.h"
+#include "binder/expression/scalar_function_expression.h"
 #include "common/cast.h"
+#include "function/cast/cast_function_bind_data.h"
 #include "planner/operator/factorization/flatten_resolver.h"
 
 using namespace lbug::binder;
@@ -14,6 +15,30 @@ using namespace lbug::common;
 namespace lbug {
 namespace planner {
 
+// A CAST between integer types keeps distinct values distinct or fails. Casts are recognised by
+// their bind data, since a user function can be named CAST_*. A casting function registered for a
+// user-defined integer type binds the same way and is taken to be injective too.
+static bool isIntegerCast(const Expression& expression) {
+    if (expression.expressionType != ExpressionType::FUNCTION) {
+        return false;
+    }
+    auto bindData = expression.constCast<ScalarFunctionExpression>().getBindData();
+    return dynamic_cast<const function::CastFunctionBindData*>(bindData) != nullptr &&
+           LogicalTypeUtils::isIntegral(expression.getDataType()) &&
+           LogicalTypeUtils::isIntegral(expression.getChild(0)->getDataType());
+}
+
+// The variable a key is, under integer casts: `{v: i}` on an INT8 column binds as
+// `CAST_TO_INT8(i)`. A key computed from a variable (`i % 5`, `r.id`, a rounding cast) leaves the
+// variable as payload, since rows with the same key can differ in it.
+static const Expression* getKeyVariable(const Expression& key) {
+    auto expression = &key;
+    while (isIntegerCast(*expression)) {
+        expression = expression->getChild(0).get();
+    }
+    return expression->expressionType == ExpressionType::VARIABLE ? expression : nullptr;
+}
+
 static bool hasNonKeyPayload(const Schema& schema, const expression_vector& keys,
     const std::vector<LogicalInsertInfo>& insertNodeInfos,
     const std::vector<LogicalInsertInfo>& insertRelInfos, const Expression& existenceMark) {
@@ -21,10 +46,8 @@ static bool hasNonKeyPayload(const Schema& schema, const expression_vector& keys
     keyNames.insert(existenceMark.getUniqueName());
     for (auto& key : keys) {
         keyNames.insert(key->getUniqueName());
-        DependentVarNameCollector collector;
-        collector.visit(key);
-        for (auto& name : collector.getVarNames()) {
-            keyNames.insert(name);
+        if (auto variable = getKeyVariable(*key)) {
+            keyNames.insert(variable->getUniqueName());
         }
     }
     for (auto& info : insertNodeInfos) {

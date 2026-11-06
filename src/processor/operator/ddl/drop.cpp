@@ -5,6 +5,7 @@
 #include "catalog/catalog_entry/node_table_catalog_entry.h"
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
 #include "common/exception/binder.h"
+#include "common/exception/catalog.h"
 #include "common/string_utils.h"
 #include "main/client_context.h"
 #include "main/database.h"
@@ -14,6 +15,7 @@
 #include "storage/storage_manager.h"
 #include "storage/table/node_table.h"
 #include "transaction/transaction.h"
+#include "transaction/transaction_manager.h"
 #include <format>
 
 using namespace lbug::catalog;
@@ -86,6 +88,9 @@ void Drop::dropTable(const main::ClientContext* context) {
         }
     }
     auto entry = catalog->getTableCatalogEntry(transaction, dropInfo.name);
+    // Storage tables this DROP removes, keyed as LocalStorage keys them.
+    const auto ownerCatalogName = entry->getOwningCatalogName();
+    std::vector<table_id_t> storageTableIDs;
     switch (entry->getType()) {
     case CatalogEntryType::NODE_TABLE_ENTRY: {
         auto* nodeEntry = entry->ptrCast<NodeTableCatalogEntry>();
@@ -111,6 +116,7 @@ void Drop::dropTable(const main::ClientContext* context) {
             }
         }
         for (auto* droppingEntry : droppingTables) {
+            storageTableIDs.push_back(droppingEntry->getTableID());
             for (auto& indexEntry : catalog->getIndexEntries(transaction)) {
                 if (indexEntry->getTableID() == droppingEntry->getTableID()) {
                     if (StringUtils::caseInsensitiveEquals(indexEntry->getIndexType(), "HASH") ||
@@ -132,12 +138,25 @@ void Drop::dropTable(const main::ClientContext* context) {
         }
     } break;
     case CatalogEntryType::REL_GROUP_ENTRY: {
-        // Do nothing
+        for (auto& relEntryInfo : entry->ptrCast<RelGroupCatalogEntry>()->getRelEntryInfos()) {
+            storageTableIDs.push_back(relEntryInfo.oid);
+        }
     } break;
     default:
         UNREACHABLE_CODE;
     }
     catalog->dropTableEntryAndIndex(transaction, dropInfo.name);
+    // Checked after the catalog change, as TransactionManager::addLocalWriter requires.
+    auto* transactionManager = transaction::TransactionManager::Get(*context);
+    for (auto tableID : storageTableIDs) {
+        if (transactionManager->hasLocalWriterOtherThan(ownerCatalogName, tableID,
+                transaction->getLocalStorage())) {
+            throw CatalogException(std::format("Write-write conflict on dropping table {}: "
+                                               "another transaction has uncommitted inserts "
+                                               "into it.",
+                dropInfo.name));
+        }
+    }
     appendMessage(std::format("Table {} has been dropped.", dropInfo.name), memoryManager);
 }
 

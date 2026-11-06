@@ -33,13 +33,14 @@ WAL::WAL(const std::string& dbPath, bool readOnly, bool enableChecksums, Virtual
     StorageManager* storageManager)
     : walPath{StorageUtils::getWALFilePath(dbPath)},
       checkpointWalPath{StorageUtils::getCheckpointWALFilePath(dbPath)},
+      pinnedCheckpointMarkerPath{StorageUtils::getPinnedCheckpointMarkerPath(dbPath)},
       inMemory{main::DBConfig::isDBPathInMemory(dbPath)}, readOnly{readOnly}, vfs{vfs},
       storageManager{storageManager}, enableChecksums(enableChecksums) {}
 
 WAL::~WAL() {}
 
 void WAL::logCommittedWAL(LocalWAL& localWAL, main::ClientContext* context,
-    uint64_t& commitSequence) {
+    uint64_t& commitSequence, uint64_t* blockStart) {
     DASSERT(!readOnly);
     commitSequence = 0;
     if (inMemory || localWAL.getSize() == 0) {
@@ -48,14 +49,38 @@ void WAL::logCommittedWAL(LocalWAL& localWAL, main::ClientContext* context,
     std::unique_lock lck{mtx};
     throwIfPoisonedNoLock();
     initWriter(context);
+    if (blockStart != nullptr) {
+        // No checksum entry is open between records, so the writer's size is the file offset of
+        // the block's first record, the offset WALReplayer::dryReplay reads back for it.
+        *blockStart = serializer->getWriter()->getSize();
+    }
     localWAL.inMemWriter->flush(*serializer->getWriter());
+    DASSERT(blockStart == nullptr ||
+            serializer->getWriter()->getSize() == *blockStart + localWAL.getSize());
     commitSequence = ++appendedCommitSequence;
     waitForDurabilityNoLock(commitSequence, lck);
+}
+
+// Holds the WAL lock across the sync, like the CHECKPOINT record: this runs only after a failure.
+void WAL::logAbort(uint64_t abortedBlockStart) {
+    DASSERT(!readOnly);
+    std::unique_lock lck{mtx};
+    throwIfPoisonedNoLock();
+    // The aborted transaction counts as an active writer until it is rolled back, and a
+    // checkpoint rotates or retires the WAL only once no writer is active, so the file holding its
+    // COMMIT is still the open one: dryReplay matches an ABORT only within one file.
+    if (serializer == nullptr || abortedBlockStart >= serializer->getWriter()->getSize()) {
+        throw RuntimeException(
+            "Cannot log an ABORT record: the WAL file holding its COMMIT is no longer open.");
+    }
+    addNewWALRecordNoLock(AbortRecord{abortedBlockStart});
+    flushAndSyncNoLock();
 }
 
 void WAL::logAndFlushCheckpoint(main::ClientContext* context) {
     std::unique_lock lck{mtx};
     throwIfPoisonedNoLock();
+    removePinnedCheckpointMarkerNoLock(context);
     initWriter(context);
     CheckpointRecord walRecord{CHECKPOINT_BUNDLE_FORMAT_VERSION};
     checkpointRecordMayExist = true;
@@ -360,6 +385,36 @@ uint64_t WAL::getFrozenWALFileSize() {
 bool WAL::mayHaveCheckpointRecord() {
     std::unique_lock lck{mtx};
     return checkpointRecordMayExist;
+}
+
+bool WAL::isPoisoned() {
+    std::unique_lock lck{mtx};
+    return poisoned;
+}
+
+void WAL::writePinnedCheckpointMarker(main::ClientContext* context) {
+    std::unique_lock lck{mtx};
+    auto markerFile = vfs->openFile(pinnedCheckpointMarkerPath,
+        FileOpenFlags(FileFlags::WRITE | FileFlags::CREATE_IF_NOT_EXISTS), context);
+    const uint8_t applied = StorageUtils::PINNED_CHECKPOINT_MARKER_APPLIED;
+    markerFile->writeFile(&applied, 1, 0);
+    markerFile->truncate(1);
+    markerFile->syncFile();
+    markerFile.reset();
+    vfs->syncParentDirectory(pinnedCheckpointMarkerPath);
+}
+
+void WAL::removePinnedCheckpointMarker(main::ClientContext* context) {
+    std::unique_lock lck{mtx};
+    removePinnedCheckpointMarkerNoLock(context);
+}
+
+void WAL::removePinnedCheckpointMarkerNoLock(main::ClientContext* context) {
+    if (!vfs->fileOrPathExists(pinnedCheckpointMarkerPath, context)) {
+        return;
+    }
+    vfs->removeFileIfExists(pinnedCheckpointMarkerPath, context);
+    vfs->syncParentDirectory(pinnedCheckpointMarkerPath);
 }
 
 void WAL::throwIfPoisoned() {

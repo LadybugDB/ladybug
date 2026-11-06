@@ -24,3 +24,20 @@
 1
 1
 1
+
+-CASE NestedSkipLimitComposes
+-LOG A SKIP below another SKIP/LIMIT must add to the rows DISTINCT keeps, not replace the outer SKIP
+-STATEMENT UNWIND range(1, 10) AS x WITH DISTINCT x AS m SKIP 2 RETURN CASE WHEN m >= 0 THEN 1 ELSE 0 END AS marker SKIP 3 LIMIT 2;
+---- 2
+1
+1
+-STATEMENT UNWIND range(1, 10) AS x WITH DISTINCT x AS m SKIP 2 RETURN count(*) AS c;
+---- 1
+8
+-STATEMENT UNWIND range(1, 10) AS x WITH DISTINCT x AS m SKIP 2 LIMIT 4 RETURN CASE WHEN m >= 0 THEN 1 ELSE 0 END AS marker SKIP 3 LIMIT 2;
+---- 1
+1
+-STATEMENT UNWIND range(1, 10) AS x WITH DISTINCT x AS m LIMIT 6 RETURN CASE WHEN m >= 0 THEN 1 ELSE 0 END AS marker SKIP 3 LIMIT 2;
+---- 2
+1
+1

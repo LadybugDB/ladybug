@@ -1,7 +1,10 @@
+#include <algorithm>
+
 #include "binder/binder.h"
 #include "binder/expression/case_expression.h"
 #include "binder/expression/expression_util.h"
 #include "binder/expression_binder.h"
+#include "function/cast/vector_cast_functions.h"
 #include "parser/expression/parsed_case_expression.h"
 
 using namespace lbug::common;
@@ -10,23 +13,40 @@ using namespace lbug::parser;
 namespace lbug {
 namespace binder {
 
+// Whether implicitCastIfNecessary would accept casting the expression to the type.
+static bool canImplicitlyCast(const Expression& expression, const LogicalType& type) {
+    return expression.dataType == type || type.containsAny() ||
+           ExpressionUtil::canCastStatically(expression, type) ||
+           function::CastFunction::hasImplicitCast(expression.dataType, type);
+}
+
 std::shared_ptr<Expression> ExpressionBinder::bindCaseExpression(
     const ParsedExpression& parsedExpression) {
     auto& parsedCaseExpression = parsedExpression.constCast<ParsedCaseExpression>();
-    auto resultType = LogicalType::ANY();
-    // Resolve result type by checking each then expression type.
+    // The result type is the common type of every THEN and the ELSE, as for coalesce.
+    expression_vector results;
     for (auto i = 0u; i < parsedCaseExpression.getNumCaseAlternative(); ++i) {
-        auto alternative = parsedCaseExpression.getCaseAlternative(i);
-        auto boundThen = bindExpression(*alternative->thenExpression);
-        if (boundThen->getDataType().getLogicalTypeID() != LogicalTypeID::ANY) {
-            resultType = boundThen->getDataType().copy();
-        }
+        results.push_back(
+            bindExpression(*parsedCaseExpression.getCaseAlternative(i)->thenExpression));
     }
-    // Resolve result type by else expression if above resolving fails.
-    if (resultType.getLogicalTypeID() == LogicalTypeID::ANY &&
-        parsedCaseExpression.hasElseExpression()) {
-        auto elseExpression = bindExpression(*parsedCaseExpression.getElseExpression());
-        resultType = elseExpression->getDataType().copy();
+    if (parsedCaseExpression.hasElseExpression()) {
+        results.push_back(bindExpression(*parsedCaseExpression.getElseExpression()));
+    }
+    auto resultType = LogicalType::ANY();
+    if (!ExpressionUtil::tryCombineDataType(results, resultType) ||
+        !std::all_of(results.begin(), results.end(),
+            [&](const auto& result) { return canImplicitlyCast(*result, resultType); })) {
+        // No common type: take the last typed THEN, else the ELSE, and cast the rest to it.
+        resultType = LogicalType::ANY();
+        for (auto i = 0u; i < parsedCaseExpression.getNumCaseAlternative(); ++i) {
+            if (results[i]->getDataType().getLogicalTypeID() != LogicalTypeID::ANY) {
+                resultType = results[i]->getDataType().copy();
+            }
+        }
+        if (resultType.getLogicalTypeID() == LogicalTypeID::ANY &&
+            parsedCaseExpression.hasElseExpression()) {
+            resultType = results.back()->getDataType().copy();
+        }
     }
     auto name = binder->getUniqueExpressionName(parsedExpression.getRawName());
     // bind ELSE ...

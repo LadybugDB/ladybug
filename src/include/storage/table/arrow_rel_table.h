@@ -15,16 +15,11 @@
 namespace lbug {
 namespace storage {
 
-struct ArrowRelTableScanState final : RelTableScanState {
-    ArrowRelTableScanState(MemoryManager& mm, common::ValueVector* nodeIDVector,
-        std::vector<common::ValueVector*> outputVectors,
-        std::shared_ptr<common::DataChunkState> outChunkState)
-        : RelTableScanState{mm, nodeIDVector, std::move(outputVectors), std::move(outChunkState)} {}
-
-    void setToTable(const transaction::Transaction* transaction, Table* table_,
-        std::vector<common::column_id_t> columnIDs_,
-        std::vector<ColumnPredicateSet> columnPredicateSets_,
-        common::RelDataDirection direction_) override;
+// Concrete columnar scan state for Arrow rel tables. Carries no fields of its own:
+// the Arrow batch cursors live on ColumnarRelTableScanState so one shared state can
+// serve mixed multi-rel scans over Arrow, icebug-disk, native, and extension tables.
+struct ArrowRelTableScanState final : ColumnarRelTableScanState {
+    using ColumnarRelTableScanState::ColumnarRelTableScanState;
 };
 
 class ArrowRelTable final : public ColumnarRelTableBase {

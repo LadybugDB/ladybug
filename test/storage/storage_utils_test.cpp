@@ -45,7 +45,10 @@ TEST(StorageUtilsTest, WindowsDrivePathDoesNotNeedCurrentDirectory) {
 #ifdef __EMSCRIPTEN__
     EXPECT_EQ("C:/adham/db_wasm_iso.lbug", expanded);
 #else
-    EXPECT_EQ(std::filesystem::path{R"(C:\adham\db_wasm_iso.lbug)"}.string(), expanded);
+    // expandPath returns generic_string() (always '/' separators), so compare
+    // against generic_string() which is "C:/..." on Windows, while string()
+    // would be "C:\\..." and mismatch (see StorageUtils::expandPath).
+    EXPECT_EQ(std::filesystem::path{R"(C:\adham\db_wasm_iso.lbug)"}.generic_string(), expanded);
 #endif
 
     const auto expandedDrivePath =
@@ -53,7 +56,8 @@ TEST(StorageUtilsTest, WindowsDrivePathDoesNotNeedCurrentDirectory) {
 #ifdef __EMSCRIPTEN__
     EXPECT_EQ("C:adham/db_wasm_iso.lbug", expandedDrivePath);
 #else
-    EXPECT_EQ(std::filesystem::path{R"(C:adham\db_wasm_iso.lbug)"}.string(), expandedDrivePath);
+    EXPECT_EQ(std::filesystem::path{R"(C:adham\db_wasm_iso.lbug)"}.generic_string(),
+        expandedDrivePath);
 #endif
 #endif
 }

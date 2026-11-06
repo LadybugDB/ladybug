@@ -7,6 +7,13 @@ namespace lbug {
 namespace binder {
 
 bool PropertyExpression::isPrimaryKey() const {
+    // A primary key is unique within its own table, not across the tables a variable spans: the
+    // same key value can exist once in each node table, so for a variable over more than one
+    // label it identifies no single row. Every caller of this overload reads the answer as that
+    // uniqueness guarantee, so a multi-label variable must report false.
+    if (!isSingleLabel()) {
+        return false;
+    }
     for (auto& [id, info] : infos) {
         if (!info.isPrimaryKey) {
             return false;
