@@ -37,8 +37,16 @@ public:
         common::VirtualFileSystem* vfs, StorageManager* storageManager = nullptr);
     ~WAL();
 
-    void logCommittedWAL(LocalWAL& localWAL, main::ClientContext* context,
-        uint64_t& commitSequence);
+    // blockStart, if given, receives the WAL offset where the transaction's records begin.
+    void logCommittedWAL(LocalWAL& localWAL, main::ClientContext* context, uint64_t& commitSequence,
+        uint64_t* blockStart = nullptr);
+    // Logs and syncs that the transaction whose records begin at abortedBlockStart was not
+    // applied after its COMMIT record became durable, so recovery skips it. Throws when no WAL
+    // file is open or the offset lies past its end: recovery matches an ABORT only within the
+    // file of its COMMIT.
+    void logAbort(uint64_t abortedBlockStart);
+    // Removes the pinned-checkpoint marker first, so it never vouches for a record whose shadow is
+    // not applied yet.
     void logAndFlushCheckpoint(main::ClientContext* context);
 
     // Renames the active WAL to the frozen checkpoint WAL. Returns false if there is nothing to
@@ -62,6 +70,10 @@ public:
     // source for WAL pin observability alongside getFileSize() (active).
     uint64_t getFrozenWALFileSize();
     bool mayHaveCheckpointRecord();
+    bool isPoisoned();
+    // See StorageUtils::getPinnedCheckpointMarkerPath.
+    void writePinnedCheckpointMarker(main::ClientContext* context);
+    void removePinnedCheckpointMarker(main::ClientContext* context);
     void throwIfPoisoned();
     void poison(const std::string& reason);
 
@@ -76,11 +88,13 @@ private:
     void waitForDurabilityNoLock(uint64_t commitSequence, std::unique_lock<std::mutex>& lck);
     void flushAndSyncNoLock();
     void writeHeader(main::ClientContext& context);
+    void removePinnedCheckpointMarkerNoLock(main::ClientContext* context);
 
 private:
     std::mutex mtx;
     std::string walPath;
     std::string checkpointWalPath;
+    std::string pinnedCheckpointMarkerPath;
     bool inMemory;
     [[maybe_unused]] bool readOnly;
     common::VirtualFileSystem* vfs;

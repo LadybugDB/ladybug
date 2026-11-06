@@ -30,6 +30,18 @@ static scalar_func_exec_t getListSortExecFunction(const binder::expression_vecto
     return func;
 }
 
+// The list keeps its own type; the sort and null order arguments are cast to STRING.
+static std::unique_ptr<FunctionBindData> getSortBindData(
+    const binder::expression_vector& arguments) {
+    logical_type_vec_t paramTypes;
+    paramTypes.push_back(arguments[0]->getDataType().copy());
+    for (auto i = 1u; i < arguments.size(); ++i) {
+        paramTypes.push_back(LogicalType::STRING());
+    }
+    return std::make_unique<FunctionBindData>(std::move(paramTypes),
+        arguments[0]->getDataType().copy());
+}
+
 static std::unique_ptr<FunctionBindData> ListSortBindFunc(ScalarBindFuncInput input) {
     auto scalarFunction = input.definition->ptrCast<ScalarFunction>();
     if (input.arguments[0]->dataType.getLogicalTypeID() == common::LogicalTypeID::ANY) {
@@ -42,7 +54,7 @@ static std::unique_ptr<FunctionBindData> ListSortBindFunc(ScalarBindFuncInput in
             scalarFunction->execFunc = getListSortExecFunction<ListSort<T>>(input.arguments);
         },
         [](auto) { UNREACHABLE_CODE; });
-    return FunctionBindData::getSimpleBindData(input.arguments, input.arguments[0]->getDataType());
+    return getSortBindData(input.arguments);
 }
 
 static std::unique_ptr<FunctionBindData> ListReverseSortBindFunc(const ScalarBindFuncInput& input) {
@@ -53,7 +65,7 @@ static std::unique_ptr<FunctionBindData> ListReverseSortBindFunc(const ScalarBin
             scalarFunction->execFunc = getListSortExecFunction<ListReverseSort<T>>(input.arguments);
         },
         [](auto) { UNREACHABLE_CODE; });
-    return FunctionBindData::getSimpleBindData(input.arguments, input.arguments[0]->getDataType());
+    return getSortBindData(input.arguments);
 }
 
 function_set ListSortFunction::getFunctionSet() {

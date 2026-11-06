@@ -38,7 +38,11 @@ public:
           propertyName{other.propertyName}, uniqueVarName{other.uniqueVarName},
           rawVariableName{other.rawVariableName}, infos{copyUnorderedMap(other.infos)} {}
 
-    // If this property is primary key on all tables.
+    // If this property is the primary key of the single table this variable spans, so that it
+    // uniquely identifies one row of a scan over the variable. A variable spanning several node
+    // tables can hold the same key in each of them, so this is false for it even when the
+    // property is the primary key of every one of those tables; ask isPrimaryKey(tableID) for
+    // the per-table schema question.
     bool isPrimaryKey() const;
     // If this property is primary key for given table.
     bool isPrimaryKey(common::table_id_t tableID) const;

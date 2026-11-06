@@ -41,6 +41,10 @@ public:
 
     common::SemiMask* getSemiMask() const { return semiMask.get(); }
 
+    common::node_group_idx_t getNumUnCommittedNodeGroups() const {
+        return numUnCommittedNodeGroups;
+    }
+
 private:
     std::mutex mtx;
     storage::NodeTable* table;
@@ -131,6 +135,10 @@ public:
     }
 
     double getProgress(ExecutionContext* context) const override;
+
+    // At least the number of morsels holding rows in this execution, committed and uncommitted
+    // (empty node groups may not count). Valid after initGlobalState.
+    uint64_t getNumMorsels() const;
 
 private:
     void initGlobalStateInternal(ExecutionContext* context) override;

@@ -1,6 +1,7 @@
 #include "storage/index/hash_index.h"
 
 #include <bitset>
+#include <deque>
 #include <limits>
 
 #include "common/assert.h"
@@ -198,7 +199,9 @@ void HashIndex<T>::splitSlots(PageAllocator& pageAllocator, const Transaction* t
     auto overflowSlotIterator = oSlots->iter_mut();
     // The overflow slot iterators will hang if they access the same page
     // So instead buffer new overflow slots here and append them at the end
-    std::vector<OnDiskSlotType> newOverflowSlots;
+    // A chain being split can live in this buffer while the split appends to it, so growing the
+    // buffer must not move its elements
+    std::deque<OnDiskSlotType> newOverflowSlots;
 
     auto getNextOvfSlot = [&](slot_id_t nextOvfSlotId) {
         if (nextOvfSlotId >= oSlots->getNumElements()) {

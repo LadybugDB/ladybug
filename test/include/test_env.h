@@ -9,18 +9,20 @@
 #endif
 #include <cstdlib>
 #include <cstring>
+#include <string>
 
-#include <windows.h>
-
+// NOTE: Do not use SetEnvironmentVariableA here. It only updates the OS
+// environment block, which getenv() does not read: the CRT keeps its own
+// copy in _environ. _putenv/_putenv_s update both, so getenv() sees them.
 static inline int setenv(const char* name, const char* value, int overwrite) {
     if (!overwrite && getenv(name))
         return 0;
-    BOOL ok = SetEnvironmentVariableA(name, value);
-    return ok ? 0 : -1;
+    return _putenv_s(name, value);
 }
 
 static inline int unsetenv(const char* name) {
-    BOOL ok = SetEnvironmentVariableA(name, NULL);
-    return ok ? 0 : -1;
+    // "NAME=" removes the variable from the CRT block (and the OS block).
+    std::string entry = std::string(name) + "=";
+    return _putenv(entry.c_str());
 }
 #endif // _WIN32

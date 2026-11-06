@@ -358,6 +358,9 @@ static constexpr sel_t EARLY_FILTER_BACKOFF_MIN_ROWS = 256;
 void ChunkedNodeGroup::scan(const Transaction* transaction, const TableScanState& scanState,
     NodeGroupScanState& nodeGroupScanState, offset_t rowIdxInGroup, length_t numRowsToScan) const {
     DASSERT(rowIdxInGroup + numRowsToScan <= numRows);
+    // Hold the shared lock for the whole scan so a concurrent ADD COLUMN push_back cannot
+    // reallocate the chunks vector mid-scan (see TableColumnsConcurrencyTest).
+    std::shared_lock lck{chunksMtx};
     auto& anchorSelVector = scanState.outState->getSelVectorUnsafe();
     if (getZoneMapResult(scanState, chunks) == ZoneMapCheckResult::SKIP_SCAN) {
         anchorSelVector.setToFiltered(0);
@@ -488,6 +491,10 @@ row_idx_t ChunkedNodeGroup::getNumUpdatedRows(const Transaction* transaction,
 bool ChunkedNodeGroup::lookup(const Transaction* transaction, const TableScanState& state,
     const NodeGroupScanState& nodeGroupScanState, offset_t rowIdxInChunk, sel_t posInOutput) const {
     DASSERT(rowIdxInChunk + 1 <= numRows);
+    // In-memory rel scans (CSRNodeGroup::scanCommittedInMemRandom) look rows up in the live
+    // in-memory groups without holding any node-group lock, while ALTER TABLE ADD grows those
+    // same groups. Hold the shared lock so the chunks vector cannot reallocate mid-lookup.
+    std::shared_lock lck{chunksMtx};
     const bool hasValuesToRead = versionInfo ? versionInfo->isSelected(transaction->getStartTS(),
                                                    transaction->getID(), rowIdxInChunk) :
                                                true;
@@ -529,14 +536,21 @@ bool ChunkedNodeGroup::delete_(const Transaction* transaction, row_idx_t rowIdxI
 void ChunkedNodeGroup::addColumn(MemoryManager& mm, const TableAddColumnState& addColumnState,
     bool enableCompression, PageAllocator* pageAllocator, ColumnStats* newColumnStats) {
     auto& dataType = addColumnState.propertyDefinition.getType();
-    chunks.push_back(std::make_unique<ColumnChunk>(mm, dataType.copy(), capacity, enableCompression,
-        ResidencyState::IN_MEMORY));
+    // Build and populate the new chunk before publishing it: readers only ever access old
+    // columns by ID, but publishing an unpopulated chunk would expose a partially
+    // constructed column to any scan that snapshots the new size.
+    auto newChunk = std::make_unique<ColumnChunk>(mm, dataType.copy(), capacity, enableCompression,
+        ResidencyState::IN_MEMORY);
     auto numExistingRows = getNumRows();
-    chunks.back()->populateWithDefaultVal(addColumnState.defaultEvaluator, numExistingRows,
+    newChunk->populateWithDefaultVal(addColumnState.defaultEvaluator, numExistingRows,
         newColumnStats);
     if (residencyState == ResidencyState::ON_DISK) {
         DASSERT(pageAllocator);
-        chunks.back()->flush(*pageAllocator);
+        newChunk->flush(*pageAllocator);
+    }
+    {
+        std::unique_lock lck{chunksMtx};
+        chunks.push_back(std::move(newChunk));
     }
 }
 

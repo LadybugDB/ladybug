@@ -99,16 +99,22 @@ std::vector<uint32_t> SubqueryGraph::getConnectedNodePos(const SubqueryGraph& nb
 
 std::unordered_set<uint32_t> SubqueryGraph::getNodePositionsIgnoringNodeSelector() const {
     std::unordered_set<uint32_t> result;
+    const auto nodes = getNodesSelectorWithRelEndpoints();
     for (auto nodePos = 0u; nodePos < queryGraph.getNumQueryNodes(); ++nodePos) {
-        if (queryNodesSelector[nodePos]) {
+        if (nodes[nodePos]) {
             result.insert(nodePos);
         }
     }
+    return result;
+}
+
+std::bitset<MAX_NUM_QUERY_VARIABLES> SubqueryGraph::getNodesSelectorWithRelEndpoints() const {
+    auto result = queryNodesSelector;
     for (auto relPos = 0u; relPos < queryGraph.getNumQueryRels(); ++relPos) {
-        auto rel = queryGraph.getQueryRel(relPos);
         if (queryRelsSelector[relPos]) {
-            result.insert(queryGraph.getQueryNodeIdx(rel->getSrcNodeName()));
-            result.insert(queryGraph.getQueryNodeIdx(rel->getDstNodeName()));
+            auto rel = queryGraph.getQueryRel(relPos);
+            result[queryGraph.getQueryNodeIdx(rel->getSrcNodeName())] = true;
+            result[queryGraph.getQueryNodeIdx(rel->getDstNodeName())] = true;
         }
     }
     return result;

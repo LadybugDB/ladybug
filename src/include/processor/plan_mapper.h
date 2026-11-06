@@ -255,7 +255,9 @@ public:
         const planner::Schema& schema);
     static FactorizedTableSchema createFlatFTableSchema(
         const binder::expression_vector& expressions, const planner::Schema& schema);
-    std::unique_ptr<common::SemiMask> createSemiMask(common::table_id_t tableID) const;
+    // dbName names the attached database that owns tableID. Empty means the current database.
+    std::unique_ptr<common::SemiMask> createSemiMask(common::table_id_t tableID,
+        const std::string& dbName = {}) const;
 
     void addOperatorMapping(const planner::LogicalOperator* logicalOp,
         PhysicalOperator* physicalOp) {

@@ -5,6 +5,8 @@
 #include "main/database.h"
 #include "main/settings.h"
 #include "processor/execution_context.h"
+#include "processor/operator/order_by/order_by_merge.h"
+#include "processor/operator/scan/scan_node_table.h"
 #include "processor/operator/table_function_call.h"
 #include "processor/operator/table_scan/ftable_scan_function.h"
 #include "processor/processor.h"
@@ -27,6 +29,22 @@ void ProcessorTask::narrowToSingleMorselSource() {
     PhysicalOperator* op = sink;
     while (!op->isSource()) {
         op = op->getChild(0);
+    }
+    if (op->getOperatorType() == PhysicalOperatorType::SCAN_NODE_TABLE) {
+        // The scan counts its morsels when its shared state is set up. No thread runs this task
+        // yet, so the state is set up here instead of by the first run().
+        sink->initGlobalState(executionContext);
+        sharedStateInitialized = true;
+        if (op->ptrCast<ScanNodeTable>()->getNumMorsels() <= 1) {
+            setSingleThreadedTask();
+        }
+        return;
+    }
+    if (op->getOperatorType() == PhysicalOperatorType::ORDER_BY_MERGE) {
+        if (op->ptrCast<OrderByMerge>()->getNumSortedKeyBlocks() <= 1) {
+            setSingleThreadedTask();
+        }
+        return;
     }
     if (op->getOperatorType() != PhysicalOperatorType::TABLE_FUNCTION_CALL) {
         return;

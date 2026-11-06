@@ -74,6 +74,9 @@ struct CachedPreparedStatement {
     // logical/physical plan is stale and must be rebound (see
     // https://github.com/LadybugDB/ladybug/issues/1158).
     uint64_t planVersion = 0;
+    // Catalog versions advance at commit. A plan bound after transaction-local DDL (including
+    // dynamic LIST partition creation) must also be rebound after later writes or rollback.
+    bool hasUncommittedCatalogChanges = false;
 
     // Pool of cloned physical plans ready for reuse, keyed by executing thread.
     // Cloning the cached template per execution costs hundreds of small allocations

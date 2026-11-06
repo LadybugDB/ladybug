@@ -351,3 +351,40 @@ First Last|27
 -STATEMENT MATCH (t:neg_defaults)-[r:RDEF]->() RETURN t.a, t.b, t.s, t.c, r.w, r.r;
 ---- 1
 -5|-2.500000|x|7|6|-1.250000
+
+-CASE ImportDatabaseInsideTransaction
+-SKIP_WASM
+-SKIP_IN_MEM
+-STATEMENT CREATE NODE TABLE Z(id INT64 PRIMARY KEY);
+---- ok
+-STATEMENT CREATE (:Z {id: 1});
+---- ok
+-STATEMENT EXPORT DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_txn/z-db";
+---- ok
+-IMPORT_DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_txn/z-db"
+-STATEMENT CREATE NODE TABLE Y(id INT64 PRIMARY KEY);
+---- ok
+-LOG IMPORT must not commit a transaction the user began
+-STATEMENT BEGIN TRANSACTION;
+---- ok
+-STATEMENT CREATE (:Y {id: 42});
+---- ok
+-STATEMENT IMPORT DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_txn/z-db";
+---- error
+Found active transaction for IMPORT DATABASE.
+-STATEMENT MATCH (y:Y) RETURN count(*);
+---- 1
+0
+-STATEMENT BEGIN TRANSACTION READ ONLY;
+---- ok
+-STATEMENT IMPORT DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_txn/z-db";
+---- error
+Can not execute a write query inside a read-only transaction.
+-STATEMENT ROLLBACK;
+---- ok
+-LOG Outside a transaction IMPORT works as before
+-STATEMENT IMPORT DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_txn/z-db";
+---- ok
+-STATEMENT MATCH (z:Z) RETURN z.id;
+---- 1
+1

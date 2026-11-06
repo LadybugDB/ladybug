@@ -84,6 +84,10 @@ std::shared_ptr<LogicalOperator> FilterPushDownOptimizer::visitFilterReplace(
         // Avoid executing child plan if literal is Null or False.
         auto& literalExpr = predicate->constCast<LiteralExpression>();
         if (literalExpr.isNull() || !literalExpr.getValue().getValue<bool>()) {
+            // Keep the filter over writes: an empty result would skip them.
+            if (filter.getChild(0)->hasUpdateRecursive()) {
+                return visitChildren(op);
+            }
             return std::make_shared<LogicalEmptyResult>(*op->getSchema());
         }
         // Ignore if literal is True.
@@ -258,6 +262,10 @@ popSecondaryARTEqualityComparison(PredicateSet& predicateSet, const Expression& 
 std::shared_ptr<LogicalOperator> FilterPushDownOptimizer::visitScanNodeTableReplace(
     const std::shared_ptr<LogicalOperator>& op) {
     auto& scan = op->cast<LogicalScanNodeTable>();
+    prunePartitions(scan);
+    if (scan.getTableIDs().empty()) {
+        return std::make_shared<LogicalEmptyResult>(*scan.getSchema());
+    }
     auto nodeID = scan.getNodeID();
     // Apply column predicates.
     if (context->getClientConfig()->enableZoneMap) {
@@ -275,7 +283,8 @@ std::shared_ptr<LogicalOperator> FilterPushDownOptimizer::visitScanNodeTableRepl
         return sm->getTable(id)->ptrCast<storage::NodeTable>();
     };
     if (tableIDs.size() == 1) {
-        primaryKeyEqualityComparison = predicateSet.popNodePKEqualityComparison(*nodeID);
+        primaryKeyEqualityComparison =
+            predicateSet.popNodePKEqualityComparison(*nodeID, tableIDs[0]);
     }
     if (primaryKeyEqualityComparison != nullptr) { // Try rewrite index scan
         auto* table = getResolvedTable(tableIDs[0]);
@@ -298,7 +307,8 @@ std::shared_ptr<LogicalOperator> FilterPushDownOptimizer::visitScanNodeTableRepl
         auto* pkIndex = table->tryGetPrimaryKeyIndex();
         if (pkIndex != nullptr && pkIndex->getIndexInfo().indexType ==
                                       storage::ArtPrimaryKeyIndex::getIndexType().typeName) {
-            auto primaryKeyRangeComparison = predicateSet.popNodePKRangeComparison(*nodeID);
+            auto primaryKeyRangeComparison =
+                predicateSet.popNodePKRangeComparison(*nodeID, tableIDs[0]);
             if (primaryKeyRangeComparison.hasBound()) {
                 auto extraInfo = std::make_unique<PrimaryKeyScanInfo>(
                     primaryKeyRangeComparison.lowerBound, primaryKeyRangeComparison.lowerInclusive,
@@ -433,7 +443,8 @@ void PredicateSet::addPredicate(std::shared_ptr<Expression> predicate) {
     }
 }
 
-static bool isNodePrimaryKey(const Expression& expression, const Expression& nodeID) {
+static bool isNodePrimaryKey(const Expression& expression, const Expression& nodeID,
+    table_id_t tableID) {
     if (expression.expressionType != ExpressionType::PROPERTY) {
         // not property
         return false;
@@ -443,18 +454,22 @@ static bool isNodePrimaryKey(const Expression& expression, const Expression& nod
         // not property for node
         return false;
     }
-    return property.isPrimaryKey();
+    // A primary key identifies a row only within its own table. After partition pruning the
+    // scan may cover a single partition child of a multi-table variable, so ask the per-table
+    // question for the remaining table instead of the cross-table uniqueness guarantee.
+    return property.isPrimaryKey(tableID);
 }
 
-std::shared_ptr<Expression> PredicateSet::popNodePKEqualityComparison(const Expression& nodeID) {
+std::shared_ptr<Expression> PredicateSet::popNodePKEqualityComparison(const Expression& nodeID,
+    table_id_t tableID) {
     // We pop when the first primary key equality comparison is found.
     auto resultPredicateIdx = INVALID_IDX;
     for (auto i = 0u; i < equalityPredicates.size(); ++i) {
         auto predicate = equalityPredicates[i];
-        if (isNodePrimaryKey(*predicate->getChild(0), nodeID)) {
+        if (isNodePrimaryKey(*predicate->getChild(0), nodeID, tableID)) {
             resultPredicateIdx = i;
             break;
-        } else if (isNodePrimaryKey(*predicate->getChild(1), nodeID)) {
+        } else if (isNodePrimaryKey(*predicate->getChild(1), nodeID, tableID)) {
             // Normalize primary key to LHS.
             auto leftChild = predicate->getChild(0);
             auto rightChild = predicate->getChild(1);
@@ -472,7 +487,8 @@ std::shared_ptr<Expression> PredicateSet::popNodePKEqualityComparison(const Expr
     return nullptr;
 }
 
-PrimaryKeyRangePredicate PredicateSet::popNodePKRangeComparison(const Expression& nodeID) {
+PrimaryKeyRangePredicate PredicateSet::popNodePKRangeComparison(const Expression& nodeID,
+    table_id_t tableID) {
     PrimaryKeyRangePredicate result;
     auto lowerPredicateIdx = INVALID_IDX;
     auto upperPredicateIdx = INVALID_IDX;
@@ -484,9 +500,9 @@ PrimaryKeyRangePredicate PredicateSet::popNodePKRangeComparison(const Expression
         }
         auto comparisonType = predicate->expressionType;
         std::shared_ptr<Expression> bound;
-        if (isNodePrimaryKey(*predicate->getChild(0), nodeID)) {
+        if (isNodePrimaryKey(*predicate->getChild(0), nodeID, tableID)) {
             bound = predicate->getChild(1);
-        } else if (isNodePrimaryKey(*predicate->getChild(1), nodeID)) {
+        } else if (isNodePrimaryKey(*predicate->getChild(1), nodeID, tableID)) {
             bound = predicate->getChild(0);
             comparisonType = ExpressionTypeUtil::reverseComparisonDirection(comparisonType);
         } else {

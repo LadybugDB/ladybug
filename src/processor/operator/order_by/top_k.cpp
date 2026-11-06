@@ -66,7 +66,6 @@ void TopKBuffer::init(storage::MemoryManager* memoryManager_, uint64_t skipNumbe
     sortState->init(*orderByDataInfo, memoryManager_);
     this->skip = skipNumber;
     this->limit = limitNumber;
-    initVectors();
     initCompareFuncs();
 }
 
@@ -87,6 +86,7 @@ void TopKBuffer::reduce() {
     if (sortState->getNumTuples() < reduceThreshold) {
         return;
     }
+    initVectors();
     sortState->finalize();
     auto newSortState = std::make_unique<TopKSortState>();
     newSortState->init(*orderByDataInfo, memoryManager);
@@ -109,6 +109,7 @@ void TopKBuffer::merge(TopKBuffer* other) {
     if (other->sortState->getSharedState()->getSortedKeyBlocks()->empty()) {
         return;
     }
+    initVectors();
     auto scanner = other->sortState->getScanner(0, skip + limit);
     while (scanner->scan(payloadVecsToScan) > 0) {
         sortState->append(keyVecsToScan, payloadVecsToScan);
@@ -117,6 +118,9 @@ void TopKBuffer::merge(TopKBuffer* other) {
 }
 
 void TopKBuffer::initVectors() {
+    if (!tmpVectors.empty()) {
+        return;
+    }
     auto payloadUnflatState = std::make_shared<common::DataChunkState>();
     auto payloadFlatState = common::DataChunkState::getSingleValueDataChunkState();
     auto lastPayloadUnflatState = std::make_shared<common::DataChunkState>();

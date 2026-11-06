@@ -24,6 +24,7 @@
 #include "storage/table/arrow_node_table.h"
 #include "storage/table/arrow_rel_table.h"
 #include "storage/table/arrow_table_support.h"
+#include "storage/table/external_table_hooks.h"
 #include "storage/table/foreign_rel_table.h"
 #include "storage/table/ice_disk_node_table.h"
 #include "storage/table/ice_disk_rel_table.h"
@@ -77,7 +78,9 @@ StorageManager::StorageManager(const std::string& databasePath, bool readOnly, b
     registerIndexType(ArtPrimaryKeyIndex::getIndexType());
 }
 
-StorageManager::~StorageManager() = default;
+StorageManager::~StorageManager() {
+    ColumnarTableHookRegistry::unbindStorageManagerTables(this);
+}
 
 void StorageManager::initDataFileHandle(VirtualFileSystem* vfs, main::ClientContext* context) {
     if (dataFH != nullptr && dataFH->getFileInfo() != nullptr) {
@@ -204,10 +207,26 @@ void StorageManager::createNodeTable(NodeTableCatalogEntry* entry, main::ClientC
             // Create icebug-disk-backed node table
             tables[entry->getTableID()] =
                 std::make_unique<IceDiskNodeTable>(this, entry, &memoryManager, context);
+        } else if (auto hooks = ColumnarTableHookRegistry::getFormatHooks(entry->getStorageFormat(),
+                       entry->getStorageFormatName())) {
+            // Create extension-backed columnar node table. The extension must be
+            // loaded before the table is created.
+            if (!hooks->createNodeTable) {
+                throw common::RuntimeException(
+                    "Loaded extension does not provide node table storage for format: " +
+                    StorageFormatUtils::displayName(entry->getStorageFormat(),
+                        entry->getStorageFormatName()));
+            }
+            tables[entry->getTableID()] =
+                hooks->createNodeTable(this, entry, &memoryManager, context);
+            ColumnarTableHookRegistry::bindTableHooks(this, entry->getTableID(), hooks);
         } else {
             throw common::RuntimeException(
                 "Unsupported storage format option for node table: " +
-                std::to_string(static_cast<int>(entry->getStorageFormat())));
+                StorageFormatUtils::displayName(entry->getStorageFormat(),
+                    entry->getStorageFormatName()) +
+                ". If this format is provided by a Ladybug extension, load the extension "
+                "and try again.");
         }
     } else if (!entry->getStorage().empty()) {
         // Check if storage is Arrow backed
@@ -253,10 +272,26 @@ void StorageManager::addRelTable(RelGroupCatalogEntry* entry, const RelTableCata
             // Create icebug-disk-backed rel table
             tables[info.oid] = std::make_unique<IceDiskRelTable>(entry, info.nodePair.srcTableID,
                 info.nodePair.dstTableID, this, &memoryManager, context);
+        } else if (auto hooks = ColumnarTableHookRegistry::getFormatHooks(entry->getStorageFormat(),
+                       entry->getStorageFormatName())) {
+            // Create extension-backed columnar rel table. The extension must be
+            // loaded before the table is created.
+            if (!hooks->createRelTable) {
+                throw common::RuntimeException(
+                    "Loaded extension does not provide rel table storage for format: " +
+                    StorageFormatUtils::displayName(entry->getStorageFormat(),
+                        entry->getStorageFormatName()));
+            }
+            tables[info.oid] = hooks->createRelTable(entry, info.nodePair.srcTableID,
+                info.nodePair.dstTableID, this, &memoryManager, context);
+            ColumnarTableHookRegistry::bindTableHooks(this, info.oid, hooks);
         } else {
             throw common::RuntimeException(
                 "Unsupported storage format option for rel table: " +
-                std::to_string(static_cast<int>(entry->getStorageFormat())));
+                StorageFormatUtils::displayName(entry->getStorageFormat(),
+                    entry->getStorageFormatName()) +
+                ". If this format is provided by a Ladybug extension, load the extension "
+                "and try again.");
         }
     } else if (!entry->getStorage().empty()) {
         if (entry->getStorage().substr(0, 8) == "arrow://") {
@@ -391,6 +426,7 @@ void StorageManager::reclaimDroppedTables(const Catalog& catalog) {
     }
     for (auto tableID : droppedTables) {
         tables.erase(tableID);
+        ColumnarTableHookRegistry::unbindTableHooks(this, tableID);
         clearCachedPlannerTableStats(tableID);
     }
 }
@@ -688,6 +724,21 @@ void StorageManager::deserialize(main::ClientContext* context, const Catalog* ca
             // Create icebug-disk-backed node table
             tables[tableID] =
                 std::make_unique<IceDiskNodeTable>(this, tableEntry, &memoryManager, context);
+        } else if (tableEntry->getStorageFormat() == StorageFormat::EXTERNAL) {
+            // Recreate extension-backed columnar node tables (e.g. after a checkpoint or
+            // reopen): the extension must be loaded before recovery. Mirrors createNodeTable.
+            auto hooks = ColumnarTableHookRegistry::getFormatHooks(tableEntry->getStorageFormat(),
+                tableEntry->getStorageFormatName());
+            if (!hooks || !hooks->createNodeTable) {
+                throw common::RuntimeException(
+                    "Unsupported storage format option for node table: " +
+                    StorageFormatUtils::displayName(tableEntry->getStorageFormat(),
+                        tableEntry->getStorageFormatName()) +
+                    ". If this format is provided by a Ladybug extension, load the extension "
+                    "and try again.");
+            }
+            tables[tableID] = hooks->createNodeTable(this, tableEntry, &memoryManager, context);
+            ColumnarTableHookRegistry::bindTableHooks(this, tableID, hooks);
         } else {
             // Create regular node table
             tables[tableID] = std::make_unique<NodeTable>(this, tableEntry, &memoryManager);
@@ -718,6 +769,22 @@ void StorageManager::deserialize(main::ClientContext* context, const Catalog* ca
                 tables[info.oid] =
                     std::make_unique<IceDiskRelTable>(relGroupEntry, info.nodePair.srcTableID,
                         info.nodePair.dstTableID, this, &memoryManager, context);
+            } else if (relGroupEntry->getStorageFormat() == StorageFormat::EXTERNAL) {
+                // Recreate extension-backed columnar rel tables on recovery. Mirrors
+                // addRelTable: the extension must be loaded before recovery.
+                auto hooks = ColumnarTableHookRegistry::getFormatHooks(
+                    relGroupEntry->getStorageFormat(), relGroupEntry->getStorageFormatName());
+                if (!hooks || !hooks->createRelTable) {
+                    throw common::RuntimeException(
+                        "Unsupported storage format option for rel table: " +
+                        StorageFormatUtils::displayName(relGroupEntry->getStorageFormat(),
+                            relGroupEntry->getStorageFormatName()) +
+                        ". If this format is provided by a Ladybug extension, load the extension "
+                        "and try again.");
+                }
+                tables[info.oid] = hooks->createRelTable(relGroupEntry, info.nodePair.srcTableID,
+                    info.nodePair.dstTableID, this, &memoryManager, context);
+                ColumnarTableHookRegistry::bindTableHooks(this, info.oid, hooks);
             } else {
                 // Create regular rel table
                 tables[info.oid] = std::make_unique<RelTable>(relGroupEntry,

@@ -64,23 +64,15 @@ bool Transaction::shouldForceCheckpoint() const {
     return !clientContext->isInMemory() && forceCheckpoint;
 }
 
-void Transaction::commit(storage::WAL* wal) {
-    if (commitTS == common::INVALID_TRANSACTION) {
-        throw common::RuntimeException{"Cannot commit with an invalid commit timestamp."};
-    }
-    uint64_t walCommitSequence = 0;
-    writeCommitToWAL(wal, walCommitSequence);
-    publishCommit();
-}
-
-void Transaction::writeCommitToWAL(storage::WAL* wal, uint64_t& walCommitSequence) {
+void Transaction::writeCommitToWAL(storage::WAL* wal, uint64_t& walCommitSequence,
+    uint64_t& walBlockStart) {
     walCommitSequence = 0;
     if (!shouldLogToWAL()) {
         return;
     }
     DASSERT(localWAL && wal);
     localWAL->logCommit();
-    wal->logCommittedWAL(*localWAL, clientContext, walCommitSequence);
+    wal->logCommittedWAL(*localWAL, clientContext, walCommitSequence, &walBlockStart);
     localWAL->clear();
 }
 
@@ -331,6 +323,11 @@ void Transaction::recordCatalogChange(catalog::Catalog* catalog) {
 
 Transaction* Transaction::Get(const main::ClientContext& context) {
     return TransactionContext::Get(context)->getActiveTransaction();
+}
+
+bool Transaction::hasCatalogChanges() const {
+    std::lock_guard lck{changedCatalogsMutex};
+    return !changedCatalogs.empty();
 }
 
 Transaction DUMMY_TRANSACTION = Transaction(TransactionType::DUMMY);

@@ -104,7 +104,14 @@ std::string StorageUtils::expandPath(const main::ClientContext* context, const s
     } else {
         normalizedPath = std::filesystem::absolute(filePath).lexically_normal();
     }
-    return normalizedPath.string();
+    // generic_string() always uses '/' separators, matching FileSystem::joinPath and
+    // IceDiskUtils::joinPath which always emit '/'. path::string() would return '\\' on
+    // Windows while TestHelper::getTempDBPathStr normalizes to '/' (lbug does not support
+    // backslashes in paths), so derived paths (WAL, shadow, marker) compared as strings
+    // would mismatch across the StorageManager and test fixtures (see
+    // PinnedCheckpointCrashTest.LeftoverShadowKeepsCommitsInFrozenWAL, where the
+    // checkpoint image map missed the frozen WAL on Windows).
+    return normalizedPath.generic_string();
 }
 
 uint32_t StorageUtils::getDataTypeSize(const LogicalType& type) {

@@ -18,7 +18,8 @@ public:
 
     bool terminate() override;
 
-    // A READ_FTABLE source that already fits in one morsel has no work for a second thread.
+    // A source with at most one morsel (READ_FTABLE, node table scan) or one sorted run to
+    // merge has no work for a second thread.
     // Called after child tasks, so an accumulate scan sees the filled table.
     void narrowToSingleMorselSource();
 
