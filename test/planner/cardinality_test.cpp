@@ -349,6 +349,25 @@ TEST_F(CardinalityTest, RangeFilterThroughRoundingCast) {
     expectFilterEstimate("Edge", "u.tns < timestamp('2022-09-07 00:59:38.477008')", 1);
 }
 
+TEST_F(CardinalityTest, UncommittedInsertAfterDropKeepsPlannerEstimates) {
+    // Regression test for #1469: inside a transaction that inserts after a DROP, the planner
+    // must read the merged stats by storage column, not by position. Committed stats are
+    // id:3, b:2 over 3 rows; the pending row makes b {10,10,20,30}, i.e. 3 distinct over a
+    // cardinality of 4, so `b = 10` estimates 4/3 = 1. A positional merge instead adds the
+    // pending b count to the dropped column's slot and leaves b at 2, estimating 4/2 = 2.
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE EstDrop(id INT64 PRIMARY KEY, a INT64, b INT64)")
+                    ->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:EstDrop {id: 1, a: 7, b: 10}),"
+                            " (:EstDrop {id: 2, a: 7, b: 10}),"
+                            " (:EstDrop {id: 3, a: 7, b: 20})")
+                    ->isSuccess());
+    ASSERT_TRUE(conn->query("ALTER TABLE EstDrop DROP a")->isSuccess());
+    ASSERT_TRUE(conn->query("BEGIN TRANSACTION")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:EstDrop {id: 4, b: 30})")->isSuccess());
+    expectFilterEstimate("EstDrop", "u.b = 10", 1);
+    ASSERT_TRUE(conn->query("ROLLBACK")->isSuccess());
+}
+
 TEST_F(CardinalityTest, TestPopulatedAfterOptimizations) {
     // Filter push down
     auto plan = getRoot("EXPLAIN LOGICAL MATCH (a:person)-[e]->(b) "
