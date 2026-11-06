@@ -131,6 +131,10 @@ void LocalNodeTable::clear(MemoryManager& mm) {
         nodeTable.getColumn(nodeTable.getPKColumnID()).getDataType().getPhysicalType(),
         overflowFileHandle);
     nodeGroups.clear();
+    // Keep the ID mapping parallel to the local columns: an emptied table has no columns.
+    // (Clear runs at commit/rollback; without this a future reuse would desync columnIDs from
+    // the local columns and trip the size check in TableStats::merge, or worse.)
+    columnIDs.clear();
 }
 
 bool LocalNodeTable::lookupPK(const Transaction* transaction, const ValueVector* keyVector,

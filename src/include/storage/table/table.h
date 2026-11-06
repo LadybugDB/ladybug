@@ -150,6 +150,8 @@ struct TableAddColumnState final {
     evaluator::ExpressionEvaluator& defaultEvaluator;
     // The catalog's column ID for the property. After a rolled-back ADD this is not the position
     // of the storage column being appended.
+    // Currently consumed only by LocalNodeTable's uncommitted-stats merge; storage placement
+    // still appends positionally (see #1221), and all REL-table consumers ignore this field.
     common::column_id_t columnID;
 
     TableAddColumnState(const binder::PropertyDefinition& propertyDefinition,
