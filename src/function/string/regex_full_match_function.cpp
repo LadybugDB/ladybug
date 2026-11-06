@@ -1,4 +1,3 @@
-#include "binder/expression/expression_util.h"
 #include "expression_evaluator/expression_evaluator_utils.h"
 #include "function/string/functions/base_regexp_function.h"
 #include "function/string/vector_string_functions.h"
@@ -40,7 +39,7 @@ struct RegexpFullMatchStaticPattern : BaseRegexpOperation {
 };
 
 static std::unique_ptr<FunctionBindData> regexFullMatchBindFunc(const ScalarBindFuncInput& input) {
-    if (input.arguments[1]->expressionType == ExpressionType::LITERAL) {
+    if (BaseRegexpOperation::isStringLiteral(*input.arguments[1])) {
         auto value = evaluator::ExpressionEvaluatorUtils::evaluateConstantExpression(
             input.arguments[1], input.context);
         input.definition->ptrCast<ScalarFunction>()->execFunc =
@@ -50,12 +49,10 @@ static std::unique_ptr<FunctionBindData> regexFullMatchBindFunc(const ScalarBind
             ScalarFunction::BinarySelectWithBindData<string_t, string_t,
                 RegexpFullMatchStaticPattern>;
         auto patternInStr = value.getValue<std::string>();
-        return std::make_unique<RegexFullMatchBindData>(
-            binder::ExpressionUtil::getDataTypes(input.arguments),
+        return std::make_unique<RegexFullMatchBindData>(logical_type_vec_t{},
             BaseRegexpOperation::parseCypherPattern(patternInStr));
     } else {
-        return std::make_unique<RegexpBindData>(
-            binder::ExpressionUtil::getDataTypes(input.arguments), LogicalType::BOOL());
+        return std::make_unique<RegexpBindData>(logical_type_vec_t{}, LogicalType::BOOL());
     }
 }
 

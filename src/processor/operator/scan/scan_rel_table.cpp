@@ -9,6 +9,7 @@
 #include "storage/local_storage/local_rel_table.h"
 #include "storage/table/arrow_node_table.h"
 #include "storage/table/arrow_rel_table.h"
+#include "storage/table/external_table_hooks.h"
 #include "storage/table/foreign_rel_table.h"
 #include "storage/table/ice_disk_node_table.h"
 #include "storage/table/ice_disk_rel_table.h"
@@ -23,6 +24,14 @@ namespace processor {
 static std::unique_ptr<TableScanState> createSourceNodeTableScanState(NodeTable* table,
     ValueVector* nodeIDVector, const std::vector<ValueVector*>& outVectors,
     MemoryManager* memoryManager) {
+    // Extension-backed columnar node tables create their state through registered hooks,
+    // mirroring createNodeTableScanState.
+    if (auto hooks = storage::ColumnarTableHookRegistry::getTableHooks(table->getStorageManager(),
+            table->getTableID())) {
+        DASSERT(hooks->createNodeScanState);
+        return hooks->createNodeScanState(table, nodeIDVector, outVectors, nodeIDVector->state,
+            memoryManager);
+    }
     if (dynamic_cast<IceDiskNodeTable*>(table) != nullptr) {
         return std::make_unique<IceDiskNodeTableScanState>(*memoryManager, nodeIDVector, outVectors,
             nodeIDVector->state);
@@ -96,17 +105,29 @@ common::sel_t ScanRelTable::applyNbrNodeMask() {
     return applyNbrMaskFilter(scanState->outState->getSelVectorUnsafe(), outVectors[0]);
 }
 
+common::sel_t ScanRelTable::getFilteredOutputSize() {
+    scanState->outState->setToUnflat();
+    return applyNbrNodeMask();
+}
+
 void ScanRelTable::initLocalStateInternal(ResultSet* resultSet, ExecutionContext* context) {
     ScanTable::initLocalStateInternal(resultSet, context);
     refreshNbrMaskCache();
     auto clientContext = context->clientContext;
     auto boundNodeIDVector = resultSet->getValueVector(opInfo.nodeIDPos).get();
     auto nbrNodeIDVector = outVectors[0];
-    // Check if this is an external rel table and create the corresponding scan state.
+    // Extension-backed columnar rel tables create their state through registered hooks.
+    auto tableHooks = storage::ColumnarTableHookRegistry::getTableHooks(
+        tableInfo.table->getStorageManager(), tableInfo.table->getTableID());
     auto* arrowTable = dynamic_cast<storage::ArrowRelTable*>(tableInfo.table);
     auto* iceDiskTable = dynamic_cast<storage::IceDiskRelTable*>(tableInfo.table);
     auto* foreignTable = dynamic_cast<storage::ForeignRelTable*>(tableInfo.table);
-    if (arrowTable) {
+    if (tableHooks) {
+        DASSERT(tableHooks->createRelScanState);
+        scanState = tableHooks->createRelScanState(tableInfo.table->ptrCast<storage::RelTable>(),
+            boundNodeIDVector, outVectors, nbrNodeIDVector->state,
+            storage::MemoryManager::Get(*clientContext));
+    } else if (arrowTable) {
         scanState =
             std::make_unique<storage::ArrowRelTableScanState>(*MemoryManager::Get(*clientContext),
                 boundNodeIDVector, outVectors, nbrNodeIDVector->state);
@@ -273,7 +294,7 @@ bool ScanRelTable::getNextTuplesInternal(ExecutionContext* context) {
             while (tableInfo.table->scan(transaction, *scanState)) {
                 const auto outputSize = scanState->outState->getSelVector().getSelSize();
                 if (outputSize > 0) {
-                    const auto filteredSize = applyNbrNodeMask();
+                    const auto filteredSize = getFilteredOutputSize();
                     if (filteredSize == 0) {
                         continue;
                     }
@@ -293,7 +314,7 @@ bool ScanRelTable::getNextTuplesInternal(ExecutionContext* context) {
         while (tableInfo.table->scan(transaction, *scanState)) {
             const auto outputSize = scanState->outState->getSelVector().getSelSize();
             if (outputSize > 0) {
-                const auto filteredSize = applyNbrNodeMask();
+                const auto filteredSize = getFilteredOutputSize();
                 if (filteredSize == 0) {
                     continue;
                 }

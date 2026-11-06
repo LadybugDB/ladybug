@@ -88,6 +88,8 @@ public:
     }
 
 private:
+    // Scratch vectors for reduce() and merge(), allocated on first use: a buffer that stays
+    // under the reduce threshold and is never merged into does not need them.
     void initVectors();
 
     template<typename FUNC>

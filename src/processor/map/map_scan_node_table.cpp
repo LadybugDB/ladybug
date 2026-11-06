@@ -167,7 +167,7 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapScanNodeTable(
             }
         }
         auto printInfo = std::make_unique<PrimaryKeyScanPrintInfo>(scan.getProperties(), keyString,
-            alias, indexType);
+            alias, indexType, tableNames);
         return std::make_unique<PrimaryKeyScanNodeTable>(std::move(scanInfo), std::move(tableInfos),
             std::move(evaluator), std::move(upperBoundEvaluator), primaryKeyScanInfo.isRange,
             false /* isIndexEquality */, primaryKeyScanInfo.lowerInclusive,
@@ -180,7 +180,7 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapScanNodeTable(
         auto evaluator = exprMapper.getEvaluator(secondaryIndexScanInfo.key);
         auto sharedState = std::make_shared<PrimaryKeyScanSharedState>(tableInfos.size());
         auto printInfo = std::make_unique<PrimaryKeyScanPrintInfo>(scan.getProperties(),
-            secondaryIndexScanInfo.key->toString(), alias, "ART");
+            secondaryIndexScanInfo.key->toString(), alias, "ART", tableNames);
         return std::make_unique<PrimaryKeyScanNodeTable>(std::move(scanInfo), std::move(tableInfos),
             std::move(evaluator), nullptr /* upperBoundEvaluator */, true /* isRange */,
             true /* isIndexEquality */, true, true, secondaryIndexScanInfo.indexName,

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "storage/wal/record/abort_record.h"
 #include "storage/wal/record/alter_table_entry_record.h"
 #include "storage/wal/record/begin_transaction_record.h"
 #include "storage/wal/record/checkpoint_record.h"

@@ -31,6 +31,14 @@ EXTENSION_E2E_TEST_JOBS ?= 1
 PGEMBED_PYTHON ?= 3.12
 PGEMBED_FIXTURE ?= python3 scripts/run_pgembed_fixture.py --
 EXTENSION_LIST ?= adbc;httpfs;duckdb;json;postgres;pg_client;sqlite;fts;delta;iceberg;azure;unity_catalog;ducklake;vector;neo4j;algo;llm;gql
+# Opt-in extensions appended to EXTENSION_LIST (e.g. lance, whose CMake
+# FATAL_ERRORs without a Rust toolchain + protoc, so it is enabled per CI
+# job instead of by default). Mirrors the EXTENSION_LIST env in
+# extension/.github/workflows/ci.yml.
+EXTRA_EXTENSIONS ?=
+ifneq ($(EXTRA_EXTENSIONS),)
+EXTENSION_LIST := $(EXTENSION_LIST);$(EXTRA_EXTENSIONS)
+endif
 EXTENSION_TEST_EXCLUDE_FILTER ?= ""
 
 ifeq ($(OS),Windows_NT)

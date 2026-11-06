@@ -496,7 +496,6 @@ void NodeBatchInsert::initGlobalStateInternal(ExecutionContext* context) {
     nodeSharedState->pkType = pkDefinition.getType().copy();
     nodeSharedState->skipDuplicatePK = info->ptrCast<NodeBatchInsertInfo>()->skipDuplicatePK;
 
-    auto* storageManager = StorageManager::Get(*clientContext);
     const auto nodeInfo = info->ptrCast<NodeBatchInsertInfo>();
     if (nodeInfo->partitionInfo.has_value()) {
         const auto& partitionInfo = *nodeInfo->partitionInfo;
@@ -547,7 +546,20 @@ void NodeBatchInsert::initGlobalStateInternal(ExecutionContext* context) {
         }
     } else {
         NodeBatchInsertTarget target;
-        target.table = storageManager->getTable(nodeTableEntry->getTableID())->ptrCast<NodeTable>();
+        target.table =
+            storage::PartitionStorageRegistry::resolveNodeTable(clientContext, *nodeTableEntry);
+        if (nodeTableEntry->isPartitionChild()) {
+            nodeSharedState->partitionConstraint = nodeTableEntry;
+            auto* parent =
+                catalog->getTableCatalogEntry(transaction, nodeTableEntry->getParentTableID())
+                    ->ptrCast<NodeTableCatalogEntry>();
+            const auto keyColumnID = parent->getPartitionColumnID();
+            const auto it =
+                std::find(info->insertColumnIDs.begin(), info->insertColumnIDs.end(), keyColumnID);
+            DASSERT(it != info->insertColumnIDs.end());
+            nodeSharedState->partitionKeyColumnIdx =
+                std::distance(info->insertColumnIDs.begin(), it);
+        }
         target.optimisticAllocator = transaction->getLocalStorage()->addOptimisticAllocator(
             target.table->getStorageManager());
         nodeSharedState->targets.push_back(std::move(target));
@@ -679,6 +691,10 @@ void NodeBatchInsert::copyToNodeGroup(transaction::Transaction* transaction,
     const auto nodeInfo = info->ptrCast<NodeBatchInsertInfo>();
 
     const auto numTuples = nodeLocalState->columnState->getSelVector().getSelSize();
+    if (nodeSharedState->partitionConstraint != nullptr) {
+        validatePartitionKey(context->clientContext, *nodeSharedState->partitionConstraint,
+            *nodeLocalState->columnVectors[nodeSharedState->partitionKeyColumnIdx]);
+    }
     if (nodeSharedState->targets.size() <= 1 && nodeSharedState->listRouter == nullptr) {
         // Non-partitioned fast path: append the contiguous selection vector directly.
         auto numAppendedTuples = 0ul;

@@ -6,9 +6,10 @@
 namespace lbug {
 namespace optimizer {
 
-/* When UNWIND is followed by MERGE, duplicate values in the UNWIND list can cause
- * issues because the MERGE's HASH_JOIN doesn't see newly created nodes within the same batch.
- * This optimizer inserts a UNWIND_DEDUP operator to deduplicate MERGE input rows.
+/* When UNWIND is followed by MERGE, this optimizer inserts an UNWIND_DEDUP operator so MERGE sees
+ * each key once. MERGE itself creates one pattern per key, so the dedup applies only where MERGE
+ * would drop the repeated created rows anyway: a node MERGE whose rows carry nothing besides the
+ * keys, and a relationship MERGE at the plan root, where no later clause reads the rows.
  *
  * E.g., UNWIND [1, 1, 2] AS x MERGE (a:A {val: x})
  * Before: UNWIND -> HASH_JOIN (for optional match) -> MERGE

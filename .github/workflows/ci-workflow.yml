@@ -358,6 +358,11 @@ jobs:
       AZURE_PUBLIC_CONTAINER: ${{ secrets.AZURE_PUBLIC_CONTAINER }}
       # Line tables only: backtraces keep file:line, objects and the ccache shrink several-fold.
       EXTRA_CMAKE_FLAGS: '-DCMAKE_C_FLAGS_RELWITHDEBINFO="-O2 -g1 -DNDEBUG" -DCMAKE_CXX_FLAGS_RELWITHDEBINFO="-O2 -g1 -DNDEBUG"'
+      # lance builds a native reader via Cargo (needs the Rust step below).
+      # Kept out of the Makefile default: its CMake FATAL_ERRORs without
+      # cargo, which would break dev builds and platforms without a Rust
+      # toolchain. Keep in sync with extension/.github/workflows/ci.yml.
+      EXTRA_EXTENSIONS: lance
       # The Makefile default (nproc * 2 / 3) builds with 2 jobs on the 4-vCPU runner.
       NUM_THREADS: 4
 
@@ -376,8 +381,8 @@ jobs:
           activate-environment: true
 
       # The icebug 13.5 prebuilt (vendored by extension/algo) is linked
-      # against libarrow.so.2600, which conda-forge does not ship yet
-      # (pixi still provides libarrow 25.x for libadbc-driver-manager).
+      # against libarrow.so.2600, which the pixi env must not ship
+      # (pixi.toml pins conda libarrow to 25.x for libadbc-driver-manager).
       # Install Arrow 26 from Apache's apt repo so the algo extension builds
       # and loads against 2600. The 26.* pin keeps a future Arrow 27 from
       # silently changing the SONAME again; the libarrow.so.2600 assertion
@@ -395,6 +400,46 @@ jobs:
           sudo apt-get install -y libarrow-dev
           test -e /usr/lib/x86_64-linux-gnu/libarrow.so.2600
           ldconfig -p | grep -q 'libarrow.so.2600'
+          # LD_LIBRARY_PATH puts $CONDA_PREFIX/lib first, so a conda
+          # libarrow.so.2600 would shadow the system one at load time.
+          # (conda-forge's libarrow 26.0.0 + simdjson 5.0.8 combo is
+          # SONAME-incoherent: it needs libsimdjson.so.34 but ships .so.35,
+          # which broke `LOAD EXTENSION 'algo'`.) Fail loudly if the pin
+          # in pixi.toml ever lets a conda 2600 back in.
+          test ! -e "${CONDA_PREFIX}/lib/libarrow.so.2600"
+
+      # The lance extension builds a native reader (lance_ladybug_ffi) via
+      # Cargo, and prost-build (via lance-core) needs protoc. Mirrors the
+      # "Install Rust toolchain and protoc" step in
+      # extension/.github/workflows/ci.yml, adapted from the manylinux
+      # container (dnf) to the ubuntu runner (apt-get). Must run before the
+      # CMake configure step; lance/CMakeLists.txt fails fast with a clear
+      # message when cargo is unavailable.
+      - name: Install Rust toolchain and protoc (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          set -e
+          if ! command -v cargo >/dev/null 2>&1; then
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+              | sh -s -- -y --profile minimal --default-toolchain stable
+          fi
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          export PATH="$HOME/.cargo/bin:$PATH"
+          cargo --version
+          # The default toolchain already carries the native triple; ensure
+          # the arch CMake maps to is installed.
+          if command -v rustup >/dev/null 2>&1; then
+            if [ "${{ runner.arch }}" = "X64" ]; then
+              rustup target add x86_64-unknown-linux-gnu
+            else
+              rustup target add aarch64-unknown-linux-gnu
+            fi
+          fi
+          if ! command -v protoc >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y protobuf-compiler
+          fi
+          protoc --version
 
       - name: Configure ADBC runtime
         run: |

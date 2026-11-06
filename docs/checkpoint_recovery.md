@@ -14,6 +14,7 @@ The checkpointer keeps that ordering:
 2. Write and sync the main `CHECKPOINT` record.
 3. Apply the shadow pages to the data files.
 4. Retire the graph WALs, then the main WAL: truncate, sync, unlink, and sync the parent directory.
+   A pinned checkpoint keeps the main WAL (see Pinned checkpoints).
 5. Remove the shadow files.
 
 Recovery repairs a file before parsing anything from it. The main file's shadow pages are
@@ -30,7 +31,71 @@ directory sync. There the ordering still recovers from a process crash — file 
 reached the OS — but power-loss durability of those directory entries is not guaranteed.
 
 If a step fails after the commit point, the database refuses further writes until it is reopened,
-and recovery finishes the checkpoint.
+and recovery finishes the checkpoint. A failure before it rolls the checkpoint back; if that rollback
+fails too, the database refuses further writes the same way.
+
+A checkpoint that runs automatically after a commit never fails that commit, which is already in
+the WAL: its failure is printed as a warning, and a later commit tries again, or fails if the
+failure made the database refuse writes. The checkpoint that `COPY` or a large `CREATE INDEX`
+requires is different, since their data is not in the WAL: its failure fails the statement. If the
+checkpoint was rolled back, the changes are lost on restart unless a later `CHECKPOINT` succeeds;
+if it made the database refuse writes, they survive the restart only if the checkpoint's record
+reached storage.
+
+## Pinned checkpoints
+
+A checkpoint taken while a read-only transaction is open keeps the WAL that transaction may still
+need: it does not rotate the WAL, so its `CHECKPOINT` record stays in the active WAL and later
+commits follow it. Its cleanup writes the marker file `<db>.pinned.tmp` before removing any shadow
+file, and every `CHECKPOINT` record logged into the active WAL first removes the marker. The marker
+therefore means that every `CHECKPOINT` record in the active WAL has been applied.
+
+A transaction committed after a `CHECKPOINT` record proves that checkpoint completed, since the
+write gate is held until a checkpoint's cleanup ends and a failure after its record poisons the WAL.
+Recovery then replays only the records after the last `CHECKPOINT` and removes a remaining shadow
+file, which belongs to a later checkpoint that never logged its record. The `CHECKPOINT` records
+stay in the WAL, so when such a transaction is the only proof, recovery writes the pinned-checkpoint
+marker before it removes the shadow. A `COMMIT` after a `CHECKPOINT` without its `BEGIN`, which the
+engine never writes, leaves the earlier rule in place: with a shadow file, only the records before
+the first `CHECKPOINT` replay. Records that end in no `COMMIT`, such as a torn commit, are a torn
+tail of the last `CHECKPOINT`, and the WAL counts as ending in that record.
+
+Recovering a WAL that ends in a `CHECKPOINT` record writes: it applies or removes the shadow files
+and retires the WAL. A read-only open therefore refuses such a database with `Cannot open database
+in read-only mode while checkpoint recovery is pending`, also when the `CHECKPOINT` is followed by
+a torn commit; opening it read-write once recovers it.
+
+When nothing was committed after the last `CHECKPOINT` record, the marker decides. With it,
+recovery discards the shadow files of the main database and partition children, and those of named
+graphs as described below.
+Without it, a remaining shadow is replayed as the committed checkpoint's, and a missing one is an
+error. A marker written by an older build holds `1` instead of `2` and only proves that a missing
+shadow was applied. A marker that is not exactly one of these bytes, such as the empty file a crash
+while writing it can leave, counts as no marker.
+
+A pinned checkpoint retires every checkpointed (loaded) named graph's WAL anyway; standalone
+sessions must not be open concurrently with the checkpoint. A named graph's commits go to the main
+WAL; its own WAL holds only the records of a session that opened the graph's file on its own, which
+the checkpoint has applied. A graph WAL found at recovery is therefore newer and is replayed.
+Older builds kept those graph WALs. Under an older build's marker, graphs therefore load this way
+only when no named graph has a non-empty WAL of its own (either the active or the frozen WAL);
+otherwise they recover through their own shadow files, which refuses to open once those are gone.
+A graph WAL alongside a shadow under such a marker is treated as applied and retired without
+replaying, so a standalone write made after that checkpoint would be dropped in that window;
+upgrading and checkpointing again clears the window. When transactions follow the last `CHECKPOINT`,
+a graph WAL replays regardless of the marker, as in older builds.
+
+## Failed commits
+
+A transaction whose changes cannot be applied after its `COMMIT` record is durable, for example
+because the buffer pool is full, is rolled back in memory and gets an `ABORT` record naming the WAL
+offset where its records start. Recovery skips the transactions such records name, so a `COMMIT`
+that reported an error is not applied once its `ABORT` is durable. If the `ABORT` record cannot be
+written either, the database refuses further writes until it is reopened, and recovery then
+applies the transaction. The `ABORT` always lands in the WAL file of its `COMMIT` with no
+`CHECKPOINT` record between them, since a checkpoint waits for the failed transaction's rollback;
+recovery ignores an `ABORT` that names no transaction committed in its file after the last
+`CHECKPOINT` before it.
 
 ## Checkpoint bundle format
 
@@ -74,7 +139,11 @@ its own again.
 
 Recovery reads the checksum flag of an attached-graph WAL from the WAL's own header, so a graph
 opened on its own may be opened with either checksum setting: its committed changes are replayed
-or its committed checkpoint recovered when the parent database is reopened.
+or its committed checkpoint recovered when the parent database is reopened. The database's own
+WAL must instead match the configured setting. A mismatch is a configuration error, not a torn
+tail, so it fails the open even with `throwOnWalReplayFailure` false and leaves the WAL untouched.
+An all-zero header, which a power loss before the WAL's first write reaches disk can leave, was
+never written and counts as a torn WAL instead.
 
 ## Downgrades
 
@@ -94,10 +163,12 @@ An ordinary version 2 WAL tail — owner trailers on the records but no pending 
 quieter hazard: an older build does not reliably refuse it. A record type the older build knows
 decodes with the trailer skipped as unknown trailing bytes and replays against the main catalog,
 silently misapplying records meant for a graph. A record type the older build does not know, such
-as `UPDATE_SEQUENCE_NAMED`, is no safer: with the default non-throwing replay configuration the
-decoding error is treated like a corrupt WAL tail — the older build replays the committed prefix
-and truncates the WAL there, silently discarding that transaction and every transaction recorded
-after it. Setting `throwOnWalReplayFailure` to true rejects an unknown record before that WAL
+as `UPDATE_SEQUENCE_NAMED` or `ABORT`, is no safer: with the default non-throwing replay
+configuration the decoding error is treated like a corrupt WAL tail — the older build replays the
+committed prefix and truncates the WAL there, silently discarding that transaction and every
+transaction recorded after it. For `ABORT`, which marks a transaction that failed after its
+`COMMIT` record was written, the older build also applies the transaction it undoes. Setting
+`throwOnWalReplayFailure` to true rejects an unknown record before that WAL
 is applied, but it still does not make downgrading safe: a WAL containing only recognized
 record types passes validation, and its owner trailers are ignored. This is why the successful
 `CHECKPOINT`, not a clean close, is the downgrade gate.

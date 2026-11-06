@@ -1,5 +1,6 @@
 #include "common/serializer/buffered_file.h"
 
+#include <algorithm>
 #include <cstring>
 
 #include "common/assert.h"
@@ -78,20 +79,31 @@ void BufferedFileReader::read(uint8_t* data, uint64_t size) {
         // Clear read buffer.
         fileOffset -= bufferSize;
         fileOffset += bufferOffset;
+        bufferOffset = 0;
+        bufferSize = 0;
+        // readFromFile silently short-reads at EOF, so check the range first and throw a
+        // catchable error instead of returning uninitialized bytes. A torn WAL tail (e.g. a
+        // crash or ENOSPC mid-commit) must surface as a replay failure, not a native crash.
+        if (fileOffset > fileSize || size > fileSize - fileOffset) {
+            throw RuntimeException(
+                std::format("Reading past the end of the file {} with size {} at offset {}",
+                    fileInfo.path, fileSize, fileOffset));
+        }
         fileInfo.readFromFile(data, size, fileOffset);
         fileOffset += size;
-        bufferOffset = bufferSize;
-    } else if (bufferOffset + size <= bufferSize) {
-        memcpy(data, &buffer[bufferOffset], size);
-        bufferOffset += size;
     } else {
-        auto toCopy = bufferSize - bufferOffset;
-        memcpy(data, &buffer[bufferOffset], toCopy);
-        bufferOffset += toCopy;
-        readNextPage();
-        auto remaining = size - toCopy;
-        memcpy(data + toCopy, buffer.get(), remaining);
-        bufferOffset += remaining;
+        // Loop across page boundaries: the final page of a torn file may hold fewer bytes
+        // than requested, and copying the full remainder would overrun the heap buffer.
+        while (size > 0) {
+            if (bufferOffset >= bufferSize) {
+                readNextPage();
+            }
+            const auto toCopy = std::min(size, bufferSize - bufferOffset);
+            memcpy(data, &buffer[bufferOffset], toCopy);
+            bufferOffset += toCopy;
+            data += toCopy;
+            size -= toCopy;
+        }
     }
 }
 

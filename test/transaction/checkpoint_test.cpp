@@ -77,6 +77,58 @@ public:
             TransactionManager::initCheckpointer;
     }
 
+    // Returns whether a COPY or CREATE INDEX commit started waiting for other writers to leave
+    // within 10 s.
+    static bool waitForForcedCheckpointPending(main::ClientContext& context) {
+        auto* transactionManager = TransactionManager::Get(context);
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+        while (std::chrono::steady_clock::now() < deadline) {
+            {
+                std::unique_lock lck{transactionManager->mtxForSerializingPublicFunctionCalls};
+                if (transactionManager->forcedCheckpointPending) {
+                    return true;
+                }
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        return false;
+    }
+
+    // Returns whether a checkpoint closed the write gate within 10 s. A BEGIN holds the gate's
+    // mutex only briefly, so it counts as closed once it stays held across a 20 ms gap.
+    static bool waitForWriteGateClosed(main::ClientContext& context) {
+        auto* transactionManager = TransactionManager::Get(context);
+        const auto isHeld = [transactionManager]() {
+            std::unique_lock lck{transactionManager->mtxForStartingNewTransactions,
+                std::try_to_lock};
+            return !lck.owns_lock();
+        };
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+        while (std::chrono::steady_clock::now() < deadline) {
+            const bool held = isHeld();
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+            if (held && isHeld()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // Holds the mutex that every begin, commit and rollback takes for 100 ms on a new thread, and
+    // returns once it is held.
+    static std::thread holdPublicMutexBriefly(main::ClientContext& context) {
+        auto* transactionManager = TransactionManager::Get(context);
+        std::promise<void> held;
+        auto heldFuture = held.get_future();
+        std::thread holder([transactionManager, held = std::move(held)]() mutable {
+            std::unique_lock lck{transactionManager->mtxForSerializingPublicFunctionCalls};
+            held.set_value();
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        });
+        heldFuture.wait();
+        return holder;
+    }
+
 private:
     TransactionManager::init_checkpointer_func_t initFunc;
 };
@@ -366,6 +418,42 @@ TEST_F(CheckpointRetryAfterFailureTest, RetryFailsWithNewWritesThenReopen) {
     checkNodes(200);
 }
 
+class FlakyCheckpointerFailsOnRollback final : public Checkpointer {
+public:
+    explicit FlakyCheckpointerFailsOnRollback(main::ClientContext& context)
+        : Checkpointer(context) {}
+
+protected:
+    bool checkpointStorage() override { throw RuntimeException("checkpoint failed."); }
+    void beforeRollback() override { throw RuntimeException("rollback failed."); }
+};
+
+TEST_F(CheckpointRetryAfterFailureTest, FailedRollbackPoisonsWAL) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    insertNodes(0, 100);
+    FlakyCheckpointer flakyCheckpointer([](main::ClientContext& context) {
+        return std::make_unique<FlakyCheckpointerFailsOnRollback>(context);
+    });
+    flakyCheckpointer.setCheckpointer(*getClientContext(*conn));
+    auto res = conn->query("CHECKPOINT;");
+    ASSERT_FALSE(res->isSuccess());
+    EXPECT_NE(res->getErrorMessage().find("refuses further writes until restart"),
+        std::string::npos)
+        << res->getErrorMessage();
+    checkNodes(100);
+    res = conn->query("CREATE (a:test {id: 100, name: 'name_100'});");
+    ASSERT_FALSE(res->isSuccess());
+    EXPECT_NE(res->getErrorMessage().find("panic state"), std::string::npos)
+        << res->getErrorMessage();
+    EXPECT_NE(res->getErrorMessage().find("Checkpoint rollback failed"), std::string::npos)
+        << res->getErrorMessage();
+    res.reset();
+    createDBAndConn();
+    checkNodes(100);
+}
+
 class FlakyCheckpointerFailsOnSerialization final : public Checkpointer {
 public:
     explicit FlakyCheckpointerFailsOnSerialization(main::ClientContext& context)
@@ -561,7 +649,7 @@ TEST_F(CheckpointRetryAfterFailureTest, MainMarkerRecoversLegacyPartitionShadows
                     ->isSuccess());
     checkpoint();
     ASSERT_TRUE(conn->query("CREATE (:partitioned_p0 {id: 1, amount: 10});")->isSuccess());
-    ASSERT_TRUE(conn->query("CREATE (:partitioned_p1 {id: 2, amount: 20});")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:partitioned_p1 {id: 2, amount: 6});")->isSuccess());
     failCheckpointWith<FlakyCheckpointerFailsOnApplyingShadow>();
 
     auto* context = getClientContext(*conn);
@@ -603,7 +691,7 @@ TEST_F(CheckpointRetryAfterFailureTest, LegacyMarkerRecoversAppliedChildrenWitho
                     ->isSuccess());
     checkpoint();
     ASSERT_TRUE(conn->query("CREATE (:partitioned_p0 {id: 1, amount: 10});")->isSuccess());
-    ASSERT_TRUE(conn->query("CREATE (:partitioned_p1 {id: 2, amount: 20});")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:partitioned_p1 {id: 2, amount: 6});")->isSuccess());
     failCheckpointWith<FlakyCheckpointerFailsOnApplyingShadow>();
 
     auto* context = getClientContext(*conn);
@@ -655,7 +743,7 @@ TEST_F(CheckpointRetryAfterFailureTest, BundleMarkerRequiresEveryChildShadow) {
                     ->isSuccess());
     checkpoint();
     ASSERT_TRUE(conn->query("CREATE (:partitioned_p0 {id: 1, amount: 10});")->isSuccess());
-    ASSERT_TRUE(conn->query("CREATE (:partitioned_p1 {id: 2, amount: 20});")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:partitioned_p1 {id: 2, amount: 6});")->isSuccess());
     failCheckpointWith<FlakyCheckpointerFailsOnApplyingShadow>();
 
     auto* context = getClientContext(*conn);
@@ -690,7 +778,7 @@ TEST_F(CheckpointRetryAfterFailureTest, MissingMainMarkerDiscardsPartitionShadow
                     ->isSuccess());
     checkpoint();
     ASSERT_TRUE(conn->query("CREATE (:partitioned_p0 {id: 1, amount: 10});")->isSuccess());
-    ASSERT_TRUE(conn->query("CREATE (:partitioned_p1 {id: 2, amount: 20});")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:partitioned_p1 {id: 2, amount: 6});")->isSuccess());
 
     auto* context = getClientContext(*conn);
     auto stagedCheckpoint = std::make_unique<Checkpointer>(*context);
@@ -804,7 +892,7 @@ TEST_F(CheckpointRetryAfterFailureTest, PartitionShadowsSurviveUntilMainWALRetir
                     ->isSuccess());
     checkpoint();
     ASSERT_TRUE(conn->query("CREATE (:partitioned_p0 {id: 1, amount: 10});")->isSuccess());
-    ASSERT_TRUE(conn->query("CREATE (:partitioned_p1 {id: 2, amount: 20});")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:partitioned_p1 {id: 2, amount: 6});")->isSuccess());
     failCheckpointWith<CheckpointerFailsBeforeWALRetirement>();
 
     auto* context = getClientContext(*conn);
@@ -834,6 +922,390 @@ TEST_F(CheckpointRetryAfterFailureTest, PartitionShadowsSurviveUntilMainWALRetir
     result = conn->query("MATCH (n:partitioned_p1) RETURN COUNT(n);");
     ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
     ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 1);
+}
+
+// Checkpoints automatically after every commit.
+class PostCommitCheckpointFailureTest : public CheckpointRetryAfterFailureTest {
+public:
+    void SetUp() override {
+        CheckpointRetryAfterFailureTest::SetUp();
+        checkpointAfterEveryCommit();
+    }
+
+    void checkpointAfterEveryCommit() const {
+        ASSERT_TRUE(conn->query("CALL force_checkpoint_on_close=false;")->isSuccess());
+        ASSERT_TRUE(conn->query("CALL auto_checkpoint=true;")->isSuccess());
+        ASSERT_TRUE(conn->query("CALL checkpoint_threshold=0;")->isSuccess());
+    }
+
+    // Counts checkpoint attempts; each one fails while failCheckpoints is set.
+    template<typename FAILING_CHECKPOINTER>
+    void countCheckpoints() {
+        FlakyCheckpointer counting(
+            [this](main::ClientContext& context) -> std::unique_ptr<Checkpointer> {
+                numCheckpoints++;
+                if (failCheckpoints) {
+                    return std::make_unique<FAILING_CHECKPOINTER>(context);
+                }
+                return std::make_unique<Checkpointer>(context);
+            });
+        counting.setCheckpointer(*getClientContext(*conn));
+    }
+
+    uint64_t numCheckpoints = 0;
+    bool failCheckpoints = true;
+};
+
+TEST_F(PostCommitCheckpointFailureTest, FailedAutoCheckpointDoesNotFailCommit) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+    countCheckpoints<FlakyCheckpointerFailsOnCheckpointStorage>();
+    ::testing::internal::CaptureStderr();
+    insertNodes(0, 1);
+    ASSERT_TRUE(conn->query("BEGIN TRANSACTION;")->isSuccess());
+    insertNodes(1, 2);
+    auto res = conn->query("COMMIT;");
+    const auto warnings = ::testing::internal::GetCapturedStderr();
+    ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+    ASSERT_EQ(numCheckpoints, 2u);
+    EXPECT_NE(warnings.find("Warning: automatic checkpoint after a commit failed, WAL "),
+        std::string::npos)
+        << warnings;
+    EXPECT_NE(warnings.find("checkpoint failed."), std::string::npos) << warnings;
+    // Reopen without checkpointing: the WAL alone recovers both commits.
+    res.reset();
+    createDBAndConn();
+    checkNodes(2);
+}
+
+TEST_F(PostCommitCheckpointFailureTest, NextCommitRetriesFailedAutoCheckpoint) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+    countCheckpoints<FlakyCheckpointerFailsOnCheckpointStorage>();
+    insertNodes(0, 1);
+    EXPECT_GT(WAL::Get(*getClientContext(*conn))->getFileSize(), 0u);
+    failCheckpoints = false;
+    insertNodes(1, 2);
+    ASSERT_EQ(numCheckpoints, 2u);
+    EXPECT_EQ(WAL::Get(*getClientContext(*conn))->getFileSize(), 0u);
+    createDBAndConn();
+    checkNodes(2);
+}
+
+TEST_F(PostCommitCheckpointFailureTest, AutoCheckpointBlockedByOpenWriterDoesNotFailCommit) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+    conn.reset();
+    createDB(10000 /* checkpoint wait timeout in microseconds */);
+    conn = std::make_unique<main::Connection>(database.get());
+    checkpointAfterEveryCommit();
+    ASSERT_TRUE(conn->query("CALL enable_multi_writes=true;")->isSuccess());
+    auto context = getClientContext(*conn);
+    main::Connection other{database.get()};
+    ASSERT_TRUE(other.query("BEGIN TRANSACTION;")->isSuccess());
+    ASSERT_TRUE(other.query("CREATE (a:test {id: 1, name: 'name_1'});")->isSuccess());
+    // This commit's checkpoint times out waiting for the other connection's write transaction.
+    insertNodes(0, 1);
+    EXPECT_GT(WAL::Get(*context)->getFileSize(), 0u);
+    auto res = other.query("COMMIT;");
+    ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+    EXPECT_EQ(WAL::Get(*context)->getFileSize(), 0u);
+    checkNodes(2);
+}
+
+// A COPY is durable only once its checkpoint runs, so it must not commit while another write
+// transaction could keep that checkpoint from running.
+TEST_F(PostCommitCheckpointFailureTest, WriterWaitingBehindAutoCheckpointLetsOthersThrough) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+    conn.reset();
+    createDB(10000000 /* checkpoint wait timeout in microseconds */);
+    conn = std::make_unique<main::Connection>(database.get());
+    checkpointAfterEveryCommit();
+    ASSERT_TRUE(conn->query("CALL enable_multi_writes=true;")->isSuccess());
+    main::Connection openWriter{database.get()};
+    main::Connection waitingWriter{database.get()};
+    main::Connection reader{database.get()};
+    ASSERT_TRUE(openWriter.query("BEGIN TRANSACTION;")->isSuccess());
+    ASSERT_TRUE(openWriter.query("CREATE (a:test {id: 1, name: 'name_1'});")->isSuccess());
+    // This commit's checkpoint closes the write gate and waits for openWriter to leave.
+    std::thread committing([this]() { insertNodes(0, 1); });
+    const bool gateClosed = FlakyCheckpointer::waitForWriteGateClosed(*getClientContext(*conn));
+    std::unique_ptr<main::QueryResult> waitingRes;
+    std::promise<void> waitingStarted;
+    std::thread waiting([&waitingWriter, &waitingRes, &waitingStarted]() {
+        waitingStarted.set_value();
+        waitingRes = waitingWriter.query("CREATE (a:test {id: 2, name: 'name_2'});");
+    });
+    waitingStarted.get_future().wait();
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    const auto start = std::chrono::steady_clock::now();
+    auto readRes = reader.query("MATCH (a:test) RETURN COUNT(a);");
+    auto commitRes = openWriter.query("COMMIT;");
+    const auto waited = std::chrono::steady_clock::now() - start;
+    committing.join();
+    waiting.join();
+    ASSERT_TRUE(gateClosed);
+    ASSERT_TRUE(readRes->isSuccess()) << readRes->getErrorMessage();
+    ASSERT_TRUE(commitRes->isSuccess()) << commitRes->getErrorMessage();
+    ASSERT_TRUE(waitingRes->isSuccess()) << waitingRes->getErrorMessage();
+    EXPECT_LT(waited, std::chrono::seconds(5));
+    checkNodes(3);
+}
+
+TEST_F(PostCommitCheckpointFailureTest, WriterWaitingAtWriteGateDoesNotPinCheckpoint) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+    auto context = getClientContext(*conn);
+    main::Connection waitingWriter{database.get()};
+    std::thread waiting;
+    // Checkpointers are created with the write gate closed.
+    FlakyCheckpointer writerArrives(
+        [&waiting, &waitingWriter](main::ClientContext& ctx) -> std::unique_ptr<Checkpointer> {
+            std::promise<void> started;
+            auto startedFuture = started.get_future();
+            waiting = std::thread([&waitingWriter, started = std::move(started)]() mutable {
+                started.set_value();
+                waitingWriter.query("BEGIN TRANSACTION;");
+            });
+            startedFuture.wait();
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            return std::make_unique<Checkpointer>(ctx);
+        });
+    writerArrives.setCheckpointer(*context);
+    insertNodes(0, 1);
+    FlakyCheckpointer::resetCheckpointer(*context);
+    waiting.join();
+    EXPECT_EQ(WAL::Get(*context)->getFileSize(), 0u);
+    ASSERT_TRUE(waitingWriter.query("COMMIT;")->isSuccess());
+    checkNodes(1);
+}
+
+TEST_F(PostCommitCheckpointFailureTest, BusyPublicMutexDoesNotPinCheckpoint) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+    auto context = getClientContext(*conn);
+    std::thread holder;
+    // Checkpointers are created with the write gate closed.
+    FlakyCheckpointer publicMutexBusy(
+        [&holder](main::ClientContext& ctx) -> std::unique_ptr<Checkpointer> {
+            holder = FlakyCheckpointer::holdPublicMutexBriefly(ctx);
+            return std::make_unique<Checkpointer>(ctx);
+        });
+    publicMutexBusy.setCheckpointer(*context);
+    insertNodes(0, 1);
+    FlakyCheckpointer::resetCheckpointer(*context);
+    holder.join();
+    EXPECT_EQ(WAL::Get(*context)->getFileSize(), 0u);
+    checkNodes(1);
+}
+
+TEST_F(PostCommitCheckpointFailureTest, CopyBesideOpenWriterCommitsNothing) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+    conn.reset();
+    createDB(10000 /* checkpoint wait timeout in microseconds */);
+    conn = std::make_unique<main::Connection>(database.get());
+    checkpointAfterEveryCommit();
+    ASSERT_TRUE(conn->query("CALL enable_multi_writes=true;")->isSuccess());
+    {
+        main::Connection other{database.get()};
+        ASSERT_TRUE(other.query("BEGIN TRANSACTION;")->isSuccess());
+        ASSERT_TRUE(other.query("CREATE (a:test {id: 10, name: 'name_10'});")->isSuccess());
+        auto res = conn->query("COPY test FROM (UNWIND range(0, 9) AS i RETURN i, 'n');");
+        ASSERT_FALSE(res->isSuccess());
+        EXPECT_NE(res->getErrorMessage().find("The transaction was rolled back"), std::string::npos)
+            << res->getErrorMessage();
+        res = conn->query("MATCH (a:test) RETURN COUNT(a);");
+        ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+        EXPECT_EQ(res->getNext()->getValue(0)->getValue<int64_t>(), 0);
+        res = other.query("COMMIT;");
+        ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+    }
+    auto res = conn->query("COPY test FROM (UNWIND range(0, 9) AS i RETURN i, 'n');");
+    ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+    // Reopen without checkpointing on close: the COPY's own checkpoint made it durable.
+    res.reset();
+    createDBAndConn();
+    checkNodes(11);
+}
+
+TEST_F(PostCommitCheckpointFailureTest, CopyWaitsForOpenWriterToFinish) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CALL enable_multi_writes=true;")->isSuccess());
+    {
+        main::Connection other{database.get()};
+        main::Connection late{database.get()};
+        ASSERT_TRUE(other.query("BEGIN TRANSACTION;")->isSuccess());
+        ASSERT_TRUE(other.query("CREATE (a:test {id: 10, name: 'name_10'});")->isSuccess());
+        std::atomic<bool> copyDone{false};
+        auto* context = getClientContext(*conn);
+        std::thread rollbackLater([&other, context]() {
+            ASSERT_TRUE(FlakyCheckpointer::waitForForcedCheckpointPending(*context));
+            // Leave the late writer time to reach its BEGIN first.
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            ASSERT_TRUE(other.query("ROLLBACK;")->isSuccess());
+        });
+        // A writer that begins while the COPY waits must not start until the COPY has
+        // checkpointed; if it did, it would hold the COPY past the timeout.
+        std::thread beginWhileCopyWaits([&late, &copyDone, context]() {
+            ASSERT_TRUE(FlakyCheckpointer::waitForForcedCheckpointPending(*context));
+            ASSERT_TRUE(late.query("BEGIN TRANSACTION;")->isSuccess());
+            while (!copyDone) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            }
+            ASSERT_TRUE(late.query("ROLLBACK;")->isSuccess());
+        });
+        const auto start = std::chrono::steady_clock::now();
+        auto res = conn->query("COPY test FROM (UNWIND range(0, 9) AS i RETURN i, 'n');");
+        const auto waited = std::chrono::steady_clock::now() - start;
+        copyDone = true;
+        rollbackLater.join();
+        beginWhileCopyWaits.join();
+        ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+        // The rollback wakes the COPY; it does not sit out the 5 s checkpoint wait timeout.
+        EXPECT_LT(waited, std::chrono::seconds(3));
+    }
+    createDBAndConn();
+    checkNodes(10);
+}
+
+// Two COPYs committing together cannot both wait for the other to leave; the second gives way
+// at once rather than both sitting out the checkpoint wait timeout.
+TEST_F(PostCommitCheckpointFailureTest, ConcurrentCopiesDoNotWaitForEachOther) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CALL enable_multi_writes=true;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE test2(id INT64 PRIMARY KEY);")->isSuccess());
+    {
+        main::Connection second{database.get()};
+        ASSERT_TRUE(second.query("BEGIN TRANSACTION;")->isSuccess());
+        auto res = second.query("COPY test2 FROM (UNWIND range(0, 4) AS i RETURN i);");
+        ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+        const auto start = std::chrono::steady_clock::now();
+        std::unique_ptr<main::QueryResult> firstRes;
+        std::thread first([this, &firstRes]() {
+            firstRes = conn->query("COPY test FROM (UNWIND range(0, 9) AS i RETURN i, 'n');");
+        });
+        // The first COPY now waits for the second transaction, which commits next.
+        const bool firstPending =
+            FlakyCheckpointer::waitForForcedCheckpointPending(*getClientContext(*conn));
+        res = second.query("COMMIT;");
+        first.join();
+        const auto waited = std::chrono::steady_clock::now() - start;
+        ASSERT_TRUE(firstPending);
+        ASSERT_TRUE(firstRes->isSuccess()) << firstRes->getErrorMessage();
+        ASSERT_FALSE(res->isSuccess());
+        EXPECT_NE(res->getErrorMessage().find("The transaction was rolled back"), std::string::npos)
+            << res->getErrorMessage();
+        EXPECT_LT(waited, std::chrono::seconds(3));
+    }
+    createDBAndConn();
+    checkNodes(10);
+    auto res = conn->query("MATCH (a:test2) RETURN COUNT(a);");
+    ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+    EXPECT_EQ(res->getNext()->getValue(0)->getValue<int64_t>(), 0);
+}
+
+TEST_F(PostCommitCheckpointFailureTest, AutoCheckpointThatPoisonsWALFailsNextWrite) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+    countCheckpoints<FlakyCheckpointerFailsOnApplyingShadow>();
+    insertNodes(0, 1);
+    ASSERT_EQ(numCheckpoints, 1u);
+    auto res = conn->query("CREATE (a:test {id: 1, name: 'name_1'});");
+    ASSERT_FALSE(res->isSuccess());
+    EXPECT_NE(res->getErrorMessage().find("refuses further writes until restart"),
+        std::string::npos)
+        << res->getErrorMessage();
+    res.reset();
+    createDBAndConn();
+    checkNodes(1);
+}
+
+TEST_F(PostCommitCheckpointFailureTest, FailedForcedCheckpointFailsCopy) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+    countCheckpoints<FlakyCheckpointerFailsOnCheckpointStorage>();
+    auto res = conn->query("COPY test FROM (UNWIND range(0, 9) AS i RETURN i, 'n');");
+    ASSERT_FALSE(res->isSuccess());
+    EXPECT_NE(
+        res->getErrorMessage().find("may be lost on restart unless a later CHECKPOINT succeeds"),
+        std::string::npos)
+        << res->getErrorMessage();
+    ASSERT_EQ(numCheckpoints, 1u);
+    failCheckpoints = false;
+    checkpoint();
+    createDBAndConn();
+    checkNodes(10);
+}
+
+TEST_F(PostCommitCheckpointFailureTest, ForcedCheckpointFailingAfterItsRecordRefusesWrites) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+    countCheckpoints<FlakyCheckpointerFailsOnApplyingShadow>();
+    auto res = conn->query("COPY test FROM (UNWIND range(0, 9) AS i RETURN i, 'n');");
+    ASSERT_FALSE(res->isSuccess());
+    const auto error = res->getErrorMessage();
+    // A later CHECKPOINT cannot run: the failure after the record poisoned the WAL.
+    EXPECT_NE(error.find("refuses further writes until restart"), std::string::npos) << error;
+    EXPECT_EQ(error.find("unless a later CHECKPOINT succeeds"), std::string::npos) << error;
+    res.reset();
+    createDBAndConn();
+    checkNodes(10);
+}
+
+TEST_F(PostCommitCheckpointFailureTest, FailedForcedCheckpointFailsCreateIndex) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+    insertNodes(0, 2);
+    countCheckpoints<FlakyCheckpointerFailsOnCheckpointStorage>();
+    setenv("LBUG_CREATE_INDEX_WAL_THRESHOLD", "1", 1);
+    auto res = conn->query("CREATE ART INDEX test_name_idx FOR (n:test) ON (n.name);");
+    unsetenv("LBUG_CREATE_INDEX_WAL_THRESHOLD");
+    ASSERT_FALSE(res->isSuccess());
+    EXPECT_NE(
+        res->getErrorMessage().find("may be lost on restart unless a later CHECKPOINT succeeds"),
+        std::string::npos)
+        << res->getErrorMessage();
+    ASSERT_EQ(numCheckpoints, 1u);
+    failCheckpoints = false;
+    checkpoint();
+    createDBAndConn();
+    res = conn->query("CALL SHOW_INDEXES() WHERE index_name = 'test_name_idx' RETURN count(*);");
+    ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+    EXPECT_EQ(res->getNext()->getValue(0)->getValue<int64_t>(), 1);
+}
+
+TEST_F(PostCommitCheckpointFailureTest, FailedCheckpointCleanupFailsNextWrite) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+    countCheckpoints<CheckpointerFailsBeforeWALRetirement>();
+    insertNodes(0, 1);
+    ASSERT_EQ(numCheckpoints, 1u);
+    auto res = conn->query("CREATE (a:test {id: 1, name: 'name_1'});");
+    ASSERT_FALSE(res->isSuccess());
+    EXPECT_NE(res->getErrorMessage().find("checkpoint interrupted before WAL retirement"),
+        std::string::npos)
+        << res->getErrorMessage();
+    res.reset();
+    createDBAndConn();
+    checkNodes(1);
 }
 
 class CommittedPartitionMissingBaseTest : public CheckpointRetryAfterFailureTest,
@@ -987,7 +1459,7 @@ TEST_F(CheckpointRetryAfterFailureTest, CommittedRecoverySurvivesRetriesThatAdva
     checkpoint();
     ASSERT_TRUE(conn->query("CREATE (:partitioned_p0 {id: 1, amount: 10});")->isSuccess());
     failCheckpointWith<FlakyCheckpointerFailsOnLoggingCheckpoint>();
-    ASSERT_TRUE(conn->query("CREATE (:partitioned_p1 {id: 2, amount: 20});")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:partitioned_p1 {id: 2, amount: 6});")->isSuccess());
     failCheckpointWith<FlakyCheckpointerFailsOnLoggingCheckpoint>();
     ASSERT_TRUE(conn->query("CREATE (:partitioned_p0 {id: 3, amount: 30});")->isSuccess());
     failCheckpointWith<FlakyCheckpointerFailsOnApplyingShadow>();
@@ -1455,6 +1927,40 @@ INSTANTIATE_TEST_SUITE_P(ShadowID, LegacyMainWALDatabaseIDTest,
         }
         return std::string{};
     });
+
+// An ABORT record only ever follows its own COMMIT, with no CHECKPOINT between them. One that
+// names no such block is ignored and does not end the WAL: a WAL that ends in a CHECKPOINT whose
+// shadow is not applied yet still recovers through that shadow, instead of replaying the records
+// before an earlier pinned CHECKPOINT a second time.
+TEST_F(CheckpointRetryAfterFailureTest, StrayAbortRecordAfterCheckpointIsIgnored) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    insertNodes(0, 50);
+    auto reader = std::make_unique<main::Connection>(database.get());
+    ASSERT_TRUE(reader->query("BEGIN TRANSACTION READ ONLY;")->isSuccess());
+    checkpoint();
+    const auto walPath = StorageUtils::getWALFilePath(databasePath);
+    const auto blockBeforeLastCheckpoint = std::filesystem::file_size(walPath);
+    insertNodes(50, 100);
+    failCheckpointWith<FlakyCheckpointerFailsOnApplyingShadow>();
+    const bool enableChecksums = getClientContext(*conn)->getDBConfig()->enableChecksums;
+    reader.reset();
+    conn.reset();
+    database.reset();
+    std::ofstream wal{walPath, std::ios::binary | std::ios::app};
+    for (const auto start : {uint64_t{1}, static_cast<uint64_t>(blockBeforeLastCheckpoint)}) {
+        const auto record = serializeCheckpointRecord(AbortRecord{start});
+        wal.write(reinterpret_cast<const char*>(record.data.get()), record.size);
+        if (enableChecksums) {
+            const auto recordChecksum = checksum(record.data.get(), record.size);
+            wal.write(reinterpret_cast<const char*>(&recordChecksum), sizeof(recordChecksum));
+        }
+    }
+    wal.close();
+    createDBAndConn();
+    checkNodes(100);
+}
 
 TEST_F(CheckpointRetryAfterFailureTest, LegacyMainShadowRejectsReplacementDatabase) {
     if (inMemMode || systemConfig->checkpointThreshold == 0) {
@@ -2152,6 +2658,48 @@ TEST_F(FlakyCheckpointerTest, RecoversLegacyFrozenGraphMarkerWithActiveWALCommit
     ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 3);
     EXPECT_FALSE(std::filesystem::exists(graphCheckpointWALPath));
     EXPECT_FALSE(std::filesystem::exists(graphShadowPath));
+}
+
+// Graph commits go to the main WAL, so only a standalone session on the graph's file leaves commits
+// in a graph WAL. The ABORT stands in for a failed publish's, behind a later commit, which another
+// writer can put there. The rows are asserted by id: a standalone session leaves their label and
+// data columns null.
+TEST_F(FlakyCheckpointerTest, AbortRecordSkipsTheTransactionInAGraphWAL) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    LegacyGraphMarkerRecoveryFixture{}.setUp(conn.get());
+    const auto graphPath = StorageUtils::getGraphPath(databasePath, "recovery_graph");
+    const auto graphWALPath = StorageUtils::getWALFilePath(graphPath);
+    conn.reset();
+    database.reset();
+
+    auto graphConfig = *systemConfig;
+    graphConfig.autoCheckpoint = false;
+    graphConfig.forceCheckpointOnClose = false;
+    graphConfig.enableChecksums = false;
+    auto graphDatabase = std::make_unique<main::Database>(graphPath, graphConfig);
+    auto graphConnection = std::make_unique<main::Connection>(graphDatabase.get());
+    ASSERT_TRUE(graphConnection->query("CREATE (:User {name: 'Carol'});")->isSuccess());
+    const auto abortedStart = std::filesystem::file_size(graphWALPath);
+    ASSERT_TRUE(graphConnection->query("CREATE (:User {name: 'Bob'});")->isSuccess());
+    ASSERT_TRUE(graphConnection->query("CREATE (:User {name: 'Dave'});")->isSuccess());
+    graphConnection.reset();
+    graphDatabase.reset();
+    const auto abortRecord = serializeCheckpointRecord(AbortRecord{abortedStart});
+    std::ofstream{graphWALPath, std::ios::binary | std::ios::app}.write(
+        reinterpret_cast<const char*>(abortRecord.data.get()), abortRecord.size);
+
+    createDBAndConn();
+    ASSERT_TRUE(conn->query("USE GRAPH recovery_graph;")->isSuccess());
+    const auto count = [&](const std::string& statement) {
+        auto result = conn->query(statement);
+        EXPECT_TRUE(result->isSuccess()) << result->getErrorMessage();
+        return result->isSuccess() ? result->getNext()->getValue(0)->getValue<int64_t>() : -1;
+    };
+    EXPECT_EQ(count("MATCH (n) RETURN COUNT(n);"), 3);
+    EXPECT_EQ(count("MATCH (n) WHERE n.id = 2 RETURN COUNT(n);"), 0);
+    EXPECT_EQ(count("MATCH (n) WHERE n.id = 3 RETURN COUNT(n);"), 1);
 }
 
 TEST_F(FlakyCheckpointerTest, RejectsActiveGraphMarkerWithNonCheckpointFrozenWAL) {
@@ -3029,7 +3577,7 @@ TEST_F(FlakyCheckpointerTest, ConcurrentDropGraphDuringCommitKeepsCatalogsAlive)
     }
     ASSERT_TRUE(conn->query("CALL force_checkpoint_on_close=false;")->isSuccess());
     ASSERT_TRUE(conn->query("CALL auto_checkpoint=false;")->isSuccess());
-    ASSERT_TRUE(conn->query("CALL debug_enable_multi_writes=true;")->isSuccess());
+    ASSERT_TRUE(conn->query("CALL enable_multi_writes=true;")->isSuccess());
     main::Connection dropConn(database.get());
     constexpr auto iterations = 100;
     for (auto i = 0; i < iterations; ++i) {
@@ -3965,7 +4513,7 @@ TEST_F(FlakyCheckpointerTest, ConcurrentDropGraphDuringStagedInsertCommitFailsCl
     }
     ASSERT_TRUE(conn->query("CALL force_checkpoint_on_close=false;")->isSuccess());
     ASSERT_TRUE(conn->query("CALL auto_checkpoint=false;")->isSuccess());
-    ASSERT_TRUE(conn->query("CALL debug_enable_multi_writes=true;")->isSuccess());
+    ASSERT_TRUE(conn->query("CALL enable_multi_writes=true;")->isSuccess());
     main::Connection dropConn(database.get());
 
     auto stageRelInsert = [&] {
@@ -4973,22 +5521,14 @@ protected:
 
 // Fix #1 – lastTimestamp data race
 // ─────────────────────────────────────────────────────────────────────────────
-// Before the fix, checkpointNoLock() read `lastTimestamp` without holding
-// mtxForSerializingPublicFunctionCalls, which is UB when commit() concurrently
-// increments it.  The fix snapshots the value under the mutex.
-//
-// Observable invariant tested here: a write transaction committed while the
-// checkpoint drain is waiting for it must be included in the checkpoint.
-// Without the fix the snapshot could see a stale (too-low) lastTimestamp,
-// causing the MVCC catalog snapshot to exclude the final committed entry.
-// After the fix the snapshot is taken under the mutex *after* the drain, so
-// it is guaranteed to reflect all commits that happened before the gate.
+// A write transaction committed while the checkpoint drain is waiting for it must be included in
+// the checkpoint: the snapshot timestamp is read only after the drain.
 TEST_F(ReviewFixesTest, CheckpointDrainWaitsForInFlightWrite) {
     if (inMemMode || systemConfig->checkpointThreshold == 0) {
         GTEST_SKIP();
     }
     conn->query("CALL auto_checkpoint=false;");
-    conn->query("CALL debug_enable_multi_writes=true;");
+    conn->query("CALL enable_multi_writes=true;");
     conn->query("CREATE NODE TABLE drain_test(id INT64 PRIMARY KEY);");
 
     // Pre-load N committed rows so the table is non-trivial.
@@ -5030,13 +5570,13 @@ TEST_F(ReviewFixesTest, CheckpointDrainWaitsForInFlightWrite) {
     conn2.reset();
 
     // On reload only checkpointed data is present (WAL has been rotated/cleared).
-    // All N+1 rows must be visible because the final commit occurred before the
-    // write gate was acquired and snapshotTS must capture it.
+    // All N+1 rows must be visible because the final commit landed during the drain, and the
+    // snapshot timestamp is read after the drain sees it.
     createDBAndConn();
     auto res = conn->query("MATCH (n:drain_test) RETURN count(n) AS c;");
     ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
     const auto count = res->getNext()->getValue(0)->getValue<int64_t>();
-    ASSERT_EQ(count, N + 1) << "Row committed just before the write gate must survive checkpoint";
+    ASSERT_EQ(count, N + 1) << "Row committed during the checkpoint drain must survive checkpoint";
 }
 
 TEST_F(ReviewFixesTest, CheckpointUsesMatchingCatalogForMainAndDefaultGraph) {
@@ -5654,6 +6194,686 @@ TEST_F(ReviewFixesTest, ConsecutivePinnedCheckpointsRecoverAfterCrash) {
     EXPECT_EQ(rows, expectedRows);
 }
 #endif // __SINGLE_THREADED__
+
+// A checkpoint taken while a read-only transaction is open (pinned) keeps its CHECKPOINT record
+// in the active WAL. Each test below crashes after such a checkpoint, leaving a different shadow
+// file behind, and reopens: every commit must be there exactly once.
+class PinnedCheckpointCrashTest : public FlakyCheckpointerTest {
+protected:
+    void SetUp() override {
+        FlakyCheckpointerTest::SetUp();
+        if (inMemMode || systemConfig->checkpointThreshold == 0) {
+            GTEST_SKIP();
+        }
+        // Tearing down without a closing checkpoint models the process dying.
+        ASSERT_TRUE(conn->query("CALL force_checkpoint_on_close=false;")->isSuccess());
+        ASSERT_TRUE(conn->query("CALL auto_checkpoint=false;")->isSuccess());
+    }
+
+    void TearDown() override {
+        reader.reset();
+        FlakyCheckpointerTest::TearDown();
+    }
+
+    void query(const std::string& statement) {
+        auto res = conn->query(statement);
+        ASSERT_TRUE(res->isSuccess()) << statement << ": " << res->getErrorMessage();
+    }
+
+    void createRows(int64_t first, int64_t last) {
+        query(std::format("UNWIND range({}, {}) AS i CREATE (:P {{id: i}});", first, last));
+    }
+
+    void pinWAL() {
+        reader = std::make_unique<main::Connection>(database.get());
+        ASSERT_TRUE(reader->query("BEGIN TRANSACTION READ ONLY;")->isSuccess());
+    }
+
+    template<typename T>
+    void failCheckpoint() {
+        auto* context = getClientContext(*conn);
+        FlakyCheckpointer flakyCheckpointer(
+            [](main::ClientContext& clientContext) { return std::make_unique<T>(clientContext); });
+        flakyCheckpointer.setCheckpointer(*context);
+        auto res = conn->query("CHECKPOINT;");
+        FlakyCheckpointer::resetCheckpointer(*context);
+        ASSERT_FALSE(res->isSuccess());
+    }
+
+    void crash() {
+        reader.reset();
+        conn.reset();
+        database.reset();
+    }
+
+    std::vector<int64_t> ids(const std::string& table = "P") {
+        auto res = conn->query(std::format("MATCH (p:{}) RETURN p.id ORDER BY p.id;", table));
+        EXPECT_TRUE(res->isSuccess()) << res->getErrorMessage();
+        std::vector<int64_t> result;
+        while (res->isSuccess() && res->hasNext()) {
+            result.push_back(res->getNext()->getValue(0)->getValue<int64_t>());
+        }
+        return result;
+    }
+
+    // Appends a well-formed record to the active WAL of a crashed database.
+    void appendToWAL(const WALRecord& record) const {
+        const auto bytes = serializeCheckpointRecord(record);
+        std::ofstream wal{StorageUtils::getWALFilePath(databasePath),
+            std::ios::binary | std::ios::app};
+        wal.write(reinterpret_cast<const char*>(bytes.data.get()), bytes.size);
+        if (systemConfig->enableChecksums) {
+            const auto recordChecksum = checksum(bytes.data.get(), bytes.size);
+            wal.write(reinterpret_cast<const char*>(&recordChecksum), sizeof(recordChecksum));
+        }
+    }
+
+    void writeMarker(const std::string& content) const {
+        std::ofstream{markerPath(), std::ios::binary | std::ios::trunc} << content;
+    }
+
+    void writeToGraphFile(const std::string& statement) {
+        auto graphDatabase = std::make_unique<main::Database>(
+            StorageUtils::getGraphPath(databasePath, "g"), *systemConfig);
+        auto graphConn = std::make_unique<main::Connection>(graphDatabase.get());
+        ASSERT_TRUE(graphConn->query("CALL force_checkpoint_on_close=false;")->isSuccess());
+        ASSERT_TRUE(graphConn->query("CALL auto_checkpoint=false;")->isSuccess());
+        auto res = graphConn->query(statement);
+        ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+    }
+
+    // A crashed database whose shadow is gone must refuse to open with each of these markers,
+    // then open once the marker holds the current content.
+    void expectInvalidMarkersRefused() {
+        for (const auto& content :
+            {std::string{}, std::string(1, '\0'), std::string{"\x02\x02"}, std::string{"\x03"}}) {
+            writeMarker(content);
+            try {
+                createDBAndConn();
+                ADD_FAILURE() << "reopened with a marker of " << content.size() << " bytes";
+                return;
+            } catch (const std::exception& e) {
+                EXPECT_NE(std::string{e.what()}.find("no valid pinned-checkpoint marker"),
+                    std::string::npos)
+                    << e.what();
+            }
+        }
+        writeMarker(std::string(1, StorageUtils::PINNED_CHECKPOINT_MARKER_APPLIED));
+        createDBAndConn();
+    }
+
+    std::string shadowPath() const { return StorageUtils::getShadowFilePath(databasePath); }
+    std::string markerPath() const {
+        return StorageUtils::getPinnedCheckpointMarkerPath(databasePath);
+    }
+
+    std::unique_ptr<main::Connection> reader;
+};
+
+// Dies where WAL::logAndFlushCheckpoint has removed the pinned-checkpoint marker and not yet
+// written the CHECKPOINT record: the shadow is complete, and the marker no longer vouches for the
+// WAL's last CHECKPOINT.
+class FlakyCheckpointerKilledAfterMarkerRemoval final : public Checkpointer {
+public:
+    explicit FlakyCheckpointerKilledAfterMarkerRemoval(main::ClientContext& context)
+        : Checkpointer(context) {}
+
+    void logCheckpointAndApplyShadowPages(bool /*walRotated*/) override {
+        const auto storageManager = mainStorageManager;
+        auto& shadowFile = storageManager->getShadowFile();
+        shadowFile.flushAll(storageManager->getOrInitDatabaseID(clientContext));
+        WAL::Get(clientContext)->removePinnedCheckpointMarker(&clientContext);
+        throw RuntimeException("checkpoint failed.");
+    }
+};
+
+// The next checkpoint dies after its storage phase wrote shadow pages, before it logged a record.
+TEST_F(PinnedCheckpointCrashTest, LeftoverShadowKeepsCommitsAfterPinnedCheckpoint) {
+    query("CREATE NODE TABLE P(id INT64 PRIMARY KEY);");
+    query("CHECKPOINT;");
+    createRows(1, 3);
+    pinWAL();
+    query("CHECKPOINT;");
+    createRows(4, 5);
+    failCheckpoint<FlakyCheckpointerKilledAfterCheckpointStorage>();
+    ASSERT_TRUE(std::filesystem::exists(shadowPath()));
+    crash();
+    createDBAndConn();
+    EXPECT_EQ(ids(), (std::vector<int64_t>{1, 2, 3, 4, 5}));
+}
+
+// A COMMIT that a later ABORT undoes still shows that the pinned checkpoint before it finished:
+// its writer got past the write gate after the CHECKPOINT record. Recovery skips through that
+// record despite the next checkpoint's leftover shadow, and the ABORT keeps the transaction out.
+// The ABORT is appended after the crash, where a failed publish would have logged it.
+TEST_F(PinnedCheckpointCrashTest, AbortedCommitAfterPinnedCheckpointIsSkipped) {
+    query("CREATE NODE TABLE P(id INT64 PRIMARY KEY);");
+    query("CHECKPOINT;");
+    createRows(1, 3);
+    pinWAL();
+    query("CHECKPOINT;");
+    const auto abortedStart =
+        std::filesystem::file_size(StorageUtils::getWALFilePath(databasePath));
+    createRows(4, 5);
+    failCheckpoint<FlakyCheckpointerKilledAfterCheckpointStorage>();
+    ASSERT_TRUE(std::filesystem::exists(shadowPath()));
+    crash();
+    appendToWAL(AbortRecord{abortedStart});
+    createDBAndConn();
+    EXPECT_EQ(ids(), (std::vector<int64_t>{1, 2, 3}));
+}
+
+TEST_F(PinnedCheckpointCrashTest, LeftoverShadowKeepsTableCreatedBeforePinnedCheckpoint) {
+    query("CREATE NODE TABLE P(id INT64 PRIMARY KEY);");
+    createRows(1, 3);
+    pinWAL();
+    query("CHECKPOINT;");
+    createRows(4, 5);
+    failCheckpoint<FlakyCheckpointerKilledAfterCheckpointStorage>();
+    ASSERT_TRUE(std::filesystem::exists(shadowPath()));
+    crash();
+    createDBAndConn();
+    EXPECT_EQ(ids(), (std::vector<int64_t>{1, 2, 3, 4, 5}));
+}
+
+// No commit between the pinned checkpoint and the one that dies: the WAL ends in the applied
+// CHECKPOINT record, and the shadow on disk is the next checkpoint's, cut short by a crash while
+// it was being written.
+TEST_F(PinnedCheckpointCrashTest, NextCheckpointShadowAfterPinnedCheckpointIsDiscarded) {
+    query("CREATE NODE TABLE P(id INT64 PRIMARY KEY);");
+    createRows(1, 3);
+    pinWAL();
+    query("CHECKPOINT;");
+    failCheckpoint<FlakyCheckpointerFailsOnLoggingCheckpoint>();
+    ASSERT_TRUE(std::filesystem::exists(shadowPath()));
+    crash();
+    std::filesystem::resize_file(shadowPath(), LBUG_PAGE_SIZE);
+    createDBAndConn();
+    EXPECT_EQ(ids(), (std::vector<int64_t>{1, 2, 3}));
+}
+
+// The state a crash leaves while cleanup removes the applied shadow: ShadowFile::clear truncates
+// the file before unlinking it.
+TEST_F(PinnedCheckpointCrashTest, EmptyShadowAfterPinnedCheckpointIsDiscarded) {
+    query("CREATE NODE TABLE P(id INT64 PRIMARY KEY);");
+    createRows(1, 3);
+    pinWAL();
+    query("CHECKPOINT;");
+    crash();
+    std::ofstream{shadowPath()};
+    createDBAndConn();
+    EXPECT_EQ(ids(), (std::vector<int64_t>{1, 2, 3}));
+}
+
+class CheckpointerCrashesBeforeShadowRemoval final : public Checkpointer {
+public:
+    explicit CheckpointerCrashesBeforeShadowRemoval(main::ClientContext& context)
+        : Checkpointer(context) {}
+
+    static inline std::string markerAtHook;
+    static inline bool shadowAtHook = false;
+
+protected:
+    void beforeShadowRemoval() override {
+        const auto& databasePath = mainStorageManager->getDatabasePath();
+        std::ifstream marker{StorageUtils::getPinnedCheckpointMarkerPath(databasePath),
+            std::ios::binary};
+        markerAtHook = {std::istreambuf_iterator<char>{marker}, {}};
+        shadowAtHook = std::filesystem::exists(StorageUtils::getShadowFilePath(databasePath));
+        throw RuntimeException("simulated crash before removing the shadow files.");
+    }
+};
+
+TEST_F(PinnedCheckpointCrashTest, MarkerIsDurableBeforeShadowsAreRemoved) {
+    query("CREATE NODE TABLE P(id INT64 PRIMARY KEY);");
+    createRows(1, 3);
+    pinWAL();
+    failCheckpoint<CheckpointerCrashesBeforeShadowRemoval>();
+    EXPECT_EQ(CheckpointerCrashesBeforeShadowRemoval::markerAtHook,
+        std::string(1, static_cast<char>(StorageUtils::PINNED_CHECKPOINT_MARKER_APPLIED)));
+    EXPECT_TRUE(CheckpointerCrashesBeforeShadowRemoval::shadowAtHook);
+    ASSERT_TRUE(std::filesystem::exists(shadowPath()));
+    crash();
+    createDBAndConn();
+    EXPECT_EQ(ids(), (std::vector<int64_t>{1, 2, 3}));
+}
+
+// The marker of an earlier pinned checkpoint must not vouch for a later CHECKPOINT record whose
+// shadow was never applied.
+TEST_F(PinnedCheckpointCrashTest, EarlierMarkerDoesNotSkipUnappliedCheckpoint) {
+    query("CREATE NODE TABLE P(id INT64 PRIMARY KEY);");
+    createRows(1, 3);
+    pinWAL();
+    query("CHECKPOINT;");
+    ASSERT_TRUE(std::filesystem::exists(markerPath()));
+    createRows(4, 5);
+    failCheckpoint<FlakyCheckpointerFailsOnApplyingShadow>();
+    EXPECT_FALSE(std::filesystem::exists(markerPath()));
+    ASSERT_TRUE(std::filesystem::exists(shadowPath()));
+    crash();
+    createDBAndConn();
+    EXPECT_EQ(ids(), (std::vector<int64_t>{1, 2, 3, 4, 5}));
+}
+
+// Older builds kept the marker while logging the next CHECKPOINT record.
+TEST_F(PinnedCheckpointCrashTest, LegacyMarkerDoesNotSkipUnappliedCheckpoint) {
+    query("CREATE NODE TABLE P(id INT64 PRIMARY KEY);");
+    createRows(1, 3);
+    pinWAL();
+    query("CHECKPOINT;");
+    createRows(4, 5);
+    failCheckpoint<FlakyCheckpointerFailsOnApplyingShadow>();
+    ASSERT_TRUE(std::filesystem::exists(shadowPath()));
+    crash();
+    writeMarker("\x01");
+    createDBAndConn();
+    EXPECT_EQ(ids(), (std::vector<int64_t>{1, 2, 3, 4, 5}));
+}
+
+// Copies the database's files once the storage phase has run (WAL rotated, shadow pages written),
+// then fails: restoring the copy gives the files a process killed at that point leaves behind,
+// which a failed checkpoint's rollback would otherwise tidy up.
+class CheckpointerImagedAfterCheckpointStorage final : public Checkpointer {
+public:
+    explicit CheckpointerImagedAfterCheckpointStorage(main::ClientContext& context)
+        : Checkpointer(context) {}
+
+    static inline std::map<std::string, std::vector<char>> image;
+
+protected:
+    bool checkpointStorage() override {
+        Checkpointer::checkpointStorage();
+        image.clear();
+        const auto& databasePath = mainStorageManager->getDatabasePath();
+        for (const auto& path : {databasePath, StorageUtils::getWALFilePath(databasePath),
+                 StorageUtils::getCheckpointWALFilePath(databasePath),
+                 StorageUtils::getShadowFilePath(databasePath),
+                 StorageUtils::getPinnedCheckpointMarkerPath(databasePath)}) {
+            if (std::filesystem::exists(path)) {
+                std::ifstream file{path, std::ios::binary};
+                image[path] = {std::istreambuf_iterator<char>{file}, {}};
+            }
+        }
+        throw RuntimeException("simulated crash after checkpoint storage phase.");
+    }
+};
+
+// A recovery that skipped the prefix of a pinned WAL keeps its CHECKPOINT record mid-file; the next
+// unpinned checkpoint rotates that WAL into the frozen WAL and dies before logging its record.
+TEST_F(PinnedCheckpointCrashTest, LeftoverShadowKeepsCommitsInFrozenWAL) {
+    query("CREATE NODE TABLE P(id INT64 PRIMARY KEY);");
+    createRows(1, 3);
+    pinWAL();
+    query("CHECKPOINT;");
+    createRows(4, 5);
+    crash();
+    createDBAndConn();
+    query("CALL force_checkpoint_on_close=false;");
+    query("CALL auto_checkpoint=false;");
+    createRows(6, 7);
+    failCheckpoint<CheckpointerImagedAfterCheckpointStorage>();
+    crash();
+    auto& image = CheckpointerImagedAfterCheckpointStorage::image;
+    ASSERT_TRUE(image.contains(StorageUtils::getCheckpointWALFilePath(databasePath)));
+    ASSERT_TRUE(image.contains(shadowPath()));
+    for (const auto& path : {StorageUtils::getWALFilePath(databasePath),
+             StorageUtils::getCheckpointWALFilePath(databasePath), shadowPath(), markerPath()}) {
+        std::filesystem::remove(path);
+    }
+    // The commits after the inherited CHECKPOINT record prove it completed, without the marker.
+    image.erase(markerPath());
+    for (const auto& [path, bytes] : image) {
+        std::ofstream{path, std::ios::binary}.write(bytes.data(), bytes.size());
+    }
+    createDBAndConn();
+    EXPECT_EQ(ids(), (std::vector<int64_t>{1, 2, 3, 4, 5, 6, 7}));
+}
+
+// Without the shadow and without the marker, the pinned checkpoint's pages were lost out of band.
+TEST_F(PinnedCheckpointCrashTest, MissingShadowWithoutMarkerRefusesToOpen) {
+    query("CREATE NODE TABLE P(id INT64 PRIMARY KEY);");
+    createRows(1, 3);
+    pinWAL();
+    query("CHECKPOINT;");
+    crash();
+    std::filesystem::remove(markerPath());
+    try {
+        createDBAndConn();
+        FAIL() << "reopened without the marker";
+    } catch (const std::exception& e) {
+        EXPECT_NE(std::string{e.what()}.find("no valid pinned-checkpoint marker"),
+            std::string::npos)
+            << e.what();
+    }
+}
+
+TEST_F(PinnedCheckpointCrashTest, MissingShadowWithoutMarkerRefusesToOpenWithLaterCommits) {
+    query("CREATE NODE TABLE P(id INT64 PRIMARY KEY);");
+    createRows(1, 3);
+    pinWAL();
+    query("CHECKPOINT;");
+    createRows(4, 5);
+    crash();
+    std::filesystem::remove(markerPath());
+    try {
+        createDBAndConn();
+        FAIL() << "reopened without the marker";
+    } catch (const std::exception& e) {
+        EXPECT_NE(std::string{e.what()}.find("no valid pinned-checkpoint marker"),
+            std::string::npos)
+            << e.what();
+    }
+}
+
+// A crash while a commit after the pinned checkpoint was being written leaves its BEGIN record.
+// Recovery must retire the WAL: kept, it would end in an applied CHECKPOINT that the next
+// checkpoint could rotate into the frozen WAL.
+TEST_F(PinnedCheckpointCrashTest, TornCommitAfterPinnedCheckpointRetiresWAL) {
+    query("CREATE NODE TABLE P(id INT64 PRIMARY KEY);");
+    createRows(1, 3);
+    pinWAL();
+    query("CHECKPOINT;");
+    crash();
+    appendToWAL(BeginTransactionRecord{});
+    createDBAndConn();
+    EXPECT_EQ(ids(), (std::vector<int64_t>{1, 2, 3}));
+    const auto walPath = StorageUtils::getWALFilePath(databasePath);
+    EXPECT_TRUE(!std::filesystem::exists(walPath) || std::filesystem::file_size(walPath) == 0);
+}
+
+// A marker that is empty, longer than one byte or holds an unknown byte proves nothing, like a
+// missing one: a crash while it is written can leave such a file.
+TEST_F(PinnedCheckpointCrashTest, InvalidMarkerWithoutShadowRefusesToOpen) {
+    query("CREATE NODE TABLE P(id INT64 PRIMARY KEY);");
+    createRows(1, 3);
+    pinWAL();
+    query("CHECKPOINT;");
+    crash();
+    expectInvalidMarkersRefused();
+    EXPECT_EQ(ids(), (std::vector<int64_t>{1, 2, 3}));
+}
+
+TEST_F(PinnedCheckpointCrashTest, InvalidMarkerWithoutShadowRefusesToOpenWithLaterCommits) {
+    query("CREATE NODE TABLE P(id INT64 PRIMARY KEY);");
+    createRows(1, 3);
+    pinWAL();
+    query("CHECKPOINT;");
+    createRows(4, 5);
+    crash();
+    expectInvalidMarkersRefused();
+    EXPECT_EQ(ids(), (std::vector<int64_t>{1, 2, 3, 4, 5}));
+}
+
+// A marker written by an older build still proves that a missing shadow was applied.
+TEST_F(PinnedCheckpointCrashTest, LegacyMarkerWithoutShadowReopens) {
+    query("CREATE NODE TABLE P(id INT64 PRIMARY KEY);");
+    createRows(1, 3);
+    pinWAL();
+    query("CHECKPOINT;");
+    createRows(4, 5);
+    crash();
+    writeMarker("\x01");
+    createDBAndConn();
+    EXPECT_EQ(ids(), (std::vector<int64_t>{1, 2, 3, 4, 5}));
+}
+
+// A named graph's commits go to the main WAL; its shadow is applied and removed like the main one.
+TEST_F(PinnedCheckpointCrashTest, NamedGraphReopensAfterPinnedCheckpoint) {
+    query("CREATE GRAPH g;");
+    query("USE GRAPH g;");
+    query("CREATE NODE TABLE Q(id INT64 PRIMARY KEY);");
+    query("CREATE (:Q {id: 1});");
+    query("CHECKPOINT;");
+    pinWAL();
+    query("CREATE (:Q {id: 2});");
+    query("CHECKPOINT;");
+    crash();
+    createDBAndConn();
+    query("USE GRAPH g;");
+    EXPECT_EQ(ids("Q"), (std::vector<int64_t>{1, 2}));
+}
+
+TEST_F(PinnedCheckpointCrashTest, NamedGraphLeftoverShadowIsDiscarded) {
+    query("CREATE GRAPH g;");
+    query("USE GRAPH g;");
+    query("CREATE NODE TABLE Q(id INT64 PRIMARY KEY);");
+    query("CREATE (:Q {id: 1});");
+    pinWAL();
+    query("CHECKPOINT;");
+    crash();
+    std::ofstream{StorageUtils::getShadowFilePath(StorageUtils::getGraphPath(databasePath, "g"))};
+    createDBAndConn();
+    query("USE GRAPH g;");
+    EXPECT_EQ(ids("Q"), (std::vector<int64_t>{1}));
+}
+
+// A session that opened the graph's file on its own left a graph WAL. The pinned checkpoint
+// applies it and must retire it, or a crash after a later commit replays it again.
+TEST_F(PinnedCheckpointCrashTest, NamedGraphWALIsRetiredByPinnedCheckpoint) {
+    query("CREATE GRAPH g;");
+    query("USE GRAPH g;");
+    query("CREATE NODE TABLE Q(id INT64 PRIMARY KEY);");
+    query("CREATE (:Q {id: 1});");
+    query("CHECKPOINT;");
+    crash();
+    writeToGraphFile("CREATE (:Q {id: 2});");
+    const auto graphWALPath =
+        StorageUtils::getWALFilePath(StorageUtils::getGraphPath(databasePath, "g"));
+    ASSERT_TRUE(std::filesystem::exists(graphWALPath));
+    createDBAndConn();
+    query("CALL force_checkpoint_on_close=false;");
+    query("CALL auto_checkpoint=false;");
+    pinWAL();
+    query("CHECKPOINT;");
+    EXPECT_FALSE(std::filesystem::exists(graphWALPath));
+    query("USE GRAPH g;");
+    query("CREATE (:Q {id: 3});");
+    crash();
+    createDBAndConn();
+    query("USE GRAPH g;");
+    EXPECT_EQ(ids("Q"), (std::vector<int64_t>{1, 2, 3}));
+}
+
+// A graph WAL found after a pinned checkpoint is newer than it and replays.
+TEST_F(PinnedCheckpointCrashTest, GraphWALWrittenAfterPinnedCheckpointReplays) {
+    query("CREATE GRAPH g;");
+    query("USE GRAPH g;");
+    query("CREATE NODE TABLE Q(id INT64 PRIMARY KEY);");
+    query("CREATE (:Q {id: 1});");
+    pinWAL();
+    query("CHECKPOINT;");
+    crash();
+    writeToGraphFile("CREATE (:Q {id: 2});");
+    createDBAndConn();
+    query("USE GRAPH g;");
+    EXPECT_EQ(ids("Q"), (std::vector<int64_t>{1, 2}));
+}
+
+// Older builds kept the graph WAL a pinned checkpoint applied, so under their marker a graph WAL
+// is not known to be newer than the checkpoint. Graphs then recover through their shadows, and
+// with the shadow gone the open refuses instead of replaying the graph WAL a second time.
+TEST_F(PinnedCheckpointCrashTest, LegacyMarkerDoesNotReplayAppliedGraphWAL) {
+    query("CREATE GRAPH g;");
+    query("USE GRAPH g;");
+    query("CREATE NODE TABLE Q(id INT64 PRIMARY KEY);");
+    query("CREATE (:Q {id: 1});");
+    query("CHECKPOINT;");
+    crash();
+    writeToGraphFile("CREATE (:Q {id: 2});");
+    const auto graphWALPath =
+        StorageUtils::getWALFilePath(StorageUtils::getGraphPath(databasePath, "g"));
+    const auto appliedGraphWAL = graphWALPath + ".applied";
+    std::filesystem::copy_file(graphWALPath, appliedGraphWAL);
+    createDBAndConn();
+    query("CALL force_checkpoint_on_close=false;");
+    query("CALL auto_checkpoint=false;");
+    query("USE GRAPH g;");
+    query("CREATE (:Q {id: 3});");
+    pinWAL();
+    query("CHECKPOINT;");
+    crash();
+    std::filesystem::rename(appliedGraphWAL, graphWALPath);
+    writeMarker("\x01");
+    try {
+        createDBAndConn();
+        FAIL() << "reopened with an older build's marker and an applied graph WAL";
+    } catch (const std::exception& e) {
+        EXPECT_NE(std::string{e.what()}.find("graph shadow file"), std::string::npos) << e.what();
+    }
+}
+
+// Without a graph WAL nothing can replay twice, so under an older build's marker a named graph
+// still loads as after a completed checkpoint once that build removed its shadow.
+TEST_F(PinnedCheckpointCrashTest, LegacyMarkerReopensNamedGraphWithoutGraphWAL) {
+    query("CREATE GRAPH g;");
+    query("USE GRAPH g;");
+    query("CREATE NODE TABLE Q(id INT64 PRIMARY KEY);");
+    query("CREATE (:Q {id: 1});");
+    query("CHECKPOINT;");
+    pinWAL();
+    query("CREATE (:Q {id: 2});");
+    query("CHECKPOINT;");
+    crash();
+    writeMarker("\x01");
+    createDBAndConn();
+    query("USE GRAPH g;");
+    EXPECT_EQ(ids("Q"), (std::vector<int64_t>{1, 2}));
+}
+
+TEST_F(PinnedCheckpointCrashTest, PartitionedTableReopensAfterPinnedCheckpoint) {
+    query("CREATE NODE TABLE L(id INT64, cluster INT64, PRIMARY KEY(id)) PARTITION BY LIST "
+          "(cluster);");
+    query("CREATE (:L {id: 5, cluster: 1});");
+    query("CHECKPOINT;");
+    pinWAL();
+    query("CHECKPOINT;");
+    crash();
+    for (const auto& entry :
+        std::filesystem::directory_iterator{std::filesystem::path{databasePath}.parent_path()}) {
+        ASSERT_NE(entry.path().extension(), ".shadow") << entry.path();
+    }
+    createDBAndConn();
+    EXPECT_EQ(ids("L"), (std::vector<int64_t>{5}));
+}
+
+// Nothing committed since the pinned checkpoint, and the next one dies after removing the marker:
+// the WAL ends in the applied CHECKPOINT, and the complete shadow beside it is the next one's.
+TEST_F(PinnedCheckpointCrashTest, CrashAfterMarkerRemovalReopens) {
+    query("CREATE NODE TABLE P(id INT64 PRIMARY KEY);");
+    createRows(1, 3);
+    pinWAL();
+    query("CHECKPOINT;");
+    ASSERT_TRUE(std::filesystem::exists(markerPath()));
+    failCheckpoint<FlakyCheckpointerKilledAfterMarkerRemoval>();
+    EXPECT_FALSE(std::filesystem::exists(markerPath()));
+    ASSERT_TRUE(std::filesystem::exists(shadowPath()));
+    crash();
+    createDBAndConn();
+    EXPECT_EQ(ids(), (std::vector<int64_t>{1, 2, 3}));
+    createRows(4, 4);
+    crash();
+    createDBAndConn();
+    EXPECT_EQ(ids(), (std::vector<int64_t>{1, 2, 3, 4}));
+}
+
+TEST_F(PinnedCheckpointCrashTest, CrashAfterMarkerRemovalKeepsLaterCommits) {
+    query("CREATE NODE TABLE P(id INT64 PRIMARY KEY);");
+    createRows(1, 3);
+    pinWAL();
+    query("CHECKPOINT;");
+    createRows(4, 5);
+    failCheckpoint<FlakyCheckpointerKilledAfterMarkerRemoval>();
+    EXPECT_FALSE(std::filesystem::exists(markerPath()));
+    ASSERT_TRUE(std::filesystem::exists(shadowPath()));
+    crash();
+    createDBAndConn();
+    EXPECT_EQ(ids(), (std::vector<int64_t>{1, 2, 3, 4, 5}));
+}
+
+// Recovery from that crash skips through the earlier CHECKPOINT on the strength of the commits
+// after it and leaves the record in the WAL, so it writes the marker: a second crash must still
+// find proof that the record was applied.
+TEST_F(PinnedCheckpointCrashTest, CrashAfterMarkerRemovalSurvivesASecondCrash) {
+    query("CREATE NODE TABLE P(id INT64 PRIMARY KEY);");
+    createRows(1, 3);
+    pinWAL();
+    query("CHECKPOINT;");
+    createRows(4, 5);
+    failCheckpoint<FlakyCheckpointerKilledAfterMarkerRemoval>();
+    EXPECT_FALSE(std::filesystem::exists(markerPath()));
+    ASSERT_TRUE(std::filesystem::exists(shadowPath()));
+    crash();
+    createDBAndConn();
+    EXPECT_FALSE(std::filesystem::exists(shadowPath()));
+    EXPECT_TRUE(std::filesystem::exists(markerPath()));
+    query("CALL force_checkpoint_on_close=false;");
+    query("CALL auto_checkpoint=false;");
+    createRows(6, 6);
+    crash();
+    createDBAndConn();
+    EXPECT_EQ(ids(), (std::vector<int64_t>{1, 2, 3, 4, 5, 6}));
+}
+
+// A WAL from another database proves nothing: recovery refuses it before writing the marker or
+// removing the shadow.
+TEST_F(PinnedCheckpointCrashTest, ForeignWALAfterMarkerRemovalGetsNoMarker) {
+    query("CREATE NODE TABLE P(id INT64 PRIMARY KEY);");
+    createRows(1, 3);
+    pinWAL();
+    query("CHECKPOINT;");
+    createRows(4, 5);
+    failCheckpoint<FlakyCheckpointerKilledAfterMarkerRemoval>();
+    auto* context = getClientContext(*conn);
+    const auto databaseID = StorageManager::Get(*context)->getOrInitDatabaseID(*context);
+    writeWALHeaderDatabaseID(*context, StorageUtils::getWALFilePath(databasePath), databaseID,
+        foreignDatabaseID(databaseID), context->getDBConfig()->enableChecksums);
+    crash();
+    try {
+        createDBAndConn();
+        FAIL() << "recovered a WAL from another database";
+    } catch (const std::exception& e) {
+        EXPECT_NE(std::string{e.what()}.find("Database ID"), std::string::npos) << e.what();
+    }
+    EXPECT_TRUE(std::filesystem::exists(shadowPath()));
+    EXPECT_FALSE(std::filesystem::exists(markerPath()));
+}
+
+// Without its data file the marker would vouch for nothing; recovery refuses before touching the
+// shadow.
+TEST_F(PinnedCheckpointCrashTest, MissingDataFileAfterMarkerRemovalRefusesToOpen) {
+    query("CREATE NODE TABLE P(id INT64 PRIMARY KEY);");
+    createRows(1, 3);
+    pinWAL();
+    query("CHECKPOINT;");
+    createRows(4, 5);
+    failCheckpoint<FlakyCheckpointerKilledAfterMarkerRemoval>();
+    crash();
+    std::filesystem::remove(databasePath);
+    try {
+        createDBAndConn();
+        FAIL() << "recovered without the data file";
+    } catch (const std::exception& e) {
+        EXPECT_NE(std::string{e.what()}.find("database file"), std::string::npos) << e.what();
+    }
+    EXPECT_TRUE(std::filesystem::exists(shadowPath()));
+    EXPECT_TRUE(std::filesystem::exists(StorageUtils::getWALFilePath(databasePath)));
+    EXPECT_FALSE(std::filesystem::exists(markerPath()));
+}
+
+// The dying checkpoint wrote no partition shadows; recovery must not require them.
+TEST_F(PinnedCheckpointCrashTest, CrashAfterMarkerRemovalWithPartitionedTableReopens) {
+    query("CREATE NODE TABLE L(id INT64, cluster INT64, PRIMARY KEY(id)) PARTITION BY LIST "
+          "(cluster);");
+    query("CREATE (:L {id: 5, cluster: 1});");
+    query("CHECKPOINT;");
+    pinWAL();
+    query("CHECKPOINT;");
+    failCheckpoint<FlakyCheckpointerKilledAfterMarkerRemoval>();
+    EXPECT_FALSE(std::filesystem::exists(markerPath()));
+    crash();
+    createDBAndConn();
+    EXPECT_EQ(ids("L"), (std::vector<int64_t>{5}));
+}
 
 // Hash index basic recovery
 //
@@ -7152,7 +8372,7 @@ TEST_F(ReviewFixesTest, DroppedGraphLivenessIdentityRemovedAtDrop) {
 TEST_F(ReviewFixesTest, RollbackSkipsDroppedGraphCatalogEntryUndo) {
     conn->query("CALL auto_checkpoint=false;");
     conn->query("CALL force_checkpoint_on_close=false;");
-    conn->query("CALL debug_enable_multi_writes=true;");
+    conn->query("CALL enable_multi_writes=true;");
     ASSERT_TRUE(conn->query("CREATE GRAPH live_graph;")->isSuccess());
     ASSERT_TRUE(conn->query("CREATE GRAPH doomed_graph;")->isSuccess());
 
@@ -7193,7 +8413,7 @@ TEST_F(ReviewFixesTest, RollbackSkipsDroppedGraphCatalogEntryUndo) {
 TEST_F(ReviewFixesTest, RollbackSkipsDroppedGraphSequenceUndo) {
     conn->query("CALL auto_checkpoint=false;");
     conn->query("CALL force_checkpoint_on_close=false;");
-    conn->query("CALL debug_enable_multi_writes=true;");
+    conn->query("CALL enable_multi_writes=true;");
     ASSERT_TRUE(conn->query("CREATE GRAPH live_graph;")->isSuccess());
     ASSERT_TRUE(conn->query("CREATE GRAPH doomed_graph;")->isSuccess());
     ASSERT_TRUE(conn->query("USE GRAPH live_graph;")->isSuccess());
@@ -8213,6 +9433,51 @@ TEST_F(PartitionCrashRecoveryTest, ListParentSurvivesCrashRecovery) {
     EXPECT_EQ(scanIDs("MATCH (n:L) RETURN n.id ORDER BY n.id;"),
         std::vector<int64_t>({1, 2, 3, 4, 5}));
     EXPECT_EQ(scanIDs("MATCH (n:L_p2) RETURN n.id ORDER BY n.id;"), std::vector<int64_t>({2, 5}));
+    const auto listPlan = conn->query("EXPLAIN MATCH(n:L) WHERE n.cluster=200 RETURN n.id;");
+    ASSERT_TRUE(listPlan->isSuccess()) << listPlan->getErrorMessage();
+    EXPECT_NE(listPlan->toString().find("Tables: L_p2"), std::string::npos);
+    EXPECT_EQ(listPlan->toString().find("L_p1"), std::string::npos);
+}
+
+TEST_F(PartitionCrashRecoveryTest, UUIDListKeysSurviveWALReplay) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    runQuery("CREATE NODE TABLE U(id INT64 PRIMARY KEY, k UUID) PARTITION BY LIST(k);");
+    runQuery("CREATE (:U {id:1, k:UUID('a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11')});");
+    runQuery("CREATE (:U {id:2, k:UUID('00000000-0000-0000-0000-000000000000')});");
+    crashAndReopen();
+    EXPECT_EQ(scanIDs("MATCH (n:U) RETURN n.id ORDER BY n.id;"), std::vector<int64_t>({1, 2}));
+    EXPECT_EQ(scanIDs("MATCH (n:U_p1) RETURN n.id ORDER BY n.id;"), std::vector<int64_t>({1}));
+    EXPECT_EQ(scanIDs("MATCH (n:U_p2) RETURN n.id ORDER BY n.id;"), std::vector<int64_t>({2}));
+
+    // Replayed binary keys must match the parsed UUID regardless of its textual case. Use
+    // CREATE for the second WAL recovery: bulk COPY needs a checkpoint to make its rows durable.
+    runQuery("CALL force_checkpoint_on_close=false;");
+    runQuery("CALL auto_checkpoint=false;");
+    runQuery("CREATE (:U {id:3, k:UUID('A0EEBC99-9C0B-4EF8-BB6D-6BB9BD380A11')});");
+    runQuery("CREATE (:U {id:4, k:UUID('ffffffff-ffff-ffff-ffff-ffffffffffff')});");
+    EXPECT_EQ(scanIDs("MATCH (n:U_p1) RETURN n.id ORDER BY n.id;"), std::vector<int64_t>({1, 3}));
+    EXPECT_EQ(scanIDs("MATCH (n:U_p3) RETURN n.id ORDER BY n.id;"), std::vector<int64_t>({4}));
+    crashAndReopen();
+    EXPECT_EQ(scanIDs("MATCH (n:U) RETURN n.id ORDER BY n.id;"),
+        std::vector<int64_t>({1, 2, 3, 4}));
+    const auto knownKey = "MATCH(n:U) WHERE n.k=UUID('a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11') "
+                          "RETURN n.id ORDER BY n.id;";
+    EXPECT_EQ(scanIDs(knownKey), std::vector<int64_t>({1, 3}));
+    const auto plan = conn->query(std::string{"EXPLAIN "} + knownKey);
+    ASSERT_TRUE(plan->isSuccess()) << plan->getErrorMessage();
+    EXPECT_NE(plan->toString().find("Tables: U_p1"), std::string::npos);
+    EXPECT_EQ(plan->toString().find("U_p0"), std::string::npos);
+    EXPECT_EQ(plan->toString().find("U_p2"), std::string::npos);
+    EXPECT_EQ(plan->toString().find("U_p3"), std::string::npos);
+    const auto newKey = "MATCH(n:U) WHERE n.k=UUID('ffffffff-ffff-ffff-ffff-ffffffffffff') "
+                        "RETURN n.id;";
+    EXPECT_EQ(scanIDs(newKey), std::vector<int64_t>({4}));
+    const auto newPlan = conn->query(std::string{"EXPLAIN "} + newKey);
+    ASSERT_TRUE(newPlan->isSuccess()) << newPlan->getErrorMessage();
+    EXPECT_NE(newPlan->toString().find("Tables: U_p3"), std::string::npos);
+    EXPECT_EQ(newPlan->toString().find("U_p1"), std::string::npos);
 }
 
 TEST_F(PartitionCrashRecoveryTest, HashParentSurvivesCrashRecovery) {
@@ -8230,6 +9495,10 @@ TEST_F(PartitionCrashRecoveryTest, HashParentSurvivesCrashRecovery) {
     runQuery("CREATE (:H {id: 5, amount: 50});");
     EXPECT_EQ(scanIDs("MATCH (n:H) RETURN n.id ORDER BY n.id;"),
         std::vector<int64_t>({1, 2, 3, 4, 5}));
+    const auto hashPlan = conn->query("EXPLAIN MATCH(n:H) WHERE n.amount=20 RETURN n.id;");
+    ASSERT_TRUE(hashPlan->isSuccess()) << hashPlan->getErrorMessage();
+    EXPECT_NE(hashPlan->toString().find("Tables: H_p0"), std::string::npos);
+    EXPECT_EQ(hashPlan->toString().find("H_p1"), std::string::npos);
 }
 
 } // namespace testing

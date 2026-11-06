@@ -289,6 +289,9 @@ void UndoBuffer::rollbackRecord(ClientContext* context, const UndoRecordType rec
 void UndoBuffer::rollbackCatalogEntryRecord(ClientContext* context, const uint8_t* record) {
     const auto& entryRecord = *reinterpret_cast<CatalogEntryRecord const*>(record);
     applyIfOwnerGraphAlive(context, entryRecord.ownerCatalog, [&]() {
+        // Excludes readers of uncommitted heads (CatalogSet::readHeadEntryOfOID) while the
+        // rolled-back entry is unlinked and freed.
+        std::unique_lock lck{entryRecord.catalogSet->mtx};
         const auto entryToRollback = entryRecord.catalogEntry->getNext();
         DASSERT(entryToRollback);
         if (entryToRollback->getNext()) {

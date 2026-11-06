@@ -141,6 +141,20 @@ TableCatalogEntry* Catalog::getTableCatalogEntry(const Transaction* transaction,
     return result->ptrCast<TableCatalogEntry>();
 }
 
+void Catalog::readLatestTableEntry(table_id_t tableID,
+    const std::function<void(const CatalogEntry*)>& read) const {
+    bool found = false;
+    tables->readHeadEntryOfOID(tableID, [&](const CatalogEntry* entry) {
+        if (entry != nullptr) {
+            found = true;
+            read(entry);
+        }
+    });
+    if (!found) {
+        internalTables->readHeadEntryOfOID(tableID, read);
+    }
+}
+
 TableCatalogEntry* Catalog::getTableCatalogEntry(const Transaction* transaction,
     const std::string& tableName, bool useInternal) const {
     CatalogEntry* result = nullptr;
@@ -155,6 +169,14 @@ TableCatalogEntry* Catalog::getTableCatalogEntry(const Transaction* transaction,
     }
     // LCOV_EXCL_STOP
     return result->ptrCast<TableCatalogEntry>();
+}
+
+NodeTableCatalogEntry* Catalog::getPartitionParentForWrite(Transaction* transaction,
+    table_id_t tableID) {
+    auto* entry = getTableCatalogEntry(transaction, tableID)->ptrCast<NodeTableCatalogEntry>();
+    DASSERT(entry->isPartitioned());
+    return tables->copyTableEntryForWrite(transaction, entry->getName())
+        ->ptrCast<NodeTableCatalogEntry>();
 }
 
 template<TableCatalogEntryType T>
@@ -301,11 +323,11 @@ CatalogEntry* Catalog::createRelGroupEntry(Transaction* transaction,
         relTableInfos.emplace_back(relTableInfo.nodePair, tables->getNextOID(),
             relTableInfo.srcMultiplicity, relTableInfo.dstMultiplicity);
     }
-    auto relGroupEntry =
-        std::make_unique<RelGroupCatalogEntry>(info.tableName, extraInfo->srcMultiplicity,
-            extraInfo->dstMultiplicity, extraInfo->storageDirection, std::move(relTableInfos),
-            extraInfo->storage, extraInfo->storageFormat, extraInfo->scanFunction,
-            std::move(extraInfo->scanBindData), extraInfo->foreignDatabaseName);
+    auto relGroupEntry = std::make_unique<RelGroupCatalogEntry>(info.tableName,
+        extraInfo->srcMultiplicity, extraInfo->dstMultiplicity, extraInfo->storageDirection,
+        std::move(relTableInfos), extraInfo->storage, extraInfo->storageFormat,
+        extraInfo->scanFunction, std::move(extraInfo->scanBindData), extraInfo->foreignDatabaseName,
+        extraInfo->storageFormatName);
     for (auto& definition : extraInfo->propertyDefinitions) {
         relGroupEntry->addProperty(definition);
     }
@@ -685,7 +707,7 @@ CatalogEntry* Catalog::createNodeTableEntry(Transaction* transaction,
     const BoundCreateTableInfo& info) {
     const auto extraInfo = info.extraInfo->constPtrCast<BoundExtraCreateNodeTableInfo>();
     auto entry = std::make_unique<NodeTableCatalogEntry>(info.tableName, extraInfo->primaryKeyName,
-        extraInfo->storage, extraInfo->storageFormat);
+        extraInfo->storage, extraInfo->storageFormat, extraInfo->storageFormatName);
     for (auto& definition : extraInfo->propertyDefinitions) {
         entry->addProperty(definition);
     }
@@ -702,6 +724,7 @@ CatalogEntry* Catalog::createNodeTableEntry(Transaction* transaction,
         const auto& partitionInfo = *extraInfo->partitionInfo;
         entry->setPartitionInfo(partitionInfo.method, partitionInfo.columnName,
             entry->getPropertyID(partitionInfo.columnName), partitionInfo.numPartitions);
+        entry->setPartitionPruningSafe(partitionInfo.partitionPruningSafe);
     }
     entry->setHasParent(info.hasParent);
     createSerialSequence(transaction, entry.get(), info.isInternal);
@@ -729,8 +752,9 @@ CatalogEntry* Catalog::createNodeTableEntry(Transaction* transaction,
                 partitionInfo.numPartitions;
         for (auto i = 0u; i < numInitialPartitions; i++) {
             auto childName = std::format("{}_p{}", info.tableName, i);
-            auto child = std::make_unique<NodeTableCatalogEntry>(childName,
-                extraInfo->primaryKeyName, extraInfo->storage, extraInfo->storageFormat);
+            auto child =
+                std::make_unique<NodeTableCatalogEntry>(childName, extraInfo->primaryKeyName,
+                    extraInfo->storage, extraInfo->storageFormat, extraInfo->storageFormatName);
             for (auto& definition : extraInfo->propertyDefinitions) {
                 child->addProperty(definition.copy());
             }
@@ -772,6 +796,12 @@ void Catalog::dropSerialSequence(Transaction* transaction, const TableCatalogEnt
             continue;
         }
         auto seqName = SequenceCatalogEntry::getSerialName(entry->getName(), definition.getName());
+        // The sequence can already be gone: DROP SEQUENCE removed it, or WAL replay applied that
+        // drop before this DROP TABLE. Dropping the table must still succeed.
+        if (!sequences->containsEntry(transaction, seqName) &&
+            !internalSequences->containsEntry(transaction, seqName)) {
+            continue;
+        }
         dropSequence(transaction, seqName);
     }
 }

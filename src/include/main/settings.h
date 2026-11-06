@@ -96,8 +96,8 @@ struct RecursivePatternFactorSetting {
     static common::Value getSetting(const ClientContext* context);
 };
 
-struct EnableMVCCSetting {
-    static constexpr auto name = "debug_enable_multi_writes";
+struct EnableMultiWritesSetting {
+    static constexpr auto name = "enable_multi_writes";
     static constexpr auto inputType = common::LogicalTypeID::BOOL;
     static void setContext(ClientContext* context, const common::Value& parameter);
     static common::Value getSetting(const ClientContext* context);

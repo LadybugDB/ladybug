@@ -25,6 +25,7 @@ enum class WALRecordType : uint8_t {
                         // accidentally read from an empty buffer.
     BEGIN_TRANSACTION_RECORD = 1,
     COMMIT_RECORD = 2,
+    ABORT_RECORD = 3,
 
     COPY_TABLE_RECORD = 13,
     CREATE_CATALOG_ENTRY_RECORD = 14,

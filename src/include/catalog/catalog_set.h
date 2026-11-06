@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <mutex>
 #include <shared_mutex>
 
@@ -23,6 +24,7 @@ using CatalogEntrySet = common::case_insensitive_map_t<catalog::CatalogEntry*>;
 
 namespace catalog {
 class Catalog;
+class TableCatalogEntry;
 
 class LBUG_API CatalogSet {
     friend class storage::UndoBuffer;
@@ -40,9 +42,20 @@ public:
 
     void alterTableEntry(transaction::Transaction* transaction,
         const binder::BoundAlterInfo& alterInfo, bool skipLoggingToWAL = false);
+    // The caller supplies the WAL representation. Dynamic partition membership is
+    // reconstructed from child creation records; this copy supplies MVCC and undo.
+    TableCatalogEntry* copyTableEntryForWrite(transaction::Transaction* transaction,
+        const std::string& name);
 
     CatalogEntrySet getEntries(const transaction::Transaction* transaction);
     CatalogEntry* getEntryOfOID(const transaction::Transaction* transaction, common::oid_t oid);
+    // Calls `read` with the newest version-chain head for an OID, bypassing transaction
+    // visibility, to detect DDL that committed after the caller's snapshot or is still
+    // uncommitted. The head is a deleted tombstone only when no live head carries the OID,
+    // and null when no head does. `read` runs under this set's lock, which rollback also
+    // takes, so the head cannot be freed while it is read.
+    void readHeadEntryOfOID(common::oid_t oid,
+        const std::function<void(const CatalogEntry*)>& read) const;
 
     void serialize(common::Serializer serializer) const;
     void serializeSnapshot(common::Serializer serializer,

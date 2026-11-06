@@ -68,9 +68,10 @@ struct LBUG_API SystemConfig {
      * Default is false: on a torn tail (e.g. after a crash), the database opens with all data
      * up to the last checkpoint, discarding only the unreplayable tail.
      * @param enableChecksums If true, the database will use checksums to detect corruption in the
-     * WAL file.
+     * WAL file. It must match the setting the database's WAL was written with: a mismatch fails
+     * the open whatever throwOnWalReplayFailure says.
      * @param enableMultiWrites If true, multiple concurrent write transactions are allowed.
-     * Default to false.
+     * Default to true.
      * @param enableDefaultHashIndex If true, node tables create the default primary-key hash
      * index.
      * @param physicalPlanPoolPerThread How many reusable cloned physical plans each thread
@@ -80,7 +81,7 @@ struct LBUG_API SystemConfig {
         bool enableCompression = true, bool readOnly = false, uint64_t maxDBSize = -1u,
         bool autoCheckpoint = true, uint64_t checkpointThreshold = 16777216 /* 16MB */,
         bool forceCheckpointOnClose = true, bool throwOnWalReplayFailure = false,
-        bool enableChecksums = true, bool enableMultiWrites = false,
+        bool enableChecksums = true, bool enableMultiWrites = true,
         bool enableDefaultHashIndex = true, uint64_t physicalPlanPoolPerThread = 5
 #if defined(__APPLE__)
         ,

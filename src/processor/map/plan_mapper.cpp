@@ -3,6 +3,7 @@
 #include "catalog/catalog.h"
 #include "main/client_context.h"
 #include "main/database.h"
+#include "main/database_manager.h"
 #include "planner/operator/logical_plan.h"
 #include "processor/operator/profile.h"
 #include "processor/physical_plan_util.h"
@@ -286,11 +287,14 @@ FactorizedTableSchema PlanMapper::createFlatFTableSchema(const expression_vector
     return tableSchema;
 }
 
-std::unique_ptr<SemiMask> PlanMapper::createSemiMask(table_id_t tableID) const {
-    auto* entry =
-        catalog::Catalog::Get(*clientContext)
-            ->getTableCatalogEntry(transaction::Transaction::Get(*clientContext), tableID);
-    auto* table = storage::PartitionStorageRegistry::resolveNodeTable(clientContext, *entry);
+std::unique_ptr<SemiMask> PlanMapper::createSemiMask(table_id_t tableID,
+    const std::string& dbName) const {
+    // Table IDs restart at 0 in every database, so an ID alone does not identify a table once
+    // an attached database is in play: the current catalog may hold an unrelated table with
+    // the same ID, or none at all. Resolve the database that owns the ID (#1417).
+    auto* storageManager =
+        main::DatabaseManager::resolveTableStorage(*clientContext, tableID, dbName).second;
+    auto* table = storageManager->getTable(tableID)->ptrCast<storage::NodeTable>();
     return SemiMaskUtil::createMask(
         table->getNumTotalRows(transaction::Transaction::Get(*clientContext)));
 }

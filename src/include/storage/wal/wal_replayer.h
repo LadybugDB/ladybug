@@ -22,10 +22,17 @@ class Checkpointer;
 class StorageManager;
 class WALReplayer {
 public:
+    // A committed transaction's records [start, end) that a later ABORT record undid.
+    struct AbortedBlock {
+        uint64_t start;
+        uint64_t end;
+    };
+
     struct GraphRecoveryState {
         struct WALReplayRange {
             std::string path;
             uint64_t endOffset;
+            std::vector<AbortedBlock> abortedBlocks;
         };
 
         std::vector<WALReplayRange> walReplayRanges;
@@ -51,17 +58,19 @@ private:
         bool isLastRecordCheckpoint = false;
         // End offset of the last CHECKPOINT record, or 0 when the file holds none. A
         // pinned checkpoint skips WAL rotation, so its record can sit mid-file (with
-        // later commits after it); only the suffix past this offset replays, and only
-        // when no shadow file remains (see below).
+        // later commits after it); usually only the suffix past this offset replays.
         uint64_t lastCheckpointOffset = 0;
         // offsetDeserialized as of just before the first CHECKPOINT record (meaningful
-        // only when lastCheckpointOffset != 0). When a shadow file remains, some
-        // checkpoint may never have completed, so recovery replays exactly the
-        // pre-checkpoint prefix ending here and discards everything from the first
-        // CHECKPOINT record onward.
+        // only when lastCheckpointOffset != 0). A WAL whose CHECKPOINT records are not
+        // shown to be complete replays exactly the prefix ending here.
         uint64_t offsetBeforeFirstCheckpoint = 0;
+        // A BEGIN..COMMIT transaction follows the last CHECKPOINT record, which proves every
+        // CHECKPOINT in the file completed (see WALReplayer::replayActiveWAL).
+        bool hasTransactionAfterLastCheckpoint = false;
         common::uuid walDatabaseID{};
         uint64_t checkpointFormatVersion = 0;
+        // Sorted by start; replay skips these transactions.
+        std::vector<AbortedBlock> abortedBlocks;
     };
 
     void replayWALRecord(WALRecord& walRecord) const;
@@ -97,6 +106,8 @@ private:
     WALReplayInfo dryReplay(common::FileInfo& fileInfo, bool throwOnWalReplayFailure,
         bool enableChecksums) const;
 
+    uint64_t replayCommittedRecords(common::FileInfo& fileInfo, const WALReplayInfo& replayInfo,
+        bool skipThroughLastCheckpoint, bool enableChecksums) const;
     void replayFrozenWAL(Checkpointer& checkpointer, bool throwOnWalReplayFailure,
         bool enableChecksums) const;
     void replayActiveWAL(Checkpointer& checkpointer, bool throwOnWalReplayFailure,

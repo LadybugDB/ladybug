@@ -121,3 +121,24 @@ abcdefghijklmnopq
 -STATEMENT RETURN CASE WHEN NULL OR true THEN 1 ELSE 2 END
 ---- 1
 1
+
+-CASE CaseResultTypeCombinesBranches
+-LOG The result type is the common type of all THEN and ELSE branches, not the last THEN
+-STATEMENT RETURN CASE WHEN false THEN 1 ELSE 2.7 END, CASE WHEN true THEN 2.7 WHEN false THEN 1 END
+---- 1
+2.700000|2.700000
+-STATEMENT UNWIND [1, 2] AS i RETURN CASE WHEN i = 1 THEN CAST(i AS INT32) ELSE i * 1.5 END
+-CHECK_ORDER
+---- 2
+1.000000
+3.000000
+-STATEMENT MATCH (a:person) WHERE a.ID = 0 RETURN CASE WHEN a.ID = 0 THEN a.age ELSE a.eyeSight END
+---- 1
+35.000000
+-LOG Branches with no common implicit type keep the existing rule
+-STATEMENT RETURN CASE WHEN true THEN 'x' ELSE 1 END
+---- 1
+x
+-STATEMENT RETURN CASE WHEN true THEN 1 ELSE 'x' END
+---- error
+Binder exception: Expression x has data type STRING but expected INT64. Implicit cast is not supported.

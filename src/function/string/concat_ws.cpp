@@ -31,20 +31,20 @@ using handle_element_func_t = std::function<void(const string_t&)>;
 static void iterateParams(const std::vector<std::shared_ptr<common::ValueVector>>& parameters,
     const std::vector<common::SelectionVector*>& parameterSelVectors, sel_t pos,
     handle_separator_func_t handleSeparatorFunc, handle_element_func_t handleElementFunc) {
-    bool isPrevNull = false;
+    // NULL parameters are skipped; a separator goes between every two emitted values.
+    bool hasEmitted = false;
     for (auto i = 1u; i < parameters.size(); i++) {
         const auto& parameter = parameters[i];
         const auto& parameterSelVector = *parameterSelVectors[i];
         auto paramPos = parameter->state->isFlat() ? parameterSelVector[0] : pos;
         if (parameter->isNull(paramPos)) {
-            isPrevNull = true;
             continue;
         }
-        if (i != 1u && !isPrevNull) {
+        if (hasEmitted) {
             handleSeparatorFunc();
         }
         handleElementFunc(parameter->getValue<string_t>(paramPos));
-        isPrevNull = false;
+        hasEmitted = true;
     }
 }
 
@@ -61,22 +61,9 @@ void execFunc(const std::vector<std::shared_ptr<common::ValueVector>>& parameter
         }
         auto separator = parameters[0]->getValue<string_t>(separatorPos);
         auto len = 0u;
-        bool isPrevNull = false;
         iterateParams(
             parameters, parameterSelVectors, pos, [&]() { len += separator.len; },
             [&](const string_t& str) { len += str.len; });
-        for (auto i = 1u; i < parameters.size(); i++) {
-            const auto& parameter = parameters[i];
-            const auto& parameterSelVector = *parameterSelVectors[i];
-            auto paramPos = parameter->state->isFlat() ? parameterSelVector[0] : pos;
-            if (parameter->isNull(paramPos)) {
-                isPrevNull = true;
-                continue;
-            }
-            if (i != 1u && !isPrevNull) {}
-
-            isPrevNull = false;
-        }
         string_t resultStr;
         StringVector::reserveString(&result, resultStr, len);
         auto resultBuffer = resultStr.getData();

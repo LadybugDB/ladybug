@@ -4,6 +4,7 @@
 
 #include "common/exception/runtime.h"
 #include "main/client_context.h"
+#include "storage/buffer_manager/memory_manager.h"
 #include "transaction/transaction.h"
 
 using namespace lbug::common;
@@ -11,6 +12,47 @@ using namespace lbug::transaction;
 
 namespace lbug {
 namespace storage {
+
+void ColumnarRelTableScanState::setToTable(const Transaction* transaction, Table* table_,
+    std::vector<column_id_t> columnIDs_, std::vector<ColumnPredicateSet> columnPredicateSets_,
+    RelDataDirection direction_) {
+    // Call base class implementation but skip local table setup: columnar tables do not
+    // support local storage.
+    TableScanState::setToTable(transaction, table_, std::move(columnIDs_),
+        std::move(columnPredicateSets_));
+    columns.resize(columnIDs.size());
+    direction = direction_;
+    for (size_t i = 0; i < columnIDs.size(); ++i) {
+        auto columnID = columnIDs[i];
+        if (columnID == INVALID_COLUMN_ID || columnID == ROW_IDX_COLUMN_ID) {
+            columns[i] = nullptr;
+        } else {
+            columns[i] = table->cast<RelTable>().getColumn(columnID, direction);
+        }
+    }
+    csrOffsetColumn = table->cast<RelTable>().getCSROffsetColumn(direction);
+    csrLengthColumn = table->cast<RelTable>().getCSRLengthColumn(direction);
+    nodeGroupIdx = INVALID_NODE_GROUP_IDX;
+}
+
+void ColumnarRelTableScanState::reloadCachedBatchData(Transaction* transaction) {
+    auto context = transaction->getClientContext();
+
+    // Create DataChunk matching the indices parquet file schema
+    auto numIndicesColumns = indicesReader->getNumColumns();
+    cachedBatchData = std::make_unique<DataChunk>(numIndicesColumns);
+
+    // Insert value vectors for all columns in the parquet file
+    auto memoryManager = MemoryManager::Get(*context);
+    for (uint32_t colIdx = 0; colIdx < numIndicesColumns; ++colIdx) {
+        const auto& columnTypeRef = indicesReader->getColumnType(colIdx);
+        auto columnType = columnTypeRef.copy();
+        auto vector = std::make_shared<ValueVector>(std::move(columnType), memoryManager);
+        cachedBatchData->insert(colIdx, vector);
+    }
+
+    indicesReader->scan(*parquetScanState, *cachedBatchData);
+}
 
 common::row_idx_t ColumnarRelTableBase::getNumTotalRows(const Transaction* transaction) {
     return getTotalRowCount(transaction);

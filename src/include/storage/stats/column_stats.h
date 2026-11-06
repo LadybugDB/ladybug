@@ -19,9 +19,9 @@ public:
 
     common::cardinality_t getNumDistinctValues() const { return hll ? hll->count() : 0; }
     // Min/max over non-null values, stored as doubles in the column's physical domain
-    // (integers, DATE days, TIMESTAMP micros), for range-selectivity estimation. Unset
-    // when no non-null value was seen or the type is not min/max-tracked (nested,
-    // strings, ...).
+    // (integers, DATE days, each timestamp type in its own unit), for range-selectivity
+    // estimation. Unset when no non-null value was seen or the type is not min/max-tracked
+    // (nested, strings, ...).
     std::optional<double> getMinValue() const { return minValue; }
     std::optional<double> getMaxValue() const { return maxValue; }
 

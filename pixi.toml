@@ -5,5 +5,13 @@ platforms = ["linux-64", "linux-aarch64", "osx-64", "osx-arm64", "win-64"]
 
 [dependencies]
 libadbc-driver-manager = ">=1.11.0,<2"
-libarrow = ">=25.0.0"
+# Keep the conda libarrow on 25.x: the algo extension builds against the
+# system Apache Arrow 26 (libarrow.so.2600 from packages.apache.org), while
+# the pixi env only needs Arrow 25 for libadbc-driver-manager. Letting this
+# float to >=26 shadows the system 2600 at runtime via LD_LIBRARY_PATH, and
+# conda-forge's libarrow 26.0.0 currently resolves with simdjson 5.0.8
+# (libsimdjson.so.35) while its DT_NEEDED asks for libsimdjson.so.34,
+# breaking `LOAD EXTENSION 'algo'` with "libsimdjson.so.34: cannot open
+# shared object file". Revisit once conda-forge's arrow/simdjson are coherent.
+libarrow = ">=25.0.0,<26"
 llvm-openmp = ">=22.1.8,<23"

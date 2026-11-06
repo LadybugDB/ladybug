@@ -100,7 +100,7 @@ static CaseResult runCase(const Config& benchConfig, uint64_t numThreads) {
     systemConfig.enableCompression = false;
     Database database(dbPath.string(), systemConfig);
     Connection setup(&database);
-    runQuery(setup, "CALL debug_enable_multi_writes=true;");
+    runQuery(setup, "CALL enable_multi_writes=true;");
     runQuery(setup, "CALL enable_default_hash_index=false;");
     runQuery(setup, "CREATE NODE TABLE person(id INT64 PRIMARY KEY, name STRING);");
     runQuery(setup, "CHECKPOINT;");
