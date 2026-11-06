@@ -1371,8 +1371,9 @@ TEST_F(ApiTest, PreparedNodeScanAfterCheckpointRenumbersColumns) {
 }
 
 TEST_F(ApiTest, PreparedStatsInfoAfterRolledBackDrop1423) {
-    // A ROLLBACK frees the catalog entry the statement was bound against without forcing a
-    // rebind, so re-executing it must not read that entry.
+    // A ROLLBACK frees the catalog entry the statement was bound against. Re-executing it
+    // rebinds (a plan bound under uncommitted catalog changes is always treated as stale)
+    // instead of reading the freed entry, so the restored columns come back.
     ASSERT_TRUE(conn->query("CREATE NODE TABLE U1423(id INT64 PRIMARY KEY, a INT64, b INT64)")
                     ->isSuccess());
     ASSERT_TRUE(conn->query("CREATE (:U1423 {id: 1, a: 7, b: 10}), (:U1423 {id: 2, a: 7, b: 10}), "
@@ -1389,13 +1390,15 @@ TEST_F(ApiTest, PreparedStatsInfoAfterRolledBackDrop1423) {
     ASSERT_TRUE(conn->query("MATCH (u:U1423) RETURN count(*)")->isSuccess());
     result = conn->execute(stats.get());
     ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
-    ASSERT_EQ(std::vector<std::string>{"3|3|2"}, TestHelper::convertResultToString(*result));
-    // The pending row has a again, so its a must not be counted under b.
+    // The DROP-time plan is stale after the ROLLBACK, so this rebinds against the restored
+    // (id, a, b) entry and reports all three columns instead of the DROP-time two.
+    ASSERT_EQ(std::vector<std::string>{"3|3|1|2"}, TestHelper::convertResultToString(*result));
+    // The rebound plan carries the restored column IDs, so a pending row merges by ID.
     ASSERT_TRUE(conn->query("BEGIN TRANSACTION")->isSuccess());
     ASSERT_TRUE(conn->query("CREATE (:U1423 {id: 4, a: 10, b: 30})")->isSuccess());
     result = conn->execute(stats.get());
     ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
-    ASSERT_EQ(std::vector<std::string>{"4|4|3"}, TestHelper::convertResultToString(*result));
+    ASSERT_EQ(std::vector<std::string>{"4|4|2|3"}, TestHelper::convertResultToString(*result));
     ASSERT_TRUE(conn->query("ROLLBACK")->isSuccess());
 }
 
