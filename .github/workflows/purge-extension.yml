@@ -3,6 +3,11 @@ name: Purge Extensions
 on:
   workflow_dispatch:
 
+# Same lock as Build and Deploy Extensions: both rewrite the published image.
+concurrency:
+  group: extension-image
+  queue: max
+
 jobs:
   get-ghcr-extensions:
     uses: ./.github/workflows/get-extensions-from-ghcr.yml
