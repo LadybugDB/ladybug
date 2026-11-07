@@ -324,6 +324,7 @@ bool ScanRelTable::getNextTuplesInternal(ExecutionContext* context) {
                 return true;
             }
         }
+        scanState->restoreBoundNodeBatch();
         if (!children[0]->getNextTuple(context)) {
             scanState->releaseScanPin();
             return false;
