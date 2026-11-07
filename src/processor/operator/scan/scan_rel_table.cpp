@@ -145,21 +145,7 @@ void ScanRelTable::initLocalStateInternal(ResultSet* resultSet, ExecutionContext
     }
     scanState->packedMultiParentScan = multiParentPackedScanEnabled;
     tableInfo.initScanState(*scanState, outVectors, clientContext);
-    // The native RelTable::initScanState reads from the bound-node
-    // nodeIDVector to pick a node group, so it must run after a child tuple
-    // is in flight (the existing call sites in fetchNextBoundNodeBatch and
-    // after pulling a child tuple handle that). External rel table backends
-    // (ForeignRelTable, ArrowRelTable, IceDiskRelTable, ...) only use
-    // initScanState to set up scan-function / shared / local state and
-    // source/nodeGroupIdx — they don't need a bound node — but the first
-    // scan() in this operator fires before any of those re-init call sites,
-    // so we'd dereference uninitialized state and crash. Detect "external"
-    // by checking the dynamic type isn't the native RelTable — this scales
-    // to any future external backend without enumerating each one here.
-    if (typeid(*tableInfo.table) != typeid(RelTable)) {
-        auto transaction = transaction::Transaction::Get(*clientContext);
-        tableInfo.table->initScanState(transaction, *scanState);
-    }
+    hasBoundBatch = false;
     if (sourceNodeScanMode) {
         sourceNodeOutVectors.clear();
         for (auto& pos : sourceNodeScanInfo.outVectorsPos) {
@@ -291,7 +277,7 @@ bool ScanRelTable::getNextTuplesInternal(ExecutionContext* context) {
     const auto transaction = transaction::Transaction::Get(*context->clientContext);
     if (sourceMode) {
         while (true) {
-            while (tableInfo.table->scan(transaction, *scanState)) {
+            while (hasBoundBatch && tableInfo.table->scan(transaction, *scanState)) {
                 const auto outputSize = scanState->outState->getSelVector().getSelSize();
                 if (outputSize > 0) {
                     const auto filteredSize = getFilteredOutputSize();
@@ -308,10 +294,11 @@ bool ScanRelTable::getNextTuplesInternal(ExecutionContext* context) {
                 scanState->releaseScanPin();
                 return false;
             }
+            hasBoundBatch = true;
         }
     }
     while (true) {
-        while (tableInfo.table->scan(transaction, *scanState)) {
+        while (hasBoundBatch && tableInfo.table->scan(transaction, *scanState)) {
             const auto outputSize = scanState->outState->getSelVector().getSelSize();
             if (outputSize > 0) {
                 const auto filteredSize = getFilteredOutputSize();
@@ -330,6 +317,7 @@ bool ScanRelTable::getNextTuplesInternal(ExecutionContext* context) {
             return false;
         }
         tableInfo.table->initScanState(transaction, *scanState);
+        hasBoundBatch = true;
     }
 }
 
