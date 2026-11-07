@@ -176,6 +176,10 @@ protected:
     common::idx_t currentSourceTableIdx = 0;
     common::offset_t nextSourceOffset = 0;
     common::row_idx_t currentSourceTableNumRows = 0;
+    // True once a bound batch is in place and initScanState has run for it. scan() must not run
+    // before that: the bound vector holds no batch yet, and some backends (foreign, extension
+    // tables) set up their scan in initScanState.
+    bool hasBoundBatch = false;
 };
 
 } // namespace processor

@@ -9,8 +9,8 @@ add_lbug_test(disk_array_collection_test disk_array_collection_test.cpp)
 add_lbug_test(buffer_manager_test buffer_manager_test.cpp)
 add_lbug_test(mvcc_retention_test mvcc_retention_test.cpp)
 add_lbug_test(version_info_scan_test version_info_scan_test.cpp)
-add_lbug_test(rel_tests rel_scan_test.cpp rel_delete_test.cpp rel_degree_test.cpp
-    table_columns_concurrency_test.cpp)
+add_lbug_test(rel_tests rel_scan_test.cpp rel_scan_state_test.cpp rel_delete_test.cpp
+    rel_degree_test.cpp table_columns_concurrency_test.cpp)
 add_lbug_test(node_update_test node_update_test.cpp)
 add_lbug_test(detach_delete_test detach_delete_test.cpp)
 add_lbug_test(storage_utils_test storage_utils_test.cpp)

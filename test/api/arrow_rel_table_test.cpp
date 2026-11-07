@@ -731,6 +731,97 @@ TEST_F(ArrowRelTableTest, LargeBatchArrowRelTable) {
     ASSERT_EQ(sumResult->getNext()->getValue(0)->getValue<common::int128_t>(), 2098176);
 }
 
+// The last extend of the fork's chain reads a chunk its child does not refill.
+TEST_F(ArrowRelTableTest, ForkOverArrowRelTablesKeepsCrossProduct) {
+    auto setup = conn->query("CREATE NODE TABLE P(id INT64 PRIMARY KEY);"
+                             "CREATE NODE TABLE X(id INT64 PRIMARY KEY);"
+                             "CREATE NODE TABLE Y(id INT64 PRIMARY KEY);"
+                             "CREATE NODE TABLE Z(id INT64 PRIMARY KEY);"
+                             "CREATE NODE TABLE W(id INT64 PRIMARY KEY);"
+                             "CREATE (:P {id: 1});"
+                             "UNWIND range(1, 4) AS i CREATE (:X {id: i}), (:Z {id: i});"
+                             "UNWIND range(1, 6) AS i CREATE (:Y {id: i}), (:W {id: i});");
+    ASSERT_TRUE(setup->isSuccess()) << setup->getErrorMessage();
+
+    auto createRel = [&](const std::string& name, const std::string& src, const std::string& dst,
+                         const std::vector<int64_t>& from, const std::vector<int64_t>& to) {
+        ArrowSchemaWrapper schema;
+        createStructSchema(&schema, 2);
+        createSchema<int64_t>(schema.children[0], "from");
+        createSchema<int64_t>(schema.children[1], "to");
+        std::vector<ArrowArrayWrapper> arrays;
+        arrays.push_back(createStructArray(from.size(),
+            {[&](ArrowArray* array) { createInt64Array(array, from); },
+                [&](ArrowArray* array) { createInt64Array(array, to); }}));
+        auto result = ArrowTableSupport::createRelTableFromArrowTable(*conn, name, src, dst,
+            std::move(schema), std::move(arrays));
+        ASSERT_TRUE(result.queryResult->isSuccess()) << result.queryResult->getErrorMessage();
+    };
+    createRel("p_x", "P", "X", {1, 1, 1, 1}, {1, 2, 3, 4});
+    createRel("p_y", "P", "Y", {1, 1, 1, 1, 1, 1}, {1, 2, 3, 4, 5, 6});
+    createRel("x_z", "X", "Z", {1, 2, 3, 4}, {1, 2, 3, 4});
+    createRel("y_w", "Y", "W", {1, 2, 3, 4, 5, 6}, {1, 2, 3, 4, 5, 6});
+
+    for (const auto* query : {"MATCH (p:P)-[:p_x]->(x:X)-[:x_z]->(z:Z), "
+                              "(p)-[:p_y]->(y:Y)-[:y_w]->(w:W) WHERE p.id > 0 RETURN count(*)",
+             "MATCH (p:P {id: 1})-[:p_x]->(x:X)-[:x_z]->(z:Z), "
+             "(p)-[:p_y]->(y:Y)-[:y_w]->(w:W) RETURN count(*)"}) {
+        auto result = conn->query(query);
+        ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+        ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 24) << query;
+    }
+}
+
+// A primary-key seed's chunk already holds one row before the first pull.
+TEST_F(ArrowRelTableTest, PrimaryKeySeedScansOnlyItsRels) {
+    auto setup = conn->query("CREATE NODE TABLE P(id INT64 PRIMARY KEY);"
+                             "CREATE NODE TABLE X(id INT64 PRIMARY KEY);"
+                             "CREATE (:P {id: 1}), (:P {id: 2}), (:P {id: 3});"
+                             "UNWIND range(1, 4) AS i CREATE (:X {id: i});");
+    ASSERT_TRUE(setup->isSuccess()) << setup->getErrorMessage();
+    std::vector<int64_t> from = {1, 1, 1, 1, 2};
+    std::vector<int64_t> to = {1, 2, 3, 4, 3};
+    ArrowSchemaWrapper schema;
+    createStructSchema(&schema, 2);
+    createSchema<int64_t>(schema.children[0], "from");
+    createSchema<int64_t>(schema.children[1], "to");
+    std::vector<ArrowArrayWrapper> arrays;
+    arrays.push_back(createStructArray(from.size(),
+        {[&](ArrowArray* array) { createInt64Array(array, from); },
+            [&](ArrowArray* array) { createInt64Array(array, to); }}));
+    auto created = ArrowTableSupport::createRelTableFromArrowTable(*conn, "p_x", "P", "X",
+        std::move(schema), std::move(arrays));
+    ASSERT_TRUE(created.queryResult->isSuccess()) << created.queryResult->getErrorMessage();
+
+    auto ids = [](main::QueryResult& result) {
+        EXPECT_TRUE(result.isSuccess()) << result.getErrorMessage();
+        std::vector<int64_t> out;
+        while (result.hasNext()) {
+            out.push_back(result.getNext()->getValue(0)->getValue<int64_t>());
+        }
+        return out;
+    };
+    using Ids = std::vector<int64_t>;
+    EXPECT_EQ(ids(*conn->query("MATCH (p:P {id: 2})-[:p_x]->(x:X) RETURN x.id ORDER BY x.id")),
+        Ids{3});
+    EXPECT_EQ(ids(*conn->query("MATCH (p:P {id: 1})-[:p_x]->(x:X) RETURN count(*)")), Ids{4});
+    EXPECT_EQ(ids(*conn->query("MATCH (p:P {id: 3})-[:p_x]->(x:X) RETURN count(*)")), Ids{0});
+    EXPECT_EQ(
+        ids(*conn->query("MATCH (p:P)-[:p_x]->(x:X) WHERE p.id = 2 RETURN x.id ORDER BY x.id")),
+        Ids{3});
+    EXPECT_EQ(ids(*conn->query("MATCH (x:X {id: 3})<-[:p_x]-(p:P) RETURN p.id ORDER BY p.id")),
+        (Ids{1, 2}));
+
+    auto prepared = conn->prepare("MATCH (p:P {id: $id})-[:p_x]->(x:X) RETURN x.id ORDER BY x.id");
+    ASSERT_TRUE(prepared->isSuccess()) << prepared->getErrorMessage();
+    for (const auto& [id, expected] :
+        std::vector<std::pair<int64_t, Ids>>{{2, {3}}, {3, {}}, {1, {1, 2, 3, 4}}, {2, {3}}}) {
+        EXPECT_EQ(ids(*conn->execute(prepared.get(), std::make_pair(std::string("id"), id))),
+            expected)
+            << "$id = " << id;
+    }
+}
+
 TEST_F(ArrowRelTableTest, CreateArrowRelTableReservedTableName) {
     // Use a reserved word as the relationship table name
     createArrowPersonTable(*conn);

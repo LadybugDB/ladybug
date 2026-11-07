@@ -1,0 +1,399 @@
+-DATASET CSV empty
+
+--
+
+# The arms of a fork are planned as one chain of extends, for example
+# S(p) -> E(p->y) -> E(p->x) -> E(y->w) -> E(x->z). The last extend reads a chunk its child does
+# not refill, so every row of the newer arm has to see all rows of the older one.
+-DEFINE_STATEMENT_BLOCK CREATE_FORK [
+-STATEMENT CREATE NODE TABLE P(id INT64 PRIMARY KEY);
+---- ok
+-STATEMENT CREATE NODE TABLE X(id INT64 PRIMARY KEY);
+---- ok
+-STATEMENT CREATE NODE TABLE Y(id INT64 PRIMARY KEY);
+---- ok
+-STATEMENT CREATE NODE TABLE Z(id INT64 PRIMARY KEY);
+---- ok
+-STATEMENT CREATE NODE TABLE W(id INT64 PRIMARY KEY);
+---- ok
+-STATEMENT CREATE REL TABLE p_x(FROM P TO X, w INT64);
+---- ok
+-STATEMENT CREATE REL TABLE p_y(FROM P TO Y, w INT64);
+---- ok
+-STATEMENT CREATE REL TABLE x_z(FROM X TO Z);
+---- ok
+-STATEMENT CREATE REL TABLE y_w(FROM Y TO W);
+---- ok
+]
+
+-DEFINE_STATEMENT_BLOCK FILL_FORK_4_6 [
+-STATEMENT CREATE (:P {id: 1});
+---- ok
+-STATEMENT UNWIND range(1, 4) AS i CREATE (:X {id: i}), (:Z {id: i});
+---- ok
+-STATEMENT UNWIND range(1, 6) AS i CREATE (:Y {id: i}), (:W {id: i});
+---- ok
+-STATEMENT MATCH (p:P), (x:X) CREATE (p)-[:p_x {w: x.id}]->(x);
+---- ok
+-STATEMENT MATCH (p:P), (y:Y) CREATE (p)-[:p_y {w: y.id}]->(y);
+---- ok
+-STATEMENT MATCH (x:X), (z:Z) WHERE x.id = z.id CREATE (x)-[:x_z]->(z);
+---- ok
+-STATEMENT MATCH (y:Y), (w:W) WHERE y.id = w.id CREATE (y)-[:y_w]->(w);
+---- ok
+]
+
+-CASE ConvergingArmsFilteredOnSharedNode
+-STATEMENT CREATE NODE TABLE A(id INT64, PRIMARY KEY(id));
+---- ok
+-STATEMENT CREATE NODE TABLE F(id INT64, PRIMARY KEY(id));
+---- ok
+-STATEMENT CREATE NODE TABLE E(id INT64, kind STRING, PRIMARY KEY(id));
+---- ok
+-STATEMENT CREATE REL TABLE emits(FROM A TO F);
+---- ok
+-STATEMENT CREATE REL TABLE to_ext(FROM F TO E);
+---- ok
+-STATEMENT CREATE (:E {id: 0, kind: 'idp'});
+---- ok
+-STATEMENT UNWIND range(1, 10) AS i CREATE (a:A {id: i})-[:emits]->(f:F {id: i});
+---- ok
+-STATEMENT MATCH (f:F), (e:E {id: 0}) CREATE (f)-[:to_ext]->(e);
+---- ok
+-STATEMENT MATCH (a1:A)-[:emits]->(:F)-[:to_ext]->(e:E)<-[:to_ext]-(:F)<-[:emits]-(a2:A) RETURN count(*);
+---- 1
+100
+-STATEMENT MATCH (a1:A)-[:emits]->(:F)-[:to_ext]->(e:E)<-[:to_ext]-(:F)<-[:emits]-(a2:A) WHERE e.kind = 'idp' RETURN count(*);
+---- 1
+100
+-STATEMENT MATCH (a1:A)-[:emits]->(:F)-[:to_ext]->(e:E {id: 0})<-[:to_ext]-(:F)<-[:emits]-(a2:A) RETURN count(*);
+---- 1
+100
+-STATEMENT MATCH (a1:A)-[:emits]->(:F)-[:to_ext]->(e:E) MATCH (a2:A)-[:emits]->(:F)-[:to_ext]->(e) WHERE e.kind = 'idp' RETURN count(*);
+---- 1
+100
+-STATEMENT MATCH (a1:A)-[:emits]->(:F)-[:to_ext]->(e:E)<-[:to_ext]-(:F)<-[:emits]-(a2:A) WHERE e.kind = 'idp' AND a1.id <> a2.id RETURN count(*);
+---- 1
+90
+-STATEMENT MATCH (a1:A)-[:emits]->(:F)-[:to_ext]->(e:E)<-[:to_ext]-(:F)<-[:emits]-(a2:A), (e)<-[:to_ext]-(:F)<-[:emits]-(a3:A) WHERE e.kind = 'idp' RETURN count(*);
+---- 1
+1000
+
+-CASE ForkFromSeedKeepsCrossProduct
+-INSERT_STATEMENT_BLOCK CREATE_FORK
+-INSERT_STATEMENT_BLOCK FILL_FORK_4_6
+-STATEMENT MATCH (p:P {id: 1})-[:p_x]->(x:X)-[:x_z]->(z:Z), (p)-[:p_y]->(y:Y)-[:y_w]->(w:W) RETURN count(*);
+---- 1
+24
+-STATEMENT MATCH (p:P)-[:p_x]->(x:X)-[:x_z]->(z:Z), (p)-[:p_y]->(y:Y)-[:y_w]->(w:W) WHERE p.id > 0 RETURN count(*);
+---- 1
+24
+-STATEMENT MATCH (p:P {id: 1})-[:p_x]->(x:X)-[:x_z]->(z:Z), (p)-[:p_y]->(y:Y)-[:y_w]->(w:W) RETURN z.id, w.id;
+---- 24
+1|1
+1|2
+1|3
+1|4
+1|5
+1|6
+2|1
+2|2
+2|3
+2|4
+2|5
+2|6
+3|1
+3|2
+3|3
+3|4
+3|5
+3|6
+4|1
+4|2
+4|3
+4|4
+4|5
+4|6
+
+# Restoring the batch must keep the rows an earlier filter dropped from it. The extra X nodes keep
+# the plan seeded on p, with the filter between the older arm's two extends. Only x2 and x4 pass the
+# filter and they have 1 and 3 rels against 1 each for x1 and x3, so the count shows which rows return.
+-CASE ForkOlderArmFilteredOnRelProperty
+-INSERT_STATEMENT_BLOCK CREATE_FORK
+-INSERT_STATEMENT_BLOCK FILL_FORK_4_6
+-STATEMENT UNWIND range(5, 3000) AS i CREATE (:X {id: i});
+---- ok
+-STATEMENT MATCH (x:X {id: 4}), (z:Z) WHERE z.id <= 2 CREATE (x)-[:x_z]->(z);
+---- ok
+-STATEMENT MATCH (p:P {id: 1})-[r:p_x]->(x:X)-[:x_z]->(z:Z), (p)-[:p_y]->(y:Y)-[:y_w]->(w:W) WHERE r.w % 2 = 0 RETURN count(*);
+---- 1
+24
+-STATEMENT CHECKPOINT;
+---- ok
+-STATEMENT MATCH (p:P {id: 1})-[r:p_x]->(x:X)-[:x_z]->(z:Z), (p)-[:p_y]->(y:Y)-[:y_w]->(w:W) WHERE r.w % 2 = 0 RETURN count(*);
+---- 1
+24
+
+# The older arm reaches its neighbours in more than one output batch.
+-CASE ForkOlderArmWiderThanVector
+-INSERT_STATEMENT_BLOCK CREATE_FORK
+-STATEMENT CREATE (:P {id: 1});
+---- ok
+-STATEMENT UNWIND range(1, 2100) AS i CREATE (:X {id: i}), (:Z {id: i});
+---- ok
+-STATEMENT UNWIND range(1, 2200) AS i CREATE (:Y {id: i}), (:W {id: i});
+---- ok
+-STATEMENT MATCH (p:P), (x:X) CREATE (p)-[:p_x {w: x.id}]->(x);
+---- ok
+-STATEMENT MATCH (p:P), (y:Y) CREATE (p)-[:p_y {w: y.id}]->(y);
+---- ok
+-STATEMENT MATCH (x:X), (z:Z) WHERE x.id = z.id CREATE (x)-[:x_z]->(z);
+---- ok
+-STATEMENT MATCH (y:Y), (w:W) WHERE y.id = w.id CREATE (y)-[:y_w]->(w);
+---- ok
+-STATEMENT MATCH (p:P {id: 1})-[:p_x]->(x:X)-[:x_z]->(z:Z), (p)-[r:p_y]->(y:Y)-[:y_w]->(w:W) WHERE r.w <= 3 RETURN count(*);
+---- 1
+6300
+
+# The older arm's nodes sit in two node groups and arrive out of offset order, so its batch is
+# scanned one node group at a time and has to come back whole.
+-CASE ForkOlderArmSpansNodeGroups
+-SKIP_NODE_GROUP_SIZE_TESTS
+-INSERT_STATEMENT_BLOCK CREATE_FORK
+-STATEMENT CREATE (:P {id: 1});
+---- ok
+-STATEMENT UNWIND range(0, 131111) AS i CREATE (:X {id: i});
+---- ok
+-STATEMENT UNWIND range(1, 3) AS i CREATE (:Y {id: i}), (:Z {id: i}), (:W {id: i});
+---- ok
+-STATEMENT MATCH (p:P), (x:X {id: 131081}) CREATE (p)-[:p_x {w: 1}]->(x);
+---- ok
+-STATEMENT MATCH (p:P), (x:X {id: 5}) CREATE (p)-[:p_x {w: 2}]->(x);
+---- ok
+-STATEMENT MATCH (p:P), (x:X {id: 131080}) CREATE (p)-[:p_x {w: 3}]->(x);
+---- ok
+-STATEMENT MATCH (p:P), (y:Y) CREATE (p)-[:p_y {w: y.id}]->(y);
+---- ok
+-STATEMENT MATCH (x:X {id: 5}), (z:Z {id: 1}) CREATE (x)-[:x_z]->(z);
+---- ok
+-STATEMENT MATCH (x:X {id: 131080}), (z:Z {id: 2}) CREATE (x)-[:x_z]->(z);
+---- ok
+-STATEMENT MATCH (x:X {id: 131081}), (z:Z {id: 3}) CREATE (x)-[:x_z]->(z);
+---- ok
+-STATEMENT MATCH (y:Y), (w:W) WHERE y.id = w.id CREATE (y)-[:y_w]->(w);
+---- ok
+-STATEMENT MATCH (p:P {id: 1})-[:p_x]->(x:X)-[:x_z]->(z:Z), (p)-[:p_y]->(y:Y)-[:y_w]->(w:W) RETURN count(*);
+---- 1
+9
+-STATEMENT MATCH (p:P {id: 1})-[:p_x]->(x:X)-[:x_z]->(z:Z), (p)-[:p_y]->(y:Y)-[:y_w]->(w:W) RETURN z.id, w.id;
+---- 9
+1|1
+1|2
+1|3
+2|1
+2|2
+2|3
+3|1
+3|2
+3|3
+-STATEMENT CHECKPOINT;
+---- ok
+-STATEMENT MATCH (p:P {id: 1})-[:p_x]->(x:X)-[:x_z]->(z:Z), (p)-[:p_y]->(y:Y)-[:y_w]->(w:W) RETURN count(*);
+---- 1
+9
+
+# x_z has one node group, so part of the older arm's batch has none to scan. p1 has one such node
+# and p2 two. Rels outside that part still count, whichever source or rel table holds them.
+-CASE ForkOlderArmPastLastRelNodeGroup
+-SKIP_NODE_GROUP_SIZE_TESTS
+-INSERT_STATEMENT_BLOCK CREATE_FORK
+-STATEMENT CREATE (:P {id: 1}), (:P {id: 2});
+---- ok
+-STATEMENT UNWIND range(0, 131111) AS i CREATE (:X {id: i});
+---- ok
+-STATEMENT UNWIND range(1, 3) AS i CREATE (:Y {id: i}), (:Z {id: i}), (:W {id: i});
+---- ok
+-STATEMENT MATCH (p:P {id: 1}), (x:X) WHERE x.id IN [5, 6, 131080] CREATE (p)-[:p_x {w: x.id}]->(x);
+---- ok
+-STATEMENT MATCH (p:P {id: 2}), (x:X) WHERE x.id IN [5, 6, 131080, 131081] CREATE (p)-[:p_x {w: x.id}]->(x);
+---- ok
+-STATEMENT MATCH (p:P), (y:Y) CREATE (p)-[:p_y {w: y.id}]->(y);
+---- ok
+-STATEMENT MATCH (x:X {id: 5}), (z:Z {id: 1}) CREATE (x)-[:x_z]->(z);
+---- ok
+-STATEMENT MATCH (x:X {id: 6}), (z:Z {id: 2}) CREATE (x)-[:x_z]->(z);
+---- ok
+-STATEMENT MATCH (y:Y), (w:W) WHERE y.id = w.id CREATE (y)-[:y_w]->(w);
+---- ok
+-STATEMENT MATCH (p:P {id: 1})-[:p_x]->(x:X)-[:x_z]->(z:Z), (p)-[:p_y]->(y:Y)-[:y_w]->(w:W) RETURN count(*);
+---- 1
+6
+-STATEMENT MATCH (p:P {id: 2})-[:p_x]->(x:X)-[:x_z]->(z:Z), (p)-[:p_y]->(y:Y)-[:y_w]->(w:W) RETURN count(*);
+---- 1
+6
+-STATEMENT CHECKPOINT;
+---- ok
+-STATEMENT MATCH (p:P {id: 2})-[:p_x]->(x:X)-[:x_z]->(z:Z), (p)-[:p_y]->(y:Y)-[:y_w]->(w:W) RETURN count(*);
+---- 1
+6
+-STATEMENT BEGIN TRANSACTION;
+---- ok
+-STATEMENT MATCH (x:X {id: 5}), (z:Z {id: 3}) CREATE (x)-[:x_z]->(z);
+---- ok
+-STATEMENT MATCH (p:P {id: 2})-[:p_x]->(x:X)-[:x_z]->(z:Z) RETURN count(*);
+---- 1
+3
+-STATEMENT MATCH (p:P {id: 2})-[:p_x]->(x:X)-[:x_z]->(z:Z), (p)-[:p_y]->(y:Y)-[:y_w]->(w:W) RETURN count(*);
+---- 1
+9
+-STATEMENT ROLLBACK;
+---- ok
+-STATEMENT CREATE REL TABLE x_z2(FROM X TO Z);
+---- ok
+-STATEMENT MATCH (x:X {id: 5}), (z:Z {id: 3}) CREATE (x)-[:x_z2]->(z);
+---- ok
+-STATEMENT MATCH (p:P {id: 2})-[:p_x]->(x:X)-[:x_z|:x_z2]->(z:Z) RETURN count(*);
+---- 1
+3
+-STATEMENT CREATE REL TABLE x_z3(FROM X TO Z);
+---- ok
+-STATEMENT BEGIN TRANSACTION;
+---- ok
+-STATEMENT MATCH (x:X {id: 5}), (z:Z {id: 1}) CREATE (x)-[:x_z3]->(z);
+---- ok
+-STATEMENT MATCH (x:X {id: 131080}), (z:Z {id: 2}) CREATE (x)-[:x_z3]->(z);
+---- ok
+-STATEMENT MATCH (p:P {id: 2})-[:p_x]->(x:X)-[:x_z3]->(z:Z) RETURN count(*);
+---- 1
+2
+-STATEMENT ROLLBACK;
+---- ok
+
+# The scan serves these rels from local storage, alone and after committed rels.
+-CASE ForkOverUncommittedRels
+-INSERT_STATEMENT_BLOCK CREATE_FORK
+-INSERT_STATEMENT_BLOCK FILL_FORK_4_6
+-STATEMENT BEGIN TRANSACTION;
+---- ok
+-STATEMENT CREATE (:X {id: 5}), (:Z {id: 5});
+---- ok
+-STATEMENT MATCH (p:P {id: 1}), (x:X {id: 5}) CREATE (p)-[:p_x {w: 5}]->(x);
+---- ok
+-STATEMENT MATCH (x:X {id: 5}), (z:Z {id: 5}) CREATE (x)-[:x_z]->(z);
+---- ok
+-STATEMENT MATCH (p:P {id: 1})-[:p_x]->(x:X)-[:x_z]->(z:Z), (p)-[:p_y]->(y:Y)-[:y_w]->(w:W) RETURN count(*);
+---- 1
+30
+-STATEMENT CREATE (:P {id: 2});
+---- ok
+-STATEMENT MATCH (p:P {id: 2}), (x:X) WHERE x.id <= 2 CREATE (p)-[:p_x {w: x.id}]->(x);
+---- ok
+-STATEMENT MATCH (p:P {id: 2}), (y:Y) WHERE y.id <= 3 CREATE (p)-[:p_y {w: y.id}]->(y);
+---- ok
+-STATEMENT MATCH (p:P {id: 2})-[:p_x]->(x:X)-[:x_z]->(z:Z), (p)-[:p_y]->(y:Y)-[:y_w]->(w:W) RETURN count(*);
+---- 1
+6
+-STATEMENT ROLLBACK;
+---- ok
+-STATEMENT MATCH (p:P {id: 1})-[:p_x]->(x:X)-[:x_z]->(z:Z), (p)-[:p_y]->(y:Y)-[:y_w]->(w:W) RETURN count(*);
+---- 1
+24
+
+# The filter sits below two extends and sees its chunk again after they flattened it.
+-CASE ForkFilterAcrossArms
+-INSERT_STATEMENT_BLOCK CREATE_FORK
+-INSERT_STATEMENT_BLOCK FILL_FORK_4_6
+-STATEMENT MATCH (p:P {id: 1})-[r1:p_x]->(x:X)-[:x_z]->(z:Z), (p)-[r2:p_y]->(y:Y)-[:y_w]->(w:W) WHERE r1.w + r2.w >= 9 RETURN count(*);
+---- 1
+3
+-STATEMENT MATCH (p:P {id: 1})-[r1:p_x]->(x:X)-[:x_z]->(z:Z), (p)-[r2:p_y]->(y:Y)-[:y_w]->(w:W) WHERE r1.w + r2.w = 5 RETURN count(*);
+---- 1
+4
+
+# Not a fork. The first batch has one row, which the extend above leaves flat. The next batch has
+# three, and the filter has to test each of them.
+-CASE FilterAfterMultiTableExtendRefill
+-INSERT_STATEMENT_BLOCK CREATE_FORK
+-STATEMENT CREATE (:P {id: 1}), (:P {id: 2});
+---- ok
+-STATEMENT UNWIND range(1, 4) AS i CREATE (:X {id: i}), (:Z {id: i});
+---- ok
+-STATEMENT MATCH (p:P {id: 1}), (x:X {id: 1}) CREATE (p)-[:p_x {w: 2}]->(x);
+---- ok
+-STATEMENT MATCH (p:P {id: 2}), (x:X {id: 2}) CREATE (p)-[:p_x {w: 1}]->(x);
+---- ok
+-STATEMENT MATCH (p:P {id: 2}), (x:X {id: 3}) CREATE (p)-[:p_x {w: 2}]->(x);
+---- ok
+-STATEMENT MATCH (p:P {id: 2}), (x:X {id: 4}) CREATE (p)-[:p_x {w: 3}]->(x);
+---- ok
+-STATEMENT CREATE REL TABLE grp(FROM X TO Z, FROM Y TO W);
+---- ok
+-STATEMENT MATCH (x:X), (z:Z) WHERE x.id = z.id CREATE (x)-[:grp]->(z);
+---- ok
+-STATEMENT MATCH (p:P)-[r:p_x|:p_y]->(m)-[:grp]->(t) WHERE p.id > 0 AND r.w % 2 = 0 RETURN count(*);
+---- 1
+2
+# With the first row of the batch passing instead of failing.
+-STATEMENT MATCH (:P {id: 2})-[r:p_x]->(:X {id: 2}) SET r.w = 2;
+---- ok
+-STATEMENT MATCH (:P {id: 2})-[r:p_x]->(:X {id: 3}) SET r.w = 1;
+---- ok
+-STATEMENT MATCH (p:P)-[r:p_x|:p_y]->(m)-[:grp]->(t) WHERE p.id > 0 AND r.w % 2 = 0 RETURN count(*);
+---- 1
+2
+
+# Same batches, with a property whose type differs across the rel tables, so the scan casts it.
+-CASE CastAfterMultiTableExtendRefill
+-INSERT_STATEMENT_BLOCK CREATE_FORK
+-STATEMENT CREATE REL TABLE a(FROM P TO X, w INT32);
+---- ok
+-STATEMENT CREATE REL TABLE b(FROM P TO Y, w INT64);
+---- ok
+-STATEMENT CREATE REL TABLE grp(FROM X TO Z, FROM Y TO W);
+---- ok
+-STATEMENT CREATE (:P {id: 1}), (:P {id: 2});
+---- ok
+-STATEMENT UNWIND range(1, 4) AS i CREATE (:X {id: i}), (:Z {id: i});
+---- ok
+-STATEMENT MATCH (p:P {id: 1}), (x:X {id: 1}) CREATE (p)-[:a {w: 2}]->(x);
+---- ok
+-STATEMENT MATCH (p:P {id: 2}), (x:X {id: 2}) CREATE (p)-[:a {w: 1}]->(x);
+---- ok
+-STATEMENT MATCH (p:P {id: 2}), (x:X {id: 3}) CREATE (p)-[:a {w: 2}]->(x);
+---- ok
+-STATEMENT MATCH (p:P {id: 2}), (x:X {id: 4}) CREATE (p)-[:a {w: 3}]->(x);
+---- ok
+-STATEMENT MATCH (x:X), (z:Z) WHERE x.id = z.id CREATE (x)-[:grp]->(z);
+---- ok
+-STATEMENT MATCH (p:P)-[r:a|:b]->(m)-[:grp]->(t) WHERE p.id > 0 RETURN r.w, t.id;
+---- 4
+1|2
+2|1
+2|3
+3|4
+
+-CASE ForkOverCheckpointedRels
+-INSERT_STATEMENT_BLOCK CREATE_FORK
+-INSERT_STATEMENT_BLOCK FILL_FORK_4_6
+-STATEMENT CHECKPOINT;
+---- ok
+-STATEMENT MATCH (p:P {id: 1})-[:p_x]->(x:X)-[:x_z]->(z:Z), (p)-[:p_y]->(y:Y)-[:y_w]->(w:W) RETURN count(*);
+---- 1
+24
+-STATEMENT MATCH (p:P {id: 1})-[r1:p_x]->(x:X)-[:x_z]->(z:Z), (p)-[r2:p_y]->(y:Y)-[:y_w]->(w:W) WHERE r1.w + r2.w >= 9 RETURN count(*);
+---- 1
+3
+
+# The last extend starts from a multi-label node, which needs the generic multi-table scan.
+-CASE ForkOlderArmMultiLabel
+-INSERT_STATEMENT_BLOCK CREATE_FORK
+-INSERT_STATEMENT_BLOCK FILL_FORK_4_6
+-STATEMENT CREATE REL TABLE grp(FROM X TO Z, FROM Y TO W);
+---- ok
+-STATEMENT MATCH (x:X), (z:Z) WHERE x.id = z.id CREATE (x)-[:grp]->(z);
+---- ok
+-STATEMENT MATCH (y:Y), (w:W) WHERE y.id = w.id CREATE (y)-[:grp]->(w);
+---- ok
+-STATEMENT MATCH (p:P {id: 1})-[:p_x|:p_y]->(m)-[:grp]->(t), (p)-[:p_x]->(x:X)-[:x_z]->(z:Z) RETURN count(*);
+---- 1
+40
