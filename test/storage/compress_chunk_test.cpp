@@ -461,7 +461,7 @@ TEST_F(CompressChunkTest, TestDoubleInPlaceUpdateNoExceptions) {
                 src[cpyOffset + i] = 5.7;
             }
 
-            ValueVector in{LogicalType::FLOAT()};
+            ValueVector in{LogicalType::DOUBLE()};
             for (size_t i = 0; i < src.size(); ++i) {
                 in.setValue<double>(i, src[i]);
             }
@@ -479,7 +479,7 @@ TEST_F(CompressChunkTest, TestDoubleInPlaceUpdateNoExceptions) {
                     state.getExceptionChunk<double>()->finalizeAndFlushToDisk(state);
                 }
 
-                ValueVector in{LogicalType::FLOAT()};
+                ValueVector in{LogicalType::DOUBLE()};
                 for (size_t i = 0; i < src.size(); ++i) {
                     in.setValue<double>(i, src[i]);
                 }
