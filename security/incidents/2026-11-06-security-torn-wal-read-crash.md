@@ -2,9 +2,11 @@
 
 **Date:** 2026-11-06
 **Status:** Resolved in 0.22.3 and on `main`
-**Severity:** Low as a security issue, since an attacker needs access to the WAL. A crashing open is a serious reliability failure.
+**Severity:** P2 (Medium) as a security incident, since an attacker needs access to the WAL. A crashing open is a serious reliability failure.
 **Component:** Storage: `BufferedFileReader`, WAL recovery
 **Author:** [@zahariash](https://github.com/zahariash)
+**CVE / advisory reference:** none published
+**Reporter credit:** [@zahariash](https://github.com/zahariash)
 
 ---
 
@@ -33,10 +35,15 @@ All on 2026-11-06.
 
 - The workload simulator, running `main` with open recovery PRs, hit a crash on reopen. A byte sweep and a minimal script followed, and the crash reproduced on released wheels.
 - A code review of the report's draft challenged its claim that a short write was required. A test that kills the process at each write showed that a plain kill is enough.
-- The report went to security@ladybugdb.com, following `SECURITY.md`. The maintainer classified it as low severity and planned 0.22.3.
-- 17:22 UTC: [#1520](https://github.com/LadybugDB/ladybug/pull/1520) merged to `main` (`1e71d9348`).
-- 17:45 UTC: [#1522](https://github.com/LadybugDB/ladybug/pull/1522) merged to `release_0_22` (`ec35ca5145`).
-- 20:40 UTC: 0.22.3 published on PyPI.
+
+## Disclosure timeline
+
+- 2026-11-06: reported to security@ladybugdb.com, following `SECURITY.md`. The maintainer confirmed it as a security incident the same day and planned 0.22.3 as the fix release.
+- 2026-11-06 16:22 UTC: [#1520](https://github.com/LadybugDB/ladybug/pull/1520) opened, public, followed by [#1522](https://github.com/LadybugDB/ladybug/pull/1522) for `release_0_22`.
+- 2026-11-06 17:22 UTC: [#1520](https://github.com/LadybugDB/ladybug/pull/1520) merged to `main` (`1e71d9348`). 17:45 UTC: [#1522](https://github.com/LadybugDB/ladybug/pull/1522) merged to `release_0_22` (`ec35ca5145`).
+- 2026-11-06 18:48 to 20:40 UTC: 0.22.3 published on npm, crates.io and PyPI.
+- 2026-11-07 16:00 UTC: 0.22.3 GitHub release.
+- No GitHub Security Advisory or CVE has been published.
 
 ## Resolution
 
@@ -45,6 +52,10 @@ All on 2026-11-06.
 **Verify:** `WalTest.TornWALTailInsideLargeStringRecord`.
 
 On the head of [#1520](https://github.com/LadybugDB/ladybug/pull/1520), four two-commit WALs (checksums on and off, 974- and 6000-byte strings) were cut at every byte of the second commit, 33,140 cuts in total, and opened strict and lenient. None crashed or returned an unexpected row count. On 0.22.3, the minimal script and the kill-at-each-write test with checksums on no longer crash.
+
+## Registry / artifact impact
+
+No release on PyPI, npm or crates.io was yanked or deprecated. 0.22.3 carries the fix on PyPI (`ladybug`), npm (`@ladybugdb/core`, `@ladybugdb/wasm-core`), crates.io (`lbug`) and GitHub releases. Not every older release will be patched, so users of older versions should upgrade to 0.22.3.
 
 ## Lessons learned
 
@@ -59,7 +70,7 @@ On the head of [#1520](https://github.com/LadybugDB/ladybug/pull/1520), four two
 |------|--------|
 | Fix and regression test | Done: [#1520](https://github.com/LadybugDB/ladybug/pull/1520), [#1522](https://github.com/LadybugDB/ladybug/pull/1522), 0.22.3 |
 | Regression test with a value over 4 KB | Open: the current test uses 3000-byte values |
-| Simulator rule that cuts a WAL at chosen points and predicts which commits survive | Written, not yet published |
+| Simulator rule that cuts a WAL at chosen points and predicts which commits survive | Written, on a fork branch, not yet proposed |
 | `wal_dump` reading a WAL by name and reporting where it stopped, with a test | Open: [#1526](https://github.com/LadybugDB/ladybug/pull/1526) |
 | What a lenient open keeps after mid-file damage | Open: [#1497](https://github.com/LadybugDB/ladybug/issues/1497) |
 
