@@ -327,6 +327,45 @@ TEST_F(ArrowCsrRelTableTest, CsrOverNativeNodeTableScans) {
     ASSERT_EQ(countResult->getNext()->getValue(0)->getValue<int64_t>(), 1);
 }
 
+// A primary-key seed's chunk already holds one row before the first pull.
+TEST_F(ArrowCsrRelTableTest, PrimaryKeySeedOverNativeNodes) {
+    auto createNative = conn->query("CREATE NODE TABLE native_person(id INT64, PRIMARY KEY(id));"
+                                    "CREATE (:native_person {id: 0});"
+                                    "CREATE (:native_person {id: 1});"
+                                    "CREATE (:native_person {id: 2});");
+    ASSERT_TRUE(createNative->isSuccess()) << createNative->getErrorMessage();
+
+    std::vector<ArrowArrayWrapper> fwdIndices, fwdIndptr;
+    fwdIndices.push_back(
+        createStructArray(3, {[](ArrowArray* a) { createUint64Array(a, {1, 2, 2}); },
+                                 [](ArrowArray* a) { createInt64Array(a, {5, 6, 7}); }}));
+    fwdIndptr.push_back(
+        createStructArray(4, {[](ArrowArray* a) { createUint64Array(a, {0, 2, 3, 3}); }}));
+
+    ArrowSchemaWrapper idxSchema, ipSchema;
+    createStructSchema(&idxSchema, 2);
+    createSchema<uint64_t>(idxSchema.children[0], "to");
+    createSchema<int64_t>(idxSchema.children[1], "weight");
+    createStructSchema(&ipSchema, 1);
+    createSchema<uint64_t>(ipSchema.children[0], "v");
+
+    auto result = ArrowTableSupport::createRelTableFromArrowCSR(*conn, "csr_native",
+        "native_person", "native_person", std::move(idxSchema), std::move(fwdIndices),
+        std::move(ipSchema), std::move(fwdIndptr));
+    ASSERT_TRUE(result.queryResult->isSuccess()) << result.queryResult->getErrorMessage();
+
+    auto weights = conn->query("MATCH (:native_person {id: 1})-[r:csr_native]->(:native_person) "
+                               "RETURN r.weight ORDER BY r.weight");
+    ASSERT_TRUE(weights->isSuccess()) << weights->getErrorMessage();
+    ASSERT_EQ(weights->getNumTuples(), 1u);
+    ASSERT_EQ(weights->getNext()->getValue(0)->getValue<int64_t>(), 7);
+
+    auto none = conn->query(
+        "MATCH (:native_person {id: 2})-[:csr_native]->(:native_person) RETURN count(*)");
+    ASSERT_TRUE(none->isSuccess()) << none->getErrorMessage();
+    ASSERT_EQ(none->getNext()->getValue(0)->getValue<int64_t>(), 0);
+}
+
 TEST_F(ArrowCsrRelTableTest, CustomDstColumnName) {
     std::vector<ArrowArrayWrapper> fwdIndices, fwdIndptr;
 
