@@ -95,16 +95,19 @@ void RelTableScanState::initState(Transaction* transaction, NodeGroup* nodeGroup
     }
 }
 
-void RelTableScanState::initCachedBoundNodeIDSelVector() {
-    if (nodeIDVector->state->getSelVector().isUnfiltered()) {
-        cachedBoundNodeSelVector.setToUnfiltered();
+static void copySelVector(const SelectionVector& src, SelectionVector& dst) {
+    if (src.isUnfiltered()) {
+        dst.setToUnfiltered();
     } else {
-        cachedBoundNodeSelVector.setToFiltered();
-        memcpy(cachedBoundNodeSelVector.getMutableBuffer().data(),
-            nodeIDVector->state->getSelVectorUnsafe().getMutableBuffer().data(),
-            nodeIDVector->state->getSelVector().getSelSize() * sizeof(sel_t));
+        dst.setToFiltered();
+        memcpy(dst.getMutableBuffer().data(), src.getSelectedPositions().data(),
+            src.getSelSize() * sizeof(sel_t));
     }
-    cachedBoundNodeSelVector.setSelSize(nodeIDVector->state->getSelVector().getSelSize());
+    dst.setSelSize(src.getSelSize());
+}
+
+void RelTableScanState::initCachedBoundNodeIDSelVector() {
+    copySelVector(nodeIDVector->state->getSelVector(), cachedBoundNodeSelVector);
 }
 
 void RelTableScanState::releaseScanPin() {
@@ -148,10 +151,17 @@ bool RelTableScanState::startNextBoundNodeGroup(Transaction* transaction) {
     // Note: deliberately do NOT update nodeGroupIdx here. CSRNodeGroup::initializeScanState
     // detects the node group change (stale nodeGroupIdx != its own idx) and runs
     // initScanForCommittedPersistent, which loads this group's CSR header.
-    setCachedBoundNodeSelVectorToPositions(positions);
+    if (nodeGroupToScan == nullptr) {
+        // Node groups ascend, so every later run is past the rel table's last node group too. Only
+        // the local scan can be left, and it reads the whole batch.
+        boundNodeGroupPlan.clear();
+        setCachedBoundNodeSelVectorToPositions(allBoundNodePositions);
+    } else {
+        setCachedBoundNodeSelVectorToPositions(positions);
+    }
     // initState sets this->nodeGroup, resets currBoundNodeIdx and initializes the CSR scan
-    // state of the node group. reset=false: cachedBoundNodeSelVector already holds exactly
-    // the positions of this group's bound nodes.
+    // state of the node group. reset=false: cachedBoundNodeSelVector already holds the
+    // positions to scan.
     initState(transaction, nodeGroupToScan, false /*resetCachedBoundNodeIDs*/);
     return true;
 }
@@ -198,6 +208,17 @@ void RelTableScanState::setNodeIDVectorToFlat(sel_t selPos) const {
     nodeIDVector->state->setToFlat();
     nodeIDVector->state->getSelVectorUnsafe().setToFiltered(1);
     nodeIDVector->state->getSelVectorUnsafe()[0] = selPos;
+}
+
+void RelTableScanState::restoreBoundNodeBatch() {
+    // A one-node batch has nothing to bring back, and its chunk may be flat by plan.
+    if (cachedBoundNodeSelVector.getSelSize() > 1) {
+        copySelVector(cachedBoundNodeSelVector, nodeIDVector->state->getSelVectorUnsafe());
+        nodeIDVector->state->setToUnflat();
+    }
+    // The next tuple may not refresh the cache: initScanState returns early on an empty batch, and
+    // ScanMultiRelTable skips a batch with no scanner for its table or a NULL first node.
+    cachedBoundNodeSelVector.setSelSize(0);
 }
 
 RelTable::RelTable(RelGroupCatalogEntry* relGroupEntry, table_id_t fromTableID,

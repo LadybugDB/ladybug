@@ -50,6 +50,9 @@ bool RelTableCollectionScanner::scan(main::ClientContext* context, RelTableScanS
                 }
             }
             if (selVector.getSelSize() > 0) {
+                // The scan only refills the selection. An operator above may have left the chunk
+                // flat, which would make the cast and any filter read only the first row.
+                scanState.outState->setToUnflat();
                 relInfo.castColumns();
                 return true;
             }
@@ -158,6 +161,7 @@ bool ScanMultiRelTable::getNextTuplesInternal(ExecutionContext* context) {
             metrics->numOutputTuple.increase(filteredSize);
             return true;
         }
+        scanState->restoreBoundNodeBatch();
         if (!children[0]->getNextTuple(context)) {
             resetState();
             scanState->releaseScanPin();

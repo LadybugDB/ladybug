@@ -2078,5 +2078,105 @@ TEST_F(OptimizerTest, UnwindDedupOnlyWhereMergeDropsTheRows) {
                          "MATCH (a:DedupA {id: s}), (b:DedupA {id: d}) MERGE (a)-[:DedupR]->(b)"));
 }
 
+// match/fork_extend.test covers restoring a bound batch only while the fork keeps plans like these:
+// the last extend reads a chunk produced further down than its child.
+TEST_F(OptimizerTest, ForkArmsPlannedAsOneExtendChain) {
+    for (const auto* statement : {
+             "CREATE NODE TABLE P(id INT64 PRIMARY KEY);",
+             "CREATE NODE TABLE X(id INT64 PRIMARY KEY);",
+             "CREATE NODE TABLE Y(id INT64 PRIMARY KEY);",
+             "CREATE NODE TABLE Z(id INT64 PRIMARY KEY);",
+             "CREATE NODE TABLE W(id INT64 PRIMARY KEY);",
+             "CREATE REL TABLE p_x(FROM P TO X, w INT64);",
+             "CREATE REL TABLE p_y(FROM P TO Y, w INT64);",
+             "CREATE REL TABLE x_z(FROM X TO Z);",
+             "CREATE REL TABLE y_w(FROM Y TO W);",
+             "CREATE (:P {id: 1});",
+             "UNWIND range(1, 4) AS i CREATE (:X {id: i}), (:Z {id: i});",
+             "UNWIND range(1, 6) AS i CREATE (:Y {id: i}), (:W {id: i});",
+             "MATCH (p:P), (x:X) CREATE (p)-[:p_x {w: x.id}]->(x);",
+             "MATCH (p:P), (y:Y) CREATE (p)-[:p_y {w: y.id}]->(y);",
+             "MATCH (x:X), (z:Z) WHERE x.id = z.id CREATE (x)-[:x_z]->(z);",
+             "MATCH (y:Y), (w:W) WHERE y.id = w.id CREATE (y)-[:y_w]->(w);",
+         }) {
+        ASSERT_TRUE(conn->query(statement)->isSuccess()) << statement;
+    }
+    auto query = "MATCH (p:P {id: 1})-[:p_x]->(x:X)-[:x_z]->(z:Z), (p)-[:p_y]->(y:Y)-[:y_w]->(w:W) "
+                 "RETURN count(*);";
+    ASSERT_STREQ(getEncodedPlan(query).c_str(), "E(z)E(w)E(x)E(y)IndexScan(p)");
+
+    auto prepared = conn->prepare(query);
+    ASSERT_TRUE(prepared->isSuccess()) << prepared->getErrorMessage();
+    for (auto i = 0; i < 2; ++i) {
+        auto result = conn->execute(prepared.get());
+        ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+        ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 24);
+    }
+
+    auto crossArmQuery = "MATCH (p:P {id: 1})-[r1:p_x]->(x:X)-[:x_z]->(z:Z), "
+                         "(p)-[r2:p_y]->(y:Y)-[:y_w]->(w:W) "
+                         "WHERE r1.w + r2.w >= 9 RETURN count(*);";
+    ASSERT_STREQ(getEncodedPlan(crossArmQuery).c_str(), "E(z)E(w)Filter()E(x)E(y)IndexScan(p)");
+    auto preparedCrossArm = conn->prepare(crossArmQuery);
+    ASSERT_TRUE(preparedCrossArm->isSuccess()) << preparedCrossArm->getErrorMessage();
+    for (auto i = 0; i < 2; ++i) {
+        auto result = conn->execute(preparedCrossArm.get());
+        ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+        ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 3);
+    }
+
+    for (const auto* statement : {
+             "UNWIND range(5, 3000) AS i CREATE (:X {id: i});",
+             "MATCH (x:X {id: 4}), (z:Z) WHERE z.id <= 2 CREATE (x)-[:x_z]->(z);",
+         }) {
+        ASSERT_TRUE(conn->query(statement)->isSuccess()) << statement;
+    }
+    ASSERT_STREQ(getEncodedPlan("MATCH (p:P {id: 1})-[r:p_x]->(x:X)-[:x_z]->(z:Z), "
+                                "(p)-[:p_y]->(y:Y)-[:y_w]->(w:W) "
+                                "WHERE r.w % 2 = 0 RETURN count(*);")
+                     .c_str(),
+        "E(z)E(w)Filter()E(x)E(y)IndexScan(p)");
+}
+
+// match/fork_extend.test's *AfterMultiTableExtendRefill cases need the first extend's chunk
+// refilled below the second extend.
+TEST_F(OptimizerTest, MultiTableExtendOverMultiTableExtend) {
+    for (const auto* statement : {
+             "CREATE NODE TABLE P(id INT64 PRIMARY KEY);",
+             "CREATE NODE TABLE X(id INT64 PRIMARY KEY);",
+             "CREATE NODE TABLE Y(id INT64 PRIMARY KEY);",
+             "CREATE NODE TABLE Z(id INT64 PRIMARY KEY);",
+             "CREATE NODE TABLE W(id INT64 PRIMARY KEY);",
+             "CREATE REL TABLE p_x(FROM P TO X, w INT64);",
+             "CREATE REL TABLE p_y(FROM P TO Y, w INT64);",
+             "CREATE REL TABLE x_z(FROM X TO Z);",
+             "CREATE REL TABLE y_w(FROM Y TO W);",
+             "CREATE REL TABLE a(FROM P TO X, w INT32);",
+             "CREATE REL TABLE b(FROM P TO Y, w INT64);",
+             "CREATE (:P {id: 1}), (:P {id: 2});",
+             "UNWIND range(1, 4) AS i CREATE (:X {id: i}), (:Z {id: i});",
+             "MATCH (p:P {id: 1}), (x:X {id: 1}) CREATE (p)-[:p_x {w: 2}]->(x), (p)-[:a {w: "
+             "2}]->(x);",
+             "MATCH (p:P {id: 2}), (x:X {id: 2}) CREATE (p)-[:p_x {w: 1}]->(x), (p)-[:a {w: "
+             "1}]->(x);",
+             "MATCH (p:P {id: 2}), (x:X {id: 3}) CREATE (p)-[:p_x {w: 2}]->(x), (p)-[:a {w: "
+             "2}]->(x);",
+             "MATCH (p:P {id: 2}), (x:X {id: 4}) CREATE (p)-[:p_x {w: 3}]->(x), (p)-[:a {w: "
+             "3}]->(x);",
+             "CREATE REL TABLE grp(FROM X TO Z, FROM Y TO W);",
+             "MATCH (x:X), (z:Z) WHERE x.id = z.id CREATE (x)-[:grp]->(z);",
+         }) {
+        ASSERT_TRUE(conn->query(statement)->isSuccess()) << statement;
+    }
+    ASSERT_STREQ(getEncodedPlan("MATCH (p:P)-[r:p_x|:p_y]->(m)-[:grp]->(t) "
+                                "WHERE p.id > 0 AND r.w % 2 = 0 RETURN count(*);")
+                     .c_str(),
+        "E(t)Filter()E(m)Filter()S(p)");
+    ASSERT_STREQ(
+        getEncodedPlan("MATCH (p:P)-[r:a|:b]->(m)-[:grp]->(t) WHERE p.id > 0 RETURN r.w, t.id;")
+            .c_str(),
+        "HJ(t._ID){S(t)}{E(t)E(m)Filter()S(p)}");
+}
+
 } // namespace testing
 } // namespace lbug
