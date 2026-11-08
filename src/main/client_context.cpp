@@ -250,7 +250,13 @@ void ClientContext::addDBDirToFileSearchPath(const std::string& dbPath) {
     if (dirPath.empty()) {
         dirPath = expandedPath[slashPos] == '\\' ? "\\" : "/";
     } else {
+#if defined(_WIN32)
+        auto nativePath = std::filesystem::path(std::u8string(dirPath.begin(), dirPath.end()));
+        auto u8str = std::filesystem::absolute(nativePath).lexically_normal().u8string();
+        dirPath = std::string(u8str.begin(), u8str.end());
+#else
         dirPath = std::filesystem::absolute(dirPath).lexically_normal().string();
+#endif
     }
     // Prepend to fileSearchPath if not already present
     auto& fileSearchPath = clientConfig.fileSearchPath;

@@ -36,7 +36,14 @@ void addInitFileDirToSearchPath(const std::shared_ptr<Connection>& conn,
     if (initDirPath.empty()) {
         initDirPath = "/";
     } else if (initFile.find("://") == std::string::npos) {
+#if defined(_WIN32)
+        auto nativePath =
+            std::filesystem::path(std::u8string(initDirPath.begin(), initDirPath.end()));
+        auto u8str = std::filesystem::absolute(nativePath).lexically_normal().u8string();
+        initDirPath = std::string(u8str.begin(), u8str.end());
+#else
         initDirPath = std::filesystem::absolute(initDirPath).lexically_normal().string();
+#endif
     }
     auto clientConfig = conn->getClientContext()->getClientConfigUnsafe();
     auto& fileSearchPath = clientConfig->fileSearchPath;

@@ -107,12 +107,23 @@ public:
         return std::format("{}.{}", path, common::StorageConstants::TEMP_FILE_SUFFIX);
     }
     static std::string getGraphPath(const std::string& dbPath, const std::string& graphName) {
+#if defined(_WIN32)
+        auto path = std::filesystem::path(std::u8string(dbPath.begin(), dbPath.end()));
+        auto base = path.stem().u8string();
+        auto ext = path.extension().u8string();
+        auto graphFileName =
+            base + std::u8string(u8".") + std::u8string(graphName.begin(), graphName.end()) + ext;
+        auto graphFile = std::filesystem::path(graphFileName);
+        auto u8res = (path.parent_path() / graphFile).generic_u8string();
+        return std::string(u8res.begin(), u8res.end());
+#else
         auto path = std::filesystem::path(dbPath);
         auto base = path.stem().string();
         auto ext = path.extension().string();
         auto graphFile = std::filesystem::path(base + "." + graphName + ext);
         // generic_string() keeps '/' separators on all platforms, matching expandPath().
         return (path.parent_path() / graphFile).generic_string();
+#endif
     }
 
     static std::string expandPath(const main::ClientContext* context, const std::string& path);
