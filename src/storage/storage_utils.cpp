@@ -34,6 +34,27 @@ static bool isWindowsUNCPath(std::string_view path) {
 }
 #endif
 
+// File and database paths arrive as UTF-8. std::filesystem::path built from a narrow
+// string decodes per process code page on Windows, and generic_string() encodes per
+// process code page. Use explicit UTF-8 conversions on Windows to keep non-ASCII
+// paths (including Unicode working directories) working properly.
+static std::filesystem::path toNativePath(const std::string& utf8Path) {
+#if defined(_WIN32)
+    return std::filesystem::path(std::u8string(utf8Path.begin(), utf8Path.end()));
+#else
+    return std::filesystem::path(utf8Path);
+#endif
+}
+
+static std::string toGenericUTF8String(const std::filesystem::path& path) {
+#if defined(_WIN32)
+    auto u8str = path.generic_u8string();
+    return std::string(u8str.begin(), u8str.end());
+#else
+    return path.generic_string();
+#endif
+}
+
 } // namespace
 
 std::string StorageUtils::getColumnName(const std::string& propertyName, ColumnType type,
@@ -93,7 +114,7 @@ std::string StorageUtils::expandPath(const main::ClientContext* context, const s
     // when the input already names a Windows drive/UNC path because absolute may
     // consult current_path(), which can fail if the process cwd has been deleted.
     std::filesystem::path normalizedPath;
-    std::filesystem::path filePath{fullPath};
+    std::filesystem::path filePath = toNativePath(fullPath);
     auto shouldAvoidAbsolute = filePath.is_absolute();
 #if defined(_WIN32) || defined(__EMSCRIPTEN__)
     shouldAvoidAbsolute =
@@ -111,7 +132,7 @@ std::string StorageUtils::expandPath(const main::ClientContext* context, const s
     // would mismatch across the StorageManager and test fixtures (see
     // PinnedCheckpointCrashTest.LeftoverShadowKeepsCommitsInFrozenWAL, where the
     // checkpoint image map missed the frozen WAL on Windows).
-    return normalizedPath.generic_string();
+    return toGenericUTF8String(normalizedPath);
 }
 
 uint32_t StorageUtils::getDataTypeSize(const LogicalType& type) {
