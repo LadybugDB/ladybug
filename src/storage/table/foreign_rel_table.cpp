@@ -48,6 +48,7 @@ void ForeignRelTable::initScanState([[maybe_unused]] transaction::Transaction* t
     function::TableFuncInitLocalStateInput localInput{*foreignRelScanState.sharedState,
         *scanBindData, nullptr /* clientContext */};
     foreignRelScanState.localState = scanFunction.initLocalStateFunc(localInput);
+    foreignRelScanState.source = TableScanSource::COMMITTED;
 }
 
 // Raw foreign key values must be integers to be usable as node offsets.
@@ -84,10 +85,9 @@ bool ForeignRelTable::scanInternal([[maybe_unused]] transaction::Transaction* tr
                         "table with the csr_rel_ prefix to promise offset-compatible foreign keys",
                 tableName));
     }
-    if (foreignRelScanState.sharedState == nullptr) {
-        throw common::RuntimeException(std::format(
-            "Cannot scan foreign-backed rel table \"{}\": scan state was not initialized",
-            tableName));
+    if (foreignRelScanState.source == TableScanSource::NONE ||
+        foreignRelScanState.sharedState == nullptr) {
+        return false;
     }
 
     // Scan the foreign table into an internal chunk (one vector per scan
@@ -177,6 +177,7 @@ bool ForeignRelTable::scanInternal([[maybe_unused]] transaction::Transaction* tr
         }
     }
     if (numEmitted == 0) {
+        foreignRelScanState.source = TableScanSource::NONE;
         return false;
     }
     foreignRelScanState.outState->getSelVectorUnsafe().setToUnfiltered(numEmitted);
