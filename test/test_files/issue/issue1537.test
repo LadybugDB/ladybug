@@ -1,0 +1,41 @@
+-DATASET CSV empty
+
+--
+
+-CASE Issue1537WithOrderByLimitMatch
+# Reproduction for github issue #1537:
+# MATCH (a:P) WITH a ORDER BY a.id LIMIT 30 MATCH (a)-[:LIKES]->(q:Q) must keep the
+# first 30 persons (0..29) and then expand, yielding 6 rows. Build-to-probe SIP
+# pre-filtered the probe scan to persons having an edge, so TOP_K picked the first
+# 30 matching persons (0..145 step 5) and returned 30 rows. The dataset is sized so
+# probeCard / SIP_RATIO > buildCard, forcing the SEMI_MASKER plan.
+
+-STATEMENT CREATE NODE TABLE P(id INT64, PRIMARY KEY(id));
+---- ok
+-STATEMENT CREATE NODE TABLE Q(id INT64, PRIMARY KEY(id));
+---- ok
+-STATEMENT CREATE REL TABLE LIKES(FROM P TO Q);
+---- ok
+-STATEMENT UNWIND range(0, 599) AS i CREATE (:P {id: i});
+---- ok
+-STATEMENT UNWIND range(0, 39) AS i CREATE (:Q {id: i});
+---- ok
+-STATEMENT MATCH (p:P), (q:Q) WHERE p.id < 200 AND p.id % 5 = 0 AND q.id = (p.id / 5) % 40 CREATE (p)-[:LIKES]->(q);
+---- ok
+
+-STATEMENT MATCH (a:P) WITH a ORDER BY a.id LIMIT 30 MATCH (a)-[:LIKES]->(q:Q) RETURN a.id, q.id ORDER BY a.id;
+---- 6
+0|0
+5|1
+10|2
+15|3
+20|4
+25|5
+
+-STATEMENT MATCH (a:P) WITH a ORDER BY a.id LIMIT 5 MATCH (a)-[:LIKES]->(q:Q) RETURN a.id, q.id ORDER BY a.id;
+---- 1
+0|0
+
+-STATEMENT MATCH (a:P) WITH a ORDER BY a.id SKIP 5 LIMIT 5 MATCH (a)-[:LIKES]->(q:Q) RETURN a.id, q.id ORDER BY a.id;
+---- 1
+5|1
