@@ -668,17 +668,19 @@ void ChunkedNodeGroup::commitInsert(row_idx_t startRow, row_idx_t numRowsToCommi
 }
 
 void ChunkedNodeGroup::rollbackInsert(row_idx_t startRow, row_idx_t numRows_, transaction_t) {
+    if (startRow >= numRows) {
+        // Nothing to rollback.
+        return;
+    }
     if (startRow == 0) {
         truncate(0);
         versionInfo.reset();
         return;
     }
-    if (startRow >= numRows) {
-        // Nothing to rollback.
-        return;
+    if (versionInfo) {
+        versionInfo->rollbackInsert(startRow, numRows_);
     }
-    versionInfo->rollbackInsert(startRow, numRows_);
-    numRows = startRow;
+    truncate(startRow);
 }
 
 // NOLINTNEXTLINE(readability-make-member-function-const): Semantically non-const.
