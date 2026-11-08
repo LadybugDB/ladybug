@@ -1,0 +1,49 @@
+-DATASET CSV empty
+
+--
+
+# Regression test for github issue #1536:
+# SingleLabelNodeDeleteExecutor::finalize() unconditionally dereferenced
+# batchSrcNodeIDVector. ProcessorTask::run() executes a copy() of the operator
+# tree while ProcessorTask::finalize() finalizes the ORIGINAL tree, whose executor
+# was never init()ed (vector null, batch empty). The dereference binds a reference
+# that is never used when the batch is empty, so release builds do not trap it,
+# but builds with _GLIBCXX_ASSERTIONS abort on the unique_ptr dereference itself.
+# Every single-label node DELETE reaches this path (plain DELETE even on the copy,
+# where the vector stays null). The guard must return before dereferencing.
+
+-CASE Issue1536SingleLabelDeleteFinalize
+-STATEMENT CREATE NODE TABLE P(id INT64, PRIMARY KEY(id));
+---- ok
+-STATEMENT CREATE NODE TABLE Q(id INT64, PRIMARY KEY(id));
+---- ok
+-STATEMENT CREATE REL TABLE LIKES(FROM P TO Q);
+---- ok
+-STATEMENT UNWIND range(0, 9) AS i CREATE (:P {id: i});
+---- ok
+-STATEMENT UNWIND range(0, 2) AS i CREATE (:Q {id: i});
+---- ok
+-STATEMENT MATCH (p:P), (q:Q) WHERE p.id < 3 AND q.id = p.id CREATE (p)-[:LIKES]->(q);
+---- ok
+-STATEMENT MATCH (p:P) WHERE p.id >= 5 DELETE p;
+---- ok
+-STATEMENT MATCH (p:P) RETURN COUNT(*);
+---- 1
+5
+-STATEMENT MATCH (p:P) WHERE p.id = 0 DELETE p;
+---- error
+Runtime exception: Node(nodeOffset: 0) has connected edges in table LIKES in the fwd direction, which cannot be deleted. Please delete the edges first or try DETACH DELETE.
+-STATEMENT MATCH (p:P) WHERE p.id < 3 DETACH DELETE p;
+---- ok
+-STATEMENT MATCH (p:P) RETURN p.id ORDER BY p.id;
+---- 2
+3
+4
+-STATEMENT MATCH (p:P)-[e:LIKES]->(q:Q) RETURN COUNT(*);
+---- 1
+0
+-STATEMENT MATCH (a) DETACH DELETE a;
+---- ok
+-STATEMENT MATCH (a) RETURN COUNT(*);
+---- 1
+0

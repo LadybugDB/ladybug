@@ -104,9 +104,12 @@ void SingleLabelNodeDeleteExecutor::init(ResultSet* resultSet, ExecutionContext*
 }
 
 void SingleLabelNodeDeleteExecutor::finalize(ExecutionContext* context) {
-    // Batch vectors are only allocated for DETACH_DELETE. Dereferencing them for a
-    // plain DELETE (or when nothing was batched) is a null dereference.
-    if (info.deleteType != DeleteNodeType::DETACH_DELETE || batchNodeIDs.empty()) {
+    // Batch vectors are only allocated for DETACH_DELETE. ProcessorTask::run() executes a
+    // copy() of the operator tree while ProcessorTask::finalize() finalizes the ORIGINAL
+    // tree, whose executor was never init()ed (vectors null, batch empty). Dereferencing
+    // a null vector is UB and aborts under _GLIBCXX_ASSERTIONS (see #1536).
+    if (info.deleteType != DeleteNodeType::DETACH_DELETE || !batchSrcNodeIDVector ||
+        batchNodeIDs.empty()) {
         return;
     }
     auto transaction = Transaction::Get(*context->clientContext);
@@ -152,8 +155,9 @@ void MultiLabelNodeDeleteExecutor::init(ResultSet* resultSet, ExecutionContext* 
 }
 
 void MultiLabelNodeDeleteExecutor::finalize(ExecutionContext* context) {
-    // Batch vectors are only allocated for DETACH_DELETE. See above.
-    if (info.deleteType != DeleteNodeType::DETACH_DELETE || batchNodeIDs.empty()) {
+    // Batch vectors are only allocated for DETACH_DELETE. See above (#1536).
+    if (info.deleteType != DeleteNodeType::DETACH_DELETE || !batchSrcNodeIDVector ||
+        batchNodeIDs.empty()) {
         return;
     }
     auto transaction = Transaction::Get(*context->clientContext);
