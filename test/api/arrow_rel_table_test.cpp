@@ -1091,3 +1091,25 @@ TEST_F(ArrowRelTableImmutabilityTest, RelTableDeleteFails) {
     ASSERT_FALSE(result->isSuccess());
     ASSERT_TRUE(result->getErrorMessage().find("Cannot delete") != std::string::npos);
 }
+
+// Regression test for #1527: primary key match over Arrow rel table must not return node 0's rels.
+TEST_F(ArrowRelTableTest, MatchPrimaryKeyOverArrowRelTableDoesNotReturnFirstNodeRels) {
+    createNativePersonTable(*conn);
+    createArrowKnowsTable(*conn);
+
+    auto result =
+        conn->query("MATCH (a:arrow_rel_person {id: 2})-[e:arrow_rel_knows]->(b:arrow_rel_person) "
+                    "RETURN b.id, e.weight");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_TRUE(result->hasNext());
+    auto row = result->getNext();
+    ASSERT_EQ(row->getValue(0)->getValue<int64_t>(), 3);
+    ASSERT_EQ(row->getValue(1)->getValue<int64_t>(), 30);
+    ASSERT_FALSE(result->hasNext());
+
+    auto resultEmpty =
+        conn->query("MATCH (a:arrow_rel_person {id: 3})-[e:arrow_rel_knows]->(b:arrow_rel_person) "
+                    "RETURN b.id, e.weight");
+    ASSERT_TRUE(resultEmpty->isSuccess()) << resultEmpty->getErrorMessage();
+    ASSERT_FALSE(resultEmpty->hasNext());
+}

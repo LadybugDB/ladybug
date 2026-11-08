@@ -256,6 +256,9 @@ void IceDiskRelTable::loadIndptrData(Transaction* transaction) const {
 }
 
 bool IceDiskRelTable::scanInternal(Transaction* transaction, TableScanState& scanState) {
+    if (scanState.source == TableScanSource::NONE) {
+        return false;
+    }
     auto& iceDiskScanState = scanState.cast<ColumnarRelTableScanState>();
 
     if (layout == IceDiskRelTableLayout::FLAT) {
@@ -305,7 +308,7 @@ bool IceDiskRelTable::scanCSR(Transaction* transaction,
         }
 
         for (; iceDiskScanState.currentLocalRowIdx < selSize && totalRowsCollected < maxRowsPerCall;
-             ++iceDiskScanState.currentLocalRowIdx) {
+            ++iceDiskScanState.currentLocalRowIdx) {
             // Find which source node this row belongs to. Rows are examined strictly in
             // increasing global (CSR) order, so we walk a single monotonic cursor through the
             // indptr (O(1) amortized per row) instead of a binary search (O(log n) per row).
@@ -395,6 +398,7 @@ bool IceDiskRelTable::scanCSR(Transaction* transaction,
         return true;
     } else {
         // No data found
+        iceDiskScanState.source = TableScanSource::NONE;
         iceDiskScanState.outState->getSelVectorUnsafe().setToFiltered(0);
         return false;
     }
@@ -432,7 +436,7 @@ bool IceDiskRelTable::scanFlat(Transaction* transaction,
         }
 
         for (; iceDiskScanState.currentLocalRowIdx < selSize && totalRowsCollected < maxRowsPerCall;
-             ++iceDiskScanState.currentLocalRowIdx) {
+            ++iceDiskScanState.currentLocalRowIdx) {
             if (iceDiskScanState.cachedBatchData->getNumValueVectors() < 2) {
                 throw RuntimeException("Flat icebug-disk relationship parquet file requires source "
                                        "and target offset columns");
@@ -505,6 +509,7 @@ bool IceDiskRelTable::scanFlat(Transaction* transaction,
         return true;
     }
 
+    iceDiskScanState.source = TableScanSource::NONE;
     iceDiskScanState.outState->getSelVectorUnsafe().setToFiltered(0);
     return false;
 }
