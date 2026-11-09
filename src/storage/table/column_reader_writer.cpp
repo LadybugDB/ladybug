@@ -302,7 +302,10 @@ private:
             if (offsetInResult == std::numeric_limits<offset_t>::max()) [[unlikely]] {
                 throw StorageException("ALP exception result offset exceeds its range.");
             }
-            if (!filterFunc.has_value() || filterFunc.value()(offsetInResult, offsetInResult + 1)) {
+            // The filter is indexed relative to the start of this read (as in
+            // DefaultColumnReadWriter::readCompressedValues), not by the position in the result.
+            if (!filterFunc.has_value() ||
+                filterFunc.value()(exceptionOffset, exceptionOffset + 1)) {
                 if constexpr (std::is_same_v<uint8_t*, OutputType>) {
                     reinterpret_cast<T*>(result)[offsetInResult] = curException.value;
                 } else {
