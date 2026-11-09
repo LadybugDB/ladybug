@@ -1,0 +1,21 @@
+-DATASET CSV empty
+
+--
+
+-CASE Issue1540AlpExceptionsUnderFilteredSelection
+# An ALP-compressed DOUBLE column split into several segments leaves a 2048-row scan batch
+# straddling a segment boundary. Read through a filtered selection (a selective predicate applied
+# before the remaining columns, or a sparse semi-mask), the exceptions in the later segment were
+# looked up in the selection at startOffsetInResult + offset instead of offset, so they were left
+# unpatched and projected as 0.0 (github issue #1540).
+
+-STATEMENT CREATE NODE TABLE T(id INT64, s STRING, v DOUBLE, flag BOOLEAN, PRIMARY KEY(id));
+---- ok
+-STATEMENT COPY T FROM (UNWIND range(0, 131071) AS i RETURN i, 'f' + CAST(i AS STRING), CASE WHEN i % 50 = 0 THEN 0.015 + (i % 7) * 0.001 ELSE CAST(((i * 2654435761) % 999999999 + 1) * 1000 AS DOUBLE) END, i % 50 = 0);
+---- ok
+-STATEMENT CALL storage_info('T') WHERE column_name = 'v' RETURN count(*) > 1;
+---- 1
+True
+-STATEMENT MATCH (t:T) WHERE t.flag = true RETURN count(*), sum(CASE WHEN t.v = 0.0 THEN 1 ELSE 0 END), min(t.s);
+---- 1
+2622|0|f0
