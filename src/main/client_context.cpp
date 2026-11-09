@@ -73,7 +73,8 @@ ActiveQuery::ActiveQuery() : interrupted{false} {}
 void ActiveQuery::reset() {
     interrupted = false;
     queryID.reset();
-    timer = Timer();
+    // The timer keeps its start time until startTimer() restarts it: a thread waiting on a task
+    // reads it, and a zeroed start would look like a long-expired deadline.
 }
 
 ClientContext::ClientContext(Database* database) : localDatabase{database} {
