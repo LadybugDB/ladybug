@@ -9,6 +9,7 @@
 #include "common/exception/connection.h"
 #include "common/exception/runtime.h"
 #include "common/file_system/virtual_file_system.h"
+#include "common/path_utils.h"
 #include "common/random_engine.h"
 #include "common/string_utils.h"
 #include "common/task_system/progress_bar.h"
@@ -250,13 +251,7 @@ void ClientContext::addDBDirToFileSearchPath(const std::string& dbPath) {
     if (dirPath.empty()) {
         dirPath = expandedPath[slashPos] == '\\' ? "\\" : "/";
     } else {
-#if defined(_WIN32)
-        auto nativePath = std::filesystem::path(std::u8string(dirPath.begin(), dirPath.end()));
-        auto u8str = std::filesystem::absolute(nativePath).lexically_normal().u8string();
-        dirPath = std::string(u8str.begin(), u8str.end());
-#else
-        dirPath = std::filesystem::absolute(dirPath).lexically_normal().string();
-#endif
+        dirPath = PathUtils::absoluteLexicallyNormalUTF8(dirPath);
     }
     // Prepend to fileSearchPath if not already present
     auto& fileSearchPath = clientConfig.fileSearchPath;

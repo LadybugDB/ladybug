@@ -5,6 +5,7 @@
 #include "common/file_system/file_info.h"
 #include "common/file_system/local_file_system.h"
 #include "common/file_system/virtual_file_system.h"
+#include "common/path_utils.h"
 #include "common/string_utils.h"
 #include "common/task_system/progress_bar.h"
 #include "embedded_shell.h"
@@ -36,14 +37,7 @@ void addInitFileDirToSearchPath(const std::shared_ptr<Connection>& conn,
     if (initDirPath.empty()) {
         initDirPath = "/";
     } else if (initFile.find("://") == std::string::npos) {
-#if defined(_WIN32)
-        auto nativePath =
-            std::filesystem::path(std::u8string(initDirPath.begin(), initDirPath.end()));
-        auto u8str = std::filesystem::absolute(nativePath).lexically_normal().u8string();
-        initDirPath = std::string(u8str.begin(), u8str.end());
-#else
-        initDirPath = std::filesystem::absolute(initDirPath).lexically_normal().string();
-#endif
+        initDirPath = common::PathUtils::absoluteLexicallyNormalUTF8(initDirPath);
     }
     auto clientConfig = conn->getClientContext()->getClientConfigUnsafe();
     auto& fileSearchPath = clientConfig->fileSearchPath;
