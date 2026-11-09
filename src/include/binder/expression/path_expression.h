@@ -17,6 +17,9 @@ public:
     std::string getVariableName() const { return variableName; }
     const common::LogicalType& getNodeType() const { return nodeType; }
     const common::LogicalType& getRelType() const { return relType; }
+    // Bound by an OPTIONAL MATCH, so it can be null and length() must not fold to its hop count.
+    void setOptional() { optional = true; }
+    bool isOptional() const { return optional; }
 
     std::string toStringInternal() const override { return variableName; }
 
@@ -24,6 +27,7 @@ private:
     std::string variableName;
     common::LogicalType nodeType;
     common::LogicalType relType;
+    bool optional = false;
 };
 
 } // namespace binder

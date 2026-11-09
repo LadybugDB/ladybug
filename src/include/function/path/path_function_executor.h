@@ -26,23 +26,23 @@ static bool isAllInternalIDDistinct(common::ValueVector* dataVector, common::off
 // customized executors.
 struct UnaryPathExecutor {
     static void executeNodeIDs(common::ValueVector& input, common::SelectionVector& inputSelVector,
-        common::ValueVector& result) {
+        common::ValueVector& result, common::SelectionVector& resultSelVector) {
         auto nodesFieldIdx = 0;
         DASSERT(nodesFieldIdx ==
                 common::StructType::getFieldIdx(input.dataType, common::InternalKeyword::NODES));
         auto nodesVector = common::StructVector::getFieldVector(&input, nodesFieldIdx).get();
         auto internalIDFieldIdx = 0;
-        execute(inputSelVector, *nodesVector, internalIDFieldIdx, result);
+        execute(input, inputSelVector, *nodesVector, internalIDFieldIdx, result, resultSelVector);
     }
 
     static void executeRelIDs(common::ValueVector& input, common::SelectionVector& inputSelVector,
-        common::ValueVector& result) {
+        common::ValueVector& result, common::SelectionVector& resultSelVector) {
         auto relsFieldIdx = 1;
         DASSERT(relsFieldIdx ==
                 common::StructType::getFieldIdx(input.dataType, common::InternalKeyword::RELS));
         auto relsVector = common::StructVector::getFieldVector(&input, relsFieldIdx).get();
         auto internalIDFieldIdx = 3;
-        execute(inputSelVector, *relsVector, internalIDFieldIdx, result);
+        execute(input, inputSelVector, *relsVector, internalIDFieldIdx, result, resultSelVector);
     }
 
     static bool selectNodeIDs(common::ValueVector& input,
@@ -52,8 +52,7 @@ struct UnaryPathExecutor {
                 common::StructType::getFieldIdx(input.dataType, common::InternalKeyword::NODES));
         auto nodesVector = common::StructVector::getFieldVector(&input, nodesFieldIdx).get();
         auto internalIDFieldIdx = 0;
-        return select(input.state->getSelVector(), *nodesVector, internalIDFieldIdx,
-            selectionVector);
+        return select(input, *nodesVector, internalIDFieldIdx, selectionVector);
     }
 
     static bool selectRelIDs(common::ValueVector& input, common::SelectionVector& selectionVector) {
@@ -62,66 +61,56 @@ struct UnaryPathExecutor {
                 common::StructType::getFieldIdx(input.dataType, common::InternalKeyword::RELS));
         auto relsVector = common::StructVector::getFieldVector(&input, relsFieldIdx).get();
         auto internalIDFieldIdx = 3;
-        return select(input.state->getSelVector(), *relsVector, internalIDFieldIdx,
-            selectionVector);
+        return select(input, *relsVector, internalIDFieldIdx, selectionVector);
     }
 
 private:
-    static void execute(const common::SelectionVector& inputSelVector,
-        common::ValueVector& listVector, common::struct_field_idx_t fieldIdx,
-        common::ValueVector& result) {
+    static common::ValueVector* getInternalIDsVector(common::ValueVector& listVector,
+        common::struct_field_idx_t fieldIdx) {
         auto listDataVector = common::ListVector::getDataVector(&listVector);
         DASSERT(fieldIdx == common::StructType::getFieldIdx(listDataVector->dataType,
                                 common::InternalKeyword::ID));
-        auto internalIDsVector =
-            common::StructVector::getFieldVector(listDataVector, fieldIdx).get();
+        return common::StructVector::getFieldVector(listDataVector, fieldIdx).get();
+    }
+
+    // A flat input's position can differ from the result's, as in UnaryFunctionExecutor. A null
+    // path or recursive rel (e.g. from an OPTIONAL MATCH that found nothing) gives null.
+    static void execute(const common::ValueVector& input,
+        const common::SelectionVector& inputSelVector, common::ValueVector& listVector,
+        common::struct_field_idx_t fieldIdx, common::ValueVector& result,
+        const common::SelectionVector& resultSelVector) {
+        auto internalIDsVector = getInternalIDsVector(listVector, fieldIdx);
         std::unordered_set<common::nodeID_t, InternalIDHasher> internalIDSet;
-        if (inputSelVector.isUnfiltered()) {
-            for (auto i = 0u; i < inputSelVector.getSelSize(); ++i) {
-                auto& listEntry = listVector.getValue<common::list_entry_t>(i);
-                bool isTrail = isAllInternalIDDistinct(internalIDsVector, listEntry.offset,
-                    listEntry.size, internalIDSet);
-                result.setValue<bool>(i, isTrail);
+        for (auto i = 0u; i < inputSelVector.getSelSize(); ++i) {
+            auto inputPos = inputSelVector[i];
+            auto resultPos = resultSelVector[i];
+            result.setNull(resultPos, input.isNull(inputPos));
+            if (result.isNull(resultPos)) {
+                continue;
             }
-        } else {
-            for (auto i = 0u; i < inputSelVector.getSelSize(); ++i) {
-                auto pos = inputSelVector[i];
-                auto& listEntry = listVector.getValue<common::list_entry_t>(pos);
-                bool isTrail = isAllInternalIDDistinct(internalIDsVector, listEntry.offset,
-                    listEntry.size, internalIDSet);
-                result.setValue<bool>(pos, isTrail);
-            }
+            auto& listEntry = listVector.getValue<common::list_entry_t>(inputPos);
+            result.setValue<bool>(resultPos, isAllInternalIDDistinct(internalIDsVector,
+                                                 listEntry.offset, listEntry.size, internalIDSet));
         }
     }
 
-    static bool select(const common::SelectionVector& inputSelVector,
-        common::ValueVector& listVector, common::struct_field_idx_t fieldIdx,
-        common::SelectionVector& selectionVector) {
-        auto listDataVector = common::ListVector::getDataVector(&listVector);
-        DASSERT(fieldIdx == common::StructType::getFieldIdx(listDataVector->dataType,
-                                common::InternalKeyword::ID));
-        auto internalIDsVector =
-            common::StructVector::getFieldVector(listDataVector, fieldIdx).get();
+    // A null path or recursive rel is not selected.
+    static bool select(const common::ValueVector& input, common::ValueVector& listVector,
+        common::struct_field_idx_t fieldIdx, common::SelectionVector& selectionVector) {
+        auto& inputSelVector = input.state->getSelVector();
+        auto internalIDsVector = getInternalIDsVector(listVector, fieldIdx);
         std::unordered_set<common::nodeID_t, InternalIDHasher> internalIDSet;
         auto numSelectedValues = 0u;
         auto buffer = selectionVector.getMutableBuffer();
-        if (inputSelVector.isUnfiltered()) {
-            for (auto i = 0u; i < inputSelVector.getSelSize(); ++i) {
-                auto& listEntry = listVector.getValue<common::list_entry_t>(i);
-                bool isTrail = isAllInternalIDDistinct(internalIDsVector, listEntry.offset,
-                    listEntry.size, internalIDSet);
-                buffer[numSelectedValues] = i;
-                numSelectedValues += isTrail;
+        for (auto i = 0u; i < inputSelVector.getSelSize(); ++i) {
+            auto pos = inputSelVector[i];
+            if (input.isNull(pos)) {
+                continue;
             }
-        } else {
-            for (auto i = 0u; i < inputSelVector.getSelSize(); ++i) {
-                auto pos = inputSelVector[i];
-                auto& listEntry = listVector.getValue<common::list_entry_t>(pos);
-                bool isTrail = isAllInternalIDDistinct(internalIDsVector, listEntry.offset,
-                    listEntry.size, internalIDSet);
-                buffer[numSelectedValues] = pos;
-                numSelectedValues += isTrail;
-            }
+            auto& listEntry = listVector.getValue<common::list_entry_t>(pos);
+            buffer[numSelectedValues] = pos;
+            numSelectedValues += isAllInternalIDDistinct(internalIDsVector, listEntry.offset,
+                listEntry.size, internalIDSet);
         }
         selectionVector.setSelSize(numSelectedValues);
         return numSelectedValues > 0;

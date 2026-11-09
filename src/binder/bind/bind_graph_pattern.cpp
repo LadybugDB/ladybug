@@ -58,10 +58,12 @@ static bool isLbugDatabase(main::DatabaseManager* dbManager, const std::string& 
 //    - In UPDATE clause, there are properties to set.
 // We do not store key-value pairs in query graph primarily because we will merge key-value
 // std::pairs with other predicates specified in WHERE clause.
-BoundGraphPattern Binder::bindGraphPattern(const std::vector<PatternElement>& graphPattern) {
+BoundGraphPattern Binder::bindGraphPattern(const std::vector<PatternElement>& graphPattern,
+    bool isOptionalMatch) {
     auto queryGraphCollection = QueryGraphCollection();
     for (auto& patternElement : graphPattern) {
-        queryGraphCollection.addAndMergeQueryGraphIfConnected(bindPatternElement(patternElement));
+        queryGraphCollection.addAndMergeQueryGraphIfConnected(
+            bindPatternElement(patternElement, isOptionalMatch));
     }
     queryGraphCollection.finalize();
     auto boundPattern = BoundGraphPattern();
@@ -70,7 +72,7 @@ BoundGraphPattern Binder::bindGraphPattern(const std::vector<PatternElement>& gr
 }
 
 // Grammar ensures pattern element is always connected and thus can be bound as a query graph.
-QueryGraph Binder::bindPatternElement(const PatternElement& patternElement) {
+QueryGraph Binder::bindPatternElement(const PatternElement& patternElement, bool isOptionalMatch) {
     auto queryGraph = QueryGraph();
     expression_vector nodeAndRels;
     auto leftNode = bindQueryNode(*patternElement.getFirstNodePattern(), queryGraph);
@@ -87,6 +89,9 @@ QueryGraph Binder::bindPatternElement(const PatternElement& patternElement) {
     if (patternElement.hasPathName()) {
         auto pathName = patternElement.getPathName();
         auto pathExpression = createPath(pathName, nodeAndRels);
+        if (isOptionalMatch) {
+            pathExpression->setOptional();
+        }
         // Every other scoped variable carries its name as alias (needed by
         // WITH * star expansion, which rejects empty aliases); do the same
         // for path variables so `MATCH p = ... WITH *` can bind.
@@ -116,7 +121,7 @@ static void extraFieldFromStructType(const LogicalType& structType,
     }
 }
 
-std::shared_ptr<Expression> Binder::createPath(const std::string& pathName,
+std::shared_ptr<PathExpression> Binder::createPath(const std::string& pathName,
     const expression_vector& children) {
     std::unordered_set<std::string> nodeFieldNameSet;
     std::vector<StructField> nodeFields;

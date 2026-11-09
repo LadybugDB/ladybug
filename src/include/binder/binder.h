@@ -65,6 +65,7 @@ struct ExportedTableData;
 struct BoundJoinHintNode;
 struct BoundCopyFromInfo;
 struct BoundTableScanInfo;
+class PathExpression;
 
 // BinderScope keeps track of expressions in scope and their aliases. We maintain the order of
 // expressions in
@@ -277,10 +278,12 @@ public:
     std::shared_ptr<Expression> bindSkipLimitExpression(const parser::ParsedExpression& expression);
 
     /*** bind graph pattern ***/
-    BoundGraphPattern bindGraphPattern(const std::vector<parser::PatternElement>& graphPattern);
+    BoundGraphPattern bindGraphPattern(const std::vector<parser::PatternElement>& graphPattern,
+        bool isOptionalMatch = false);
 
-    QueryGraph bindPatternElement(const parser::PatternElement& patternElement);
-    std::shared_ptr<Expression> createPath(const std::string& pathName,
+    QueryGraph bindPatternElement(const parser::PatternElement& patternElement,
+        bool isOptionalMatch);
+    std::shared_ptr<PathExpression> createPath(const std::string& pathName,
         const expression_vector& children);
 
     std::shared_ptr<RelExpression> bindQueryRel(const parser::RelPattern& relPattern,
