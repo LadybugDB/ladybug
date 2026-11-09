@@ -781,6 +781,23 @@ row_idx_t VersionInfo::getNumVisibleRows(const transaction::Transaction* transac
     return numVisible;
 }
 
+row_idx_t VersionInfo::getNumLeadingVisibleRows(const transaction::Transaction* transaction,
+    row_idx_t numRows) const {
+    row_idx_t numVisible = 0;
+    for (idx_t vectorIdx = 0; numVisible < numRows; ++vectorIdx) {
+        const auto numRowsInVector =
+            std::min<row_idx_t>(DEFAULT_VECTOR_CAPACITY, numRows - numVisible);
+        const auto vectorVersion = getVectorVersionInfo(vectorIdx);
+        if (vectorVersion != nullptr &&
+            vectorVersion->getNumVisibleRows(transaction->getStartTS(), transaction->getID(), 0,
+                numRowsInVector) != numRowsInVector) {
+            break;
+        }
+        numVisible += numRowsInVector;
+    }
+    return numVisible;
+}
+
 row_idx_t VersionInfo::getNumInsertedRows(const transaction::Transaction* transaction,
     row_idx_t startRow, length_t numRows) const {
     if (numRows == 0) {

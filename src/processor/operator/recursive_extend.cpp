@@ -227,8 +227,9 @@ static bool tryExecuteFunctionalChainFastPath(ExecutionContext* context,
             }
         }
     } else {
+        storage::NodeVisibilityCache visibility{*nodeTable, transaction};
         for (offset_t offset = 0; offset < maxOffset; ++offset) {
-            if (!nodeTable->isVisible(transaction, offset)) {
+            if (!visibility.isVisible(offset)) {
                 continue;
             }
             if (visitSource(offset)) {
@@ -260,8 +261,9 @@ void RecursiveExtend::executeInternal(ExecutionContext* context) {
                                  ->getTable(tableID)
                                  ->ptrCast<storage::NodeTable>();
             auto maxOffset = graph->getMaxOffset(transaction, tableID);
+            storage::NodeVisibilityCache visibility{*nodeTable, transaction};
             for (auto offset = 0u; offset < maxOffset; ++offset) {
-                totalNumNodes += nodeTable->isVisible(transaction, offset);
+                totalNumNodes += visibility.isVisible(offset);
             }
         }
     }
@@ -314,8 +316,9 @@ void RecursiveExtend::executeInternal(ExecutionContext* context) {
             auto nodeTable = storage::StorageManager::Get(*clientContext)
                                  ->getTable(tableID)
                                  ->ptrCast<storage::NodeTable>();
+            storage::NodeVisibilityCache visibility{*nodeTable, transaction};
             for (auto offset = 0u; offset < maxOffset; ++offset) {
-                if (!nodeTable->isVisible(transaction, offset)) {
+                if (!visibility.isVisible(offset)) {
                     continue;
                 }
                 calcFunc(offset);

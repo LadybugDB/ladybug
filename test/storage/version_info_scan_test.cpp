@@ -151,3 +151,36 @@ TEST(VersionInfoScanTest, WholeVectorAndRowCheckedVectorShareOneRange) {
         DEFAULT_VECTOR_CAPACITY);
     EXPECT_EQ(selected(selVector), positionsWithout(0, DEFAULT_VECTOR_CAPACITY, {HALF_VECTOR + 3}));
 }
+
+TEST(VersionInfoScanTest, LeadingVisibleRowsCoverCommittedVectors) {
+    VersionInfo info;
+    info.append(WRITER_ID, 0, DEFAULT_VECTOR_CAPACITY + HALF_VECTOR);
+    info.commitInsert(0, DEFAULT_VECTOR_CAPACITY + HALF_VECTOR, COMMIT_TS);
+    const Transaction reader{TransactionType::READ_ONLY, READER_ID, COMMIT_TS + 5};
+    EXPECT_EQ(info.getNumLeadingVisibleRows(&reader, DEFAULT_VECTOR_CAPACITY + HALF_VECTOR),
+        DEFAULT_VECTOR_CAPACITY + HALF_VECTOR);
+    const Transaction olderReader{TransactionType::READ_ONLY, READER_ID, COMMIT_TS - 1};
+    EXPECT_EQ(info.getNumLeadingVisibleRows(&olderReader, DEFAULT_VECTOR_CAPACITY + HALF_VECTOR),
+        0u);
+}
+
+// The run stops at the first vector holding a row the reader does not see, so rows after it are
+// left to the check per row.
+TEST(VersionInfoScanTest, VisibleDeleteEndsTheLeadingRun) {
+    VersionInfo info;
+    const auto numRows = DEFAULT_VECTOR_CAPACITY * 2 + HALF_VECTOR;
+    info.append(WRITER_ID, 0, numRows);
+    info.commitInsert(0, numRows, COMMIT_TS);
+    const auto deletedRow = DEFAULT_VECTOR_CAPACITY + HALF_VECTOR;
+    ASSERT_TRUE(info.delete_(OTHER_WRITER_ID, deletedRow));
+    // The deleter sees its own delete; another reader does not see it while it is uncommitted.
+    const Transaction deleter{TransactionType::WRITE, OTHER_WRITER_ID, COMMIT_TS + 1};
+    EXPECT_EQ(info.getNumLeadingVisibleRows(&deleter, numRows), DEFAULT_VECTOR_CAPACITY);
+    const Transaction reader{TransactionType::READ_ONLY, READER_ID, COMMIT_TS + 5};
+    EXPECT_EQ(info.getNumLeadingVisibleRows(&reader, numRows), numRows);
+    info.commitDelete(deletedRow, 1, COMMIT_TS + 2);
+    EXPECT_EQ(info.getNumLeadingVisibleRows(&reader, numRows), DEFAULT_VECTOR_CAPACITY);
+    // A reader that started before the delete committed still sees every row.
+    const Transaction olderReader{TransactionType::READ_ONLY, READER_ID, COMMIT_TS + 1};
+    EXPECT_EQ(info.getNumLeadingVisibleRows(&olderReader, numRows), numRows);
+}

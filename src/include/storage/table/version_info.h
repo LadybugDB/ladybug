@@ -37,6 +37,11 @@ public:
         common::row_idx_t startRow, common::length_t numRows) const;
     common::row_idx_t getNumVisibleRows(const transaction::Transaction* transaction,
         common::row_idx_t startRow, common::length_t numRows) const;
+    // Rows from row 0 that the transaction sees, inserted and not deleted, counted in whole
+    // vectors up to the first vector with a row it does not see. The caller holds the node
+    // group's chunked-group lock.
+    common::row_idx_t getNumLeadingVisibleRows(const transaction::Transaction* transaction,
+        common::row_idx_t numRows) const;
     // Rows whose insert the transaction can see, deleted or not.
     common::row_idx_t getNumInsertedRows(const transaction::Transaction* transaction,
         common::row_idx_t startRow, common::length_t numRows) const;

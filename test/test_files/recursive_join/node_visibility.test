@@ -1,0 +1,165 @@
+-DATASET CSV empty
+
+--
+
+# 3000 nodes span two vectors of a node group. Node 2500 sits in the second one and node 5 in the
+# first.
+-CASE RecursiveJoinNodeVisibility
+-CREATE_CONNECTION conn_write
+-CREATE_CONNECTION conn_read
+-STATEMENT [conn_write] CREATE NODE TABLE N(id INT64 PRIMARY KEY);
+---- ok
+-STATEMENT [conn_write] CREATE REL TABLE K(FROM N TO N);
+---- ok
+# Next gives every node at most one neighbour, which the recursive join's functional-chain path
+# handles.
+-STATEMENT [conn_write] CREATE REL TABLE Next(FROM N TO N);
+---- ok
+-STATEMENT [conn_write] UNWIND range(0, 2999) AS i CREATE (:N {id: i});
+---- ok
+-STATEMENT [conn_write] MATCH (a:N {id: 0}), (b:N) WHERE b.id > 0 CREATE (a)-[:K]->(b);
+---- ok
+-STATEMENT [conn_write] UNWIND range(0, 2998) AS i MATCH (a:N {id: i}), (b:N {id: i + 1}) CREATE (a)-[:Next]->(b);
+---- ok
+# Checkpointed rows carry no version info.
+-STATEMENT [conn_write] CHECKPOINT;
+---- ok
+-STATEMENT [conn_write] BEGIN TRANSACTION
+---- ok
+-STATEMENT [conn_write] MATCH (n:N {id: 2500}) DETACH DELETE n;
+---- ok
+-STATEMENT [conn_write] CREATE (:N {id: 3000}), (:N {id: 3001});
+---- ok
+-STATEMENT [conn_write] MATCH (a:N {id: 2999}), (b:N {id: 3000}), (c:N {id: 3001}) CREATE (a)-[:K]->(b)-[:K]->(c);
+---- ok
+# The deleting transaction no longer sees node 2500, but still sees every node after it.
+-STATEMENT [conn_write] MATCH (a:N {id: 1})-[:K*1..2]-(b:N) RETURN count(DISTINCT b);
+---- 1
+2999
+-STATEMENT [conn_write] MATCH (a:N {id: 1}), (b:N {id: 3001}) MATCH p = (a)-[:K* SHORTEST 1..4]-(b) RETURN length(p);
+---- 1
+4
+# With a lower bound of 0, every visible source returns itself.
+-STATEMENT [conn_write] MATCH (a:N)-[:K*0..1]->(b:N) RETURN count(*);
+---- 1
+6001
+-STATEMENT [conn_write] MATCH (a:N)-[:Next*0..1]->(b:N) RETURN count(*);
+---- 1
+5998
+# Another connection sees neither the uncommitted delete nor the uncommitted insert.
+-STATEMENT [conn_read] MATCH (a:N {id: 1})-[:K*1..2]-(b:N) RETURN count(DISTINCT b);
+---- 1
+3000
+-STATEMENT [conn_read] MATCH (a:N {id: 1}), (b:N {id: 2500}) MATCH p = (a)-[:K* SHORTEST 1..4]-(b) RETURN length(p);
+---- 1
+2
+-STATEMENT [conn_read] MATCH (a:N)-[:K*0..1]->(b:N) RETURN count(*);
+---- 1
+5999
+-STATEMENT [conn_read] MATCH (a:N)-[:Next*0..1]->(b:N) RETURN count(*);
+---- 1
+5999
+-STATEMENT [conn_write] COMMIT
+---- ok
+-STATEMENT [conn_read] MATCH (a:N {id: 1})-[:K*1..2]-(b:N) RETURN count(DISTINCT b);
+---- 1
+2999
+-STATEMENT [conn_read] MATCH (a:N)-[:K*0..1]->(b:N) RETURN count(*);
+---- 1
+6001
+-STATEMENT [conn_read] MATCH (a:N)-[:Next*0..1]->(b:N) RETURN count(*);
+---- 1
+5998
+
+-CASE RecursiveJoinNodeVisibilityOpenSnapshot
+-CREATE_CONNECTION conn_write
+-CREATE_CONNECTION conn_read
+-STATEMENT [conn_write] CREATE NODE TABLE N(id INT64 PRIMARY KEY);
+---- ok
+-STATEMENT [conn_write] CREATE REL TABLE K(FROM N TO N);
+---- ok
+-STATEMENT [conn_write] CREATE REL TABLE Next(FROM N TO N);
+---- ok
+-STATEMENT [conn_write] UNWIND range(0, 2999) AS i CREATE (:N {id: i});
+---- ok
+-STATEMENT [conn_write] MATCH (a:N {id: 0}), (b:N) WHERE b.id > 0 CREATE (a)-[:K]->(b);
+---- ok
+-STATEMENT [conn_write] UNWIND range(0, 2998) AS i MATCH (a:N {id: i}), (b:N {id: i + 1}) CREATE (a)-[:Next]->(b);
+---- ok
+# Checkpointed rows carry no version info.
+-STATEMENT [conn_write] CHECKPOINT;
+---- ok
+-STATEMENT [conn_read] BEGIN TRANSACTION READ ONLY
+---- ok
+-STATEMENT [conn_write] BEGIN TRANSACTION
+---- ok
+-STATEMENT [conn_write] MATCH (n:N {id: 5}) DETACH DELETE n;
+---- ok
+-STATEMENT [conn_write] MATCH (a:N {id: 1})-[:K*1..2]-(b:N) RETURN count(DISTINCT b);
+---- 1
+2999
+-STATEMENT [conn_write] COMMIT
+---- ok
+# A snapshot taken before the delete committed still sees node 5.
+-STATEMENT [conn_read] MATCH (a:N {id: 1})-[:K*1..2]-(b:N) RETURN count(DISTINCT b);
+---- 1
+3000
+-STATEMENT [conn_read] MATCH (a:N)-[:K*0..1]->(b:N) RETURN count(*);
+---- 1
+5999
+-STATEMENT [conn_read] COMMIT
+---- ok
+-STATEMENT [conn_read] MATCH (a:N {id: 1})-[:K*1..2]-(b:N) RETURN count(DISTINCT b);
+---- 1
+2999
+-STATEMENT [conn_read] MATCH (a:N)-[:K*0..1]->(b:N) RETURN count(*);
+---- 1
+5997
+-STATEMENT [conn_read] MATCH (a:N)-[:Next*0..1]->(b:N) RETURN count(*);
+---- 1
+5996
+
+# Without a checkpoint the committed rows keep their insert versions. Grouping the walks by a
+# property of the end node runs the grouped reachable count.
+-CASE RecursiveJoinNodeVisibilityUncheckpointed
+-CREATE_CONNECTION conn_write
+-CREATE_CONNECTION conn_read
+-STATEMENT [conn_write] CREATE NODE TABLE N(id INT64 PRIMARY KEY, g INT64);
+---- ok
+-STATEMENT [conn_write] CREATE REL TABLE K(FROM N TO N);
+---- ok
+-STATEMENT [conn_write] UNWIND range(0, 2999) AS i CREATE (:N {id: i, g: i % 3});
+---- ok
+-STATEMENT [conn_write] MATCH (a:N {id: 0}), (b:N) WHERE b.id > 0 CREATE (a)-[:K]->(b);
+---- ok
+-STATEMENT [conn_write] BEGIN TRANSACTION
+---- ok
+-STATEMENT [conn_write] MATCH (n:N {id: 2500}) DETACH DELETE n;
+---- ok
+-STATEMENT [conn_write] CREATE (:N {id: 3000, g: 0}), (:N {id: 3001, g: 1});
+---- ok
+-STATEMENT [conn_write] MATCH (a:N {id: 2999}), (b:N {id: 3000}), (c:N {id: 3001}) CREATE (a)-[:K]->(b)-[:K]->(c);
+---- ok
+-STATEMENT [conn_write] MATCH (a:N {id: 1})-[:K*1..2]-(b:N) RETURN count(DISTINCT b);
+---- 1
+2999
+-STATEMENT [conn_write] MATCH (a:N)-[:K*0..1]->(b:N) RETURN b.g, count(*);
+---- 3
+0|2001
+1|2000
+2|2000
+-STATEMENT [conn_read] MATCH (a:N {id: 1})-[:K*1..2]-(b:N) RETURN count(DISTINCT b);
+---- 1
+3000
+-STATEMENT [conn_read] MATCH (a:N)-[:K*0..1]->(b:N) RETURN b.g, count(*);
+---- 3
+0|1999
+1|2000
+2|2000
+-STATEMENT [conn_write] COMMIT
+---- ok
+-STATEMENT [conn_read] MATCH (a:N)-[:K*0..1]->(b:N) RETURN b.g, count(*);
+---- 3
+0|2001
+1|2000
+2|2000

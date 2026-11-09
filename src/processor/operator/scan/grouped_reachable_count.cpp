@@ -254,8 +254,9 @@ void GroupedReachableCount::compute(ExecutionContext* context) {
     // Per-destination walk counts: L_0[v] = 1 per visible source, L_{d+1} propagated over
     // forward edges. The walk count of `v` is sum_{d in [lo, up]} L_d[v].
     std::vector<uint64_t> cur(maxOffset, 0), next(maxOffset, 0), total(maxOffset, 0);
+    storage::NodeVisibilityCache visibility{*nodeTable, transaction};
     for (offset_t offset = 0; offset < maxOffset; ++offset) {
-        if (nodeTable->isVisible(transaction, offset)) {
+        if (visibility.isVisible(offset)) {
             cur[offset] = 1;
             if (lowerBound == 0) {
                 total[offset] = 1;

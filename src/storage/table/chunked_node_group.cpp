@@ -588,6 +588,14 @@ row_idx_t ChunkedNodeGroup::getNumVisibleRows(const Transaction* transaction) co
     return numRows;
 }
 
+row_idx_t ChunkedNodeGroup::getNumLeadingVisibleRows(const Transaction* transaction) const {
+    const row_idx_t numRowsNow = numRows;
+    if (versionInfo) {
+        return versionInfo->getNumLeadingVisibleRows(transaction, numRowsNow);
+    }
+    return numRowsNow;
+}
+
 std::unique_ptr<ColumnChunk> InMemChunkedNodeGroup::flushInternal(ColumnChunkData& chunk,
     PageAllocator& pageAllocator) {
     // Finalize is necessary prior to splitting for strings and lists so that pruned values

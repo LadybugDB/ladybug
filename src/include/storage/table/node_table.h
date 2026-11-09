@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <optional>
 #include <shared_mutex>
 #include <vector>
@@ -233,8 +234,9 @@ public:
     common::offset_t getNumTuplesInNodeGroup(common::node_group_idx_t nodeGroupIdx) const {
         return nodeGroups->getNodeGroup(nodeGroupIdx)->getNumRows();
     }
-    NodeGroup* getNodeGroup(common::node_group_idx_t nodeGroupIdx) const {
-        return nodeGroups->getNodeGroup(nodeGroupIdx);
+    NodeGroup* getNodeGroup(common::node_group_idx_t nodeGroupIdx,
+        bool mayOutOfBound = false) const {
+        return nodeGroups->getNodeGroup(nodeGroupIdx, mayOutOfBound);
     }
     NodeGroup* getNodeGroupNoLock(common::node_group_idx_t nodeGroupIdx) const {
         return nodeGroups->getNodeGroupNoLock(nodeGroupIdx);
@@ -285,6 +287,36 @@ private:
     // freed by reclaimDroppedIndexes() during checkpoint (after the dropping tx is durable).
     std::vector<IndexHolder> droppedIndexes;
     NodeTableVersionRecordHandler versionRecordHandler;
+};
+
+// Answers NodeTable::isVisible for one transaction on one thread. For each node group it asks
+// once, under the group's lock, how many leading rows the transaction sees, and answers offsets in
+// that run without a lock. The count stays right while the transaction deletes no row of the
+// table, so callers make one cache per scan that does not: neighbour scans and the source loops
+// of recursive joins. Tables that keep their rows outside node groups have none, so every check
+// goes to isVisible.
+class LBUG_API NodeVisibilityCache {
+public:
+    NodeVisibilityCache(const NodeTable& table, const transaction::Transaction* transaction);
+
+    bool isVisible(common::offset_t offset);
+
+private:
+    common::row_idx_t& getCount(common::node_group_idx_t nodeGroupIdx);
+
+    // Counts for the first node groups are kept inline, so a scan of a smaller table allocates
+    // nothing.
+    static constexpr common::node_group_idx_t NUM_INLINE_COUNTS = 16;
+
+    const NodeTable& table;
+    const transaction::Transaction* transaction;
+    // The transaction's own inserts start here.
+    common::offset_t minUncommittedOffset;
+    // The node groups that existed when the cache was made. Their counts are INVALID_ROW_IDX until
+    // asked.
+    common::node_group_idx_t numNodeGroups;
+    std::array<common::row_idx_t, NUM_INLINE_COUNTS> inlineCounts{};
+    std::vector<common::row_idx_t> otherCounts;
 };
 
 } // namespace storage

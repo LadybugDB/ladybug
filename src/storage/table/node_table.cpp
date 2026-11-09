@@ -897,6 +897,49 @@ bool NodeTable::isVisible(const Transaction* transaction, offset_t offset) const
     return nodeGroup->isVisible(transaction, offsetInGroup);
 }
 
+NodeVisibilityCache::NodeVisibilityCache(const NodeTable& table, const Transaction* transaction)
+    : table{table}, transaction{transaction}, minUncommittedOffset{INVALID_OFFSET},
+      numNodeGroups{table.getNumNodeGroups()} {
+    inlineCounts.fill(INVALID_ROW_IDX);
+    const auto* localStorage = transaction->getLocalStorage();
+    if (localStorage == nullptr) {
+        return;
+    }
+    if (auto* localTable = localStorage->getLocalTable(table)) {
+        minUncommittedOffset = localTable->cast<LocalNodeTable>().getStartOffset();
+    }
+}
+
+row_idx_t& NodeVisibilityCache::getCount(node_group_idx_t nodeGroupIdx) {
+    if (nodeGroupIdx < NUM_INLINE_COUNTS) {
+        return inlineCounts[nodeGroupIdx];
+    }
+    if (otherCounts.empty()) {
+        otherCounts.assign(numNodeGroups - NUM_INLINE_COUNTS, INVALID_ROW_IDX);
+    }
+    return otherCounts[nodeGroupIdx - NUM_INLINE_COUNTS];
+}
+
+bool NodeVisibilityCache::isVisible(offset_t offset) {
+    // A transaction's own inserts can share offsets with rows other writers commit later, and
+    // isVisible looks them up in local storage first.
+    if (offset >= minUncommittedOffset) {
+        return table.isVisible(transaction, offset);
+    }
+    const auto [nodeGroupIdx, rowIdxInGroup] =
+        StorageUtils::getNodeGroupIdxAndOffsetInChunk(offset);
+    if (nodeGroupIdx >= numNodeGroups) {
+        return table.isVisible(transaction, offset);
+    }
+    auto& numVisible = getCount(nodeGroupIdx);
+    if (numVisible == INVALID_ROW_IDX) {
+        // A group that another transaction's COPY appended is gone once that COPY rolls back.
+        const auto* nodeGroup = table.getNodeGroup(nodeGroupIdx, true /* mayOutOfBound */);
+        numVisible = nodeGroup ? nodeGroup->getNumLeadingVisibleRows(transaction) : 0;
+    }
+    return rowIdxInGroup < numVisible || table.isVisible(transaction, offset);
+}
+
 bool NodeTable::isVisibleNoLock(const Transaction* transaction, offset_t offset) const {
     if (offset == INVALID_OFFSET) {
         throw RuntimeException(
