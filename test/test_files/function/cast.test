@@ -1406,10 +1406,10 @@ False
 -LOG PatternToString
 -STATEMENT OPTIONAL MATCH p = (a:person) WHERE a.ID = -1 RETURN cast(nodes(p), "string");
 ---- 1
-[]
+
 -STATEMENT OPTIONAL MATCH p = (a:person)-[e:knows]->(:person) WHERE a.ID = -1 RETURN cast(rels(p), "string");
 ---- 1
-[]
+
 
 -CASE NestTypeImplicitCast
 

@@ -791,6 +791,16 @@ TEST_F(OptimizerTest, CountRelTableOptimizer) {
     ASSERT_FALSE(hasOperatorType(plan7->getLastOperator().get(),
         planner::LogicalOperatorType::COUNT_REL_TABLE));
 
+    // length() of a path from a plain MATCH is a constant, so the filter folds away.
+    auto qLength = "MATCH p = (a:opt_user)-[e:opt_follows]->(b:opt_user) WHERE length(p) = 1 "
+                   "RETURN COUNT(*);";
+    auto planLength = getRoot(qLength);
+    ASSERT_TRUE(hasOperatorType(planLength->getLastOperator().get(),
+        planner::LogicalOperatorType::COUNT_REL_TABLE));
+    auto resultLength = conn->query(qLength);
+    ASSERT_TRUE(resultLength->isSuccess());
+    ASSERT_EQ(resultLength->getNext()->getValue(0)->getValue<int64_t>(), 2);
+
     // SUM(1) uses COUNT_REL_TABLE directly while preserving SUM's INT128 result type.
     auto qSumOne = "MATCH (a:opt_user)-[e:opt_follows]->(b:opt_user) RETURN SUM(1) AS total;";
     auto planSumOne = getRoot(qSumOne);

@@ -49,6 +49,9 @@ private:
     void resolveResultVector(const processor::ResultSet& resultSet,
         storage::MemoryManager* memoryManager) override;
 
+    bool hasNullInput(common::sel_t resultPos) const;
+    void setNull(common::sel_t resultPos, bool isNull);
+    void setAllNonNull();
     void copyNodes(common::sel_t resultPos, bool isEmptyRels);
     uint64_t copyRels(common::sel_t resultPos);
 
