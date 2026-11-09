@@ -25,6 +25,10 @@ namespace {
 // it is destroyed, and SlotGuard restores a caller's previous value.
 thread_local const TaskScheduler* busySlotOwner = nullptr;
 
+// How long the waiter sleeps before reading the clock again when the deadline has already passed;
+// completion still wakes it at once. A statement started after the deadline is interrupted on
+// time unless its timeout is shorter than this, which caps the overrun of shorter timeouts. A
+// shorter interval would help only those timeouts and wake the waiter more often.
 constexpr uint64_t INTERRUPT_RECHECK_INTERVAL_MS = 100;
 
 } // namespace
