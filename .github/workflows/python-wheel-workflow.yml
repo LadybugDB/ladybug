@@ -100,7 +100,10 @@ jobs:
 
     env:
       CIBW_PLATFORM: ${{ matrix.os }}
-      CIBW_BUILD: "cp311-* cp312-* cp313-* cp314-* cp315-*"
+      # Windows ARM64: nuget.org does not yet publish pythonarm64 3.15.x, so
+      # cibuildwheel cannot provision a cp315-win_arm64 interpreter. Build
+      # cp311-cp314 there; every other platform builds cp311-cp315.
+      CIBW_BUILD: ${{ matrix.os == 'windows' && matrix.platform == 'arm64' && 'cp311-* cp312-* cp313-* cp314-*' || 'cp311-* cp312-* cp313-* cp314-* cp315-*' }}
       LBUG_PYTHON_PRECOMPILED_DIR: ${{ github.workspace }}/precompiled-liblbug
       LBUG_PYTHON_CIBW_SOURCE_DIR: ${{ github.workspace }}/scripts/pip-package/cibw-source/sdist
 
