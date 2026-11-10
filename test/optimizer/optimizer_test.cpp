@@ -2112,6 +2112,50 @@ TEST_F(OptimizerTest, UnwindDedupOnlyWhereMergeDropsTheRows) {
                          "MATCH (a:DedupA {id: s}), (b:DedupA {id: d}) MERGE (a)-[:DedupR]->(b)"));
 }
 
+// The two fork arms (p->x->z and p->y->w) have different cardinalities, but without
+// ANALYZE stats the cost model ties. Join enumeration iterates over unordered_set /
+// unordered_map (getRelNbrPositions, getNbrSubgraphs, DPLevel maps), whose order varies
+// with the STL (libstdc++ vs libc++ vs MSVC). All valid single-chain interleavings
+// (x before z, y before w) are therefore observed across platforms, e.g. Linux gives
+// E(z)E(w)E(x)E(y), macOS E(z)E(w)E(y)E(x), Windows E(z)E(x)E(w)E(y). Assert the
+// shape (one linear extend chain, no HJ/CP/Intersect) and the arm dependencies
+// instead of one exact string.
+static void expectSingleForkExtendChain(const std::string& encodedPlan, bool expectFilter) {
+    EXPECT_TRUE(encodedPlan.find("HJ(") == std::string::npos) << encodedPlan;
+    EXPECT_TRUE(encodedPlan.find("CP()") == std::string::npos) << encodedPlan;
+    EXPECT_TRUE(encodedPlan.find("I(") == std::string::npos) << encodedPlan;
+    auto countOccurrences = [](const std::string& haystack, const std::string& needle) {
+        size_t count = 0;
+        for (size_t pos = haystack.find(needle); pos != std::string::npos;
+             pos = haystack.find(needle, pos + 1)) {
+            ++count;
+        }
+        return count;
+    };
+    EXPECT_EQ(countOccurrences(encodedPlan, "E("), 4u) << encodedPlan;
+    EXPECT_TRUE(encodedPlan.find("IndexScan(p)") != std::string::npos) << encodedPlan;
+    if (expectFilter) {
+        EXPECT_EQ(countOccurrences(encodedPlan, "Filter()"), 1u) << encodedPlan;
+    } else {
+        EXPECT_EQ(countOccurrences(encodedPlan, "Filter()"), 0u) << encodedPlan;
+    }
+    // In the top-down encoding, an outer extend appears earlier, so x->z becomes
+    // pos(E(z)) < pos(E(x)) and y->w becomes pos(E(w)) < pos(E(y)).
+    const auto posX = encodedPlan.find("E(x)");
+    const auto posY = encodedPlan.find("E(y)");
+    const auto posZ = encodedPlan.find("E(z)");
+    const auto posW = encodedPlan.find("E(w)");
+    EXPECT_TRUE(posX != std::string::npos && posY != std::string::npos &&
+                posZ != std::string::npos && posW != std::string::npos)
+        << encodedPlan;
+    if (posX != std::string::npos && posZ != std::string::npos) {
+        EXPECT_LT(posZ, posX) << encodedPlan;
+    }
+    if (posY != std::string::npos && posW != std::string::npos) {
+        EXPECT_LT(posW, posY) << encodedPlan;
+    }
+}
+
 // match/fork_extend.test covers restoring a bound batch only while the fork keeps plans like these:
 // the last extend reads a chunk produced further down than its child.
 TEST_F(OptimizerTest, ForkArmsPlannedAsOneExtendChain) {
@@ -2137,7 +2181,7 @@ TEST_F(OptimizerTest, ForkArmsPlannedAsOneExtendChain) {
     }
     auto query = "MATCH (p:P {id: 1})-[:p_x]->(x:X)-[:x_z]->(z:Z), (p)-[:p_y]->(y:Y)-[:y_w]->(w:W) "
                  "RETURN count(*);";
-    ASSERT_STREQ(getEncodedPlan(query).c_str(), "E(z)E(w)E(x)E(y)IndexScan(p)");
+    expectSingleForkExtendChain(getEncodedPlan(query), false);
 
     auto prepared = conn->prepare(query);
     ASSERT_TRUE(prepared->isSuccess()) << prepared->getErrorMessage();
@@ -2150,7 +2194,7 @@ TEST_F(OptimizerTest, ForkArmsPlannedAsOneExtendChain) {
     auto crossArmQuery = "MATCH (p:P {id: 1})-[r1:p_x]->(x:X)-[:x_z]->(z:Z), "
                          "(p)-[r2:p_y]->(y:Y)-[:y_w]->(w:W) "
                          "WHERE r1.w + r2.w >= 9 RETURN count(*);";
-    ASSERT_STREQ(getEncodedPlan(crossArmQuery).c_str(), "E(z)E(w)Filter()E(x)E(y)IndexScan(p)");
+    expectSingleForkExtendChain(getEncodedPlan(crossArmQuery), true);
     auto preparedCrossArm = conn->prepare(crossArmQuery);
     ASSERT_TRUE(preparedCrossArm->isSuccess()) << preparedCrossArm->getErrorMessage();
     for (auto i = 0; i < 2; ++i) {
@@ -2165,11 +2209,10 @@ TEST_F(OptimizerTest, ForkArmsPlannedAsOneExtendChain) {
          }) {
         ASSERT_TRUE(conn->query(statement)->isSuccess()) << statement;
     }
-    ASSERT_STREQ(getEncodedPlan("MATCH (p:P {id: 1})-[r:p_x]->(x:X)-[:x_z]->(z:Z), "
-                                "(p)-[:p_y]->(y:Y)-[:y_w]->(w:W) "
-                                "WHERE r.w % 2 = 0 RETURN count(*);")
-                     .c_str(),
-        "E(z)E(w)Filter()E(x)E(y)IndexScan(p)");
+    expectSingleForkExtendChain(getEncodedPlan("MATCH (p:P {id: 1})-[r:p_x]->(x:X)-[:x_z]->(z:Z), "
+                                               "(p)-[:p_y]->(y:Y)-[:y_w]->(w:W) "
+                                               "WHERE r.w % 2 = 0 RETURN count(*);"),
+        true);
 }
 
 // match/fork_extend.test's *AfterMultiTableExtendRefill cases need the first extend's chunk
