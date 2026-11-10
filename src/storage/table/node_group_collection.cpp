@@ -288,6 +288,11 @@ void NodeGroupCollection::deserialize(Deserializer& deSer, MemoryManager& memory
     stats.deserialize(deSer);
     numTotalRows = 0;
     const auto lock = nodeGroups.lock();
+    if (!nodeGroups.isEmpty(lock)) {
+        // A pinned checkpoint can retain more physical columns than the current catalog.
+        // New node groups must use the same layout as the deserialized groups.
+        types = LogicalType::copy(nodeGroups.getFirstGroup(lock)->getDataTypes());
+    }
     for (auto& nodeGroup : nodeGroups.getAllGroups(lock)) {
         numTotalRows += nodeGroup->getNumRows();
     }

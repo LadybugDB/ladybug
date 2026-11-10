@@ -482,8 +482,25 @@ void ChunkedNodeGroup::scanCommitted(const Transaction* transaction, TableScanSt
     }
     for (auto i = 0u; i < scanState.columnIDs.size(); i++) {
         const auto columnID = scanState.columnIDs[i];
+        auto& outputChunk = output.getColumnChunk(i);
         chunks[columnID]->scanCommitted<SCAN_RESIDENCY_STATE>(transaction,
-            scanState.nodeGroupScanState->chunkStates[i], output.getColumnChunk(i));
+            scanState.nodeGroupScanState->chunkStates[i], outputChunk);
+        // Inserts after DROP do not populate the dropped slot. A pinned checkpoint still
+        // retains that column, so preserve row positions with NULLs for those inserts.
+        DASSERT(chunks[columnID]->getNumValues() <= numRows);
+        auto numMissingRows = numRows - chunks[columnID]->getNumValues();
+        if (numMissingRows > 0) {
+            ValueVector nulls(outputChunk.getDataType().copy(), &outputChunk.getMemoryManager(),
+                std::make_shared<DataChunkState>());
+            nulls.setAllNull();
+            while (numMissingRows > 0) {
+                const auto numToAppend =
+                    std::min<uint64_t>(numMissingRows, DEFAULT_VECTOR_CAPACITY);
+                nulls.state->getSelVectorUnsafe().setToUnfiltered(numToAppend);
+                outputChunk.append(&nulls, nulls.state->getSelVector());
+                numMissingRows -= numToAppend;
+            }
+        }
     }
 }
 
