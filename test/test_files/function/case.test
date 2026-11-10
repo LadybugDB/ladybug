@@ -8,7 +8,14 @@
 
 -STATEMENT RETURN CASE NULL  WHEN NULL THEN "Null value" ELSE "Not null value" END;
 ---- 1
-Null value
+Not null value
+-STATEMENT UNWIND [1, 2] AS x RETURN x, CASE x WHEN NULL THEN 'matched WHEN NULL' ELSE 'else' END AS r;
+---- 2
+1|else
+2|else
+-STATEMENT RETURN CASE 1 WHEN NULL THEN 'matched' ELSE 'else' END;
+---- 1
+else
 -STATEMENT return case 25 when 25 then null else 25 end;
 ---- 1
 
