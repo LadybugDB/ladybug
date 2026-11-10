@@ -274,8 +274,7 @@ NodeTable::NodeTable(const StorageManager* storageManager,
                                      nodeTableEntry->getOwningCatalog()) {
     auto* dataFH = storageManager->getDataFH();
     auto& pageAllocator = *dataFH->getPageManager();
-    const auto maxColumnID = nodeTableEntry->getMaxColumnID();
-    columns.resize(maxColumnID + 1);
+    columns.resize(nodeTableEntry->getNextColumnID());
     for (auto& property : nodeTableEntry->getProperties()) {
         const auto columnID = nodeTableEntry->getColumnID(property.getName());
         const auto columnName =
@@ -294,8 +293,17 @@ NodeTable::NodeTable(const StorageManager* storageManager,
         indexes.push_back(IndexHolder{PrimaryKeyIndex::createNewIndex(indexInfo,
             storageManager->isInMemory(), *mm, pageAllocator, shadowFile)});
     }
-    nodeGroups = std::make_unique<NodeGroupCollection>(*mm,
-        LocalNodeTable::getNodeTableColumnTypes(*nodeTableEntry), enableCompression,
+    // A checkpoint pinned by a reader can retain dropped column slots. Empty tables have
+    // no chunk metadata to restore their types from, so use an unused INT64 slot there.
+    std::vector<LogicalType> columnTypes;
+    for (auto columnID = 0u; columnID < columns.size(); ++columnID) {
+        if (!columns[columnID]) {
+            columns[columnID] = ColumnFactory::createColumn(std::format("dropped_{}", columnID),
+                LogicalType::INT64(), dataFH, mm, shadowFile, enableCompression);
+        }
+        columnTypes.push_back(columns[columnID]->getDataType().copy());
+    }
+    nodeGroups = std::make_unique<NodeGroupCollection>(*mm, columnTypes, enableCompression,
         storageManager->getDataFH() ? ResidencyState::ON_DISK : ResidencyState::IN_MEMORY,
         &versionRecordHandler);
 }
@@ -768,12 +776,15 @@ bool NodeTable::checkpoint(main::ClientContext* context, TableCatalogEntry* tabl
     transaction_t retentionHorizon, const std::vector<transaction_t>&) {
     const auto effectiveEpoch =
         epochWatermark > 0 ? epochWatermark : changeEpoch.load(std::memory_order_acquire);
+    const bool retainColumns = retentionHorizon != INVALID_TRANSACTION;
+    const bool vacuumDroppedColumns =
+        !retainColumns && getNumColumns() != tableEntry->getNumProperties();
     // A group that still carries a retention horizon from an earlier pinned checkpoint is
     // re-checkpointed even when its epoch is unchanged, provided no reader is open: the
     // retained versions and update chains are then unobservable garbage and this is the
     // only reclamation pass. While readers are open the old retention still covers them
     // (the horizon never moves backward across overlapping checkpoints), so the skip stands.
-    if (effectiveEpoch <= lastCheckpointedEpoch &&
+    if (!vacuumDroppedColumns && effectiveEpoch <= lastCheckpointedEpoch &&
         (retentionHorizon != INVALID_TRANSACTION || !nodeGroups->hasRetainedHorizon())) {
         return false;
     }
@@ -786,10 +797,21 @@ bool NodeTable::checkpoint(main::ClientContext* context, TableCatalogEntry* tabl
     std::vector<Column*> checkpointColumnPtrs;
     {
         std::unique_lock schemaLck{schemaMtx};
-        for (auto& property : tableEntry->getProperties()) {
-            auto columnID = tableEntry->getColumnID(property.getName());
-            columnIDs.push_back(columnID);
-            checkpointColumnPtrs.push_back(columns[columnID].get());
+        if (retainColumns) {
+            // Keep committed slots for old catalog versions, including dropped columns.
+            // Trailing slots from rolled-back ADDs are invisible to every reader.
+            const auto numColumns = tableEntry->getNextColumnID();
+            DASSERT(numColumns <= columns.size());
+            for (auto columnID = 0u; columnID < numColumns; ++columnID) {
+                columnIDs.push_back(columnID);
+                checkpointColumnPtrs.push_back(columns[columnID].get());
+            }
+        } else {
+            for (auto& property : tableEntry->getProperties()) {
+                auto columnID = tableEntry->getColumnID(property.getName());
+                columnIDs.push_back(columnID);
+                checkpointColumnPtrs.push_back(columns[columnID].get());
+            }
         }
     }
 
@@ -803,7 +825,8 @@ bool NodeTable::checkpoint(main::ClientContext* context, TableCatalogEntry* tabl
         // the full hash-index infrastructure is deferred to a follow-up.
         index.checkpoint(context, pageAllocator, *shadowFile);
     }
-    // Checkpoint succeeded. Now vacuum dropped columns and update catalog IDs.
+    // Checkpoint succeeded. Discard rolled-back additions, and vacuum dropped columns
+    // and update catalog IDs only when no reader needs the old layout.
     // Guard under schemaMtx so concurrent readers see a consistent view.
     {
         std::unique_lock schemaLck{schemaMtx};
@@ -813,8 +836,8 @@ bool NodeTable::checkpoint(main::ClientContext* context, TableCatalogEntry* tabl
             checkpointColumns.push_back(std::move(columns[columnID]));
         }
         columns = std::move(checkpointColumns);
-        if (tableEntry->vacuumColumnIDs(0 /*nextColumnID*/)) {
-            context->getDatabase()->getCatalog()->incrementColumnIDsVersion();
+        if (!retainColumns && tableEntry->vacuumColumnIDs(0 /*nextColumnID*/)) {
+            tableEntry->getOwningCatalog()->incrementColumnIDsVersion();
         }
     }
     lastCheckpointedEpoch = effectiveEpoch;
@@ -1222,6 +1245,19 @@ void NodeTable::serialize(Serializer& serializer) const {
 void NodeTable::deserialize(main::ClientContext* context, StorageManager* storageManager,
     Deserializer& deSer) {
     nodeGroups->deserialize(deSer, *memoryManager);
+    if (nodeGroups->getNumNodeGroups() > 0) {
+        // Retained dropped columns are self-describing in the checkpoint's chunk metadata.
+        // Restore their types before an ADD or another pinned checkpoint uses the slots.
+        const auto& columnTypes = nodeGroups->getNodeGroup(0)->getDataTypes();
+        DASSERT(columnTypes.size() == columns.size());
+        for (auto columnID = 0u; columnID < columnTypes.size(); ++columnID) {
+            if (columns[columnID]->getDataType() != columnTypes[columnID]) {
+                columns[columnID] = ColumnFactory::createColumn(std::format("dropped_{}", columnID),
+                    columnTypes[columnID].copy(), storageManager->getDataFH(), memoryManager,
+                    shadowFile, enableCompression);
+            }
+        }
+    }
     std::vector<IndexInfo> indexInfos;
     std::vector<length_t> storageInfoBufferSizes;
     std::vector<std::unique_ptr<uint8_t[]>> storageInfoBuffers;

@@ -245,10 +245,14 @@ public:
         return version.load(std::memory_order_relaxed) - lastCheckpointVersion;
     }
     bool changedSinceLastCheckpoint() const {
-        return version.load(std::memory_order_relaxed) != lastCheckpointVersion;
+        return version.load(std::memory_order_relaxed) != lastCheckpointVersion ||
+               columnIDsVersion.load(std::memory_order_relaxed) != lastCheckpointColumnIDsVersion;
     }
-    void resetVersion() { lastCheckpointVersion = version.load(std::memory_order_relaxed); }
-    void resetVersion(uint64_t checkpointedVersion) { lastCheckpointVersion = checkpointedVersion; }
+    void resetVersion() { resetVersion(version.load(std::memory_order_relaxed)); }
+    void resetVersion(uint64_t checkpointedVersion) {
+        lastCheckpointVersion = checkpointedVersion;
+        lastCheckpointColumnIDsVersion = columnIDsVersion.load(std::memory_order_relaxed);
+    }
     // Bumped when a checkpoint renumbers column IDs: no definition changes, so version stays.
     void incrementColumnIDsVersion() { columnIDsVersion.fetch_add(1, std::memory_order_relaxed); }
     // Changes whenever a bound plan may be stale: after a catalog change or a renumbering.
@@ -328,6 +332,7 @@ private:
     std::atomic<uint64_t> version;
     uint64_t lastCheckpointVersion = 0;
     std::atomic<uint64_t> columnIDsVersion{0};
+    uint64_t lastCheckpointColumnIDsVersion = 0;
     std::string catalogName;
     std::unique_ptr<storage::StorageManager> storageManager;
     // Main catalog for function lookup (nullptr for the main catalog itself).

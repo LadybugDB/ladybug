@@ -1,4 +1,6 @@
+#include <array>
 #include <fstream>
+#include <tuple>
 
 #include "api_test/api_test.h"
 #include "api_test/private_api_test.h"
@@ -194,6 +196,179 @@ TEST_F(EmptyDBTransactionTest, DatabaseFilesAfterCheckpoint) {
     ASSERT_FALSE(
         std::filesystem::exists(lbug::storage::StorageUtils::getWALFilePath(databasePath)));
     conn->query("CREATE NODE TABLE test(id INT64 PRIMARY KEY, name STRING);");
+}
+
+class CheckpointSchemaTest
+    : public EmptyDBTransactionTest,
+      public ::testing::WithParamInterface<std::tuple<unsigned, bool, bool, bool>> {};
+
+TEST_P(CheckpointSchemaTest, ReaderKeepsDroppedColumns) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    const auto [scenario, persistent, copyCheckpoint, namedGraph] = GetParam();
+    ASSERT_TRUE(conn->query("CALL auto_checkpoint=false")->isSuccess());
+    if (namedGraph) {
+        ASSERT_TRUE(conn->query("CREATE GRAPH g")->isSuccess());
+        ASSERT_TRUE(conn->query("USE GRAPH g")->isSuccess());
+    }
+    ASSERT_TRUE(
+        conn->query("CREATE NODE TABLE T(id INT64 PRIMARY KEY, c0 INT64 DEFAULT 5, "
+                    "c1 INT64 DEFAULT 6, c2 INT64 DEFAULT 7)")
+            ->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE REL TABLE R(FROM T TO T)")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:T {id: 1})")->isSuccess());
+    if (persistent) {
+        ASSERT_TRUE(conn->query("CHECKPOINT")->isSuccess());
+    }
+    auto reader = std::make_unique<lbug::main::Connection>(database.get());
+    if (namedGraph) {
+        ASSERT_TRUE(reader->query("USE GRAPH g")->isSuccess());
+    }
+    ASSERT_TRUE(reader->query("BEGIN TRANSACTION READ ONLY")->isSuccess());
+    const std::array<std::string, 4> ddl = {"ALTER TABLE T DROP c2", "ALTER TABLE T DROP c1",
+        "ALTER TABLE T DROP c1", "ALTER TABLE T DROP c0; ALTER TABLE T ADD c0 INT64 DEFAULT -4"};
+    ASSERT_TRUE(conn->query(ddl[scenario])->isSuccess());
+    auto newerReader = std::make_unique<lbug::main::Connection>(database.get());
+    if (namedGraph) {
+        ASSERT_TRUE(newerReader->query("USE GRAPH g")->isSuccess());
+    }
+    ASSERT_TRUE(newerReader->query("BEGIN TRANSACTION READ ONLY")->isSuccess());
+    const auto oldQuery =
+        scenario == 2 ? "MATCH (t:T) RETURN t.c1" : "MATCH (t:T) RETURN t.c0, t.c1, t.c2";
+    const std::array<std::string, 4> newQueries = {"MATCH (t:T) RETURN t.c0, t.c1 ORDER BY t.id",
+        "MATCH (t:T) RETURN t.c0, t.c2 ORDER BY t.id",
+        "MATCH (t:T) RETURN t.c0, t.c2 ORDER BY t.id",
+        "MATCH (t:T) RETURN t.c0, t.c1, t.c2 ORDER BY t.id"};
+    if (copyCheckpoint) {
+        // COPY only forces a checkpoint when automatic checkpointing is enabled.
+        ASSERT_TRUE(conn->query("CALL auto_checkpoint=true")->isSuccess());
+    }
+    for (auto round = 0; round < 2; ++round) {
+        if (round == 1) {
+            ASSERT_TRUE(conn->query("CREATE (:T {id: 2})")->isSuccess());
+        }
+        auto checkpoint = conn->query(
+            copyCheckpoint ? "COPY R FROM (MATCH (t:T) RETURN t.id AS FROM, t.id AS TO)" :
+                             "CHECKPOINT");
+        ASSERT_TRUE(checkpoint->isSuccess()) << checkpoint->getErrorMessage();
+        auto oldResult = reader->query(oldQuery);
+        ASSERT_TRUE(oldResult->isSuccess()) << oldResult->getErrorMessage();
+        ASSERT_EQ(oldResult->getNumTuples(), 1);
+        auto oldRow = oldResult->getNext();
+        if (scenario == 2) {
+            EXPECT_EQ(oldRow->getValue(0)->getValue<int64_t>(), 6);
+        } else {
+            for (auto col = 0u; col < 3; ++col) {
+                EXPECT_EQ(oldRow->getValue(col)->getValue<int64_t>(), 5 + col);
+            }
+        }
+        for (auto* connection : {conn.get(), newerReader.get()}) {
+            auto result = connection->query(newQueries[scenario]);
+            ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+            auto row = result->getNext();
+            EXPECT_EQ(row->getValue(0)->getValue<int64_t>(), scenario == 3 ? -4 : 5);
+            EXPECT_EQ(row->getValue(1)->getValue<int64_t>(),
+                scenario == 1 || scenario == 2 ? 7 : 6);
+            if (scenario == 3) {
+                EXPECT_EQ(row->getValue(2)->getValue<int64_t>(), 7);
+            }
+        }
+    }
+    ASSERT_TRUE(reader->query("COMMIT")->isSuccess());
+    ASSERT_TRUE(newerReader->query("COMMIT")->isSuccess());
+    reader.reset();
+    newerReader.reset();
+    ASSERT_TRUE(conn->query("CHECKPOINT")->isSuccess());
+    createDBAndConn();
+    if (namedGraph) {
+        ASSERT_TRUE(conn->query("USE GRAPH g")->isSuccess());
+    }
+    auto result = conn->query(newQueries[scenario]);
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(result->getNumTuples(), 2);
+    while (result->hasNext()) {
+        auto row = result->getNext();
+        EXPECT_EQ(row->getValue(0)->getValue<int64_t>(), scenario == 3 ? -4 : 5);
+        EXPECT_EQ(row->getValue(1)->getValue<int64_t>(), scenario == 1 || scenario == 2 ? 7 : 6);
+        if (scenario == 3) {
+            EXPECT_EQ(row->getValue(2)->getValue<int64_t>(), 7);
+        }
+    }
+}
+
+INSTANTIATE_TEST_SUITE_P(DroppedColumns, CheckpointSchemaTest,
+    ::testing::Combine(::testing::Values(0u, 1u, 2u, 3u), ::testing::Bool(), ::testing::Bool(),
+        ::testing::Bool()));
+
+TEST_F(EmptyDBTransactionTest, ReopenDroppedColumnsFromPinnedCheckpoint) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    const auto lastID = StorageConfig::NODE_GROUP_SIZE + 2;
+    for (const bool empty : {false, true}) {
+        const auto table = empty ? "EmptyT" : "PopulatedT";
+        SCOPED_TRACE(table);
+        ASSERT_TRUE(conn->query("CALL auto_checkpoint=false")->isSuccess());
+        ASSERT_TRUE(conn->query("CALL force_checkpoint_on_close=false")->isSuccess());
+        ASSERT_TRUE(
+            conn->query(std::format("CREATE NODE TABLE {}(id INT64 PRIMARY KEY, "
+                                    "dropped STRING, dropped_list INT64[] DEFAULT [1, 2], "
+                                    "dropped_struct STRUCT(x STRING) DEFAULT {{x: 'old'}}, "
+                                    "kept INT64 DEFAULT 7)",
+                            table))
+                ->isSuccess());
+        if (!empty) {
+            ASSERT_TRUE(conn->query(std::format("CREATE (:{} {{id: 1, dropped: 'old'}})", table))
+                    ->isSuccess());
+        }
+        auto reader = std::make_unique<lbug::main::Connection>(database.get());
+        ASSERT_TRUE(reader->query("BEGIN TRANSACTION READ ONLY")->isSuccess());
+        ASSERT_TRUE(conn->query("BEGIN TRANSACTION")->isSuccess());
+        ASSERT_TRUE(
+            conn->query(
+                    std::format("ALTER TABLE {} ADD rolled_back STRING DEFAULT 'unused'", table))
+                ->isSuccess());
+        ASSERT_TRUE(conn->query("ROLLBACK")->isSuccess());
+        ASSERT_TRUE(conn->query(std::format("ALTER TABLE {} DROP dropped", table))->isSuccess());
+        ASSERT_TRUE(
+            conn->query(std::format("ALTER TABLE {} DROP dropped_list", table))->isSuccess());
+        ASSERT_TRUE(
+            conn->query(std::format("ALTER TABLE {} DROP dropped_struct", table))->isSuccess());
+        ASSERT_TRUE(conn->query("CHECKPOINT")->isSuccess());
+        auto result = reader->query(std::format("MATCH (t:{}) RETURN t.dropped, t.kept", table));
+        ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+        ASSERT_EQ(result->getNumTuples(), empty ? 0 : 1);
+        if (!empty) {
+            auto row = result->getNext();
+            EXPECT_EQ(row->getValue(0)->getValue<std::string>(), "old");
+            EXPECT_EQ(row->getValue(1)->getValue<int64_t>(), 7);
+        }
+        result.reset();
+        ASSERT_TRUE(reader->query("COMMIT")->isSuccess());
+        reader.reset();
+        // Reopen the pinned checkpoint image without a final vacuum on close.
+        createDBAndConn();
+        ASSERT_TRUE(conn->query("CALL auto_checkpoint=false")->isSuccess());
+        reader = std::make_unique<lbug::main::Connection>(database.get());
+        ASSERT_TRUE(reader->query("BEGIN TRANSACTION READ ONLY")->isSuccess());
+        ASSERT_TRUE(conn->query(std::format("ALTER TABLE {} ADD extra STRING DEFAULT 'new'", table))
+                ->isSuccess());
+        ASSERT_TRUE(
+            conn->query(
+                    std::format("UNWIND range(2, {}) AS id CREATE (:{} {{id: id}})", lastID, table))
+                ->isSuccess());
+        ASSERT_TRUE(conn->query("CHECKPOINT")->isSuccess());
+        ASSERT_TRUE(reader->query("COMMIT")->isSuccess());
+        reader.reset();
+        ASSERT_TRUE(conn->query("CHECKPOINT")->isSuccess());
+        createDBAndConn();
+        result = conn->query(std::format("MATCH (t:{}) WHERE t.extra = 'new' AND t.kept = 7 "
+                                         "RETURN count(*)",
+            table));
+        ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+        EXPECT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), lastID - (empty ? 1 : 0));
+    }
 }
 
 #ifndef __SINGLE_THREADED__
