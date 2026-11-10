@@ -21,7 +21,10 @@ TEST(FileSearchPathTest, DBInitAddsDBDirToSearchPath) {
     auto database = std::make_unique<Database>(dbPath, SystemConfig());
     auto conn = std::make_unique<Connection>(database.get());
 
-    auto expectedDir = fs::path(dbPath).parent_path().lexically_normal().string();
+    // expandPath()/addDBDirToFileSearchPath() normalize to generic ('/') separators on all
+    // platforms, while path::string() uses native ('\\') separators on Windows. Compare
+    // against generic_string() so the expectation matches the stored form.
+    auto expectedDir = fs::path(dbPath).parent_path().lexically_normal().generic_string();
     const auto& searchPath = conn->getClientContext()->getClientConfigUnsafe()->fileSearchPath;
     EXPECT_EQ(searchPath, expectedDir);
 }
@@ -42,7 +45,7 @@ TEST(FileSearchPathTest, NewConnectionGetsDBDirSearchPath) {
     auto conn1 = std::make_unique<Connection>(database.get());
     auto conn2 = std::make_unique<Connection>(database.get());
 
-    auto expectedDir = fs::path(dbPath).parent_path().lexically_normal().string();
+    auto expectedDir = fs::path(dbPath).parent_path().lexically_normal().generic_string();
     EXPECT_EQ(conn1->getClientContext()->getClientConfigUnsafe()->fileSearchPath, expectedDir);
     EXPECT_EQ(conn2->getClientContext()->getClientConfigUnsafe()->fileSearchPath, expectedDir);
 }
@@ -63,8 +66,8 @@ TEST(FileSearchPathTest, AttachAddsAttachedDBDirToSearchPath) {
     ASSERT_TRUE(result->isSuccess()) << result->toString();
 
     const auto& searchPath = conn->getClientContext()->getClientConfigUnsafe()->fileSearchPath;
-    auto expectedSrcDir = fs::path(srcDbPath).parent_path().lexically_normal().string();
-    auto expectedDstDir = fs::path(dstDbPath).parent_path().lexically_normal().string();
+    auto expectedSrcDir = fs::path(srcDbPath).parent_path().lexically_normal().generic_string();
+    auto expectedDstDir = fs::path(dstDbPath).parent_path().lexically_normal().generic_string();
 
     EXPECT_NE(searchPath.find(expectedSrcDir), std::string::npos)
         << "Attached db directory should be in fileSearchPath. Got: " << searchPath;
@@ -86,7 +89,7 @@ TEST(FileSearchPathTest, AttachPrependsSearchPath) {
     ASSERT_TRUE(result->isSuccess()) << result->toString();
 
     const auto& searchPath = conn->getClientContext()->getClientConfigUnsafe()->fileSearchPath;
-    auto expectedSrcDir = fs::path(srcDbPath).parent_path().lexically_normal().string();
+    auto expectedSrcDir = fs::path(srcDbPath).parent_path().lexically_normal().generic_string();
 
     // Attached db directory should appear before (or at the start of) the search path
     EXPECT_EQ(searchPath.substr(0, expectedSrcDir.size()), expectedSrcDir)
