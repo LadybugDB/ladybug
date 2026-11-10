@@ -149,3 +149,27 @@ x
 -STATEMENT RETURN CASE WHEN true THEN 1 ELSE 'x' END
 ---- error
 Binder exception: Expression x has data type STRING but expected INT64. Implicit cast is not supported.
+
+-LOG CaseBranchShortCircuit
+-STATEMENT UNWIND [0, 5] AS x RETURN x, CASE WHEN x = 0 THEN 0 ELSE 10 / x END AS r;
+---- 2
+0|0
+5|2
+-STATEMENT UNWIND [0, 5] AS x RETURN x, CASE WHEN x <> 0 THEN 10 / x ELSE 0 END AS r;
+---- 2
+0|0
+5|2
+-STATEMENT UNWIND [0, 1, 2] AS x RETURN x, CASE WHEN x = 0 THEN 0 WHEN x = 1 THEN 10 ELSE 100 / x END AS r;
+---- 3
+0|0
+1|10
+2|50
+-STATEMENT UNWIND [0, 5] AS x RETURN x, CASE WHEN x = 0 THEN 0 WHEN 10 / x = 2 THEN 1 ELSE -1 END AS r;
+---- 2
+0|0
+5|1
+-STATEMENT UNWIND [0, 1, 2] AS x RETURN x, CASE WHEN x = 0 THEN CASE WHEN x = 0 THEN 100 ELSE 1 / x END ELSE 10 / x END AS r;
+---- 3
+0|100
+1|10
+2|5

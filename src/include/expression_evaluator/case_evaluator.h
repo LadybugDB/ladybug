@@ -69,10 +69,22 @@ private:
     void fillEntry(common::sel_t resultPos, common::ValueVector* srcVector);
 
 private:
+    void collectUnfilledMask();
+
+private:
     std::vector<CaseAlternativeEvaluator> alternativeEvaluators;
     std::unique_ptr<ExpressionEvaluator> elseEvaluator;
 
     std::bitset<common::DEFAULT_VECTOR_CAPACITY> filledMask;
+    // Scratch buffer holding the row positions a branch must be evaluated on. Each branch is
+    // evaluated only on the rows that need it, so errors on rows that take another branch
+    // (e.g. division by zero) cannot fail the query.
+    std::unique_ptr<common::SelectionVector> maskedSelVector =
+        std::make_unique<common::SelectionVector>(common::DEFAULT_VECTOR_CAPACITY);
+    // Scratch storage for collecting the data chunk states of a branch. One entry per distinct
+    // state; reused across batches (each CASE evaluator instance is only used by one thread
+    // at a time, like the other mutable evaluation state above).
+    std::vector<common::DataChunkState*> branchStatesScratch;
 };
 
 } // namespace evaluator
