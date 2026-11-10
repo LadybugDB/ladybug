@@ -3,7 +3,7 @@
 #include "binder/expression_binder.h"
 #include "common/exception/binder.h"
 #include "common/types/value/value.h"
-#include "function/arithmetic/vector_arithmetic_functions.h"
+#include "function/list/vector_list_functions.h"
 #include "function/path/vector_path_functions.h"
 #include "function/rewrite_function.h"
 
@@ -19,34 +19,35 @@ static std::shared_ptr<Expression> rewriteFunc(const RewriteFunctionBindInput& i
     auto binder = input.expressionBinder;
     if (param->expressionType == ExpressionType::PATH) {
         int64_t numRels = 0u;
-        std::vector<const RelExpression*> recursiveRels;
+        bool hasRecursive = false;
         for (auto& child : param->getChildren()) {
             if (ExpressionUtil::isRelPattern(*child)) {
                 numRels++;
             } else if (ExpressionUtil::isRecursiveRelPattern(*child)) {
-                recursiveRels.push_back(child->constPtrCast<RelExpression>());
+                hasRecursive = true;
+                break;
             }
         }
-        auto numRelsExpression = binder->createLiteralExpression(Value(numRels));
-        if (recursiveRels.empty()) {
-            return numRelsExpression;
+        if (!hasRecursive) {
+            // Fixed-length paths have a constant length with no runtime dependency, so keep
+            // the cheap literal rewrite.
+            return binder->createLiteralExpression(Value(numRels));
         }
-        expression_vector children;
-        children.push_back(std::move(numRelsExpression));
-        children.push_back(recursiveRels[0]->getLengthExpression());
-        auto result = binder->bindScalarFunctionExpression(children, AddFunction::name);
-        for (auto i = 1u; i < recursiveRels.size(); ++i) {
-            children[0] = std::move(result);
-            children[1] = recursiveRels[i]->getLengthExpression();
-            result = binder->bindScalarFunctionExpression(children, AddFunction::name);
-        }
-        return result;
-    } else if (ExpressionUtil::isRecursiveRelPattern(*param)) {
-        return param->constPtrCast<RelExpression>()->getLengthExpression();
+        // Variable-length paths fall through to the path-based rewrite below. The previous
+        // rewrite summed the hidden `_LENGTH` properties of the recursive rels, but those
+        // belong to the rel variables, which `WITH p` does not project, so the mapper later
+        // failed with `Cannot evaluate expression with type PROPERTY.`
+    } else if (param->getDataType().getLogicalTypeID() != LogicalTypeID::RECURSIVE_REL) {
+        throw BinderException("LENGTH() expects a path or recursive relationship as input. "
+                              "Use LENGTH(path) where path is a MATCH path variable, e.g. MATCH "
+                              "p = "
+                              "(a)-[]->(b) RETURN LENGTH(p).");
     }
-    throw BinderException("LENGTH() expects a path or recursive relationship as input. "
-                          "Use LENGTH(path) where path is a MATCH path variable, e.g. MATCH p = "
-                          "(a)-[]->(b) RETURN LENGTH(p).");
+    // LENGTH(p) == SIZE(RELS(p)): the rels list lives inside the path/recursive-rel value
+    // itself, so this depends only on the path variable and survives `WITH p`, `WITH *`,
+    // aliasing (`WITH p AS q`), and `UNWIND collect(p) AS p`.
+    auto relsExpr = binder->bindScalarFunctionExpression({input.arguments[0]}, RelsFunction::name);
+    return binder->bindScalarFunctionExpression({relsExpr}, SizeFunction::name);
 }
 
 function_set LengthFunction::getFunctionSet() {
