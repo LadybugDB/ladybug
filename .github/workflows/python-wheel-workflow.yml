@@ -100,7 +100,7 @@ jobs:
 
     env:
       CIBW_PLATFORM: ${{ matrix.os }}
-      CIBW_BUILD: "cp310-* cp311-* cp312-* cp313-* cp314-*"
+      CIBW_BUILD: "cp311-* cp312-* cp313-* cp314-* cp315-*"
       LBUG_PYTHON_PRECOMPILED_DIR: ${{ github.workspace }}/precompiled-liblbug
       LBUG_PYTHON_CIBW_SOURCE_DIR: ${{ github.workspace }}/scripts/pip-package/cibw-source/sdist
 
