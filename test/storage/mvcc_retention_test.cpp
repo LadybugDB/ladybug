@@ -497,5 +497,139 @@ TEST_F(MVCCRetentionTest, SyntheticBaseNodeSplicesBelowKeptNodes) {
     EXPECT_EQ(observed[1], 10u);
 }
 
+TEST_F(MVCCRetentionTest, UpdatesStayOnTheirRowsAtPinnedCheckpoint) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+    // Rows whose value no longer equals their id: only the updated ones.
+    const auto changedRows = [](main::Connection& connection) {
+        auto result =
+            connection.query("MATCH (p:P) WHERE p.v <> p.id RETURN p.id, p.v ORDER BY p.id;");
+        EXPECT_TRUE(result->isSuccess()) << result->getErrorMessage();
+        std::vector<std::pair<int64_t, int64_t>> rows;
+        while (result->hasNext()) {
+            auto row = result->getNext();
+            rows.emplace_back(row->getValue(0)->getValue<int64_t>(),
+                row->getValue(1)->getValue<int64_t>());
+        }
+        return rows;
+    };
+    ASSERT_TRUE(conn->query("CALL auto_checkpoint=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE P(id INT64 PRIMARY KEY, v INT64);")->isSuccess());
+    const auto numRows = static_cast<int64_t>(4 * DEFAULT_VECTOR_CAPACITY);
+    ASSERT_TRUE(conn->query("UNWIND range(0, " + std::to_string(numRows - 1) +
+                            ") AS i CREATE (:P {id: i, v: i});")
+                    ->isSuccess());
+    ASSERT_TRUE(conn->query("CHECKPOINT;")->isSuccess());
+    // Rows in vectors 1 and 3; vectors 0 and 2 have no updates.
+    const auto rowA = static_cast<int64_t>(DEFAULT_VECTOR_CAPACITY + 1);
+    const auto rowB = static_cast<int64_t>(3 * DEFAULT_VECTOR_CAPACITY + 8);
+    ASSERT_TRUE(conn->query("MATCH (p:P) WHERE p.id IN [" + std::to_string(rowA) + ", " +
+                            std::to_string(rowB) + "] SET p.v = -p.id;")
+                    ->isSuccess());
+    auto reader = std::make_unique<main::Connection>(database.get());
+    ASSERT_TRUE(reader->query("BEGIN TRANSACTION READ ONLY;")->isSuccess());
+    ASSERT_TRUE(conn->query("CHECKPOINT;")->isSuccess());
+    const std::vector<std::pair<int64_t, int64_t>> expectedRows = {{rowA, -rowA}, {rowB, -rowB}};
+    EXPECT_EQ(changedRows(*conn), expectedRows);
+    EXPECT_EQ(changedRows(*reader), expectedRows);
+    ASSERT_TRUE(reader->query("COMMIT;")->isSuccess());
+    reader.reset();
+    createDBAndConn();
+    EXPECT_EQ(changedRows(*conn), expectedRows);
+}
+
+TEST_F(MVCCRetentionTest, DropKeepsKeptChainsAtTheirVectors) {
+    auto* mm = getMemoryManager(*database);
+    UpdateInfo updateInfo;
+    ValueVector values{LogicalType::INT64()};
+    values.setState(std::make_shared<DataChunkState>(DEFAULT_VECTOR_CAPACITY));
+    setIntValue(values, 100);
+    Transaction write{*conn->getClientContext(), TransactionType::WRITE,
+        Transaction::START_TRANSACTION_ID, 0};
+    // Only vector 1 has updates; vector 0 gets an empty slot.
+    auto& node = updateInfo.update(*mm, &write, 1, 3, values);
+    updateInfo.commit(1, &node, 12);
+
+    updateInfo.dropUnretainedNodes(updateInfo.planRetention(10), true);
+    const Transaction reader{TransactionType::READ_ONLY, 50, 30};
+    const auto versionsAt = [&](idx_t vectorIdx) {
+        std::vector<transaction_t> observed;
+        updateInfo.iterateVectorInfo(&reader, vectorIdx,
+            [&](const VectorUpdateInfo& info) { observed.push_back(info.version); });
+        return observed;
+    };
+    EXPECT_TRUE(versionsAt(0).empty());
+    EXPECT_EQ(versionsAt(1), std::vector<transaction_t>{12});
+}
+
+TEST_F(MVCCRetentionTest, DropOfEveryChainLeavesNoUpdates) {
+    auto* mm = getMemoryManager(*database);
+    UpdateInfo updateInfo;
+    ValueVector values{LogicalType::INT64()};
+    values.setState(std::make_shared<DataChunkState>(DEFAULT_VECTOR_CAPACITY));
+    setIntValue(values, 100);
+    Transaction write{*conn->getClientContext(), TransactionType::WRITE,
+        Transaction::START_TRANSACTION_ID, 0};
+    auto& node = updateInfo.update(*mm, &write, 1, 3, values);
+    updateInfo.commit(1, &node, 12);
+
+    updateInfo.dropUnretainedNodes(updateInfo.planRetention(20), true);
+    EXPECT_FALSE(updateInfo.isSet());
+}
+
+TEST_F(MVCCRetentionTest, DropPopsOnlyTrailingEmptySlots) {
+    auto* mm = getMemoryManager(*database);
+    UpdateInfo updateInfo;
+    ValueVector values{LogicalType::INT64()};
+    values.setState(std::make_shared<DataChunkState>(DEFAULT_VECTOR_CAPACITY));
+    setIntValue(values, 100);
+    Transaction firstWrite{*conn->getClientContext(), TransactionType::WRITE,
+        Transaction::START_TRANSACTION_ID, 0};
+    auto& oldNode = updateInfo.update(*mm, &firstWrite, 2, 3, values);
+    updateInfo.commit(2, &oldNode, 5);
+    Transaction secondWrite{*conn->getClientContext(), TransactionType::WRITE,
+        Transaction::START_TRANSACTION_ID + 1, 6};
+    auto& keptNode = updateInfo.update(*mm, &secondWrite, 1, 3, values);
+    updateInfo.commit(1, &keptNode, 12);
+
+    // Vector 2's chain is below the horizon and dropped; vector 0 is empty below vector 1's.
+    updateInfo.dropUnretainedNodes(updateInfo.planRetention(10), true);
+    EXPECT_EQ(updateInfo.getNumVectors(), 2u);
+    const Transaction reader{TransactionType::READ_ONLY, 50, 30};
+    const auto versionsAt = [&](idx_t vectorIdx) {
+        std::vector<transaction_t> observed;
+        updateInfo.iterateVectorInfo(&reader, vectorIdx,
+            [&](const VectorUpdateInfo& info) { observed.push_back(info.version); });
+        return observed;
+    };
+    EXPECT_TRUE(versionsAt(0).empty());
+    EXPECT_EQ(versionsAt(1), std::vector<transaction_t>{12});
+}
+
+TEST_F(MVCCRetentionTest, SharedDropKeepsEverySlot) {
+    auto* mm = getMemoryManager(*database);
+    UpdateInfo updateInfo;
+    ValueVector values{LogicalType::INT64()};
+    values.setState(std::make_shared<DataChunkState>(DEFAULT_VECTOR_CAPACITY));
+    setIntValue(values, 100);
+    Transaction write{*conn->getClientContext(), TransactionType::WRITE,
+        Transaction::START_TRANSACTION_ID, 0};
+    auto& node = updateInfo.update(*mm, &write, 1, 3, values);
+    updateInfo.commit(1, &node, 12);
+
+    // Every chain dropped, but a scan may share this object: no slot is removed.
+    updateInfo.dropUnretainedNodes(updateInfo.planRetention(20), false);
+    EXPECT_EQ(updateInfo.getNumVectors(), 2u);
+    EXPECT_TRUE(updateInfo.isSet());
+    const Transaction reader{TransactionType::READ_ONLY, 50, 30};
+    for (idx_t vectorIdx = 0; vectorIdx < 2; vectorIdx++) {
+        auto numVisited = 0u;
+        updateInfo.iterateVectorInfo(&reader, vectorIdx,
+            [&](const VectorUpdateInfo&) { numVisited++; });
+        EXPECT_EQ(numVisited, 0u);
+    }
+}
+
 } // namespace testing
 } // namespace lbug
