@@ -198,6 +198,17 @@ uint64_t NodeGroupCollection::getEstimatedMemoryUsage() const {
     return estimatedMemUsage;
 }
 
+bool NodeGroupCollection::vacuumInMemoryUpdates(transaction_t horizon) {
+    const auto lock = nodeGroups.lock();
+    bool didWork = false;
+    for (auto& nodeGroup : nodeGroups.getAllGroups(lock)) {
+        if (nodeGroup->vacuumInMemoryUpdates(horizon)) {
+            didWork = true;
+        }
+    }
+    return didWork;
+}
+
 // NOLINTNEXTLINE(readability-make-member-function-const): Semantically non-const.
 bool NodeGroupCollection::hasRetainedHorizon() const {
     const auto lock = nodeGroups.lock();

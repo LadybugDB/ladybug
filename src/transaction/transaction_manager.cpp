@@ -12,8 +12,11 @@
 #include "main/attached_database.h"
 #include "main/client_context.h"
 #include "main/database.h"
+#include "main/database_manager.h"
 #include "main/db_config.h"
 #include "storage/checkpointer.h"
+#include "storage/partition_storage_registry.h"
+#include "storage/storage_manager.h"
 #include "storage/wal/local_wal.h"
 #include "storage/wal/wal.h"
 #include <format>
@@ -310,6 +313,20 @@ void TransactionManager::commitAndCheckpoint(main::ClientContext& clientContext,
             warnAutoCheckpointFailed(wal, e);
         }
     }
+    if (clientContext.isInMemory()) {
+        // In-memory databases never checkpoint, so version chains would grow without
+        // bound (see #1566). Fold superseded versions into the bases now that the
+        // committing transaction is gone; live readers (if any) keep their horizon.
+        // Best-effort: a vacuum failure must not fail the already-committed statement.
+        try {
+            std::unique_lock checkpointLck{mtxForCheckpoint, std::try_to_lock};
+            if (checkpointLck.owns_lock()) {
+                vacuumInMemoryUpdates(clientContext);
+            }
+        } catch (const std::exception& e) {
+            warnAutoCheckpointFailed(wal, e);
+        }
+    }
 }
 
 void TransactionManager::rollback(main::ClientContext& clientContext, transaction_t transactionID) {
@@ -340,8 +357,37 @@ void TransactionManager::rollback(main::ClientContext& clientContext, transactio
     }
 }
 
+void TransactionManager::vacuumInMemoryUpdates(main::ClientContext& clientContext) {
+    // Oldest active startTS, or INVALID_TRANSACTION when no transaction is open. Only
+    // committed versions below it may be folded; newer versions stay for live readers.
+    const auto horizon = snapshotHorizon();
+    // Main storage manager plus any graph and partition-child managers (mirrors
+    // Checkpointer::collectCheckpointTargets plus per-partition files).
+    std::vector<StorageManager*> managers;
+    managers.push_back(clientContext.getDatabase()->getStorageManager());
+    if (auto* dbManager = main::DatabaseManager::Get(clientContext)) {
+        for (auto* graphCatalog : dbManager->getGraphs()) {
+            if (auto* sm = graphCatalog->getStorageManager()) {
+                if (sm != managers.front()) {
+                    managers.push_back(sm);
+                }
+            }
+        }
+        for (auto* sm : dbManager->getPartitionStorageRegistry()->getAllManagers()) {
+            managers.push_back(sm);
+        }
+    }
+    for (auto* sm : managers) {
+        sm->vacuumInMemoryUpdates(horizon);
+    }
+}
+
 void TransactionManager::checkpoint(main::ClientContext& clientContext) {
     if (clientContext.isInMemory()) {
+        // In-memory databases have no WAL/shadow files to checkpoint, but explicit
+        // CHECKPOINT should still reclaim superseded MVCC versions.
+        std::unique_lock checkpointLck{mtxForCheckpoint};
+        vacuumInMemoryUpdates(clientContext);
         return;
     }
     // Use the dedicated checkpoint mutex so active writers can still commit/rollback
@@ -497,6 +543,11 @@ std::unique_ptr<Checkpointer> TransactionManager::initCheckpointer(
 
 void TransactionManager::tryCheckpoint(main::ClientContext& clientContext) {
     if (clientContext.isInMemory()) {
+        std::unique_lock checkpointLck{mtxForCheckpoint, std::try_to_lock};
+        if (!checkpointLck.owns_lock()) {
+            return;
+        }
+        vacuumInMemoryUpdates(clientContext);
         return;
     }
     std::unique_lock checkpointLck{mtxForCheckpoint, std::try_to_lock};

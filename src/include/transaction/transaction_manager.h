@@ -113,6 +113,10 @@ private:
     // write transactions leave the system. Read transactions are allowed to continue.
     common::UniqLock stopNewWriteTransactionsAndWaitUntilAllWriteTransactionsLeave();
 
+    // Reclaims superseded in-memory MVCC versions (see StorageManager::vacuumInMemoryUpdates).
+    // Used by in-memory commits and checkpoints, which otherwise never prune version chains.
+    void vacuumInMemoryUpdates(main::ClientContext& clientContext);
+
     bool hasActiveWriteTransactionNoLock() const {
         return activeWriteTransactionCount.load(std::memory_order_acquire) > 0;
     }

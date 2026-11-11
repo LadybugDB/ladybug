@@ -556,6 +556,17 @@ std::unordered_map<table_id_t, uint64_t> StorageManager::captureChangeEpochs() c
     return epochs;
 }
 
+bool StorageManager::vacuumInMemoryUpdates(transaction_t horizon) {
+    std::shared_lock lck{mtx};
+    bool didWork = false;
+    for (const auto& [id, table] : tables) {
+        if (table->vacuumInMemoryUpdates(horizon)) {
+            didWork = true;
+        }
+    }
+    return didWork;
+}
+
 void StorageManager::finalizeCheckpoint(main::ClientContext& context) {
     dataFH->getPageManager()->finalizeCheckpoint();
     // Publish staged per-table state (e.g. PK index read headers) now that the checkpoint

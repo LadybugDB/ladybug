@@ -862,6 +862,10 @@ void NodeTable::reclaimDroppedIndexes(PageAllocator& pageAllocator) {
     droppedIndexes.clear();
 }
 
+bool NodeTable::vacuumInMemoryUpdates(transaction_t horizon) {
+    return nodeGroups->vacuumInMemoryUpdates(horizon);
+}
+
 void NodeTable::reclaimStorage(PageAllocator& pageAllocator) const {
     nodeGroups->reclaimStorage(pageAllocator);
     for (const auto& index : indexes) {

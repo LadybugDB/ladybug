@@ -108,6 +108,7 @@ public:
     TableStats getStats() const { return nodeGroups->getStats(); }
 
     void reclaimStorage(PageAllocator& pageAllocator) const;
+    bool vacuumInMemoryUpdates(common::transaction_t horizon);
     void checkpoint(const std::vector<common::column_id_t>& columnIDs, PageAllocator& pageAllocator,
         const transaction::Transaction* snapshotTxn = nullptr,
         common::transaction_t retentionHorizon = common::INVALID_TRANSACTION,

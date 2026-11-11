@@ -268,6 +268,9 @@ public:
     void rollbackDelete(common::row_idx_t startRow, common::row_idx_t numRows_,
         common::transaction_t commitTS);
     virtual void reclaimStorage(PageAllocator& pageAllocator) const;
+    // Folds committed update chains below `horizon` into the in-memory bases and drops
+    // the folded nodes. Returns true when any chain data was reclaimed.
+    bool vacuumInMemoryUpdates(common::transaction_t horizon);
 
     uint64_t getEstimatedMemoryUsage() const;
 

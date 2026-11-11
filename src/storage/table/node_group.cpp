@@ -448,6 +448,17 @@ bool NodeGroup::hasRetainedHorizon() const {
     return false;
 }
 
+bool NodeGroup::vacuumInMemoryUpdates(transaction_t horizon) {
+    const auto lock = chunkedGroups.lock();
+    bool didWork = false;
+    for (auto& chunkedGroup : chunkedGroups.getAllGroups(lock)) {
+        if (chunkedGroup->vacuumInMemoryUpdates(horizon)) {
+            didWork = true;
+        }
+    }
+    return didWork;
+}
+
 void NodeGroup::addColumn(TableAddColumnState& addColumnState, PageAllocator* pageAllocator,
     ColumnStats* newColumnStats) {
     dataTypes.push_back(addColumnState.propertyDefinition.getType().copy());

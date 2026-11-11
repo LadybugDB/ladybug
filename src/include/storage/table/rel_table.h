@@ -252,6 +252,7 @@ public:
         const std::vector<common::transaction_t>& openStartTSs = {}) override;
     void rollbackCheckpoint() override {};
     void reclaimStorage(PageAllocator& pageAllocator) const override;
+    bool vacuumInMemoryUpdates(common::transaction_t horizon) override;
 
     common::row_idx_t getNumTotalRows(const transaction::Transaction* transaction) override;
     // Rels of a native rel table that the transaction can see, as count(*) counts them.

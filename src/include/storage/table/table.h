@@ -203,6 +203,9 @@ public:
     // in-memory state that must not become visible if the checkpoint still fails.
     virtual void finalizeCheckpoint(main::ClientContext&) {};
     virtual void reclaimStorage(PageAllocator& pageAllocator) const = 0;
+    // Folds committed update chains below `horizon` into in-memory bases. Used by
+    // in-memory databases, which never checkpoint, to bound MVCC version memory.
+    virtual bool vacuumInMemoryUpdates(common::transaction_t) { return false; }
 
     virtual common::row_idx_t getNumTotalRows(const transaction::Transaction* transaction) = 0;
 

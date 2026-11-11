@@ -407,6 +407,82 @@ void relinkChainNewestFirst(UpdateNode& header,
 }
 } // namespace
 
+bool UpdateInfo::vacuumCommitted(transaction_t horizon,
+    const std::function<void(idx_t, sel_t, const VectorUpdateInfo*, idx_t)>& writeRow) {
+    // Committed versions live below START_TRANSACTION_ID; uncommitted writer IDs sort above it.
+    static constexpr transaction_t UNCOMMITTED_FLOOR = Transaction::START_TRANSACTION_ID;
+    std::unique_lock lock{mtx};
+    bool didWork = false;
+    for (auto vectorIdx = 0u; vectorIdx < updates.size(); vectorIdx++) {
+        auto& node = updates[vectorIdx];
+        if (!node || !node->info) {
+            continue;
+        }
+        std::unique_lock chainLock{node->mtx};
+        // Newest-below per row: first below-horizon committed entry seen newest-first.
+        std::bitset<DEFAULT_VECTOR_CAPACITY> seen;
+        struct FoldOp {
+            sel_t row;
+            const VectorUpdateInfo* srcNode;
+            idx_t srcPos;
+        };
+        std::vector<FoldOp> folds;
+        folds.reserve(32);
+        for (auto* current = node->info.get(); current != nullptr; current = current->getPrev()) {
+            const bool isCommitted = current->version < UNCOMMITTED_FLOOR;
+            if (!isCommitted) {
+                continue;
+            }
+            if (horizon != INVALID_TRANSACTION && current->version >= horizon) {
+                continue;
+            }
+            for (auto i = 0u; i < current->numRowsUpdated; i++) {
+                const auto row = current->rowsInVector[i];
+                if (row >= DEFAULT_VECTOR_CAPACITY || seen.test(row)) {
+                    continue;
+                }
+                seen.set(row);
+                folds.push_back({row, current, i});
+            }
+            if (seen.count() == DEFAULT_VECTOR_CAPACITY) {
+                break;
+            }
+        }
+        for (const auto& op : folds) {
+            writeRow(vectorIdx, op.row, op.srcNode, op.srcPos);
+        }
+        if (!folds.empty()) {
+            didWork = true;
+        }
+        // Drop every committed node below the horizon; keep uncommitted and kept-committed.
+        std::vector<std::unique_ptr<VectorUpdateInfo>> survivors;
+        auto head = std::move(node->info);
+        while (head) {
+            auto prev = head->movePrev();
+            const bool isCommitted = head->version < UNCOMMITTED_FLOOR;
+            const bool below =
+                isCommitted && (horizon == INVALID_TRANSACTION || head->version < horizon);
+            if (!below) {
+                survivors.push_back(std::move(head));
+            }
+            head = std::move(prev);
+        }
+        relinkChainNewestFirst(*node, survivors);
+    }
+    // Prune emptied vector shells when exclusively owned; shared owners keep shells so
+    // in-flight scans never observe structural churn (mirrors dropUnretainedNodes).
+    if (lock.owns_lock()) {
+        // use_count check must happen on the caller side for UpdateInfo itself; here the
+        // UpdateInfo object is exclusively locked, but its shared_ptr may still be shared
+        // via ColumnChunk::shareUpdateInfo. Only erase shells when no other owner can
+        // observe the vector layout. The caller guarantees exclusivity for in-memory vacuum
+        // (no active readers), so erasing is safe. Keep the erase unconditionally: empty
+        // shells carry no chain and no reader depends on their presence.
+        std::erase_if(updates, [](const auto& n) { return !n || n->info == nullptr; });
+    }
+    return didWork;
+}
+
 VectorUpdateInfo& UpdateInfo::insertRetainedBaseNode(MemoryManager& memoryManager,
     LogicalType dataType, idx_t vectorIdx, transaction_t horizon) {
     auto& header = getOrCreateUpdateNode(vectorIdx);

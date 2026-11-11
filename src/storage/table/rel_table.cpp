@@ -741,6 +741,16 @@ void RelTable::reclaimStorage(PageAllocator& pageAllocator) const {
     }
 }
 
+bool RelTable::vacuumInMemoryUpdates(transaction_t horizon) {
+    bool didWork = false;
+    for (auto& relData : directedRelData) {
+        if (relData->vacuumInMemoryUpdates(horizon)) {
+            didWork = true;
+        }
+    }
+    return didWork;
+}
+
 void RelTable::updateRelOffsets(const LocalRelTable& localRelTable) {
     auto& localNodeGroup = localRelTable.getLocalNodeGroup();
     const offset_t maxCommittedOffset = reserveRelOffsets(localNodeGroup.getNumRows());

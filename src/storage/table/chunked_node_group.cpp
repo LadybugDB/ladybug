@@ -147,6 +147,19 @@ void ChunkedNodeGroup::resetVersionAndUpdateInfo() {
     }
 }
 
+bool ChunkedNodeGroup::vacuumInMemoryUpdates(transaction_t horizon) {
+    // ON_DISK chunks decline inside ColumnChunk::vacuumInMemoryUpdates (their bases need
+    // the page-rewrite path); in-memory chunks fold committed chains into their bases.
+    bool didWork = false;
+    std::shared_lock lck{chunksMtx};
+    for (const auto& chunk : chunks) {
+        if (chunk->vacuumInMemoryUpdates(horizon)) {
+            didWork = true;
+        }
+    }
+    return didWork;
+}
+
 void ChunkedNodeGroup::truncate(const offset_t numRows_) {
     DASSERT(numRows >= numRows_);
     for (const auto& chunk : chunks) {
