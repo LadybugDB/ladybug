@@ -4,7 +4,6 @@
 
 #include <cstdint>
 #include <memory>
-#include <optional>
 #include <vector>
 
 #include "aggregate_hash_table.h"
@@ -113,6 +112,7 @@ protected:
         common::offset_t offset) const;
 
     struct Partition {
+        // Always set for the first partition; for the others only once finalizing merges tuples.
         std::unique_ptr<AggregateHashTable> hashTable;
         std::mutex mtx;
         std::unique_ptr<HashTableQueue> queue;
@@ -125,26 +125,29 @@ protected:
 public:
     HashAggregateInfo aggInfo;
     uint64_t limitNumber;
-    storage::MemoryManager* memoryManager;
     std::vector<Partition> globalPartitions;
-    // Table schemas for the per-function distinct queues, indexed by aggregate function
-    // (std::nullopt for non-distinct functions). Saved at construction so resetForReuse()
-    // can rebuild the queues from scratch: mergeInto() consumes a queue (nulling its
-    // headBlock), so the old queue cannot be used as a copy source on the next execution.
-    std::vector<std::optional<FactorizedTableSchema>> distinctTableSchemas;
 };
 
 struct HashAggregateLocalState {
     std::vector<common::ValueVector*> keyVectors;
     std::vector<common::ValueVector*> dependentKeyVectors;
     common::DataChunkState* leadingState = nullptr;
+    // Created by the first append(): every thread that joins the pipeline runs init(), and a
+    // thread that gets no input should not allocate a table.
     std::unique_ptr<PartitioningAggregateHashTable> aggregateHashTable;
 
     void init(HashAggregateSharedState* sharedState, ResultSet& resultSet,
         main::ClientContext* context, std::vector<function::AggregateFunction>& aggregateFunctions,
         std::vector<common::LogicalType> types);
-    uint64_t append(const std::vector<AggregateInput>& aggregateInputs,
-        uint64_t multiplicity) const;
+    uint64_t append(const std::vector<AggregateInput>& aggregateInputs, uint64_t multiplicity);
+
+private:
+    void createHashTable();
+
+    HashAggregateSharedState* sharedState = nullptr;
+    storage::MemoryManager* memoryManager = nullptr;
+    const std::vector<function::AggregateFunction>* aggregateFunctions = nullptr;
+    std::vector<common::LogicalType> distinctKeyTypes;
 };
 
 struct HashAggregatePrintInfo final : OPPrintInfo {
