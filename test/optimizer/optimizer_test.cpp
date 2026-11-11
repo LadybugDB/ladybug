@@ -2216,7 +2216,9 @@ TEST_F(OptimizerTest, ForkArmsPlannedAsOneExtendChain) {
 }
 
 // match/fork_extend.test's *AfterMultiTableExtendRefill cases need the first extend's chunk
-// refilled below the second extend.
+// refilled below the second extend. Ten P rows fail the filter, one of them with 200 edges: a plan
+// that scans m first pays for those edges and the chain, which filters p first, does not. With
+// one P row failing, the two plans tie.
 TEST_F(OptimizerTest, MultiTableExtendOverMultiTableExtend) {
     for (const auto* statement : {
              "CREATE NODE TABLE P(id INT64 PRIMARY KEY);",
@@ -2230,8 +2232,10 @@ TEST_F(OptimizerTest, MultiTableExtendOverMultiTableExtend) {
              "CREATE REL TABLE y_w(FROM Y TO W);",
              "CREATE REL TABLE a(FROM P TO X, w INT32);",
              "CREATE REL TABLE b(FROM P TO Y, w INT64);",
-             "CREATE (:P {id: 1}), (:P {id: 2});",
+             "UNWIND range(-9, 2) AS i CREATE (:P {id: i});",
              "UNWIND range(1, 4) AS i CREATE (:X {id: i}), (:Z {id: i});",
+             "UNWIND range(1, 200) AS i CREATE (:Y {id: i});",
+             "MATCH (p:P {id: 0}), (y:Y) CREATE (p)-[:p_y {w: 1}]->(y), (p)-[:b {w: 1}]->(y);",
              "MATCH (p:P {id: 1}), (x:X {id: 1}) CREATE (p)-[:p_x {w: 2}]->(x), (p)-[:a {w: "
              "2}]->(x);",
              "MATCH (p:P {id: 2}), (x:X {id: 2}) CREATE (p)-[:p_x {w: 1}]->(x), (p)-[:a {w: "

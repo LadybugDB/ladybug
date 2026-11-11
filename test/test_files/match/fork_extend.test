@@ -314,7 +314,11 @@
 # three, and the filter has to test each of them.
 -CASE FilterAfterMultiTableExtendRefill
 -INSERT_STATEMENT_BLOCK CREATE_FORK
--STATEMENT CREATE (:P {id: 1}), (:P {id: 2});
+-STATEMENT UNWIND range(-9, 2) AS i CREATE (:P {id: i});
+---- ok
+-STATEMENT UNWIND range(1, 200) AS i CREATE (:Y {id: i});
+---- ok
+-STATEMENT MATCH (p:P {id: 0}), (y:Y) CREATE (p)-[:p_y {w: 1}]->(y);
 ---- ok
 -STATEMENT UNWIND range(1, 4) AS i CREATE (:X {id: i}), (:Z {id: i});
 ---- ok
@@ -351,7 +355,11 @@
 ---- ok
 -STATEMENT CREATE REL TABLE grp(FROM X TO Z, FROM Y TO W);
 ---- ok
--STATEMENT CREATE (:P {id: 1}), (:P {id: 2});
+-STATEMENT UNWIND range(-9, 2) AS i CREATE (:P {id: i});
+---- ok
+-STATEMENT UNWIND range(1, 200) AS i CREATE (:Y {id: i});
+---- ok
+-STATEMENT MATCH (p:P {id: 0}), (y:Y) CREATE (p)-[:p_y {w: 1}]->(y), (p)-[:b {w: 1}]->(y);
 ---- ok
 -STATEMENT UNWIND range(1, 4) AS i CREATE (:X {id: i}), (:Z {id: i});
 ---- ok
