@@ -114,6 +114,10 @@ public:
         return false;
     }
 
+    static std::unique_lock<std::mutex> lockWriteGate(main::ClientContext& context) {
+        return std::unique_lock{TransactionManager::Get(context)->mtxForStartingNewTransactions};
+    }
+
     // Holds the mutex that every begin, commit and rollback takes for 100 ms on a new thread, and
     // returns once it is held.
     static std::thread holdPublicMutexBriefly(main::ClientContext& context) {
@@ -972,31 +976,104 @@ TEST_F(PostCommitCheckpointFailureTest, NextCommitRetriesFailedAutoCheckpoint) {
     checkNodes(2);
 }
 
-TEST_F(PostCommitCheckpointFailureTest, AutoCheckpointBlockedByOpenWriterDoesNotFailCommit) {
+TEST_F(PostCommitCheckpointFailureTest, AutoCheckpointSkipsOpenWriter) {
     if (inMemMode) {
         GTEST_SKIP();
     }
     conn.reset();
-    createDB(10000 /* checkpoint wait timeout in microseconds */);
+    createDB(2000000 /* checkpoint wait timeout in microseconds */);
     conn = std::make_unique<main::Connection>(database.get());
     checkpointAfterEveryCommit();
     ASSERT_TRUE(conn->query("CALL enable_multi_writes=true;")->isSuccess());
     auto context = getClientContext(*conn);
-    main::Connection other{database.get()};
-    ASSERT_TRUE(other.query("BEGIN TRANSACTION;")->isSuccess());
-    ASSERT_TRUE(other.query("CREATE (a:test {id: 1, name: 'name_1'});")->isSuccess());
-    // This commit's checkpoint times out waiting for the other connection's write transaction.
+    countCheckpoints<FlakyCheckpointerFailsOnCheckpointStorage>();
+    failCheckpoints = false;
+    {
+        main::Connection other{database.get()};
+        ASSERT_TRUE(other.query("BEGIN TRANSACTION;")->isSuccess());
+        ASSERT_TRUE(other.query("CREATE (a:test {id: 3, name: 'name_3'});")->isSuccess());
+        ::testing::internal::CaptureStderr();
+        const auto start = std::chrono::steady_clock::now();
+        for (auto i = 0; i < 3; ++i) {
+            insertNodes(i, i + 1);
+        }
+        const auto waited = std::chrono::steady_clock::now() - start;
+        const auto warnings = ::testing::internal::GetCapturedStderr();
+        EXPECT_LT(waited, std::chrono::seconds(1));
+        EXPECT_TRUE(warnings.empty()) << warnings;
+        EXPECT_EQ(numCheckpoints, 0u);
+        EXPECT_GT(WAL::Get(*context)->getFileSize(), 0u);
+        auto res = other.query("COMMIT;");
+        ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+        EXPECT_EQ(numCheckpoints, 1u);
+        EXPECT_EQ(WAL::Get(*context)->getFileSize(), 0u);
+    }
+    createDBAndConn();
+    checkNodes(4);
+}
+
+TEST_F(PostCommitCheckpointFailureTest, AutoCheckpointSkipsBusyWriteGate) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+    auto context = getClientContext(*conn);
+    countCheckpoints<FlakyCheckpointerFailsOnCheckpointStorage>();
+    failCheckpoints = false;
+    ASSERT_TRUE(conn->query("BEGIN TRANSACTION;")->isSuccess());
     insertNodes(0, 1);
-    EXPECT_GT(WAL::Get(*context)->getFileSize(), 0u);
-    auto res = other.query("COMMIT;");
+    auto gate = FlakyCheckpointer::lockWriteGate(*context);
+    std::unique_ptr<main::QueryResult> res;
+    std::promise<void> committed;
+    auto finished = committed.get_future();
+    std::thread committing([&]() {
+        res = conn->query("COMMIT;");
+        committed.set_value();
+    });
+    const auto status = finished.wait_for(std::chrono::seconds(1));
+    gate.unlock();
+    committing.join();
+    ASSERT_EQ(status, std::future_status::ready);
     ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+    EXPECT_EQ(numCheckpoints, 0u);
+    EXPECT_GT(WAL::Get(*context)->getFileSize(), 0u);
+    res.reset();
+    createDBAndConn();
+    checkNodes(1);
+    context = getClientContext(*conn);
+    checkpointAfterEveryCommit();
+    countCheckpoints<FlakyCheckpointerFailsOnCheckpointStorage>();
+    insertNodes(1, 2);
+    EXPECT_EQ(numCheckpoints, 1u);
     EXPECT_EQ(WAL::Get(*context)->getFileSize(), 0u);
+    createDBAndConn();
     checkNodes(2);
 }
 
-// A COPY is durable only once its checkpoint runs, so it must not commit while another write
-// transaction could keep that checkpoint from running.
-TEST_F(PostCommitCheckpointFailureTest, WriterWaitingBehindAutoCheckpointLetsOthersThrough) {
+TEST_F(PostCommitCheckpointFailureTest, AutoCheckpointRunsBesideOpenReader) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+    countCheckpoints<FlakyCheckpointerFailsOnCheckpointStorage>();
+    failCheckpoints = false;
+    {
+        main::Connection reader{database.get()};
+        ASSERT_TRUE(reader.query("BEGIN TRANSACTION READ ONLY;")->isSuccess());
+        insertNodes(0, 1);
+        EXPECT_EQ(numCheckpoints, 1u);
+        auto res = reader.query("MATCH (a:test) RETURN COUNT(a);");
+        ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+        EXPECT_EQ(res->getNext()->getValue(0)->getValue<int64_t>(), 0);
+        ASSERT_TRUE(reader.query("COMMIT;")->isSuccess());
+    }
+    insertNodes(1, 2);
+    EXPECT_EQ(numCheckpoints, 2u);
+    EXPECT_EQ(WAL::Get(*getClientContext(*conn))->getFileSize(), 0u);
+    createDBAndConn();
+    checkNodes(2);
+}
+
+// A writer waiting at an explicit checkpoint's gate must let readers and active writers finish.
+TEST_F(PostCommitCheckpointFailureTest, WriterWaitingBehindExplicitCheckpointLetsOthersThrough) {
     if (inMemMode) {
         GTEST_SKIP();
     }
@@ -1008,10 +1085,11 @@ TEST_F(PostCommitCheckpointFailureTest, WriterWaitingBehindAutoCheckpointLetsOth
     main::Connection openWriter{database.get()};
     main::Connection waitingWriter{database.get()};
     main::Connection reader{database.get()};
+    insertNodes(0, 1);
     ASSERT_TRUE(openWriter.query("BEGIN TRANSACTION;")->isSuccess());
     ASSERT_TRUE(openWriter.query("CREATE (a:test {id: 1, name: 'name_1'});")->isSuccess());
-    // This commit's checkpoint closes the write gate and waits for openWriter to leave.
-    std::thread committing([this]() { insertNodes(0, 1); });
+    std::unique_ptr<main::QueryResult> checkpointRes;
+    std::thread checkpointing([&]() { checkpointRes = conn->query("CHECKPOINT;"); });
     const bool gateClosed = FlakyCheckpointer::waitForWriteGateClosed(*getClientContext(*conn));
     std::unique_ptr<main::QueryResult> waitingRes;
     std::promise<void> waitingStarted;
@@ -1025,9 +1103,10 @@ TEST_F(PostCommitCheckpointFailureTest, WriterWaitingBehindAutoCheckpointLetsOth
     auto readRes = reader.query("MATCH (a:test) RETURN COUNT(a);");
     auto commitRes = openWriter.query("COMMIT;");
     const auto waited = std::chrono::steady_clock::now() - start;
-    committing.join();
+    checkpointing.join();
     waiting.join();
     ASSERT_TRUE(gateClosed);
+    ASSERT_TRUE(checkpointRes->isSuccess()) << checkpointRes->getErrorMessage();
     ASSERT_TRUE(readRes->isSuccess()) << readRes->getErrorMessage();
     ASSERT_TRUE(commitRes->isSuccess()) << commitRes->getErrorMessage();
     ASSERT_TRUE(waitingRes->isSuccess()) << waitingRes->getErrorMessage();

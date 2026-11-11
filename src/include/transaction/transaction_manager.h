@@ -99,10 +99,11 @@ private:
     void waitForOtherWritersBeforeForcedCheckpoint();
     void endForcedCheckpoint();
     bool hasNoActiveTransactions() const;
-    void checkpointNoLock(main::ClientContext& clientContext);
+    void checkpointNoLock(main::ClientContext& clientContext,
+        std::unique_lock<std::mutex> writeGate = {});
     void logAbortOfDurableCommit(uint64_t walBlockStart, const std::string& publishError);
-    // Try to checkpoint without blocking. Returns immediately if another checkpoint is in
-    // progress. Used by auto-checkpoint after commit.
+    // Auto-checkpoint skips busy checkpoint/write gates and active writers. A later write
+    // commit retries instead of waiting for unrelated transactions to finish.
     void tryCheckpoint(main::ClientContext& clientContext);
 
     // This function locks the mutex to stop new transactions and waits until all transactions
@@ -111,7 +112,7 @@ private:
 
     // This function locks the mutex to stop new write transactions and waits until all active
     // write transactions leave the system. Read transactions are allowed to continue.
-    common::UniqLock stopNewWriteTransactionsAndWaitUntilAllWriteTransactionsLeave();
+    std::unique_lock<std::mutex> stopNewWriteTransactionsAndWaitUntilAllWriteTransactionsLeave();
 
     // Reclaims superseded in-memory MVCC versions (see StorageManager::vacuumInMemoryUpdates).
     // Used by in-memory commits and checkpoints, which otherwise never prune version chains.
