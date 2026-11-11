@@ -72,6 +72,10 @@ public:
 
     static TransactionManager* Get(const main::ClientContext& context);
 
+    bool hasMultipleActiveWriteTransactions() const {
+        return activeWriteTransactionCount.load(std::memory_order_acquire) > 1;
+    }
+
     // A transaction stages its inserts in its LocalStorage, with the columns of its catalog
     // snapshot, and appends them to the table's storage at commit. Another transaction's ADD
     // COLUMN, DROP COLUMN, or DROP TABLE therefore conflicts with them, and the second of the

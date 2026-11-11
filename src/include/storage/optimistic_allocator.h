@@ -26,6 +26,9 @@ public:
 
     void rollback();
     void commit();
+    // A rolled-back row can remain in shared storage to preserve another writer's offsets.
+    // Its pages then belong to storage and must be reclaimed by checkpoint, not rollback.
+    void retainPageRange(PageRange block);
 
 private:
     PageManager& pageManager;

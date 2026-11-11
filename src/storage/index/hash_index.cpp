@@ -292,7 +292,7 @@ void HashIndex<T>::reserve(PageAllocator& pageAllocator, const Transaction* tran
             this->indexHeaderForWriteTrx.nextSplitSlotId =
                 numRequiredSlots - numSlotsOfCurrentLevel;
         }
-    } else {
+    } else if (numRequiredSlots > pSlots->getNumElements(transaction->getType())) {
         splitSlots(pageAllocator, transaction, this->indexHeaderForWriteTrx,
             numRequiredSlots - pSlots->getNumElements(transaction->getType()));
     }

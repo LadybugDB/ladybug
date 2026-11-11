@@ -65,7 +65,8 @@ public:
         nodeGroups.replaceGroup(lock, nodeGroupIdx, std::move(group));
     }
 
-    void rollbackInsert(common::row_idx_t numRows_, bool updateNumRows = true);
+    bool rollbackInsert(common::node_group_idx_t nodeGroupIdx, common::row_idx_t startRow,
+        common::row_idx_t numRows);
 
     void clear() {
         const auto lock = nodeGroups.lock();

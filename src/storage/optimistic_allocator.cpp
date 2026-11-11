@@ -1,5 +1,7 @@
 #include "storage/optimistic_allocator.h"
 
+#include <algorithm>
+
 #include "storage/page_manager.h"
 
 namespace lbug::storage {
@@ -30,5 +32,12 @@ void OptimisticAllocator::rollback() {
 void OptimisticAllocator::commit() {
     std::unique_lock lck{mtx};
     optimisticallyAllocatedPages.clear();
+}
+
+void OptimisticAllocator::retainPageRange(PageRange block) {
+    std::unique_lock lck{mtx};
+    std::erase_if(optimisticallyAllocatedPages, [&](const auto& entry) {
+        return entry.startPageIdx == block.startPageIdx && entry.numPages == block.numPages;
+    });
 }
 } // namespace lbug::storage

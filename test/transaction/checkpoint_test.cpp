@@ -13,6 +13,7 @@
 #include <mutex>
 #include <optional>
 #include <thread>
+#include <tuple>
 #include <unordered_set>
 #include <vector>
 
@@ -1194,6 +1195,99 @@ TEST_F(PostCommitCheckpointFailureTest, ConcurrentCopiesDoNotWaitForEachOther) {
     ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
     EXPECT_EQ(res->getNext()->getValue(0)->getValue<int64_t>(), 0);
 }
+
+class ConcurrentCopyRollbackTest
+    : public PostCommitCheckpointFailureTest,
+      public ::testing::WithParamInterface<std::tuple<bool, unsigned, bool, bool>> {};
+
+TEST_P(ConcurrentCopyRollbackTest, PreservesOtherCopy) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+    const auto [rel, rollbackMode, existingRows, largeCopy] = GetParam();
+    const auto rejectedCommit = rollbackMode == 1;
+    ASSERT_TRUE(conn->query("CALL enable_multi_writes=true")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE N(id INT64 PRIMARY KEY)")->isSuccess());
+    if (rel) {
+        ASSERT_TRUE(conn->query("CREATE (:N {id: 0}), (:N {id: 1})")->isSuccess());
+        ASSERT_TRUE(conn->query("CREATE REL TABLE K(FROM N TO N, value INT64)")->isSuccess());
+    }
+    const auto copy = [rel](int64_t first, int64_t last) {
+        return rel ? std::format("COPY K FROM (UNWIND range({}, {}) AS i "
+                                 "RETURN 0 AS FROM, 1 AS TO, i AS value)",
+                         first, last) :
+                     std::format("COPY N FROM (UNWIND range({}, {}) AS i RETURN i)", first, last);
+    };
+    if (existingRows) {
+        ASSERT_TRUE(conn->query(copy(-5, -1))->isSuccess());
+    }
+    if (rollbackMode == 2) {
+        ASSERT_TRUE(conn->query("CALL auto_checkpoint=false")->isSuccess());
+    }
+    const auto checkRows = [&](bool reusedKeys) {
+        auto result = conn->query(rel ? "MATCH ()-[r:K]->() RETURN r.value ORDER BY r.value" :
+                                        "MATCH (n:N) RETURN n.id ORDER BY n.id");
+        ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+        ASSERT_EQ(result->getNumTuples(), 100 + (existingRows ? 5 : 0) + (reusedKeys ? 3 : 0));
+        if (existingRows) {
+            for (auto id = -5; id < 0; ++id) {
+                EXPECT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), id);
+            }
+        }
+        for (auto id = 1; id <= 100; ++id) {
+            EXPECT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), id);
+        }
+        if (reusedKeys) {
+            for (auto id = 1000; id <= 1002; ++id) {
+                EXPECT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), id);
+            }
+        }
+    };
+    {
+        main::Connection other{database.get()};
+        ASSERT_TRUE(other.query("BEGIN TRANSACTION")->isSuccess());
+        const auto numRows = largeCopy ? StorageConfig::NODE_GROUP_SIZE + 1 : 100;
+        auto result = other.query(copy(1000, 999 + numRows));
+        ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+        std::unique_ptr<main::QueryResult> committedCopy;
+        std::thread writer([&]() { committedCopy = conn->query(copy(1, 100)); });
+        bool pending = true;
+        if (rollbackMode == 2) {
+            writer.join();
+        } else {
+            pending = FlakyCheckpointer::waitForForcedCheckpointPending(*getClientContext(*conn));
+        }
+        result = other.query(rejectedCommit ? "COMMIT" : "ROLLBACK");
+        if (writer.joinable()) {
+            writer.join();
+        }
+        ASSERT_TRUE(pending);
+        ASSERT_TRUE(committedCopy->isSuccess()) << committedCopy->getErrorMessage();
+        if (rejectedCommit) {
+            ASSERT_FALSE(result->isSuccess());
+            EXPECT_NE(result->getErrorMessage().find("The transaction was rolled back"),
+                std::string::npos);
+        } else {
+            ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+        }
+        checkRows(false);
+    }
+    if (rollbackMode == 2) {
+        ASSERT_TRUE(conn->query("CHECKPOINT")->isSuccess());
+    }
+    // The successful COPY must survive reopening without another checkpoint on close.
+    createDBAndConn();
+    checkRows(false);
+    // Rolled-back primary keys and CSR row ranges must remain usable by later COPYs.
+    ASSERT_TRUE(conn->query(copy(1000, 1002))->isSuccess());
+    checkRows(true);
+    createDBAndConn();
+    checkRows(true);
+}
+
+INSTANTIATE_TEST_SUITE_P(NodeAndRel, ConcurrentCopyRollbackTest,
+    ::testing::Combine(::testing::Bool(), ::testing::Values(0u, 1u, 2u), ::testing::Bool(),
+        ::testing::Bool()));
 
 TEST_F(PostCommitCheckpointFailureTest, AutoCheckpointThatPoisonsWALFailsNextWrite) {
     if (inMemMode) {

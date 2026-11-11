@@ -19,6 +19,7 @@
 #include "storage/storage_manager.h"
 #include "storage/wal/local_wal.h"
 #include "transaction/transaction.h"
+#include "transaction/transaction_manager.h"
 #include <format>
 
 using namespace lbug::catalog;
@@ -60,10 +61,12 @@ void NodeTableVersionRecordHandler::rollbackInsert(main::ClientContext* context,
     DASSERT(nodeGroupIdx < table->getNumNodeGroups() || startRow == 0);
     if (nodeGroupIdx < table->getNumNodeGroups()) {
         VersionRecordHandler::rollbackInsert(context, nodeGroupIdx, startRow, numRows);
-        auto* nodeGroup = table->getNodeGroupNoLock(nodeGroupIdx);
-        const auto numRowsToRollback = std::min(numRows, nodeGroup->getNumRows() - startRow);
-        nodeGroup->rollbackInsert(startRow);
-        table->rollbackGroupCollectionInsert(numRowsToRollback);
+        // Another COPY may still be appending or holding pointers into these groups.
+        if (TransactionManager::Get(*context)->hasMultipleActiveWriteTransactions() ||
+            !table->rollbackGroupCollectionInsert(nodeGroupIdx, startRow, numRows)) {
+            Transaction::Get(*context)->getLocalStorage()->retainOptimisticAllocations(
+                table->getStorageManager(), *table->getNodeGroupNoLock(nodeGroupIdx));
+        }
     }
 }
 
@@ -835,8 +838,9 @@ void NodeTable::rollbackPKIndexInsert(main::ClientContext* context, row_idx_t st
 }
 
 // NOLINTNEXTLINE(readability-make-member-function-const): Semantically non-const.
-void NodeTable::rollbackGroupCollectionInsert(row_idx_t numRows_) {
-    nodeGroups->rollbackInsert(numRows_);
+bool NodeTable::rollbackGroupCollectionInsert(node_group_idx_t nodeGroupIdx, row_idx_t startRow,
+    row_idx_t numRows) {
+    return nodeGroups->rollbackInsert(nodeGroupIdx, startRow, numRows);
 }
 
 void NodeTable::rollbackCheckpoint() {

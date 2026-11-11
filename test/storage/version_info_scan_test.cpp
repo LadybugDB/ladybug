@@ -76,6 +76,19 @@ TEST(VersionInfoScanTest, RolledBackInsertIsNotSelected) {
     EXPECT_EQ(selVector.getSelSize(), 0u);
 }
 
+TEST(VersionInfoScanTest, MultipleRollbackRangesStayDeletedForCheckpoint) {
+    VersionInfo info;
+    info.append(WRITER_ID, 0, 100);
+    info.append(WRITER_ID, 100, 100);
+    info.rollbackInsert(100, 100);
+    info.rollbackInsert(0, 100);
+    Transaction checkpoint{TransactionType::CHECKPOINT, Transaction::DUMMY_TRANSACTION_ID,
+        COMMIT_TS};
+    for (auto row = 0u; row < 200; ++row) {
+        EXPECT_TRUE(info.isDeleted(&checkpoint, row));
+    }
+}
+
 // A delete on rows without version info marks their vector ALWAYS_INSERTED; once the delete is
 // rolled back, the vector is selected whole again.
 TEST(VersionInfoScanTest, AlwaysInsertedVectorIsSelectedWhole) {

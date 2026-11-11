@@ -220,7 +220,8 @@ public:
 
     void rollbackPKIndexInsert(main::ClientContext* context, common::row_idx_t startRow,
         common::row_idx_t numRows_, common::node_group_idx_t nodeGroupIdx_);
-    void rollbackGroupCollectionInsert(common::row_idx_t numRows_);
+    bool rollbackGroupCollectionInsert(common::node_group_idx_t nodeGroupIdx,
+        common::row_idx_t startRow, common::row_idx_t numRows);
 
     common::node_group_idx_t getNumCommittedNodeGroups() const {
         return nodeGroups->getNumNodeGroups();

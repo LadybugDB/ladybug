@@ -149,6 +149,12 @@ void ChunkedNodeGroup::resetVersionAndUpdateInfo() {
 
 void ChunkedNodeGroup::truncate(const offset_t numRows_) {
     DASSERT(numRows >= numRows_);
+    if (versionInfo) {
+        // A reclaimed tail may be reused by a later insert.
+        for (auto row = numRows_; row < numRows; ++row) {
+            versionInfo->stampDeleteCommitTS(row, INVALID_TRANSACTION);
+        }
+    }
     for (const auto& chunk : chunks) {
         chunk->truncate(numRows_);
     }
@@ -672,15 +678,9 @@ void ChunkedNodeGroup::rollbackInsert(row_idx_t startRow, row_idx_t numRows_, tr
         // Nothing to rollback.
         return;
     }
-    if (startRow == 0) {
-        truncate(0);
-        versionInfo.reset();
-        return;
-    }
     if (versionInfo) {
-        versionInfo->rollbackInsert(startRow, numRows_);
+        versionInfo->rollbackInsert(startRow, std::min(numRows_, numRows - startRow));
     }
-    truncate(startRow);
 }
 
 // NOLINTNEXTLINE(readability-make-member-function-const): Semantically non-const.
