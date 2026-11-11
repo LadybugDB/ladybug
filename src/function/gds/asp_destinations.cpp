@@ -1,4 +1,5 @@
 #include "binder/expression/node_expression.h"
+#include "function/gds/bidirectional_sp.h"
 #include "function/gds/gds_function_collection.h"
 #include "function/gds/rec_joins.h"
 #include "processor/execution_context.h"
@@ -280,6 +281,25 @@ public:
     std::unique_ptr<EdgeCompute> copy() override {
         return std::make_unique<ASPDestinationsEdgeCompute>(frontierPair, multiplicitiesPair,
             pathNodeMask);
+    }
+
+    bool runSinglePairSearch(ExecutionContext* context, Graph* graph, ExtendDirection direction,
+        uint64_t maxLength, nodeID_t source, NodeOffsetMaskMap* outputMask) override {
+        BidirectionalSPConfig config;
+        config.frontierPair = frontierPair;
+        config.pathNodeMask = pathNodeMask;
+        config.setPathCount = [this](nodeID_t dst, uint64_t count) {
+            multiplicitiesPair->pinNextTableID(dst.tableID);
+            multiplicitiesPair->increaseNextMultiplicity(dst.offset, count);
+        };
+        if (!runBidirectionalSinglePair(context, graph, direction, maxLength, source, outputMask,
+                config)) {
+            return false;
+        }
+        // The output writer reads the current multiplicities, which only the iterative search
+        // pins otherwise.
+        multiplicitiesPair->pinCurTableID(source.tableID);
+        return true;
     }
 
 private:
