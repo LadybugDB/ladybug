@@ -308,7 +308,7 @@ bool IceDiskRelTable::scanCSR(Transaction* transaction,
         }
 
         for (; iceDiskScanState.currentLocalRowIdx < selSize && totalRowsCollected < maxRowsPerCall;
-            ++iceDiskScanState.currentLocalRowIdx) {
+             ++iceDiskScanState.currentLocalRowIdx) {
             // Find which source node this row belongs to. Rows are examined strictly in
             // increasing global (CSR) order, so we walk a single monotonic cursor through the
             // indptr (O(1) amortized per row) instead of a binary search (O(log n) per row).
@@ -436,7 +436,7 @@ bool IceDiskRelTable::scanFlat(Transaction* transaction,
         }
 
         for (; iceDiskScanState.currentLocalRowIdx < selSize && totalRowsCollected < maxRowsPerCall;
-            ++iceDiskScanState.currentLocalRowIdx) {
+             ++iceDiskScanState.currentLocalRowIdx) {
             if (iceDiskScanState.cachedBatchData->getNumValueVectors() < 2) {
                 throw RuntimeException("Flat icebug-disk relationship parquet file requires source "
                                        "and target offset columns");
