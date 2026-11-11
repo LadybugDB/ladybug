@@ -15,6 +15,7 @@ namespace transaction {
 class TransactionManager;
 } // namespace transaction
 namespace storage {
+class NodeGroup;
 // Local tables are keyed by their owning catalog as well as their table ID: table IDs are
 // per-catalog, so a transaction touching several graphs can hold uncommitted state for
 // same-ID tables in different catalogs.
@@ -57,6 +58,7 @@ public:
     // call per batch-insert target) share a single allocator, and commit/rollback covers each
     // file exactly once.
     PageAllocator* addOptimisticAllocator(StorageManager* sm = nullptr);
+    void retainOptimisticAllocations(StorageManager* sm, const NodeGroup& nodeGroup);
 
     void commit();
     void rollback();

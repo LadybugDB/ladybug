@@ -4,11 +4,13 @@
 #include "common/enums/rel_direction.h"
 #include "common/types/types.h"
 #include "main/client_context.h"
+#include "storage/local_storage/local_storage.h"
 #include "storage/storage_manager.h"
 #include "storage/storage_utils.h"
 #include "storage/table/node_group.h"
 #include "storage/table/rel_table.h"
 #include "transaction/transaction.h"
+#include "transaction/transaction_manager.h"
 
 using namespace lbug::catalog;
 using namespace lbug::common;
@@ -35,7 +37,7 @@ void PersistentVersionRecordHandler::applyFuncToChunkedGroups(version_record_han
 void PersistentVersionRecordHandler::rollbackInsert(main::ClientContext* context,
     node_group_idx_t nodeGroupIdx, row_idx_t startRow, row_idx_t numRows) const {
     VersionRecordHandler::rollbackInsert(context, nodeGroupIdx, startRow, numRows);
-    relTableData->rollbackGroupCollectionInsert(numRows, true);
+    relTableData->rollbackGroupCollectionInsert(context, nodeGroupIdx, startRow, numRows, true);
 }
 
 InMemoryVersionRecordHandler::InMemoryVersionRecordHandler(RelTableData* relTableData,
@@ -52,10 +54,7 @@ void InMemoryVersionRecordHandler::applyFuncToChunkedGroups(version_record_handl
 void InMemoryVersionRecordHandler::rollbackInsert(main::ClientContext* context,
     node_group_idx_t nodeGroupIdx, row_idx_t startRow, row_idx_t numRows) const {
     VersionRecordHandler::rollbackInsert(context, nodeGroupIdx, startRow, numRows);
-    auto* nodeGroup = relTableData->getNodeGroupNoLock(nodeGroupIdx);
-    const auto numRowsToRollback = std::min(numRows, nodeGroup->getNumRows() - startRow);
-    nodeGroup->rollbackInsert(startRow);
-    relTableData->rollbackGroupCollectionInsert(numRowsToRollback, false);
+    relTableData->rollbackGroupCollectionInsert(context, nodeGroupIdx, startRow, numRows, false);
 }
 
 RelTableData::RelTableData(FileHandle* dataFH, MemoryManager* mm, ShadowFile* shadowFile,
@@ -309,8 +308,17 @@ const VersionRecordHandler* RelTableData::getVersionRecordHandler(
 }
 
 // NOLINTNEXTLINE(readability-make-member-function-const): Semantically non-const.
-void RelTableData::rollbackGroupCollectionInsert(row_idx_t numRows_, bool isPersistent) {
-    nodeGroups->rollbackInsert(numRows_, !isPersistent);
+void RelTableData::rollbackGroupCollectionInsert(main::ClientContext* context,
+    node_group_idx_t nodeGroupIdx, row_idx_t startRow, row_idx_t numRows, bool isPersistent) {
+    if (nodeGroupIdx >= getNumNodeGroups()) {
+        return;
+    }
+    if (!isPersistent && !TransactionManager::Get(*context)->hasMultipleActiveWriteTransactions() &&
+        nodeGroups->rollbackInsert(nodeGroupIdx, startRow, numRows)) {
+        return;
+    }
+    Transaction::Get(*context)->getLocalStorage()->retainOptimisticAllocations(
+        table.getStorageManager(), *getNodeGroupNoLock(nodeGroupIdx));
 }
 
 void RelTableData::reclaimStorage(PageAllocator& pageAllocator) const {
