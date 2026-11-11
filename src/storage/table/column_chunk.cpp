@@ -375,6 +375,28 @@ void ColumnChunk::applyUpdateRetention(UpdateRetentionCapture&& capture) {
     }
 }
 
+bool ColumnChunk::vacuumInMemoryUpdates(transaction_t horizon) {
+    if (getResidencyState() != ResidencyState::IN_MEMORY) {
+        return false;
+    }
+    if (updateInfo.use_count() != 1) {
+        return false;
+    }
+    if (!updateInfo->isSet()) {
+        return false;
+    }
+    auto writeRow = [this](idx_t vectorIdx, sel_t rowInVector, const VectorUpdateInfo* srcNode,
+                        idx_t srcPos) {
+        const auto baseRow =
+            static_cast<row_idx_t>(vectorIdx) * DEFAULT_VECTOR_CAPACITY + rowInVector;
+        std::span<std::unique_ptr<ColumnChunkData>> segments{data};
+        auto [segment, offsetInSegment] = genericFindSegment(segments, baseRow);
+        DASSERT(segment != segments.end());
+        (*segment)->write(srcNode->data.get(), srcPos, offsetInSegment, 1);
+    };
+    return updateInfo->vacuumCommitted(horizon, writeRow);
+}
+
 void ColumnChunk::transplantRetainedUpdates(const ColumnChunk& src, row_idx_t rowDelta,
     transaction_t horizon) {
     if (!src.updateInfo->isSet()) {

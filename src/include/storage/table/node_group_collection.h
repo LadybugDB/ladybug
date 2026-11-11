@@ -85,6 +85,7 @@ public:
     // True when any node group still carries a retention horizon from an earlier pinned
     // checkpoint (see NodeGroup::hasRetainedHorizon).
     bool hasRetainedHorizon() const;
+    bool vacuumInMemoryUpdates(common::transaction_t horizon);
     void reclaimStorage(PageAllocator& pageAllocator) const;
 
     TableStats getStats() const {

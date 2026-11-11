@@ -1108,6 +1108,15 @@ void CSRNodeGroup::reclaimStorage(PageAllocator& pageAllocator, const UniqLock& 
     }
 }
 
+bool CSRNodeGroup::vacuumInMemoryUpdates(transaction_t horizon) {
+    bool didWork = NodeGroup::vacuumInMemoryUpdates(horizon);
+    const auto lock = chunkedGroups.lock();
+    if (persistentChunkGroup && persistentChunkGroup->vacuumInMemoryUpdates(horizon)) {
+        didWork = true;
+    }
+    return didWork;
+}
+
 static std::unique_ptr<ChunkedCSRNodeGroup> createNewPersistentChunkGroup(
     ChunkedCSRNodeGroup& oldPersistentChunkGroup, CSRNodeGroupCheckpointState& csrState) {
     auto newGroup =

@@ -270,6 +270,12 @@ public:
     // path), since their chunk-level buffers and null masks are not positionally valid.
     void readBaseValue(common::row_idx_t rowInChunk, ColumnChunkData& out,
         common::row_idx_t outPos) const;
+    // Folds committed update chains into the in-memory base and drops the folded nodes.
+    // Only runs on IN_MEMORY chunks exclusively owned (use_count == 1); ON_DISK chunks
+    // and shared chunks are skipped. `horizon` is the oldest active startTS (or
+    // INVALID_TRANSACTION when no readers are active); only committed versions below it
+    // are folded. Returns true when any chain data was reclaimed.
+    bool vacuumInMemoryUpdates(common::transaction_t horizon);
 
     // Clears the pending updates. If a scan shares them, drops only this chunk's reference
     // and the scan keeps the pre-checkpoint updates.

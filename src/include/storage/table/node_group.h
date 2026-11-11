@@ -219,6 +219,9 @@ public:
     // pinned checkpoint. Used to force a reclaiming checkpoint after the readers drain,
     // even when the table epoch is unchanged.
     bool hasRetainedHorizon() const;
+    // Folds committed update chains below `horizon` into in-memory bases (see
+    // ColumnChunk::vacuumInMemoryUpdates). Returns true when any chain data was reclaimed.
+    virtual bool vacuumInMemoryUpdates(common::transaction_t horizon);
 
     template<class TARGET>
     TARGET& cast() {

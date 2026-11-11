@@ -317,5 +317,9 @@ void RelTableData::reclaimStorage(PageAllocator& pageAllocator) const {
     nodeGroups->reclaimStorage(pageAllocator);
 }
 
+bool RelTableData::vacuumInMemoryUpdates(transaction_t horizon) {
+    return nodeGroups->vacuumInMemoryUpdates(horizon);
+}
+
 } // namespace storage
 } // namespace lbug

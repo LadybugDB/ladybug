@@ -171,6 +171,19 @@ public:
     // shadowing it. Returns the existing node when one is already stamped with horizon.
     VectorUpdateInfo& insertRetainedBaseNode(MemoryManager& memoryManager,
         common::LogicalType dataType, common::idx_t vectorIdx, common::transaction_t horizon);
+    // Folds the newest committed version below `horizon` for every row into the base via
+    // `writeRow(vectorIdx, rowInVector, srcData, srcPosInSrc)`, then drops every committed
+    // node with version < horizon. Uncommitted nodes (version >= START_TRANSACTION_ID) and
+    // committed nodes with version >= horizon are kept. When `horizon` is INVALID_TRANSACTION
+    // (no active readers) every committed node is folded and dropped, so the chain only
+    // retains uncommitted entries. Returns true when any committed data was folded.
+    // Safe under concurrent new writers (they create uncommitted nodes, which are preserved)
+    // and concurrent new readers (they observe the folded base plus the kept chains).
+    // Must NOT run while an older reader (startTS <= folded versions) is still active: the
+    // caller must ensure `horizon` is the oldest active startTS (or INVALID when none).
+    bool vacuumCommitted(common::transaction_t horizon,
+        const std::function<void(common::idx_t, common::sel_t, const VectorUpdateInfo*,
+            common::idx_t)>& writeRow);
 
 private:
     UpdateNode& getUpdateNode(common::idx_t vectorIdx);
