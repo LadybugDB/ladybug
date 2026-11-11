@@ -625,6 +625,7 @@ std::shared_ptr<RelExpression> Binder::createRecursiveQueryRel(const parser::Rel
     recursiveInfo->function = QueryRelTypeUtils::getFunction(queryRel->getRelType());
     recursiveInfo->bindData = std::move(bindData);
     queryRel->setRecursiveInfo(std::move(recursiveInfo));
+    scope.addRecursiveRel(queryRel->getUniqueName());
     return queryRel;
 }
 

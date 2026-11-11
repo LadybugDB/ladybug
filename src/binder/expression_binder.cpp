@@ -7,6 +7,7 @@
 #include "binder/expression/expression_util.h"
 #include "binder/expression/literal_expression.h"
 #include "binder/expression/parameter_expression.h"
+#include "binder/expression/rel_expression.h"
 #include "binder/expression/scalar_function_expression.h"
 #include "binder/expression_visitor.h"
 #include "common/exception/binder.h"
@@ -513,6 +514,10 @@ std::string ExpressionBinder::getUniqueName(const std::string& name) const {
 void ExpressionBinder::addParameter(const std::string& name, std::shared_ptr<Value> value) {
     DASSERT(!knownParameters.contains(name));
     knownParameters[name] = value;
+}
+
+bool ExpressionBinder::isRecursiveRelBound(const RelExpression& rel) const {
+    return binder->scope.hasRecursiveRel(rel.getUniqueName());
 }
 
 } // namespace binder

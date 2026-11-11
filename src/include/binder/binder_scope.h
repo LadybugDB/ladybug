@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <unordered_set>
 
 #include "binder/expression/expression.h"
 #include "binder/expression/node_expression.h"
@@ -52,12 +53,21 @@ public:
         return nodeReplacement.at(name);
     }
 
+    // Recursive rels bound by the patterns of the current query part, named or not. Their
+    // properties, such as the path length, are not carried through a projection, which clears
+    // them.
+    void addRecursiveRel(const std::string& uniqueName) { recursiveRels.insert(uniqueName); }
+    bool hasRecursiveRel(const std::string& uniqueName) const {
+        return recursiveRels.contains(uniqueName);
+    }
+
     void clear();
 
 private:
     BinderScope(const BinderScope& other)
         : expressions{other.expressions}, nameToExprIdx{other.nameToExprIdx},
-          memorizedNodeNameToEntries{other.memorizedNodeNameToEntries} {}
+          memorizedNodeNameToEntries{other.memorizedNodeNameToEntries},
+          recursiveRels{other.recursiveRels} {}
 
 private:
     // Expressions in scope. Order should be preserved.
@@ -71,6 +81,7 @@ private:
     // A node pattern may not always be bound as a node expression, e.g. in the above query,
     // (new_a) is bound as a variable rather than node expression.
     common::case_insensitive_map_t<std::shared_ptr<NodeExpression>> nodeReplacement;
+    std::unordered_set<std::string> recursiveRels;
 };
 
 } // namespace binder
