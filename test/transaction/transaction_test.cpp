@@ -212,10 +212,9 @@ TEST_P(CheckpointSchemaTest, ReaderKeepsDroppedColumns) {
         ASSERT_TRUE(conn->query("CREATE GRAPH g")->isSuccess());
         ASSERT_TRUE(conn->query("USE GRAPH g")->isSuccess());
     }
-    ASSERT_TRUE(
-        conn->query("CREATE NODE TABLE T(id INT64 PRIMARY KEY, c0 INT64 DEFAULT 5, "
-                    "c1 INT64 DEFAULT 6, c2 INT64 DEFAULT 7)")
-            ->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE T(id INT64 PRIMARY KEY, c0 INT64 DEFAULT 5, "
+                            "c1 INT64 DEFAULT 6, c2 INT64 DEFAULT 7)")
+                    ->isSuccess());
     ASSERT_TRUE(conn->query("CREATE REL TABLE R(FROM T TO T)")->isSuccess());
     ASSERT_TRUE(conn->query("CREATE (:T {id: 1})")->isSuccess());
     if (persistent) {
@@ -311,16 +310,15 @@ TEST_F(EmptyDBTransactionTest, ReopenDroppedColumnsFromPinnedCheckpoint) {
         SCOPED_TRACE(table);
         ASSERT_TRUE(conn->query("CALL auto_checkpoint=false")->isSuccess());
         ASSERT_TRUE(conn->query("CALL force_checkpoint_on_close=false")->isSuccess());
-        ASSERT_TRUE(
-            conn->query(std::format("CREATE NODE TABLE {}(id INT64 PRIMARY KEY, "
-                                    "dropped STRING, dropped_list INT64[] DEFAULT [1, 2], "
-                                    "dropped_struct STRUCT(x STRING) DEFAULT {{x: 'old'}}, "
-                                    "kept INT64 DEFAULT 7)",
-                            table))
-                ->isSuccess());
+        ASSERT_TRUE(conn->query(std::format("CREATE NODE TABLE {}(id INT64 PRIMARY KEY, "
+                                            "dropped STRING, dropped_list INT64[] DEFAULT [1, 2], "
+                                            "dropped_struct STRUCT(x STRING) DEFAULT {{x: 'old'}}, "
+                                            "kept INT64 DEFAULT 7)",
+                                    table))
+                        ->isSuccess());
         if (!empty) {
             ASSERT_TRUE(conn->query(std::format("CREATE (:{} {{id: 1, dropped: 'old'}})", table))
-                    ->isSuccess());
+                            ->isSuccess());
         }
         auto reader = std::make_unique<lbug::main::Connection>(database.get());
         ASSERT_TRUE(reader->query("BEGIN TRANSACTION READ ONLY")->isSuccess());
@@ -353,11 +351,10 @@ TEST_F(EmptyDBTransactionTest, ReopenDroppedColumnsFromPinnedCheckpoint) {
         reader = std::make_unique<lbug::main::Connection>(database.get());
         ASSERT_TRUE(reader->query("BEGIN TRANSACTION READ ONLY")->isSuccess());
         ASSERT_TRUE(conn->query(std::format("ALTER TABLE {} ADD extra STRING DEFAULT 'new'", table))
-                ->isSuccess());
-        ASSERT_TRUE(
-            conn->query(
-                    std::format("UNWIND range(2, {}) AS id CREATE (:{} {{id: id}})", lastID, table))
-                ->isSuccess());
+                        ->isSuccess());
+        ASSERT_TRUE(conn->query(std::format("UNWIND range(2, {}) AS id CREATE (:{} {{id: id}})",
+                                    lastID, table))
+                        ->isSuccess());
         ASSERT_TRUE(conn->query("CHECKPOINT")->isSuccess());
         ASSERT_TRUE(reader->query("COMMIT")->isSuccess());
         reader.reset();
