@@ -2327,5 +2327,99 @@ TEST_F(OptimizerTest, MultiTableExtendOverMultiTableExtend) {
         "HJ(t._ID){S(t)}{E(t)E(m)Filter()S(p)}");
 }
 
+static planner::LogicalOperator* findOperator(planner::LogicalOperator* op,
+    planner::LogicalOperatorType type) {
+    std::vector<planner::LogicalOperator*> operators;
+    collectOperators(op, type, operators);
+    return operators.empty() ? nullptr : operators[0];
+}
+
+static bool hasRowReducer(planner::LogicalOperator* op) {
+    return findOperator(op, planner::LogicalOperatorType::AGGREGATE) != nullptr ||
+           findOperator(op, planner::LogicalOperatorType::DISTINCT) != nullptr ||
+           findOperator(op, planner::LogicalOperatorType::LIMIT) != nullptr;
+}
+
+TEST_F(OptimizerTest, LatePropertiesSkipAggregate) {
+    auto plan =
+        getRoot("MATCH (a:person)-[:knows]->(b:person) MATCH (b)-[:studyAt]->(o:organisation) "
+                "WITH b, count(*) AS c RETURN b.fName, c");
+    auto* root = plan->getLastOperator().get();
+    auto* aggregate = findOperator(root, planner::LogicalOperatorType::AGGREGATE);
+    ASSERT_NE(aggregate, nullptr);
+    // b's scan has no properties left, so its join with the extend is removed.
+    EXPECT_FALSE(scansNodeProperty(aggregate, "b", "fName"));
+    EXPECT_FALSE(hasOperatorType(aggregate, planner::LogicalOperatorType::HASH_JOIN));
+    auto* join = findOperator(root, planner::LogicalOperatorType::HASH_JOIN);
+    ASSERT_NE(join, nullptr);
+    EXPECT_TRUE(scansNodeProperty(join->getChild(0).get(), "b", "fName"));
+    EXPECT_TRUE(hasRowReducer(join->getChild(1).get()));
+    // The fetched rows' node IDs mask the scan.
+    EXPECT_TRUE(
+        hasOperatorType(join->getChild(1).get(), planner::LogicalOperatorType::SEMI_MASKER));
+}
+
+// The rewrite picks a lookup for b, then label pruning leaves b without a table (studyAt ends at
+// organisation); the query has no rows and is planned with a join.
+TEST_F(OptimizerTest, LatePropertiesOfPrunedNodeUseJoin) {
+    auto plan = getRoot("MATCH (a:person)-[:studyAt]->(b:person) WITH b LIMIT 5 RETURN b.fName");
+    EXPECT_FALSE(hasOperatorType(plan->getLastOperator().get(),
+        planner::LogicalOperatorType::QUERY_PRIMARY_KEY_LOOKUP));
+}
+
+static std::vector<std::string> getFirstColumn(main::QueryResult& result) {
+    std::vector<std::string> values;
+    while (result.hasNext()) {
+        values.push_back(result.getNext()->getValue(0)->toString());
+    }
+    return values;
+}
+
+// A prepared late fetch sees nodes created between two executions, through both the lookup and the
+// join.
+TEST_F(OptimizerTest, LatePropertiesAcrossInsert) {
+    auto lookup =
+        conn->prepare("MATCH (a:person) WITH a ORDER BY a.ID DESC LIMIT 1 RETURN a.fName");
+    auto join = conn->prepare("MATCH (a:person) UNWIND [1] AS x WITH a, count(*) AS c "
+                              "RETURN a.fName ORDER BY a.fName DESC LIMIT 1");
+    ASSERT_TRUE(lookup->isSuccess() && join->isSuccess());
+    EXPECT_EQ(getFirstColumn(*conn->execute(lookup.get())),
+        std::vector<std::string>{"Hubert Blaine Wolfeschlegelsteinhausenbergerdorff"});
+    EXPECT_EQ(getFirstColumn(*conn->execute(join.get())),
+        std::vector<std::string>{"Hubert Blaine Wolfeschlegelsteinhausenbergerdorff"});
+    ASSERT_TRUE(conn->query("CREATE (:person {ID: 100, fName: 'Zed'})")->isSuccess());
+    EXPECT_EQ(getFirstColumn(*conn->execute(lookup.get())), std::vector<std::string>{"Zed"});
+    EXPECT_EQ(getFirstColumn(*conn->execute(join.get())), std::vector<std::string>{"Zed"});
+}
+
+// A prepared late fetch is replanned after a column before the fetched one is dropped and the
+// table is checkpointed, which renumbers its columns.
+TEST_F(OptimizerTest, LatePropertiesAcrossDropColumnAndCheckpoint) {
+    auto lookup = conn->prepare("MATCH (a:person) WITH a ORDER BY a.ID LIMIT 1 RETURN a.eyeSight");
+    auto join = conn->prepare("MATCH (a:person) UNWIND [1] AS x WITH a, count(*) AS c "
+                              "RETURN a.eyeSight ORDER BY a.eyeSight LIMIT 1");
+    ASSERT_TRUE(lookup->isSuccess() && join->isSuccess());
+    EXPECT_EQ(getFirstColumn(*conn->execute(lookup.get())), std::vector<std::string>{"5.000000"});
+    EXPECT_EQ(getFirstColumn(*conn->execute(join.get())), std::vector<std::string>{"4.500000"});
+    ASSERT_TRUE(conn->query("ALTER TABLE person DROP gender")->isSuccess());
+    ASSERT_TRUE(conn->query("CHECKPOINT")->isSuccess());
+    EXPECT_EQ(getFirstColumn(*conn->execute(lookup.get())), std::vector<std::string>{"5.000000"});
+    EXPECT_EQ(getFirstColumn(*conn->execute(join.get())), std::vector<std::string>{"4.500000"});
+}
+
+TEST_F(OptimizerTest, LatePropertiesAfterTopKUseLookup) {
+    for (auto limit : {3, 1024}) {
+        auto plan = getRoot(std::format(
+            "MATCH (a:person) WITH a ORDER BY a.ID DESC LIMIT {} RETURN a.fName", limit));
+        auto* lookup = findOperator(plan->getLastOperator().get(),
+            planner::LogicalOperatorType::QUERY_PRIMARY_KEY_LOOKUP);
+        ASSERT_NE(lookup, nullptr) << limit;
+        EXPECT_TRUE(scansNodeProperty(lookup, "a", "fName"));
+        EXPECT_TRUE(
+            hasOperatorType(lookup->getChild(0).get(), planner::LogicalOperatorType::ORDER_BY));
+        EXPECT_FALSE(scansNodeProperty(lookup->getChild(0).get(), "a", "fName"));
+    }
+}
+
 } // namespace testing
 } // namespace lbug

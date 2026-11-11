@@ -12,11 +12,10 @@ public:
 
     // Skip collecting node/rel properties if they are in WITH projection list.
     // See with_clause_projection_rewriter for more details.
-    void visitSingleQuerySkipNodeRel(const NormalizedSingleQuery& singleQuery);
+    void visitQueryPartSkipNodeRel(const NormalizedQueryPart& queryPart);
+    using BoundStatementVisitor::visitQueryPart;
 
 private:
-    void visitQueryPartSkipNodeRel(const NormalizedQueryPart& queryPart);
-
     void visitMatch(const BoundReadingClause& readingClause) override;
     void visitUnwind(const BoundReadingClause& readingClause) override;
     void visitLoadFrom(const BoundReadingClause& readingClause) override;

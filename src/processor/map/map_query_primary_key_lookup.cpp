@@ -22,7 +22,9 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapQueryPrimaryKeyLookup(
     auto outSchema = lookup.getSchema();
     auto storageManager = storage::StorageManager::Get(*clientContext);
     auto table = storageManager->getTable(lookup.getTableID())->ptrCast<storage::NodeTable>();
-    DASSERT(table->tryGetPrimaryKeyIndex() != nullptr);
+    // An internal-ID key resolves to the offset without the primary-key index.
+    DASSERT(lookup.getKey()->dataType.getLogicalTypeID() == LogicalTypeID::INTERNAL_ID ||
+            table->tryGetPrimaryKeyIndex() != nullptr);
 
     auto nodeIDPos = getDataPos(*lookup.getNodeID(), *outSchema);
     std::vector<DataPos> outVectorsPos;
