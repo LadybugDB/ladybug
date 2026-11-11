@@ -419,6 +419,11 @@ void ShadowFile::clear(BufferManager& bm, bool syncParentDirectory) {
     shadowPagesMap.clear();
     shadowPageRecords.clear();
     hasShadowPages.store(false, std::memory_order_release);
+    // An earlier clear() already truncated, unlinked and closed the file, and no checkpoint has
+    // reopened it since: a checkpoint that fails before reaching this file rolls back over it.
+    if (shadowingFH->getFileInfo() == nullptr) {
+        return;
+    }
     shadowingFH->resetToZeroPagesAndPageCapacity();
     shadowingFH->resetFileInfo();
     vfs->removeFileIfExists(shadowFilePath);
