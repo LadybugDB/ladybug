@@ -1,0 +1,109 @@
+name: Smoke Test Extensions
+
+# Installs and loads extensions with every Ladybug release that downloads them,
+# on every platform the extensions are built for. Called before a release deploy
+# with the line being built, or dispatched to check what a repository serves now.
+
+on:
+  workflow_call:
+    inputs:
+      line:
+        description: "releases/ directory the run deploys, e.g. v0.22.0"
+        type: string
+        required: true
+
+  workflow_dispatch:
+    inputs:
+      repo:
+        description: "Extension repository URL"
+        type: string
+        default: "https://extension.ladybugdb.com/"
+      lines:
+        description: "Space-separated lines to test, e.g. v0.21.0"
+        type: string
+        required: true
+      extensions:
+        description: "Space-separated extensions to test (default: all)"
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  smoke-test:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {os: ubuntu-22.04, plat: linux_amd64, artifact: linux-x86_64}
+          - {os: ubuntu-24.04-arm, plat: linux_arm64, artifact: linux-aarch64}
+          - {os: macos-latest, plat: osx_arm64, artifact: osx-arm64}
+          - {os: macos-15-intel, plat: osx_amd64, artifact: osx-x86_64}
+          - {os: windows-2022, plat: win_amd64, artifact: win-x86_64}
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          sparse-checkout: scripts/extension
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        run: python -m pip install uv
+
+      # The Windows wheels leave OpenSSL 3 to the user, and Python finds an extension
+      # module's DLLs in the system directory, where this installer copies them.
+      - name: Install OpenSSL 3 (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $dst = "$env:RUNNER_TEMP\slp_openssl.exe"
+          # Retries connection failures too, which -MaximumRetryCount does not.
+          for ($i = 1; $i -le 5; $i++) {
+            try {
+              Invoke-WebRequest -Uri "https://slproweb.com/download/Win64OpenSSL_Light-3_5_9.exe" -OutFile $dst
+              break
+            } catch {
+              if ($i -eq 5) { throw }
+              Start-Sleep -Seconds 10
+            }
+          }
+          Start-Process -FilePath $dst -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART" -Wait
+          if (-not (Test-Path "$env:SystemRoot\System32\libssl-3-x64.dll")) {
+            Write-Error "OpenSSL DLLs were not copied to System32"
+            exit 1
+          }
+
+      - name: Download this platform's new build
+        if: ${{ inputs.line }}
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: lbug-extensions-${{ matrix.artifact }}
+          path: new/${{ inputs.line }}/${{ matrix.plat }}
+
+      # A deploy fails when an extension loads with what the CDN serves now and not with
+      # the new build, when the new build lacks an extension the CDN serves, or when the
+      # CDN cannot be reached.
+      - name: Smoke test
+        env:
+          LINE: ${{ inputs.line }}
+          REPO: ${{ inputs.repo }}
+          LINES: ${{ inputs.lines }}
+          EXTENSIONS: ${{ inputs.extensions }}
+        run: |
+          if [ -n "$LINE" ]; then
+            python scripts/extension/smoke_test.py --line "$LINE" --repo new \
+              --baseline https://extension.ladybugdb.com/
+          else
+            # Word splitting, with globbing off, turns the space-separated inputs into argument lists.
+            set -f
+            # shellcheck disable=SC2086
+            python scripts/extension/smoke_test.py --line $LINES --repo "$REPO" --extension $EXTENSIONS
+          fi
