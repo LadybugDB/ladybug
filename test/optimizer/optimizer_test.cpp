@@ -685,6 +685,47 @@ TEST_F(OptimizerTest, LookupJoinCountsFlatOuterRows) {
     EXPECT_EQ(lookup->getCardinality(), 10u * 20);
 }
 
+static const planner::LogicalOperator* findLookupJoin(const planner::LogicalOperator* op) {
+    if (op->getOperatorType() == planner::LogicalOperatorType::QUERY_PRIMARY_KEY_LOOKUP) {
+        return op;
+    }
+    for (auto i = 0u; i < op->getNumChildren(); ++i) {
+        if (auto* lookup = findLookupJoin(op->getChild(i).get())) {
+            return lookup;
+        }
+    }
+    return nullptr;
+}
+
+// IC7's shape: one lkc_src node reaches 100 lkc_mid nodes, each with 20 edges to lkc_target. The
+// lookup on t probes once per mid and target, 2,000 flat rows, over the cap; the last hop alone
+// gives 20, and a scan of lkc_target reads 5,000 rows.
+TEST_F(OptimizerTest, LookupJoinCountsEarlierHopFanOut) {
+    if (common::DEFAULT_EXTEND_DIRECTION != common::ExtendDirection::BOTH) {
+        GTEST_SKIP();
+    }
+    constexpr auto cap = common::PlannerKnobs::LOOKUP_JOIN_MAX_OUTER_CARDINALITY;
+    static_assert(20 <= cap && 100 * 20 > cap && 100 * 20 < 5000);
+    for (auto query : {"CREATE NODE TABLE lkc_src(id INT64, PRIMARY KEY(id));",
+             "CREATE NODE TABLE lkc_mid(id INT64, PRIMARY KEY(id));",
+             "CREATE NODE TABLE lkc_target(id INT64, name STRING, PRIMARY KEY(id));",
+             "CREATE REL TABLE lkc_to_mid(FROM lkc_src TO lkc_mid);",
+             "CREATE REL TABLE lkc_to_target(FROM lkc_mid TO lkc_target);",
+             "CREATE (:lkc_src {id: 0});", "UNWIND range(0, 99) AS i CREATE (:lkc_mid {id: i});",
+             "UNWIND range(0, 4999) AS i CREATE (:lkc_target {id: i, name: CAST(i AS STRING)});",
+             "MATCH (s:lkc_src), (m:lkc_mid) CREATE (s)-[:lkc_to_mid]->(m);",
+             "MATCH (m:lkc_mid), (t:lkc_target) WHERE t.id < 2000 AND t.id % 100 = m.id "
+             "CREATE (m)-[:lkc_to_target]->(t);"}) {
+        auto result = conn->query(query);
+        ASSERT_TRUE(result->isSuccess()) << query << ": " << result->getErrorMessage();
+    }
+    auto plan = getRoot("MATCH (s:lkc_src {id: 0})-[:lkc_to_mid]->(m:lkc_mid)-[:lkc_to_target]->"
+                        "(t:lkc_target) RETURN t.name;");
+    EXPECT_EQ(findLookupJoin(plan->getLastOperator().get()), nullptr);
+    EXPECT_TRUE(
+        hasOperatorType(plan->getLastOperator().get(), planner::LogicalOperatorType::HASH_JOIN));
+}
+
 TEST_F(OptimizerTest, PlanUndirectedInnerJoin) {
     if (common::DEFAULT_EXTEND_DIRECTION != common::ExtendDirection::BOTH) {
         GTEST_SKIP();
