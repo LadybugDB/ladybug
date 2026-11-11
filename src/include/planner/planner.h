@@ -23,6 +23,7 @@ struct BoundDeleteInfo;
 struct BoundJoinHintNode;
 class NormalizedSingleQuery;
 class NormalizedQueryPart;
+struct LatePropertyFetch;
 class BoundReadingClause;
 class BoundUpdatingClause;
 class BoundProjectionBody;
@@ -155,6 +156,7 @@ public:
     LogicalPlan planQuery(const binder::BoundStatement& boundStatement);
     LogicalPlan planSingleQuery(const binder::NormalizedSingleQuery& singleQuery);
     void planQueryPart(const binder::NormalizedQueryPart& queryPart, LogicalPlan& prevPlan);
+    void planLatePropertyFetch(const binder::LatePropertyFetch& fetch, LogicalPlan& plan);
 
     // Plan read.
     void planReadingClause(const binder::BoundReadingClause& readingClause, LogicalPlan& plan);

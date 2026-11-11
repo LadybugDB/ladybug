@@ -25,15 +25,6 @@ expression_vector PropertyCollector::getProperties() const {
     return result;
 }
 
-void PropertyCollector::visitSingleQuerySkipNodeRel(const NormalizedSingleQuery& singleQuery) {
-    DASSERT(singleQuery.getNumQueryParts() != 0);
-    auto numQueryParts = singleQuery.getNumQueryParts();
-    for (auto i = 0u; i < numQueryParts - 1; ++i) {
-        visitQueryPartSkipNodeRel(*singleQuery.getQueryPart(i));
-    }
-    visitQueryPart(*singleQuery.getQueryPart(numQueryParts - 1));
-}
-
 void PropertyCollector::visitQueryPartSkipNodeRel(const NormalizedQueryPart& queryPart) {
     for (auto i = 0u; i < queryPart.getNumReadingClause(); ++i) {
         visitReadingClause(*queryPart.getReadingClause(i));

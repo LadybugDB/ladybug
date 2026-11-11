@@ -43,6 +43,12 @@ public:
 
     Table* getTable(common::table_id_t tableID);
     bool containsTable(common::table_id_t tableID) const;
+    // The node table behind an entry of the active catalog, or nullptr. Table IDs repeat across
+    // attached databases, and partition children, Icebug-disk, Arrow and foreign tables keep other
+    // storage behind their entries, so only an entry whose data the active storage manager keeps
+    // in its own node groups qualifies. Needs an active transaction.
+    static NodeTable* tryGetNativeNodeTable(const main::ClientContext& context,
+        const catalog::TableCatalogEntry& entry);
 
     static void recover(main::ClientContext& clientContext, bool throwOnWalReplayFailure,
         bool enableChecksums);
