@@ -18,6 +18,7 @@ namespace binder {
 
 class Binder;
 struct CaseAlternative;
+class RelExpression;
 
 struct ExpressionBinderConfig {
     // If a property is not in projection list but required in order by after aggregation,
@@ -110,6 +111,9 @@ public:
     std::shared_ptr<Expression> bindLiteralExpression(
         const parser::ParsedExpression& parsedExpression) const;
     std::shared_ptr<Expression> createLiteralExpression(const common::Value& value) const;
+    // Whether a pattern of the current query part bound the recursive rel, so that its
+    // properties, such as its length, can be read.
+    bool isRecursiveRelBound(const RelExpression& rel) const;
     std::shared_ptr<Expression> createLiteralExpression(const std::string& strVal) const;
     std::shared_ptr<Expression> createNullLiteralExpression() const;
     std::shared_ptr<Expression> createNullLiteralExpression(const common::Value& value) const;

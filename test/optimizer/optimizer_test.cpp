@@ -18,6 +18,7 @@
 #include "planner/join_order/cost_model.h"
 #include "planner/operator/logical_filter.h"
 #include "planner/operator/logical_intersect.h"
+#include "planner/operator/logical_path_property_probe.h"
 #include "planner/operator/logical_plan_util.h"
 #include "planner/operator/scan/logical_count_rel_table.h"
 #include "planner/operator/scan/logical_dummy_scan.h"
@@ -683,6 +684,32 @@ TEST_F(OptimizerTest, LookupJoinCountsFlatOuterRows) {
     ASSERT_NE(lookup, nullptr);
     // The lookup reports its flat input rows, not the 10 factorized ones.
     EXPECT_EQ(lookup->getCardinality(), 10u * 20);
+}
+
+static planner::RecursiveJoinType getPathTracking(const planner::LogicalOperator* op) {
+    if (op->getOperatorType() == planner::LogicalOperatorType::PATH_PROPERTY_PROBE) {
+        return op->constCast<planner::LogicalPathPropertyProbe>().getJoinType();
+    }
+    for (auto i = 0u; i < op->getNumChildren(); ++i) {
+        if (op->getChild(i)->getOperatorType() != planner::LogicalOperatorType::EMPTY_RESULT) {
+            return getPathTracking(op->getChild(i).get());
+        }
+    }
+    throw std::runtime_error("no path property probe in the plan");
+}
+
+// In the query part that matches the path, LENGTH(p) reads the recursive rel's length, so the
+// search returns lengths without tracking paths. After WITH p the rel is out of scope, and the
+// length comes from the path value.
+TEST_F(OptimizerTest, PathLengthSkipsPathsWhereRelIsBound) {
+    auto plan = getRoot("MATCH p = (a:person)-[:knows* SHORTEST 1..3]-(b:person) WHERE a.ID = 0 "
+                        "RETURN b.ID, length(p);");
+    EXPECT_EQ(getPathTracking(plan->getLastOperator().get()),
+        planner::RecursiveJoinType::TRACK_NONE);
+    plan = getRoot("MATCH p = (a:person)-[:knows* SHORTEST 1..3]-(b:person) WHERE a.ID = 0 "
+                   "WITH p RETURN length(p);");
+    EXPECT_EQ(getPathTracking(plan->getLastOperator().get()),
+        planner::RecursiveJoinType::TRACK_PATH);
 }
 
 TEST_F(OptimizerTest, PlanUndirectedInnerJoin) {
