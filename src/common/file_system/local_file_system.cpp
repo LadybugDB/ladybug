@@ -335,9 +335,12 @@ static bool isAllowedDeletionPath(const std::string& path, const std::string& db
                stemWithoutExt.starts_with(dbFileName + ".");
     }
 
-    // Graph DB file: db.<graph>.lbdb
-    if (extension == dbExt) {
+    // Graph DB file: db.<graph>.lbdb, or db.<graph> when the main DB file has no extension.
+    if (!dbExt.empty() && extension == dbExt) {
         return fileName.starts_with(dbBase + ".") && fileName != dbFileName;
+    }
+    if (dbExt.empty() && p.stem().string() == dbBase && !extension.empty()) {
+        return true;
     }
 
     return false;
