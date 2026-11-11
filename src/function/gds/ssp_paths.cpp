@@ -1,5 +1,6 @@
 #include "binder/expression/node_expression.h"
 #include "function/gds/auxiliary_state/path_auxiliary_state.h"
+#include "function/gds/bidirectional_sp.h"
 #include "function/gds/gds_function_collection.h"
 #include "function/gds/rec_joins.h"
 // #include "main/client_context.h"
@@ -47,6 +48,17 @@ public:
 
     std::unique_ptr<EdgeCompute> copy() override {
         return std::make_unique<SSPPathsEdgeCompute>(frontierPair, bfsGraphManager, pathNodeMask);
+    }
+
+    bool runSinglePairSearch(ExecutionContext* context, graph::Graph* graph,
+        ExtendDirection direction, uint64_t maxLength, nodeID_t source,
+        NodeOffsetMaskMap* outputMask) override {
+        BidirectionalSPConfig config;
+        config.frontierPair = frontierPair;
+        config.pathNodeMask = pathNodeMask;
+        config.pathGraph = bfsGraphManager->getCurrentGraph();
+        return runBidirectionalSinglePair(context, graph, direction, maxLength, source, outputMask,
+            config);
     }
 
 private:

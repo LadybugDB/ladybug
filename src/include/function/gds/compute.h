@@ -1,10 +1,14 @@
 #pragma once
 
+#include "common/enums/extend_direction.h"
 #include "common/mask.h"
 #include "common/types/types.h"
 #include "graph/graph.h"
 
 namespace lbug {
+namespace processor {
+struct ExecutionContext;
+}
 namespace function {
 
 /**
@@ -29,6 +33,14 @@ public:
     virtual bool terminate(common::NodeOffsetMaskMap&) { return false; }
 
     virtual std::unique_ptr<EdgeCompute> copy() = 0;
+
+    // Runs the whole search for one source when the algorithm has a faster plan for it. Returns
+    // false, with nothing done, when the caller should run the iterative search instead.
+    virtual bool runSinglePairSearch(processor::ExecutionContext*, graph::Graph*,
+        common::ExtendDirection, uint64_t /*maxLength*/, common::nodeID_t /*source*/,
+        common::NodeOffsetMaskMap* /*outputMask*/) {
+        return false;
+    }
 };
 
 class VertexCompute {
