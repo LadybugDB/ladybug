@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <cmath>
 #include <utility>
 
 #include "catalog/catalog.h"
@@ -94,18 +95,24 @@ void Planner::appendNonRecursiveExtend(const std::shared_ptr<NodeExpression>& bo
         cardinalityEstimator.getExtensionRate(*rel, *boundNode, direction, transaction);
     const auto outputCardinality =
         cardinalityEstimator.multiply(extensionRate, plan.getLastOperator()->getCardinality());
-    // Keep the input (factorized) cardinality here: the nbr group stays nested with the
-    // multiplier below, and every downstream flat estimate is computed as
-    // card * multiplier (FLATTEN, getJoinKeysFlatCardinality). Propagating the flat
-    // fan-out output as the extend cardinality counts the rate twice (e.g. LSQB Q8's
-    // 16k tags x246 fan-out explodes to 976M phantom rows two hops down), which makes DP
-    // avoid small SIP-prunable seeds and regressed Q8 755ms -> 1.3s. Fan-out still
-    // reaches DP through the extend cost below, so chains with huge fan-out (Q12)
-    // keep comparing honestly.
+    // The extend flattens an unflat bound group in its schema without a FLATTEN operator, which
+    // would drop that group's multiplier, an earlier hop's fan-out. Carry it into the neighbour
+    // group's multiplier, so flat estimates (card * multipliers: FLATTEN, join keys, lookup
+    // probes) still count it. A flat bound group's multiplier is already counted, by a FLATTEN
+    // or an earlier extend from the same node.
+    //
+    // Store the input (factorized) cardinality: propagating the flat fan-out as the extend
+    // cardinality counts the rate twice (e.g. LSQB Q8's 16k tags x246 fan-out explodes to 976M
+    // phantom rows two hops down), which makes DP avoid small SIP-prunable seeds and regressed
+    // Q8 755ms -> 1.3s. This hop's fan-out still reaches DP through the extend cost below, so
+    // chains with huge fan-out (Q12) keep comparing honestly.
+    const auto boundGroup = plan.getSchema()->getGroup(boundNode->getInternalID());
+    const auto multiplier =
+        boundGroup->isFlat() ? extensionRate : extensionRate * boundGroup->getMultiplier();
     extend->setCardinality(plan.getLastOperator()->getCardinality());
     plan.setCost(CostModel::computeExtendCost(plan, outputCardinality));
     auto group = extend->getSchema()->getGroup(nbrNode->getInternalID());
-    group->setMultiplier(extensionRate);
+    group->setMultiplier(multiplier);
     plan.setLastOperator(std::move(extend));
     auto nbrNodeTableIDSet = getNbrNodeTableIDSet(*rel, direction);
     if (nbrNodeTableIDSet.size() > nbrNode->getNumEntries()) {
@@ -129,8 +136,9 @@ void Planner::appendPackedExtend(const std::shared_ptr<NodeExpression>& boundNod
         cardinalityEstimator.getExtensionRate(*rel, *boundNode, direction, transaction);
     const auto outputCardinality =
         cardinalityEstimator.multiply(extensionRate, plan.getLastOperator()->getCardinality());
-    // Same as appendNonRecursiveExtend above: keep the input (factorized) cardinality so
-    // downstream flat estimates (card * multiplier) do not count the fan-out twice.
+    // Keep the input (factorized) cardinality so downstream flat estimates (card * multiplier)
+    // do not count the fan-out twice. Unlike appendNonRecursiveExtend, the bound group stays
+    // unflat and keeps its multiplier, so it is not multiplied in here.
     extend->setCardinality(plan.getLastOperator()->getCardinality());
     plan.setCost(CostModel::computeExtendCost(plan, outputCardinality));
     auto group = extend->getSchema()->getGroup(nbrNode->getInternalID());
