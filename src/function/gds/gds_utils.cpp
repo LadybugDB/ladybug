@@ -45,16 +45,9 @@ static void scheduleFrontierTask(ExecutionContext* context, const GraphRelInfo& 
         return;
     }
 
-    // GDSUtils::runFrontiersUntilConvergence is called from a GDSCall operator, which already
-    // runs inside a task on a thread Tm: a worker, or the calling thread for a one-thread task.
-    // So this function is executed by Tm. Because this function will monitor the task and wait
-    // for it to complete, running GDS algorithms effectively "loses" Tm. This can even lead to
-    // the query processor to halt, e.g., if there is a single worker thread in the system, and
-    // more generally decrease the number of worker threads by 1. Therefore, we instruct
-    // scheduleTaskAndWaitOrError to start a new thread, which takes over Tm's slot, by passing
-    // true for launchNewWorkerThread.
-    TaskScheduler::Get(*context->clientContext)
-        ->scheduleTaskAndWaitOrError(task, context, true /* launchNewWorkerThread */);
+    // GDS runs inside a task, so this thread holds a scheduler slot and works on the task it
+    // waits for rather than starting a thread to take its place.
+    TaskScheduler::Get(*context->clientContext)->scheduleTaskAndWaitOrError(task, context);
 }
 
 static void runOneIteration(ExecutionContext* context, Graph* graph,
@@ -132,8 +125,7 @@ static void runVertexComputeInternal(const TableCatalogEntry* currentEntry,
         currentEntry->getTableID());
     auto sharedState = task->getSharedState();
     sharedState->morselDispatcher.init(maxOffset);
-    TaskScheduler::Get(*context->clientContext)
-        ->scheduleTaskAndWaitOrError(task, context, true /* launchNewWorkerThread */);
+    TaskScheduler::Get(*context->clientContext)->scheduleTaskAndWaitOrError(task, context);
 }
 
 void GDSUtils::runVertexCompute(ExecutionContext* context, GDSDensityState densityState,
