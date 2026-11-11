@@ -1,7 +1,9 @@
 #include <algorithm>
 #include <atomic>
 #include <fstream>
+#include <map>
 #include <memory>
+#include <set>
 #include <thread>
 #include <vector>
 
@@ -662,8 +664,7 @@ static bool cachedPlanExists(Connection* conn, const PreparedStatement& ps);
 // through the cached-physical-plan fast path segfaulted in FactorizedTableSchema::copy.
 // Root cause: HashTableQueue::mergeInto() consumes a queue (nulling its headBlock), and
 // HashAggregateSharedState::resetForReuse() rebuilt the per-function distinct queues via
-// distinctQueue->copy(), dereferencing the nulled headBlock. The queues are now rebuilt
-// from schemas saved at construction time.
+// distinctQueue->copy(), dereferencing the nulled headBlock.
 TEST_F(ApiTest, RepeatedDistinctAggregateCachedPlanExecution906) {
     // LDBC query 11 shape against the tinysnb graph loaded by the fixture: traversal join,
     // DISTINCT hash aggregate grouped by key, ORDER BY plus LIMIT.
@@ -688,6 +689,109 @@ TEST_F(ApiTest, RepeatedDistinctAggregateCachedPlanExecution906) {
         }
     }
     ASSERT_TRUE(cachedPlanExists(conn.get(), *prepared));
+}
+
+// Aggregates have one partition per configured thread, here 8. Partitions other than the first get
+// a hash table only when they receive tuples, and a cached plan drops those tables before it runs
+// again. The groups change between executions, so partitions go from full to empty and back. Each
+// group also runs alone: whichever partition it hashes to, readers pass partitions without a table
+// on the way to it.
+TEST_F(ApiTest, RepeatedAggregateCachedPlanWithChangingGroupCount) {
+    conn->setMaxNumThreadForExec(8);
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE T(id INT64, g INT64, v INT64, PRIMARY KEY(id))")
+                    ->isSuccess());
+    // Several morsels, so that more than one thread appends to the same partition queues.
+    ASSERT_TRUE(conn->query("UNWIND range(0, 9999) AS i CREATE (:T {id: i, g: i % 100, v: i % 7})")
+                    ->isSuccess());
+    auto groupBy = conn->prepare("MATCH (t:T) WHERE t.id >= $lo AND t.id < $hi "
+                                 "RETURN t.g, count(*), count(DISTINCT t.v) ORDER BY t.g");
+    ASSERT_TRUE(groupBy->isSuccess()) << groupBy->getErrorMessage();
+    auto distinct =
+        conn->prepare("MATCH (t:T) WHERE t.id >= $lo AND t.id < $hi RETURN count(DISTINCT t.g)");
+    ASSERT_TRUE(distinct->isSuccess()) << distinct->getErrorMessage();
+    auto distinctLimit =
+        conn->prepare("MATCH (t:T) WHERE t.id >= $lo AND t.id < $hi RETURN DISTINCT t.g LIMIT 5");
+    ASSERT_TRUE(distinctLimit->isSuccess()) << distinctLimit->getErrorMessage();
+    std::vector<std::pair<int64_t, int64_t>> ranges = {{0, 10000}, {0, 0}, {0, 7}};
+    for (int64_t g = 0; g < 100; g++) {
+        ranges.emplace_back(g, g + 1);
+    }
+    ranges.emplace_back(0, 10000);
+    for (const auto& [lo, hi] : ranges) {
+        std::map<int64_t, std::pair<int64_t, std::set<int64_t>>> groups;
+        for (auto id = lo; id < hi; id++) {
+            auto& [count, values] = groups[id % 100];
+            count++;
+            values.insert(id % 7);
+        }
+        std::vector<std::string> groupByGroundTruth;
+        for (const auto& [g, group] : groups) {
+            groupByGroundTruth.push_back(std::to_string(g) + "|" + std::to_string(group.first) +
+                                         "|" + std::to_string(group.second.size()));
+        }
+        const auto lower = std::make_pair(std::string("lo"), lo);
+        const auto upper = std::make_pair(std::string("hi"), hi);
+        auto result = conn->execute(groupBy.get(), lower, upper);
+        ASSERT_TRUE(result->isSuccess()) << lo << ".." << hi << ": " << result->getErrorMessage();
+        ASSERT_EQ(groupByGroundTruth,
+            TestHelper::convertResultToString(*result, true /* checkOutputOrder */))
+            << lo << ".." << hi;
+        result = conn->execute(distinct.get(), lower, upper);
+        ASSERT_TRUE(result->isSuccess()) << lo << ".." << hi << ": " << result->getErrorMessage();
+        ASSERT_EQ(std::vector<std::string>{std::to_string(groups.size())},
+            TestHelper::convertResultToString(*result))
+            << lo << ".." << hi;
+        result = conn->execute(distinctLimit.get(), lower, upper);
+        ASSERT_TRUE(result->isSuccess()) << lo << ".." << hi << ": " << result->getErrorMessage();
+        const auto rows = TestHelper::convertResultToString(*result);
+        ASSERT_EQ(std::min<size_t>(groups.size(), 5), rows.size()) << lo << ".." << hi;
+        for (const auto& row : rows) {
+            ASSERT_TRUE(groups.contains(std::stoll(row))) << lo << ".." << hi << ": " << row;
+        }
+    }
+    ASSERT_TRUE(cachedPlanExists(conn.get(), *groupBy));
+    ASSERT_TRUE(cachedPlanExists(conn.get(), *distinct));
+    ASSERT_TRUE(cachedPlanExists(conn.get(), *distinctLimit));
+}
+
+// An execution that fails after the aggregate flushed tuples into its partition queues leaves them
+// there, and the next execution of the cached plan must drop them. With 100,000 keys, the
+// thread-local tables fill up and flush into the queues before the cast fails on the last row.
+TEST_F(ApiTest, RepeatedAggregateCachedPlanAfterFailedExecution) {
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE U(id INT64, PRIMARY KEY(id))")->isSuccess());
+    ASSERT_TRUE(conn->query("UNWIND range(0, 99999) AS i CREATE (:U {id: i})")->isSuccess());
+    // id + $z, except on the row whose id is $z, where the cast fails.
+    const std::string key = "t.id + $z + CAST(CASE WHEN t.id = $z THEN 'x' ELSE '0' END AS INT64)";
+    // One partition, then 8.
+    for (const uint64_t threads : {1u, 8u}) {
+        conn->setMaxNumThreadForExec(threads);
+        auto groupBy = conn->prepare(
+            "MATCH (t:U) WITH " + key + " AS k, count(*) AS c RETURN count(*), max(c)");
+        ASSERT_TRUE(groupBy->isSuccess()) << groupBy->getErrorMessage();
+        auto distinct = conn->prepare("MATCH (t:U) RETURN count(DISTINCT " + key + ")");
+        ASSERT_TRUE(distinct->isSuccess()) << distinct->getErrorMessage();
+        const std::vector<std::pair<PreparedStatement*, std::string>> cases = {
+            {groupBy.get(), "100000|1"}, {distinct.get(), "100000"}};
+        for (auto run = 0; run < 2; run++) {
+            for (const auto& [preparedStatement, groundTruth] : cases) {
+                auto result = conn->execute(preparedStatement,
+                    std::make_pair(std::string("z"), static_cast<int64_t>(99999)));
+                ASSERT_FALSE(result->isSuccess()) << threads << " threads, run " << run;
+                ASSERT_NE(result->getErrorMessage().find("Cast failed"), std::string::npos)
+                    << result->getErrorMessage();
+                // Keys are now id - 1, none of them equal to a key of the failed execution.
+                result = conn->execute(preparedStatement,
+                    std::make_pair(std::string("z"), static_cast<int64_t>(-1)));
+                ASSERT_TRUE(result->isSuccess())
+                    << threads << " threads, run " << run << ": " << result->getErrorMessage();
+                ASSERT_EQ(std::vector<std::string>{groundTruth},
+                    TestHelper::convertResultToString(*result))
+                    << threads << " threads, run " << run;
+            }
+        }
+        ASSERT_TRUE(cachedPlanExists(conn.get(), *groupBy));
+        ASSERT_TRUE(cachedPlanExists(conn.get(), *distinct));
+    }
 }
 
 // Regression test for issue #1030: re-running a cached parameterized rel scan after a
