@@ -636,6 +636,37 @@ TEST_F(ApiTest, ImportDatabaseWithOneThreadAndThreadsSetToTwo) {
     ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 3);
 }
 
+TEST_F(ApiTest, DenseRecursiveJoinWithOneThread) {
+    // The second hop's frontier of 3,000 nodes is dense, so its task goes through the scheduler.
+    // The thread that waits for it holds the only slot and has to run it: the caller, the pool's
+    // only worker under a timeout, and the caller again when the query may use two threads.
+    auto systemConfig = SystemConfig();
+    systemConfig.maxNumThreads = 1;
+    auto tempDir = TestHelper::getTempDir(getTestGroupAndName());
+    Database database(tempDir + "/one_thread", systemConfig);
+    Connection conn(&database);
+    ASSERT_TRUE(conn.query("CREATE NODE TABLE N(id INT64 PRIMARY KEY)")->isSuccess());
+    ASSERT_TRUE(conn.query("CREATE REL TABLE E(FROM N TO N)")->isSuccess());
+    ASSERT_TRUE(conn.query("UNWIND range(0, 3000) AS i CREATE (:N {id: i})")->isSuccess());
+    ASSERT_TRUE(
+        conn.query("MATCH (a:N {id: 0}), (b:N) WHERE b.id > 0 CREATE (a)-[:E]->(b)")->isSuccess());
+    ASSERT_TRUE(conn.query("MATCH (a:N), (b:N) WHERE a.id > 0 AND b.id = a.id + 1 "
+                           "CREATE (a)-[:E]->(b)")
+                    ->isSuccess());
+    const auto query = "MATCH (:N {id: 0})-[:E*1..2]->(b:N) RETURN count(*)";
+    auto expectCount = [&] {
+        auto result = conn.query(query);
+        ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+        ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 5999);
+    };
+    expectCount();
+    conn.setQueryTimeOut(600000);
+    expectCount();
+    conn.setQueryTimeOut(0);
+    ASSERT_TRUE(conn.query("CALL threads=2")->isSuccess());
+    expectCount();
+}
+
 TEST_F(ApiTest, CloseDatabaseBeforeQueryResultAndConnection) {
     auto systemConfig = SystemConfig();
     systemConfig.bufferPoolSize = 10 * 1024 * 1024; // 10MB
