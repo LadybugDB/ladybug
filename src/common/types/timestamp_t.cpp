@@ -398,7 +398,15 @@ timestamp_t Timestamp::trunc(DatePartSpecifier specifier, timestamp_t timestamp)
 
 int64_t Timestamp::getEpochNanoSeconds(const timestamp_t& timestamp) {
     int64_t result = 0;
-    function::Multiply::operation(timestamp.value, Interval::NANOS_PER_MICRO, result);
+    // The overflow-checked int64_t specialization of Multiply::operation is
+    // only selected when every argument is a non-const int64_t lvalue. With
+    // `timestamp` const-qualified, the primary (unchecked) template was
+    // selected instead and out-of-range timestamps silently wrapped (e.g.
+    // casting '9999-01-01' to TIMESTAMP_NS produced an instant in 1815).
+    // Copying to locals restores the intended OverflowException.
+    int64_t value = timestamp.value;
+    int64_t nanosPerMicro = Interval::NANOS_PER_MICRO;
+    function::Multiply::operation(value, nanosPerMicro, result);
     return result;
 }
 
