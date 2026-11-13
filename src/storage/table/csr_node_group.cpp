@@ -801,6 +801,11 @@ void CSRNodeGroup::rollbackInsert(row_idx_t startRow) {
 
 void CSRNodeGroup::appendChunkedCSRGroup(const Transaction* transaction,
     const std::vector<column_id_t>& columnIDs, InMemChunkedCSRNodeGroup& chunkedGroup) {
+    // COPY visits all bound-node partitions, including those with no new rels. Do not
+    // allocate an in-memory chunk or CSR index for an empty partition.
+    if (chunkedGroup.getNumRows() == 0) {
+        return;
+    }
     const auto& csrHeader = chunkedGroup.getCSRHeader();
     std::vector<const ColumnChunkData*> chunkedGroupForProperties(chunkedGroup.getNumColumns());
     for (auto i = 0u; i < chunkedGroup.getNumColumns(); i++) {
@@ -839,6 +844,11 @@ CSRIndex& CSRNodeGroup::getCSRIndexForAppend(const UniqLock& /*lock*/) {
 
 void CSRNodeGroup::updateCSRIndex(CSRIndex& index, offset_t boundNodeOffsetInGroup,
     row_idx_t startRow, length_t length) {
+    // A CSR header contains entries for nodes with no insertions too. Leave their
+    // row vectors empty instead of allocating a [startRow, 0] pair.
+    if (length == 0) {
+        return;
+    }
     auto& nodeCSRIndex = index.indices[boundNodeOffsetInGroup];
     const auto isEmptyCSR = nodeCSRIndex.rowIndices.empty();
     const auto appendToEndOfCSR =
@@ -966,8 +976,8 @@ void CSRNodeGroup::checkpoint(MemoryManager&, NodeGroupCheckpointState& state) {
         // the checkpoint's own deferral scope, exactly like a scan releasing its pin.
         pruneRetainedSnapshotsNoLock(csrState.openStartTSs);
     }
-    // The in-mem-only path resets nothing when there are no rels; anything captured there
-    // would alias live objects the checkpoint keeps mutating, so only prune there.
+    // With no in-memory rels and no persistent group there are no tuples to retain;
+    // the in-mem-only checkpoint only clears empty bookkeeping, so only prune there.
     auto numInMemRels = 0u;
     if (retentionPath && persistentChunkGroup == nullptr) {
         for (const auto& chunkedGroup : chunkedGroups.getAllGroups(lock)) {
@@ -1150,6 +1160,11 @@ void CSRNodeGroup::checkpointInMemAndOnDisk(const UniqLock& lock, NodeGroupCheck
             // chunked group.
             persistentChunkGroup = createNewPersistentChunkGroup(
                 persistentChunkGroup->cast<ChunkedCSRNodeGroup>(), csrState);
+        }
+        // Empty appends from an earlier COPY may have left an index and empty chunks.
+        // Do not discard physical rows that may still be needed by versions/readers.
+        if (getNumRows() == 0) {
+            finalizeCheckpoint(lock);
         }
         return;
     }
@@ -1648,6 +1663,8 @@ void CSRNodeGroup::checkpointInMemOnly(const UniqLock& lock, NodeGroupCheckpoint
         numRels += chunkedGroup->getNumRows();
     }
     if (numRels == 0) {
+        // No tuples are left to publish; release any empty in-memory bookkeeping.
+        finalizeCheckpoint(lock);
         return;
     }
     // Construct in-mem csr header chunks.

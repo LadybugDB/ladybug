@@ -311,5 +311,118 @@ TEST_F(RelDegreeTest, SequentialIndexEntryWithoutRangeHasNoRels) {
     run("COMMIT;");
 }
 
+TEST_F(RelDegreeTest, CopyDoesNotRetainIndexesForEmptyPartitions) {
+    run("CREATE NODE TABLE N(id INT64, PRIMARY KEY(id));");
+    run("CREATE REL TABLE R(FROM N TO N);");
+    run("COPY N FROM (UNWIND range(0, 262143) AS i RETURN i);");
+    run("COPY R FROM (UNWIND [0, 131072] AS i RETURN i, i);");
+
+    // The second partition already has persistent rels, but this COPY has no rows for it.
+    // Both directions must leave it without a CSR index after checkpoint.
+    run("COPY R FROM (RETURN 0, 0);");
+    run("BEGIN TRANSACTION READ ONLY;");
+    for (auto direction : relEntry().getRelDataDirections()) {
+        auto* data = relTable().getDirectedTableData(direction);
+        for (common::node_group_idx_t i = 0; i < 2; i++) {
+            auto* group = data->getNodeGroup(i);
+            ASSERT_NE(group, nullptr);
+            EXPECT_EQ(group->cast<storage::CSRNodeGroup>().getCSRIndex(), nullptr);
+        }
+    }
+    run("COMMIT;");
+    // Empty partitions must not add undo records that refer to absent in-memory chunks.
+    // Repeated rollback also exercises reused COPY plans and both direction cursors.
+    for (auto i = 0u; i < 5; i++) {
+        run("BEGIN TRANSACTION;");
+        run("COPY R FROM (RETURN 131072, 0);");
+        run("ROLLBACK;");
+    }
+    auto result = conn->query("MATCH ()-[:R]->() RETURN count(*);");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    EXPECT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 3);
+    checkDegrees();
+}
+
+TEST_F(RelDegreeTest, SparseCopyLeavesUntouchedNodeListsUnallocated) {
+    run("CALL auto_checkpoint=false;");
+    run("CREATE NODE TABLE N(id INT64, PRIMARY KEY(id));");
+    run("CREATE REL TABLE R(FROM N TO N);");
+    run("UNWIND range(0, 9) AS i CREATE (:N {id: i});");
+    run("MATCH (a:N {id: 0}), (b:N {id: 0}) CREATE (a)-[:R]->(b);");
+    run("CHECKPOINT;");
+    run("COPY R FROM (RETURN 1, 1);");
+
+    run("BEGIN TRANSACTION READ ONLY;");
+    for (auto direction : relEntry().getRelDataDirections()) {
+        const auto* index = relTable()
+                                .getDirectedTableData(direction)
+                                ->getNodeGroup(0)
+                                ->cast<storage::CSRNodeGroup>()
+                                .getCSRIndex();
+        ASSERT_NE(index, nullptr);
+        EXPECT_EQ(index->getNumRows(1), 1u);
+        for (offset_t i = 0; i < common::StorageConfig::NODE_GROUP_SIZE; i++) {
+            if (i != 1) {
+                EXPECT_EQ(index->indices[i].rowIndices.capacity(), 0u) << i;
+            }
+        }
+    }
+    run("COMMIT;");
+    run("CHECKPOINT;");
+    checkDegrees();
+}
+
+TEST_F(RelDegreeTest, NoChangeCheckpointDropsLegacyEmptyIndexesButPreservesPins) {
+    run("CALL auto_checkpoint=false;");
+    run("CREATE NODE TABLE N(id INT64, PRIMARY KEY(id));");
+    run("CREATE REL TABLE R(FROM N TO N);");
+    run("UNWIND range(0, 9) AS i CREATE (:N {id: i});");
+    run("COPY R FROM (RETURN 0, 0);");
+    run("CHECKPOINT;");
+    run("MATCH (a:N {id: 1}), (b:N {id: 1}) CREATE (a)-[:R]->(b);");
+
+    // Recreate the old zero-row state without going through the now-guarded COPY append:
+    // discard the staged rows through the base class, leaving an allocated but empty index.
+    std::vector<std::shared_ptr<storage::CSRIndex>> pins;
+    run("BEGIN TRANSACTION READ ONLY;");
+    const auto* txn = transaction::Transaction::Get(*getClientContext(*conn));
+    for (auto direction : relEntry().getRelDataDirections()) {
+        auto& group = relTable()
+                          .getDirectedTableData(direction)
+                          ->getNodeGroup(0)
+                          ->cast<storage::CSRNodeGroup>();
+        auto pin = group.captureScanPin(txn).index;
+        ASSERT_NE(pin, nullptr);
+        for (auto& entry : pin->indices) {
+            entry.clear();
+        }
+        group.storage::NodeGroup::rollbackInsert(0);
+        ASSERT_NE(group.getCSRIndex(), nullptr);
+        pins.push_back(std::move(pin));
+    }
+    run("COMMIT;");
+    run("CHECKPOINT;");
+
+    run("BEGIN TRANSACTION READ ONLY;");
+    for (auto direction : relEntry().getRelDataDirections()) {
+        auto& group = relTable()
+                          .getDirectedTableData(direction)
+                          ->getNodeGroup(0)
+                          ->cast<storage::CSRNodeGroup>();
+        EXPECT_EQ(group.getCSRIndex(), nullptr);
+        EXPECT_NE(group.getPersistentChunkedGroup(), nullptr);
+    }
+    // Removing the group's reference must not invalidate another holder's object.
+    for (const auto& pin : pins) {
+        EXPECT_EQ(pin->getNumRows(1), 0u);
+    }
+    run("COMMIT;");
+    auto result = conn->query("MATCH (a:N {id: 0})-[:R]->(b:N) RETURN b.id;");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_TRUE(result->hasNext());
+    EXPECT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 0);
+    EXPECT_FALSE(result->hasNext());
+}
+
 } // namespace testing
 } // namespace lbug
