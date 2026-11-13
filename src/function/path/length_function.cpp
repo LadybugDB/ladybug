@@ -60,7 +60,8 @@ static std::shared_ptr<Expression> rewriteFunc(const RewriteFunctionBindInput& i
             return nullIfUnmatched(input, std::move(numRelsExpression));
         }
         // In the query part that matched the path, each recursive rel carries its length, and
-        // reading it lets the search skip tracking whole paths.
+        // reading it lets the search skip tracking whole paths. The rels stay bound until a
+        // projection clears the scope (BinderScope::clear()).
         if (std::ranges::all_of(recursiveRels,
                 [&](const RelExpression* rel) { return binder->isRecursiveRelBound(*rel); })) {
             auto result = std::move(numRelsExpression);
@@ -79,7 +80,7 @@ static std::shared_ptr<Expression> rewriteFunc(const RewriteFunctionBindInput& i
                binder->isRecursiveRelBound(param->constCast<RelExpression>())) {
         return param->constCast<RelExpression>().getLengthExpression();
     }
-    // After WITH or UNWIND the rels are no longer in scope, but LENGTH(p) == SIZE(RELS(p)): the
+    // After a projection (WITH) the rels are no longer bound, but LENGTH(p) == SIZE(RELS(p)): the
     // rels list lives inside the path/recursive-rel value itself, so this depends only on the
     // path variable and survives `WITH p`, `WITH *`, aliasing (`WITH p AS q`), and
     // `UNWIND collect(p) AS p`.
