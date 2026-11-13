@@ -136,6 +136,11 @@ static void appendNewChunkedGroup(MemoryManager& mm, transaction::Transaction* t
     const std::vector<column_id_t>& columnIDs, InMemChunkedCSRNodeGroup& chunkedGroup,
     RelTable& relTable, CSRNodeGroup& nodeGroup, RelDataDirection direction,
     PageAllocator& pageAllocator) {
+    // Empty COPY partitions must not publish insert-version/undo records or create
+    // persistent/in-memory groups. There are no tuples for commit or rollback to visit.
+    if (chunkedGroup.getNumRows() == 0) {
+        return;
+    }
     const bool isNewNodeGroup = nodeGroup.isEmpty();
     const auto* clientContext = transaction->getClientContext();
     const bool inManualTransaction =
