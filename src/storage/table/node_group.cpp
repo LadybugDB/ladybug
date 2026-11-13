@@ -939,6 +939,22 @@ bool NodeGroup::isVisible(const Transaction* transaction, row_idx_t rowIdxInGrou
            chunkedGroup->isInserted(transaction, rowIdxInChunkedGroup);
 }
 
+row_idx_t NodeGroup::getNumLeadingVisibleRows(const Transaction* transaction) const {
+    const auto lock = chunkedGroups.lock();
+    row_idx_t numVisible = 0;
+    for (const auto& chunkedGroup : chunkedGroups.getAllGroups(lock)) {
+        if (chunkedGroup->getStartRowIdx() != numVisible) {
+            break;
+        }
+        const auto numLeading = chunkedGroup->getNumLeadingVisibleRows(transaction);
+        numVisible += numLeading;
+        if (numLeading < chunkedGroup->getNumRows()) {
+            break;
+        }
+    }
+    return numVisible;
+}
+
 bool NodeGroup::isVisibleNoLock(const Transaction* transaction, row_idx_t rowIdxInGroup) const {
     const auto* chunkedGroup = findChunkedGroupFromRowIdxNoLock(rowIdxInGroup);
     if (!chunkedGroup) {
