@@ -241,17 +241,22 @@ void NodeGroupCollection::reclaimStorage(PageAllocator& pageAllocator) const {
     }
 }
 
-void NodeGroupCollection::rollbackInsert(row_idx_t numRows_, bool updateNumRows) {
+bool NodeGroupCollection::rollbackInsert(node_group_idx_t nodeGroupIdx, row_idx_t startRow,
+    row_idx_t numRows) {
     const auto lock = nodeGroups.lock();
-
-    // remove any empty trailing node groups after the rollback
-    const auto numGroupsToRemove = nodeGroups.getNumEmptyTrailingGroups(lock);
-    nodeGroups.removeTrailingGroups(lock, numGroupsToRemove);
-
-    if (updateNumRows) {
-        DASSERT(numRows_ <= numTotalRows);
-        numTotalRows -= numRows_;
+    // Interior slots must stay in place: later rows keep their original offsets.
+    if (nodeGroupIdx + 1 != nodeGroups.getNumGroups(lock)) {
+        return false;
     }
+    auto* nodeGroup = nodeGroups.getGroup(lock, nodeGroupIdx);
+    const auto numRowsBefore = nodeGroup->getNumRows();
+    if (startRow > numRowsBefore || startRow + numRows < numRowsBefore) {
+        return false;
+    }
+    nodeGroup->rollbackInsert(startRow);
+    numTotalRows -= numRowsBefore - startRow;
+    nodeGroups.removeTrailingGroups(lock, nodeGroups.getNumEmptyTrailingGroups(lock));
+    return true;
 }
 
 void NodeGroupCollection::pushInsertInfo(const Transaction* transaction, const NodeGroup* nodeGroup,

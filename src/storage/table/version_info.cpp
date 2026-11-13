@@ -423,7 +423,6 @@ void VectorVersionInfo::rollbackInsertions(row_idx_t startRowInVector, row_idx_t
     }
     if (!insertedVersions) {
         insertionStatus = InsertionStatus::NO_INSERTED;
-        deletionStatus = DeletionStatus::NO_DELETED;
     }
 }
 
@@ -945,6 +944,12 @@ void VersionInfo::rollbackInsert(row_idx_t startRow, row_idx_t numRows) {
             vectorIdx == endVectorIdx ? endRowIdxInVector : DEFAULT_VECTOR_CAPACITY - 1;
         auto& vectorVersionInfo = getOrCreateVersionInfo(vectorIdx);
         vectorVersionInfo.rollbackInsertions(startRowIdx, endRowIdx - startRowIdx + 1);
+        // Other writers can own later rows, so aborted slots may survive physically.
+        // Real commit timestamps start above zero. A delete at zero hides these slots from
+        // every snapshot and survives checkpoint even after insertion versions are discarded.
+        for (auto row = startRowIdx; row <= endRowIdx; ++row) {
+            vectorVersionInfo.stampDeleteCommitTS(row, 0);
+        }
     }
 }
 

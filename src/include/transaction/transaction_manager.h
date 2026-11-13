@@ -72,6 +72,13 @@ public:
 
     static TransactionManager* Get(const main::ClientContext& context);
 
+    // Rollback holds the public-function mutex through undo replay. BEGIN registers a writer
+    // under the same mutex. The count includes the rolling-back writer until replay finishes.
+    // A count of one does not prove tail ownership: another writer may already have committed.
+    bool hasMultipleActiveWriteTransactions() const {
+        return activeWriteTransactionCount.load(std::memory_order_acquire) > 1;
+    }
+
     // A transaction stages its inserts in its LocalStorage, with the columns of its catalog
     // snapshot, and appends them to the table's storage at commit. Another transaction's ADD
     // COLUMN, DROP COLUMN, or DROP TABLE therefore conflicts with them, and the second of the

@@ -124,7 +124,9 @@ public:
         return nodeGroups->getNodeGroupNoLock(nodeGroupIdx);
     }
 
-    void rollbackGroupCollectionInsert(common::row_idx_t numRows_, bool isPersistent);
+    void rollbackGroupCollectionInsert(main::ClientContext* context,
+        common::node_group_idx_t nodeGroupIdx, common::row_idx_t startRow,
+        common::row_idx_t numRows, bool isPersistent);
 
     common::RelDataDirection getDirection() const { return direction; }
 
