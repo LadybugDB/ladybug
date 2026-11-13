@@ -5,6 +5,7 @@
 #include "common/string_utils.h"
 #include "common/types/cast_helpers.h"
 #include "common/types/timestamp_t.h"
+#include "function/arithmetic/multiply.h"
 #include "re2.h"
 #include <format>
 
