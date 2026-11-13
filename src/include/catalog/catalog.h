@@ -251,6 +251,8 @@ public:
     void resetVersion() { resetVersion(version.load(std::memory_order_relaxed)); }
     void resetVersion(uint64_t checkpointedVersion) {
         lastCheckpointVersion = checkpointedVersion;
+        // Compaction renumbers slots during checkpoint, after the catalog-version snapshot.
+        // Post-checkpoint cleanup still holds the write gate and records the IDs just persisted.
         lastCheckpointColumnIDsVersion = columnIDsVersion.load(std::memory_order_relaxed);
     }
     // Bumped when a checkpoint renumbers column IDs: no definition changes, so version stays.

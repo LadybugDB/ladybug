@@ -368,6 +368,37 @@ TEST_F(EmptyDBTransactionTest, ReopenDroppedColumnsFromPinnedCheckpoint) {
     }
 }
 
+TEST_F(EmptyDBTransactionTest, ReopenRetypedColumnFromPinnedCheckpoint) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CALL auto_checkpoint=false")->isSuccess());
+    ASSERT_TRUE(conn->query("CALL force_checkpoint_on_close=false")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE T(id INT64 PRIMARY KEY, c INT64)")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:T {id: 1, c: 41})")->isSuccess());
+    const auto query = "MATCH (t:T) RETURN t.c ORDER BY t.id";
+    {
+        lbug::main::Connection reader{database.get()};
+        ASSERT_TRUE(reader.query("BEGIN TRANSACTION READ ONLY")->isSuccess());
+        ASSERT_TRUE(conn->query("ALTER TABLE T DROP c")->isSuccess());
+        ASSERT_TRUE(conn->query("ALTER TABLE T ADD c STRING DEFAULT 'new'")->isSuccess());
+        ASSERT_TRUE(conn->query("CREATE (:T {id: 2, c: 'written'})")->isSuccess());
+        ASSERT_TRUE(conn->query("CHECKPOINT")->isSuccess());
+        auto old = reader.query(query);
+        ASSERT_TRUE(old->isSuccess()) << old->getErrorMessage();
+        ASSERT_EQ(old->getNumTuples(), 1u);
+        EXPECT_EQ(old->getNext()->getValue(0)->getValue<int64_t>(), 41);
+        ASSERT_TRUE(reader.query("COMMIT")->isSuccess());
+    }
+    createDBAndConn();
+    auto result = conn->query(query);
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(result->getColumnDataTypes()[0].getLogicalTypeID(), LogicalTypeID::STRING);
+    ASSERT_EQ(result->getNumTuples(), 2u);
+    EXPECT_EQ(result->getNext()->getValue(0)->getValue<std::string>(), "new");
+    EXPECT_EQ(result->getNext()->getValue(0)->getValue<std::string>(), "written");
+}
+
 #ifndef __SINGLE_THREADED__
 static void insertNodes(uint64_t startID, uint64_t num, lbug::main::Database& database) {
     auto conn = std::make_unique<lbug::main::Connection>(&database);

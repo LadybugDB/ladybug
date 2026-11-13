@@ -803,7 +803,8 @@ bool RelTable::checkpoint(main::ClientContext*, TableCatalogEntry* tableEntry,
     if (effectiveEpoch <= lastCheckpointedEpoch) {
         return false;
     }
-    // Deleted columns are vacuumed and not checkpointed or serialized.
+    // Each CSR direction compacts its physical columns to this list. StorageManager must
+    // renumber the shared rel-group catalog IDs after all of its tables have checkpointed.
     std::vector<column_id_t> columnIDs;
     columnIDs.push_back(0);
     for (auto& property : tableEntry->getProperties()) {
