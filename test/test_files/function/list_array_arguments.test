@@ -26,3 +26,31 @@ Conversion exception: Unsupported casting LIST with incorrect list entry to ARRA
 -STATEMENT MATCH (a:A) RETURN a.arr;
 ---- 1
 [1,2,3]
+
+-CASE ConcatOnArrayReturnsList
+-LOG list_concat and its aliases make a result longer than either ARRAY argument, so it is a LIST
+-STATEMENT RETURN typeof(list_concat(array_value(1, 2, 3), array_value(4, 5, 6))), typeof(list_cat(array_value(1, 2, 3), array_value(4, 5, 6))), typeof(array_concat(array_value(1, 2, 3), array_value(4, 5, 6))), typeof(array_cat(array_value(1, 2, 3), array_value(4, 5, 6)));
+---- 1
+INT64[]|INT64[]|INT64[]|INT64[]
+-STATEMENT RETURN list_concat(array_value(1, 2, 3), array_value(4, 5, 6));
+---- 1
+[1,2,3,4,5,6]
+-LOG Functions that keep the length keep the ARRAY type
+-STATEMENT RETURN typeof(list_sort(array_value(3, 1, 2))), typeof(list_reverse(array_value(3, 1, 2)));
+---- 1
+INT64[3]|INT64[3]
+-STATEMENT CREATE NODE TABLE B(id INT64 PRIMARY KEY, arr INT64[3]);
+---- ok
+-STATEMENT CREATE (:B {id: 1, arr: [1, 2, 3]});
+---- ok
+-STATEMENT MATCH (b:B) SET b.arr = list_concat(b.arr, b.arr);
+---- error
+Conversion exception: Unsupported casting LIST with incorrect list entry to ARRAY. Expected: 3, Actual: 6.
+-STATEMENT MATCH (b:B) RETURN b.arr;
+---- 1
+[1,2,3]
+
+-CASE PrependErrorNamesListPrepend
+-STATEMENT RETURN list_prepend([1, 2], 'x');
+---- error
+Binder exception: Cannot bind LIST_PREPEND with parameter type INT64[] and STRING.
