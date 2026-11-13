@@ -288,9 +288,12 @@ void RecursiveExtend::executeInternal(ExecutionContext* context) {
             auto computeState = function->getComputeState(context, bindData, sharedState.get());
             auto sourceNodeID = nodeID_t{offset, tableID};
             computeState->initSource(sourceNodeID);
-            GDSUtils::runRecursiveJoinEdgeCompute(context, *computeState, graph,
-                bindData.extendDirection, bindData.upperBound, sharedState->getOutputNodeMaskMap(),
-                propertyNames);
+            auto outputMask = sharedState->getOutputNodeMaskMap();
+            if (!computeState->edgeCompute->runSinglePairSearch(context, graph,
+                    bindData.extendDirection, bindData.upperBound, sourceNodeID, outputMask)) {
+                GDSUtils::runRecursiveJoinEdgeCompute(context, *computeState, graph,
+                    bindData.extendDirection, bindData.upperBound, outputMask, propertyNames);
+            }
             auto writer = function->getOutputWriter(context, bindData, *computeState, sourceNodeID,
                 sharedState.get());
             auto vertexCompute = std::make_unique<RJVertexCompute>(
