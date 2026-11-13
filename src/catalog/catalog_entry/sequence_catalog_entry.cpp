@@ -68,6 +68,37 @@ void SequenceCatalogEntry::nextValNoLock() {
     sequenceData.usageCount++;
 }
 
+// Moves a non-cycling sequence `count` nextval calls ahead in O(1), so that replaying a large
+// setval doesn't take `count` steps. Returns false, changing nothing, when the sequence cycles or
+// the result would leave its bounds; the caller then steps with nextValNoLock, which reports it.
+bool SequenceCatalogEntry::tryAdvanceNoLock(uint64_t count) {
+    if (sequenceData.cycle || count == 0) {
+        return false;
+    }
+    const auto steps = sequenceData.usageCount > 0 ? count : count - 1;
+    const auto from = sequenceData.usageCount > 0 ? sequenceData.currVal : sequenceData.startValue;
+    if (from < sequenceData.minValue || from > sequenceData.maxValue) {
+        return false;
+    }
+    // Unsigned arithmetic is exact here: `from` and both bounds are int64 values.
+    const auto step = sequenceData.increment > 0 ?
+                          static_cast<uint64_t>(sequenceData.increment) :
+                          uint64_t{0} - static_cast<uint64_t>(sequenceData.increment);
+    const auto room =
+        sequenceData.increment > 0 ?
+            static_cast<uint64_t>(sequenceData.maxValue) - static_cast<uint64_t>(from) :
+            static_cast<uint64_t>(from) - static_cast<uint64_t>(sequenceData.minValue);
+    if (steps > room / step) {
+        return false;
+    }
+    const auto delta = steps * step;
+    sequenceData.currVal =
+        static_cast<int64_t>(sequenceData.increment > 0 ? static_cast<uint64_t>(from) + delta :
+                                                          static_cast<uint64_t>(from) - delta);
+    sequenceData.usageCount += count;
+    return true;
+}
+
 // referenced from DuckDB
 void SequenceCatalogEntry::nextKVal(transaction::Transaction* transaction, const uint64_t& count) {
     DASSERT(count > 0);
@@ -75,8 +106,10 @@ void SequenceCatalogEntry::nextKVal(transaction::Transaction* transaction, const
     {
         std::lock_guard lck(mtx);
         rollbackData = SequenceRollbackData{sequenceData.usageCount, sequenceData.currVal};
-        for (auto i = 0ul; i < count; i++) {
-            nextValNoLock();
+        if (!tryAdvanceNoLock(count)) {
+            for (auto i = 0ul; i < count; i++) {
+                nextValNoLock();
+            }
         }
     }
     transaction->pushSequenceChange(this, count, rollbackData);
@@ -95,6 +128,49 @@ void SequenceCatalogEntry::nextKVal(transaction::Transaction* transaction, const
         }
     }
     transaction->pushSequenceChange(this, count, rollbackData);
+}
+
+int64_t SequenceCatalogEntry::setVal(transaction::Transaction* transaction, int64_t value) {
+    SequenceRollbackData rollbackData{};
+    uint64_t count = 0;
+    {
+        std::lock_guard lck(mtx);
+        if (value < sequenceData.minValue || value > sequenceData.maxValue) {
+            throw CatalogException(
+                std::format("setval: value {} is out of bounds for sequence \"{}\" ({}..{})", value,
+                    name, sequenceData.minValue, sequenceData.maxValue));
+        }
+        // The sequence only moves forward, through values nextval would return, so the change is
+        // logged and replayed as that many nextval calls. A fresh sequence's first nextval
+        // returns its start value; later ones add the increment to the current value.
+        const auto usedBefore = sequenceData.usageCount > 0;
+        const auto from = usedBefore ? sequenceData.currVal : sequenceData.startValue;
+        const auto forward = sequenceData.increment > 0 ? value >= from : value <= from;
+        // Unsigned differences are exact here: both values lie within the int64 bounds.
+        const auto distance = sequenceData.increment > 0 ?
+                                  static_cast<uint64_t>(value) - static_cast<uint64_t>(from) :
+                                  static_cast<uint64_t>(from) - static_cast<uint64_t>(value);
+        const auto step = sequenceData.increment > 0 ?
+                              static_cast<uint64_t>(sequenceData.increment) :
+                              uint64_t{0} - static_cast<uint64_t>(sequenceData.increment);
+        if (!forward || distance % step != 0) {
+            throw CatalogException(std::format(
+                "setval: sequence \"{}\" can only move forward to a value it would produce; {} "
+                "is not reachable from {} by increment {}",
+                name, value, from, sequenceData.increment));
+        }
+        count = distance / step + (usedBefore ? 0 : 1);
+        if (count == 0) {
+            return value;
+        }
+        rollbackData = SequenceRollbackData{sequenceData.usageCount, sequenceData.currVal};
+        // Equivalent to `count` calls of nextValNoLock: the target is in bounds and ahead of
+        // the current value, so none of them wraps or overflows.
+        sequenceData.currVal = value;
+        sequenceData.usageCount += count;
+    }
+    transaction->pushSequenceChange(this, count, rollbackData);
+    return value;
 }
 
 void SequenceCatalogEntry::rollbackVal(const uint64_t& usageCount, const int64_t& currVal) {
