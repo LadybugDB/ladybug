@@ -61,7 +61,8 @@ void NodeTableVersionRecordHandler::rollbackInsert(main::ClientContext* context,
     DASSERT(nodeGroupIdx < table->getNumNodeGroups() || startRow == 0);
     if (nodeGroupIdx < table->getNumNodeGroups()) {
         VersionRecordHandler::rollbackInsert(context, nodeGroupIdx, startRow, numRows);
-        // Another COPY may still be appending or holding pointers into these groups.
+        // An active COPY may hold a group pointer. Even as the sole writer, truncate only if
+        // the collection confirms this range is still the physical tail under its lock.
         if (TransactionManager::Get(*context)->hasMultipleActiveWriteTransactions() ||
             !table->rollbackGroupCollectionInsert(nodeGroupIdx, startRow, numRows)) {
             Transaction::Get(*context)->getLocalStorage()->retainOptimisticAllocations(

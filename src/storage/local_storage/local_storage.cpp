@@ -186,6 +186,8 @@ void LocalStorage::retainOptimisticAllocations(StorageManager* sm, const NodeGro
     auto* effectiveSM = sm != nullptr ? sm : StorageManager::Get(clientContext);
     const auto it = allocatorsByStorageManager.find(effectiveSM);
     if (it == allocatorsByStorageManager.end()) {
+        // In-memory databases and transactions that allocated no pages in this file have
+        // nothing in the optimistic rollback list.
         return;
     }
     // Reuse the column hierarchy's page traversal without freeing the retained pages.

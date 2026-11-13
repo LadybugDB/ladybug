@@ -475,6 +475,7 @@ void NodeGroup::rollbackInsert(row_idx_t startRow) {
         numRows = 0;
         return;
     }
+    // This also removes a chunk starting exactly at startRow, now truncated to zero.
     const auto numEmptyTrailingGroups = chunkedGroups.getNumEmptyTrailingGroups(lock);
     chunkedGroups.removeTrailingGroups(lock, numEmptyTrailingGroups);
     numRows = startRow;

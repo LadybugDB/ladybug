@@ -945,7 +945,8 @@ void VersionInfo::rollbackInsert(row_idx_t startRow, row_idx_t numRows) {
         auto& vectorVersionInfo = getOrCreateVersionInfo(vectorIdx);
         vectorVersionInfo.rollbackInsertions(startRowIdx, endRowIdx - startRowIdx + 1);
         // Other writers can own later rows, so aborted slots may survive physically.
-        // Persist them as always deleted rather than resurrecting them at checkpoint.
+        // Real commit timestamps start above zero. A delete at zero hides these slots from
+        // every snapshot and survives checkpoint even after insertion versions are discarded.
         for (auto row = startRowIdx; row <= endRowIdx; ++row) {
             vectorVersionInfo.stampDeleteCommitTS(row, 0);
         }

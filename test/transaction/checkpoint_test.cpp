@@ -40,6 +40,7 @@
 #include "storage/checkpointer.h"
 #include "storage/database_header.h"
 #include "storage/index/index.h"
+#include "storage/optimistic_allocator.h"
 #include "storage/page_allocator.h"
 #include "storage/page_manager.h"
 #include "storage/shadow_file.h"
@@ -6982,6 +6983,31 @@ TEST_F(ReviewFixesTest, HashIndexBasicRecoveryAfterCheckpoint) {
         EXPECT_EQ(r->getNext()->getValue(0)->getValue<std::string>(), "v" + std::to_string(i));
         EXPECT_FALSE(r->hasNext());
     }
+}
+
+TEST_F(ReviewFixesTest, OptimisticRollbackFreesOnlyUnretainedPages) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+    auto* file = getStorageManager(*database)->getDataFH();
+    // A fresh page manager gives two adjacent allocations independent of the DB's free list.
+    PageManager pages{file};
+    OptimisticAllocator allocator{pages};
+    const auto start = allocator.allocatePageRange(8).startPageIdx;
+    ASSERT_EQ(allocator.allocatePageRange(4).startPageIdx, start + 8);
+    allocator.retainPageRange({start + 2, 2}); // splits the first allocation
+    allocator.retainPageRange({start + 6, 4}); // spans both allocations
+    allocator.retainPageRange({start + 2, 2}); // already retained
+    allocator.retainPageRange({start, 0});
+    allocator.rollback();
+    std::vector<std::pair<page_idx_t, page_idx_t>> freed;
+    for (const auto& range : pages.getFreeEntries(0, pages.getNumFreeEntries())) {
+        freed.emplace_back(range.startPageIdx, range.numPages);
+    }
+    std::sort(freed.begin(), freed.end());
+    const std::vector<std::pair<page_idx_t, page_idx_t>> expected{{start, 2}, {start + 4, 2},
+        {start + 10, 2}};
+    EXPECT_EQ(freed, expected);
 }
 
 // Fix #5 – reclaimTailPagesIfNeeded must not introduce overlap with existing FSM entries

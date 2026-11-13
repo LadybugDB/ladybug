@@ -150,8 +150,10 @@ void ChunkedNodeGroup::resetVersionAndUpdateInfo() {
 void ChunkedNodeGroup::truncate(const offset_t numRows_) {
     DASSERT(numRows >= numRows_);
     if (versionInfo) {
-        // A reclaimed tail may be reused by a later insert.
+        // The collection proved this is the rolling-back writer's suffix. Clear only its
+        // always-deleted stamps so a later insert can reuse these slots.
         for (auto row = numRows_; row < numRows; ++row) {
+            DASSERT(versionInfo->getDeleteCommitTS(row) == 0);
             versionInfo->stampDeleteCommitTS(row, INVALID_TRANSACTION);
         }
     }
