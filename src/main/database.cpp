@@ -5,6 +5,7 @@
 #include "extension/mapper_extension.h"
 #include "extension/planner_extension.h"
 #include "extension/transformer_extension.h"
+#include "main/attached_database.h"
 #include "main/client_context.h"
 #include "main/database_manager.h"
 #include "storage/buffer_manager/buffer_manager.h"
@@ -202,10 +203,36 @@ void Database::initMembers(std::string_view dbPath, construct_bm_func_t initBmFu
 
 Database::~Database() {
     if (!dbConfig->readOnly && dbConfig->forceCheckpointOnClose) {
-        try {
-            ClientContext clientContext(this);
-            transactionManager->checkpoint(clientContext);
-        } catch (...) {} // NOLINT
+        bool shouldCheckpoint = false;
+        if (storageManager->getDataFH() == nullptr ||
+            storageManager->getDataFH()->getNumPages() == 0) {
+            shouldCheckpoint = true;
+        } else if (transactionManager->hasCommittedWriteTransaction()) {
+            shouldCheckpoint = true;
+        } else if (storageManager->getWAL().getFileSize() > 0) {
+            shouldCheckpoint = true;
+        } else if (databaseManager != nullptr) {
+            for (auto* attachedDB : databaseManager->getAttachedDatabases()) {
+                if (auto* attachedLbug = dynamic_cast<AttachedLbugDatabase*>(attachedDB)) {
+                    if (attachedLbug->getTransactionManager() != nullptr &&
+                        attachedLbug->getTransactionManager()->hasCommittedWriteTransaction()) {
+                        shouldCheckpoint = true;
+                        break;
+                    }
+                    if (attachedLbug->getStorageManager() != nullptr &&
+                        attachedLbug->getStorageManager()->getWAL().getFileSize() > 0) {
+                        shouldCheckpoint = true;
+                        break;
+                    }
+                }
+            }
+        }
+        if (shouldCheckpoint) {
+            try {
+                ClientContext clientContext(this);
+                transactionManager->checkpoint(clientContext);
+            } catch (...) {} // NOLINT
+        }
     }
     dbLifeCycleManager->isDatabaseClosed = true;
 }

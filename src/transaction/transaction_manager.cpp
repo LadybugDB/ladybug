@@ -217,6 +217,7 @@ void TransactionManager::commitAndCheckpoint(main::ClientContext& clientContext,
             } break;
             case TransactionType::RECOVERY:
             case TransactionType::WRITE: {
+                hasCommittedWriteTransaction_.store(true, std::memory_order_release);
                 committingWriteTransactionCount.fetch_add(1, std::memory_order_release);
                 markedAsCommitting = true;
                 lck.unlock();
@@ -648,6 +649,7 @@ void TransactionManager::checkpointNoLock(main::ClientContext& clientContext) {
     checkpointer->postCheckpointCleanup(canResetPageManagerToCurrent);
     progress.update(1.0);
     writeGate = {};
+    hasCommittedWriteTransaction_.store(false, std::memory_order_release);
 }
 
 } // namespace transaction
