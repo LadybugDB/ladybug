@@ -313,6 +313,9 @@ void RelTableData::rollbackGroupCollectionInsert(main::ClientContext* context,
     if (nodeGroupIdx >= getNumNodeGroups()) {
         return;
     }
+    // The persistent CSR header still addresses these slots until checkpoint rebuilds it.
+    // Only in-memory appends can reclaim an owned suffix, after the same writer and tail
+    // checks as node tables.
     if (!isPersistent && !TransactionManager::Get(*context)->hasMultipleActiveWriteTransactions() &&
         nodeGroups->rollbackInsert(nodeGroupIdx, startRow, numRows)) {
         return;
