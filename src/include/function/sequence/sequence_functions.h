@@ -17,5 +17,11 @@ struct NextValFunction {
     static function_set getFunctionSet();
 };
 
+struct SetValFunction {
+    static constexpr const char* name = "SETVAL";
+
+    static function_set getFunctionSet();
+};
+
 } // namespace function
 } // namespace lbug
