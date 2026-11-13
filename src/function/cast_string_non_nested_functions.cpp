@@ -68,7 +68,11 @@ bool TryCastStringToTimestamp::tryCast<timestamp_ns_t>(const char* input, uint64
     if (!Timestamp::tryConvertTimestamp(input, len, result)) {
         return false;
     }
-    result = Timestamp::getEpochNanoSeconds(result);
+    try {
+        result = Timestamp::getEpochNanoSeconds(result);
+    } catch (...) {
+        return false;
+    }
     return true;
 }
 
@@ -78,7 +82,11 @@ bool TryCastStringToTimestamp::tryCast<timestamp_ms_t>(const char* input, uint64
     if (!Timestamp::tryConvertTimestamp(input, len, result)) {
         return false;
     }
-    result = Timestamp::getEpochMilliSeconds(result);
+    try {
+        result = Timestamp::getEpochMilliSeconds(result);
+    } catch (...) {
+        return false;
+    }
     return true;
 }
 
@@ -88,7 +96,11 @@ bool TryCastStringToTimestamp::tryCast<timestamp_sec_t>(const char* input, uint6
     if (!Timestamp::tryConvertTimestamp(input, len, result)) {
         return false;
     }
-    result = Timestamp::getEpochSeconds(result);
+    try {
+        result = Timestamp::getEpochSeconds(result);
+    } catch (...) {
+        return false;
+    }
     return true;
 }
 
