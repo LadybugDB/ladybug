@@ -1,0 +1,121 @@
+-DATASET CSV empty
+
+--
+
+-CASE SetvalMovesSequenceForward
+-STATEMENT CREATE SEQUENCE s INCREMENT 10;
+---- ok
+-STATEMENT RETURN nextval('s');
+---- 1
+1
+-STATEMENT RETURN setval('s', 51);
+---- 1
+51
+-STATEMENT RETURN currval('s'), nextval('s');
+---- 1
+51|61
+-LOG Setting the current value again is a no-op
+-STATEMENT RETURN setval('s', 61), nextval('s');
+---- 1
+61|71
+-LOG A fresh sequence can be set to its start value or beyond
+-STATEMENT CREATE SEQUENCE t START 5;
+---- ok
+-STATEMENT RETURN setval('t', 5);
+---- 1
+5
+-STATEMENT RETURN nextval('t');
+---- 1
+6
+-STATEMENT CREATE SEQUENCE d INCREMENT -2 START -1;
+---- ok
+-STATEMENT RETURN setval('d', -9), nextval('d');
+---- 1
+-9|-11
+
+-CASE SetvalRejectsUnreachableValues
+-STATEMENT CREATE SEQUENCE s INCREMENT 10;
+---- ok
+-STATEMENT RETURN nextval('s');
+---- 1
+1
+-STATEMENT RETURN setval('s', 50);
+---- error
+Catalog exception: setval: sequence "s" can only move forward to a value it would produce; 50 is not reachable from 1 by increment 10
+-STATEMENT RETURN setval('s', 21);
+---- 1
+21
+-LOG Moving backwards is refused
+-STATEMENT RETURN setval('s', 11);
+---- error
+Catalog exception: setval: sequence "s" can only move forward to a value it would produce; 11 is not reachable from 21 by increment 10
+-STATEMENT RETURN setval('s', -9);
+---- error
+Catalog exception: setval: value -9 is out of bounds for sequence "s" (1..9223372036854775807)
+-STATEMENT CREATE SEQUENCE b START 1 MAXVALUE 100;
+---- ok
+-STATEMENT RETURN setval('b', 101);
+---- error
+Catalog exception: setval: value 101 is out of bounds for sequence "b" (1..100)
+-STATEMENT RETURN currval('s');
+---- 1
+21
+
+-CASE SetvalIsTransactional
+-STATEMENT CREATE SEQUENCE s;
+---- ok
+-STATEMENT RETURN nextval('s');
+---- 1
+1
+-STATEMENT BEGIN TRANSACTION;
+---- ok
+-STATEMENT RETURN setval('s', 100);
+---- 1
+100
+-STATEMENT ROLLBACK;
+---- ok
+-STATEMENT RETURN currval('s');
+---- 1
+1
+-STATEMENT BEGIN TRANSACTION READ ONLY;
+---- ok
+-STATEMENT RETURN setval('s', 5);
+---- error
+Can not execute a write query inside a read-only transaction.
+-STATEMENT ROLLBACK;
+---- ok
+
+-CASE SetvalOnSerialSequence
+-STATEMENT CREATE NODE TABLE A(id SERIAL PRIMARY KEY, v INT64);
+---- ok
+-STATEMENT CREATE (:A {v: 1});
+---- ok
+-STATEMENT RETURN setval('A_id_serial', 10);
+---- 1
+10
+-STATEMENT CREATE (:A {v: 2});
+---- ok
+-STATEMENT MATCH (a:A) RETURN a.id, a.v ORDER BY a.id;
+-CHECK_ORDER
+---- 2
+0|1
+11|2
+
+-CASE SetvalSurvivesReplay
+-SKIP_IN_MEM
+-LOG A large setval replays from the WAL without stepping through every value
+-STATEMENT CREATE SEQUENCE big;
+---- ok
+-STATEMENT CHECKPOINT;
+---- ok
+-STATEMENT CALL auto_checkpoint=false;
+---- ok
+-STATEMENT CALL force_checkpoint_on_close=false;
+---- ok
+-STATEMENT RETURN setval('big', 9000000000000000000);
+---- 1
+9000000000000000000
+-RELOADDB
+-STATEMENT RETURN currval('big'), nextval('big');
+---- 1
+9000000000000000000|9000000000000000001

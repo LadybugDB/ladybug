@@ -66,6 +66,8 @@ public:
     void nextKVal(transaction::Transaction* transaction, const uint64_t& count);
     void nextKVal(transaction::Transaction* transaction, const uint64_t& count,
         common::ValueVector& resultVector);
+    // Moves the sequence forward so that currval() returns `value`. Returns `value`.
+    int64_t setVal(transaction::Transaction* transaction, int64_t value);
     void rollbackVal(const uint64_t& usageCount, const int64_t& currVal);
 
     //===--------------------------------------------------------------------===//
@@ -85,6 +87,7 @@ public:
 
 private:
     void nextValNoLock();
+    bool tryAdvanceNoLock(uint64_t count);
 
 private:
     std::mutex mtx;
