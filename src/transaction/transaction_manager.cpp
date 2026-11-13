@@ -387,13 +387,16 @@ void TransactionManager::checkpoint(main::ClientContext& clientContext) {
     if (clientContext.isInMemory()) {
         // In-memory databases have no WAL/shadow files to checkpoint, but explicit
         // CHECKPOINT should still reclaim superseded MVCC versions.
+        // Note: this precedes the read-only guard below on purpose, so an in-memory
+        // read-only checkpoint stays a silent no-op (there are no files to protect).
         std::unique_lock checkpointLck{mtxForCheckpoint};
         vacuumInMemoryUpdates(clientContext);
         return;
     }
-    // ClientContext::validateTransaction already refuses CHECKPOINT on a read-only database;
-    // refuse here too, so no other caller can write the data, WAL or shadow files from it.
-    if (clientContext.getDBConfig()->readOnly) {
+    // ClientContext::validateTransaction already refuses CHECKPOINT when no write query may
+    // execute; refuse here too, so no other caller can write the data, WAL or shadow files.
+    // canExecuteWriteQuery() also covers attached remote DBs, keeping both gates identical.
+    if (!clientContext.canExecuteWriteQuery()) {
         throw ConnectionException("Cannot execute write operations in a read-only database!");
     }
     // Use the dedicated checkpoint mutex so active writers can still commit/rollback
@@ -563,6 +566,11 @@ void TransactionManager::tryCheckpoint(main::ClientContext& clientContext) {
     checkpointNoLock(clientContext);
 }
 
+// NB: no read-only guard here by design — checkpoint() above is the sole checked entry
+// point. All current paths here (checkpoint(), tryCheckpoint()) are unreachable on a
+// read-only database: auto-checkpoints require a preceding write commit, and recovery
+// refuses read-only opens with pending checkpoint state before replay. A future internal
+// caller must route through checkpoint() or replicate its guard.
 void TransactionManager::checkpointNoLock(main::ClientContext& clientContext) {
     QueryProgressScope progress{clientContext, 0.01};
     // We only need to wait for active write transactions to leave the system before
