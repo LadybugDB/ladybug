@@ -3,6 +3,7 @@
 #include <exception>
 
 #include "common/assert.h"
+#include "common/exception/runtime.h"
 #include "common/types/types.h"
 #include "storage/buffer_manager/buffer_manager.h"
 #include "storage/buffer_manager/memory_manager.h"
@@ -15,6 +16,7 @@
 #include "storage/table/column_chunk_data.h"
 #include "storage/table/column_chunk_scanner.h"
 #include "storage/table/node_table.h"
+#include <format>
 
 using namespace lbug::common;
 using namespace lbug::transaction;
@@ -467,15 +469,21 @@ void ChunkedNodeGroup::scanCommitted(const Transaction* transaction, TableScanSt
     if (residencyState != SCAN_RESIDENCY_STATE) {
         return;
     }
+    const auto groupRows = getNumRows();
     for (auto i = 0u; i < scanState.columnIDs.size(); i++) {
         const auto columnID = scanState.columnIDs[i];
         auto& outputChunk = output.getColumnChunk(i);
+        const auto numValues = chunks[columnID]->getNumValues();
+        if (numValues > groupRows) {
+            throw RuntimeException(std::format("Cannot checkpoint column {}: the chunk has {} "
+                                               "values for {} rows.",
+                columnID, numValues, groupRows));
+        }
         chunks[columnID]->scanCommitted<SCAN_RESIDENCY_STATE>(transaction,
             scanState.nodeGroupScanState->chunkStates[i], outputChunk);
         // Inserts after DROP do not populate the dropped slot. A pinned checkpoint still
         // retains that column, so preserve row positions with NULLs for those inserts.
-        DASSERT(chunks[columnID]->getNumValues() <= numRows);
-        auto numMissingRows = numRows - chunks[columnID]->getNumValues();
+        auto numMissingRows = groupRows - numValues;
         if (numMissingRows > 0) {
             ValueVector nulls(outputChunk.getDataType().copy(), &outputChunk.getMemoryManager(),
                 std::make_shared<DataChunkState>());
