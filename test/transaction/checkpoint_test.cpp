@@ -118,6 +118,12 @@ public:
         return std::unique_lock{TransactionManager::Get(context)->mtxForStartingNewTransactions};
     }
 
+    static void ageAutoCheckpointDeferral(main::ClientContext& context) {
+        auto* manager = TransactionManager::Get(context);
+        std::lock_guard lock{manager->mtxForCheckpoint};
+        manager->firstAutoCheckpointSkip -= std::chrono::minutes(1);
+    }
+
     // Holds the mutex that every begin, commit and rollback takes for 100 ms on a new thread, and
     // returns once it is held.
     static std::thread holdPublicMutexBriefly(main::ClientContext& context) {
@@ -998,18 +1004,121 @@ TEST_F(PostCommitCheckpointFailureTest, AutoCheckpointSkipsOpenWriter) {
             insertNodes(i, i + 1);
         }
         const auto waited = std::chrono::steady_clock::now() - start;
-        const auto warnings = ::testing::internal::GetCapturedStderr();
+        const auto log = ::testing::internal::GetCapturedStderr();
         EXPECT_LT(waited, std::chrono::seconds(1));
-        EXPECT_TRUE(warnings.empty()) << warnings;
+        const auto first = log.find("Automatic checkpoint deferred for writers");
+        ASSERT_NE(first, std::string::npos) << log;
+        EXPECT_EQ(log.find("Automatic checkpoint deferred for writers", first + 1),
+            std::string::npos)
+            << log;
+        EXPECT_EQ(log.find("Warning:"), std::string::npos) << log;
         EXPECT_EQ(numCheckpoints, 0u);
         EXPECT_GT(WAL::Get(*context)->getFileSize(), 0u);
+        ::testing::internal::CaptureStderr();
         auto res = other.query("COMMIT;");
+        const auto completion = ::testing::internal::GetCapturedStderr();
         ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+        EXPECT_NE(completion.find("automatic checkpoint deferrals = 3"), std::string::npos)
+            << completion;
         EXPECT_EQ(numCheckpoints, 1u);
         EXPECT_EQ(WAL::Get(*context)->getFileSize(), 0u);
     }
     createDBAndConn();
     checkNodes(4);
+}
+
+TEST_F(PostCommitCheckpointFailureTest, AutoCheckpointDrainsWritersAfterDeferralExpires) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CALL enable_multi_writes=true")->isSuccess());
+    auto context = getClientContext(*conn);
+    countCheckpoints<FlakyCheckpointerFailsOnCheckpointStorage>();
+    failCheckpoints = false;
+    {
+        main::Connection other{database.get()};
+        ASSERT_TRUE(other.query("BEGIN TRANSACTION")->isSuccess());
+        ASSERT_TRUE(other.query("CREATE (:test {id: 2})")->isSuccess());
+        insertNodes(0, 1);
+        FlakyCheckpointer::ageAutoCheckpointDeferral(*context);
+        std::unique_ptr<main::QueryResult> result;
+        std::thread committing([&] { result = conn->query("CREATE (:test {id: 1})"); });
+        const bool gateClosed = FlakyCheckpointer::waitForWriteGateClosed(*context);
+        auto otherResult = other.query("COMMIT");
+        committing.join();
+        ASSERT_TRUE(gateClosed);
+        ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+        ASSERT_TRUE(otherResult->isSuccess()) << otherResult->getErrorMessage();
+        EXPECT_EQ(numCheckpoints, 1u);
+        EXPECT_EQ(WAL::Get(*context)->getFileSize(), 0u);
+    }
+    createDBAndConn();
+    checkNodes(3);
+}
+
+TEST_F(PostCommitCheckpointFailureTest, AutoCheckpointRetriesAtWALGrowthLimit) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+    conn.reset();
+    createDB(10000 /* checkpoint wait timeout in microseconds */);
+    conn = std::make_unique<main::Connection>(database.get());
+    checkpointAfterEveryCommit();
+    ASSERT_TRUE(conn->query("CALL enable_multi_writes=true")->isSuccess());
+    {
+        main::Connection other{database.get()};
+        ASSERT_TRUE(other.query("BEGIN TRANSACTION")->isSuccess());
+        ASSERT_TRUE(other.query("CREATE (:test {id: 9})")->isSuccess());
+        insertNodes(0, 1);
+        ::testing::internal::CaptureStderr();
+        auto result = conn->query("CREATE (:test {id: 1, name: repeat('x', 1100000)})");
+        const auto log = ::testing::internal::GetCapturedStderr();
+        ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+        EXPECT_NE(log.find("Automatic checkpoint waiting for writers"), std::string::npos) << log;
+        EXPECT_NE(log.find("Timeout waiting for active write transactions"), std::string::npos)
+            << log;
+        EXPECT_GE(WAL::Get(*getClientContext(*conn))->getFileSize(), 1100000u);
+        // The already oversized WAL must not make the next small commit wait again.
+        ::testing::internal::CaptureStderr();
+        insertNodes(2, 3);
+        const auto nextLog = ::testing::internal::GetCapturedStderr();
+        EXPECT_NE(nextLog.find("Automatic checkpoint deferred for writers"), std::string::npos)
+            << nextLog;
+        EXPECT_EQ(nextLog.find("waiting for writers"), std::string::npos) << nextLog;
+        ASSERT_TRUE(other.query("ROLLBACK")->isSuccess());
+    }
+    createDBAndConn();
+    checkNodes(3);
+    auto result = conn->query("MATCH (n:test {id: 1}) RETURN n.name");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    EXPECT_EQ(result->getNext()->getValue(0)->getValue<std::string>(), std::string(1100000, 'x'));
+}
+
+TEST_F(PostCommitCheckpointFailureTest, PinnedWALDoesNotRepeatDrainForSameBytes) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CALL enable_multi_writes=true")->isSuccess());
+    auto wal = WAL::Get(*getClientContext(*conn));
+    {
+        main::Connection reader{database.get()};
+        main::Connection writer{database.get()};
+        ASSERT_TRUE(reader.query("BEGIN TRANSACTION READ ONLY")->isSuccess());
+        auto result = conn->query("CREATE (:test {id: 0, name: repeat('x', 1100000)})");
+        ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+        ASSERT_GE(wal->getFileSize(), 1100000u);
+        ASSERT_TRUE(writer.query("BEGIN TRANSACTION")->isSuccess());
+        ::testing::internal::CaptureStderr();
+        insertNodes(1, 2);
+        const auto log = ::testing::internal::GetCapturedStderr();
+        EXPECT_NE(log.find("Automatic checkpoint deferred for writers"), std::string::npos) << log;
+        EXPECT_EQ(log.find("waiting for writers"), std::string::npos) << log;
+        ASSERT_TRUE(reader.query("COMMIT")->isSuccess());
+        ASSERT_TRUE(writer.query("COMMIT")->isSuccess());
+        EXPECT_EQ(wal->getFileSize(), 0u);
+    }
+    createDBAndConn();
+    checkNodes(2);
 }
 
 TEST_F(PostCommitCheckpointFailureTest, AutoCheckpointSkipsBusyWriteGate) {

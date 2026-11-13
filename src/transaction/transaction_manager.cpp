@@ -29,6 +29,9 @@ namespace lbug {
 namespace transaction {
 namespace {
 
+constexpr auto MAX_AUTO_CHECKPOINT_DEFERRAL = std::chrono::seconds(30);
+constexpr uint64_t MIN_AUTO_CHECKPOINT_WAL_HEADROOM = 1ULL << 20;
+
 class QueryProgressScope {
 public:
     QueryProgressScope(main::ClientContext& clientContext, double initialProgress) {
@@ -203,7 +206,7 @@ void TransactionManager::endForcedCheckpoint() {
 void TransactionManager::commitAndCheckpoint(main::ClientContext& clientContext,
     Transaction* transaction) {
     bool shouldForceCheckpoint = false;
-    bool shouldAutoCheckpoint = false;
+    std::optional<uint64_t> autoCheckpointThreshold;
     bool markedAsCommitting = false;
     uint64_t walCommitSequence = 0;
     uint64_t walBlockStart = 0;
@@ -243,7 +246,9 @@ void TransactionManager::commitAndCheckpoint(main::ClientContext& clientContext,
                     cvForPublishingCommit.notify_all();
                 }
                 shouldForceCheckpoint = transaction->shouldForceCheckpoint();
-                shouldAutoCheckpoint = Checkpointer::canAutoCheckpoint(clientContext, *transaction);
+                if (Checkpointer::canAutoCheckpoint(clientContext, *transaction)) {
+                    autoCheckpointThreshold = clientContext.getDBConfig()->checkpointThreshold;
+                }
                 clearTransactionNoLock(transaction->getID());
                 activeWriteTransactionCount.fetch_sub(1, std::memory_order_release);
                 committingWriteTransactionCount.fetch_sub(1, std::memory_order_release);
@@ -304,9 +309,9 @@ void TransactionManager::commitAndCheckpoint(main::ClientContext& clientContext,
                 "succeeds; run CHECKPOINT rather than the statement again: {}",
                 e.what())};
         }
-    } else if (shouldAutoCheckpoint) {
+    } else if (autoCheckpointThreshold) {
         try {
-            tryCheckpoint(clientContext);
+            tryCheckpoint(clientContext, *autoCheckpointThreshold);
         } catch (const std::exception& e) {
             // The commit is in the WAL whatever the checkpoint did, so failing the statement would
             // only invite a retry that applies it twice. A rolled-back checkpoint is retried by a
@@ -551,7 +556,8 @@ std::unique_ptr<Checkpointer> TransactionManager::initCheckpointer(
     return std::make_unique<Checkpointer>(clientContext);
 }
 
-void TransactionManager::tryCheckpoint(main::ClientContext& clientContext) {
+void TransactionManager::tryCheckpoint(main::ClientContext& clientContext,
+    uint64_t checkpointThreshold) {
     if (clientContext.isInMemory()) {
         std::unique_lock checkpointLck{mtxForCheckpoint, std::try_to_lock};
         if (!checkpointLck.owns_lock()) {
@@ -566,10 +572,39 @@ void TransactionManager::tryCheckpoint(main::ClientContext& clientContext) {
     }
     // Keep the gate closed after checking writers so none can enter before checkpoint runs.
     std::unique_lock writeGate{mtxForStartingNewTransactions, std::try_to_lock};
-    if (!writeGate.owns_lock() || hasActiveWriteTransactionNoLock()) {
+    if (writeGate.owns_lock() && !hasActiveWriteTransactionNoLock()) {
+        checkpointNoLock(clientContext, std::move(writeGate));
         return;
     }
-    checkpointNoLock(clientContext, std::move(writeGate));
+    // A fallback takes the gate again through the normal writer drain.
+    writeGate = {};
+    const auto now = std::chrono::steady_clock::now();
+    const auto deferredFor = autoCheckpointSkips == 0 ?
+                                 std::chrono::steady_clock::duration::zero() :
+                                 now - firstAutoCheckpointSkip;
+    const auto walBytes = wal.getFileSize();
+    const auto baseBytes = std::max(checkpointThreshold, walBytesAtLastDrainAttempt);
+    const auto headroom = std::max(checkpointThreshold, MIN_AUTO_CHECKPOINT_WAL_HEADROOM);
+    // Subtract only in ascending order: doubling a large configured threshold can overflow.
+    const bool walBudgetUsed = walBytes > baseBytes && walBytes - baseBytes >= headroom;
+    if (!walBudgetUsed && deferredFor < MAX_AUTO_CHECKPOINT_DEFERRAL) {
+        if (++autoCheckpointSkips == 1) {
+            firstAutoCheckpointSkip = now;
+            std::clog << std::format("Automatic checkpoint deferred for writers (WAL {} bytes).",
+                             walBytes)
+                      << std::endl;
+        }
+        return;
+    }
+    std::clog << std::format("Automatic checkpoint waiting for writers "
+                             "(skipped {}, elapsed {} ms, WAL {} bytes).",
+                     autoCheckpointSkips,
+                     std::chrono::duration_cast<std::chrono::milliseconds>(deferredFor).count(),
+                     walBytes)
+              << std::endl;
+    walBytesAtLastDrainAttempt = walBytes;
+    autoCheckpointSkips = 0;
+    checkpointNoLock(clientContext);
 }
 
 // NB: no read-only guard here by design — checkpoint() above is the sole checked entry
@@ -668,6 +703,15 @@ void TransactionManager::checkpointNoLock(main::ClientContext& clientContext,
         }
     }
     checkpointer->postCheckpointCleanup(canResetPageManagerToCurrent);
+    if (autoCheckpointSkips != 0) {
+        std::clog << std::format("Checkpoint completed (automatic checkpoint deferrals = {}).",
+                         autoCheckpointSkips)
+                  << std::endl;
+    }
+    autoCheckpointSkips = 0;
+    // A reader may pin the WAL even after a successful checkpoint. Only further growth counts
+    // towards the next drain.
+    walBytesAtLastDrainAttempt = wal.mayHaveCheckpointRecord() ? wal.getFileSize() : 0;
     progress.update(1.0);
     writeGate = {};
 }
