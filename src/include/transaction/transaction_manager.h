@@ -1,6 +1,7 @@
 #pragma once
 
 #include <atomic>
+#include <chrono>
 #include <condition_variable>
 #include <functional>
 #include <map>
@@ -102,9 +103,9 @@ private:
     void checkpointNoLock(main::ClientContext& clientContext,
         std::unique_lock<std::mutex> writeGate = {});
     void logAbortOfDurableCommit(uint64_t walBlockStart, const std::string& publishError);
-    // Auto-checkpoint skips busy checkpoint/write gates and active writers. A later write
-    // commit retries instead of waiting for unrelated transactions to finish.
-    void tryCheckpoint(main::ClientContext& clientContext);
+    // An automatic checkpoint normally defers to active writers. Sustained deferral or WAL
+    // growth makes one committing thread take the normal checkpoint drain path.
+    void tryCheckpoint(main::ClientContext& clientContext, uint64_t checkpointThreshold);
 
     // This function locks the mutex to stop new transactions and waits until all transactions
     // (both read and write) leave the system. Used as a fallback.
@@ -171,6 +172,11 @@ private:
     // Prevents concurrent checkpoints. Separate from mtxForSerializingPublicFunctionCalls so
     // that active writers can commit/rollback while the checkpoint is draining them.
     std::mutex mtxForCheckpoint;
+    // Protected by mtxForCheckpoint. A failed drain starts a fresh deferral window, so the
+    // same oversized WAL cannot make every subsequent commit wait for the same writer.
+    uint64_t autoCheckpointSkips = 0;
+    std::chrono::steady_clock::time_point firstAutoCheckpointSkip;
+    uint64_t walBytesAtLastDrainAttempt = 0;
     // Atomic counter tracking active write/recovery transactions so the checkpoint drain loop
     // can poll without holding mtxForSerializingPublicFunctionCalls.
     std::atomic<uint32_t> activeWriteTransactionCount{0};
