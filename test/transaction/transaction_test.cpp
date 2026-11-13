@@ -5,6 +5,7 @@
 #include "api_test/api_test.h"
 #include "api_test/private_api_test.h"
 #include "common/checksum.h"
+#include "common/exception/connection.h"
 #include "common/exception/runtime.h"
 #include "common/exception/transaction_manager.h"
 #include "common/serializer/buffer_writer.h"
@@ -16,6 +17,7 @@
 #include "storage/wal/wal.h"
 #include "storage/wal/wal_record.h"
 #include "transaction/transaction.h"
+#include "transaction/transaction_manager.h"
 #include <format>
 
 using namespace lbug::common;
@@ -397,6 +399,36 @@ TEST_F(EmptyDBTransactionTest, ReopenRetypedColumnFromPinnedCheckpoint) {
     ASSERT_EQ(result->getNumTuples(), 2u);
     EXPECT_EQ(result->getNext()->getValue(0)->getValue<std::string>(), "new");
     EXPECT_EQ(result->getNext()->getValue(0)->getValue<std::string>(), "written");
+}
+
+TEST_F(EmptyDBTransactionTest, CheckpointOnReadOnlyDatabaseWritesNothing) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE ro(id INT64 PRIMARY KEY);")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:ro {id: 1});")->isSuccess());
+    systemConfig->readOnly = true;
+    createDBAndConn();
+    const auto walPath = lbug::storage::StorageUtils::getWALFilePath(databasePath);
+    const auto shadowPath = lbug::storage::StorageUtils::getShadowFilePath(databasePath);
+    const auto walExisted = std::filesystem::exists(walPath);
+    const auto walSize = walExisted ? std::filesystem::file_size(walPath) : 0;
+    auto result = conn->query("CHECKPOINT;");
+    ASSERT_FALSE(result->isSuccess());
+    ASSERT_EQ(result->getErrorMessage(),
+        "Connection exception: Cannot execute write operations in a read-only database!");
+    // A caller that skips ClientContext::validateTransaction is refused as well.
+    auto* clientContext = getClientContext(*conn);
+    EXPECT_THROW(TransactionManager::Get(*clientContext)->checkpoint(*clientContext),
+        ConnectionException);
+    ASSERT_FALSE(std::filesystem::exists(shadowPath));
+    ASSERT_EQ(std::filesystem::exists(walPath), walExisted);
+    if (walExisted) {
+        ASSERT_EQ(std::filesystem::file_size(walPath), walSize);
+    }
+    ASSERT_EQ(
+        conn->query("MATCH (n:ro) RETURN count(*);")->getNext()->getValue(0)->getValue<int64_t>(),
+        1);
 }
 
 #ifndef __SINGLE_THREADED__

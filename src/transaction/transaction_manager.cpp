@@ -7,6 +7,7 @@
 #include <thread>
 
 #include "common/exception/checkpoint.h"
+#include "common/exception/connection.h"
 #include "common/exception/transaction_manager.h"
 #include "common/task_system/progress_bar.h"
 #include "main/attached_database.h"
@@ -389,6 +390,11 @@ void TransactionManager::checkpoint(main::ClientContext& clientContext) {
         std::unique_lock checkpointLck{mtxForCheckpoint};
         vacuumInMemoryUpdates(clientContext);
         return;
+    }
+    // ClientContext::validateTransaction already refuses CHECKPOINT on a read-only database;
+    // refuse here too, so no other caller can write the data, WAL or shadow files from it.
+    if (clientContext.getDBConfig()->readOnly) {
+        throw ConnectionException("Cannot execute write operations in a read-only database!");
     }
     // Use the dedicated checkpoint mutex so active writers can still commit/rollback
     // during the drain phase.
