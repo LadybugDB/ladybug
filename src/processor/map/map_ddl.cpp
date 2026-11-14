@@ -1,4 +1,5 @@
 #include "planner/operator/ddl/logical_alter.h"
+#include "planner/operator/ddl/logical_constraint.h"
 #include "planner/operator/ddl/logical_create_index.h"
 #include "planner/operator/ddl/logical_create_sequence.h"
 #include "planner/operator/ddl/logical_create_table.h"
@@ -6,6 +7,7 @@
 #include "planner/operator/ddl/logical_drop.h"
 #include "processor/expression_mapper.h"
 #include "processor/operator/ddl/alter.h"
+#include "processor/operator/ddl/constraint.h"
 #include "processor/operator/ddl/create_index.h"
 #include "processor/operator/ddl/create_sequence.h"
 #include "processor/operator/ddl/create_table.h"
@@ -30,6 +32,27 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapCreateTable(
         storage::MemoryManager::Get(*clientContext));
     auto sharedState = std::make_shared<CreateTableSharedState>();
     return std::make_unique<CreateTable>(createTable.getInfo()->copy(), messageTable, sharedState,
+        getOperatorID(), std::move(printInfo));
+}
+
+std::unique_ptr<PhysicalOperator> PlanMapper::mapCreateConstraint(
+    const LogicalOperator* logicalOperator) {
+    auto& createConstraint = logicalOperator->constCast<LogicalCreateConstraint>();
+    auto printInfo =
+        std::make_unique<LogicalCreateConstraintPrintInfo>(createConstraint.getInfo()->copy());
+    auto messageTable = FactorizedTableUtils::getSingleStringColumnFTable(
+        storage::MemoryManager::Get(*clientContext));
+    return std::make_unique<CreateConstraint>(createConstraint.getInfo()->copy(),
+        std::move(messageTable), getOperatorID(), std::move(printInfo));
+}
+
+std::unique_ptr<PhysicalOperator> PlanMapper::mapDropConstraint(
+    const LogicalOperator* logicalOperator) {
+    auto& dropConstraint = logicalOperator->constCast<LogicalDropConstraint>();
+    auto printInfo = std::make_unique<LogicalDropConstraintPrintInfo>(*dropConstraint.getInfo());
+    auto messageTable = FactorizedTableUtils::getSingleStringColumnFTable(
+        storage::MemoryManager::Get(*clientContext));
+    return std::make_unique<DropConstraint>(*dropConstraint.getInfo(), std::move(messageTable),
         getOperatorID(), std::move(printInfo));
 }
 

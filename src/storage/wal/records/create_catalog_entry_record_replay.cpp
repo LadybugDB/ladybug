@@ -1,5 +1,6 @@
 #include "binder/ddl/bound_create_table_info.h"
 #include "catalog/catalog.h"
+#include "catalog/catalog_entry/constraint_catalog_entry.h"
 #include "catalog/catalog_entry/index_catalog_entry.h"
 #include "catalog/catalog_entry/node_table_catalog_entry.h"
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
@@ -148,6 +149,24 @@ void WALReplayer::replayCreateCatalogEntryRecord(WALRecord& walRecord) const {
     case CatalogEntryType::TYPE_ENTRY: {
         auto& typeEntry = record.ownedCatalogEntry->constCast<TypeCatalogEntry>();
         catalog->createType(transaction, typeEntry.getName(), typeEntry.getLogicalType().copy());
+    } break;
+    case CatalogEntryType::CONSTRAINT_ENTRY: {
+        auto* constraintEntry =
+            record.ownedCatalogEntry->ptrCast<catalog::ConstraintCatalogEntry>();
+        const auto recordedTableID = constraintEntry->getTableID();
+        // The referenced table replayed earlier in WAL order; translate the recorded ID
+        // through the entry-type map like INDEX_ENTRY does. Rel targets replay as
+        // REL_GROUP_ENTRY, node targets as NODE_TABLE_ENTRY.
+        auto replayedTableID =
+            constraintEntry->isRel() ?
+                getReplayedEntryID(CatalogEntryType::REL_GROUP_ENTRY, recordedTableID) :
+                getReplayedEntryID(CatalogEntryType::NODE_TABLE_ENTRY, recordedTableID);
+        constraintEntry->setTableID(replayedTableID);
+        const auto recordedConstraintID = constraintEntry->getOID();
+        const auto replayedConstraintID =
+            catalog->createConstraint(transaction, std::move(record.ownedCatalogEntry));
+        recordReplayedEntryID(CatalogEntryType::CONSTRAINT_ENTRY, recordedConstraintID,
+            replayedConstraintID);
     } break;
     case CatalogEntryType::INDEX_ENTRY: {
         auto* indexEntry = record.ownedCatalogEntry->ptrCast<IndexCatalogEntry>();

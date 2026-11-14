@@ -112,6 +112,9 @@ public:
     std::unique_ptr<BoundStatement> bindCreateTable(const parser::Statement& statement);
     std::unique_ptr<BoundStatement> bindCreateTableAs(const parser::Statement& createTable);
     std::unique_ptr<BoundStatement> bindCreateIndex(const parser::Statement& statement);
+    std::unique_ptr<BoundStatement> bindCreateConstraint(const parser::Statement& statement);
+    std::unique_ptr<BoundStatement> bindDropConstraint(const parser::Statement& statement);
+    std::unique_ptr<BoundStatement> bindShowConstraints(const parser::Statement& statement);
     std::unique_ptr<BoundStatement> bindCreateType(const parser::Statement& statement) const;
     std::unique_ptr<BoundStatement> bindCreateSequence(const parser::Statement& statement) const;
 
