@@ -480,6 +480,7 @@ void NodeBatchInsert::initGlobalStateInternal(ExecutionContext* context) {
     auto pkColumnID = nodeTableEntry->getColumnID(pkDefinition.getName());
     // Init info
     info->compressionEnabled = StorageManager::Get(*clientContext)->compressionEnabled();
+    info->clearColumns();
     auto dataColumnIdx = 0u;
     for (auto& property : nodeTableEntry->getProperties()) {
         info->columnTypes.push_back(property.getType().copy());
