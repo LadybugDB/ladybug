@@ -83,9 +83,32 @@ bool isFalseConstant(PhysicalTypeID physicalType, std::span<const uint8_t> buffe
 
 ColumnChunkMetadata GetCompressionMetadata::operator()(std::span<const uint8_t> buffer,
     uint64_t numValues, StorageValue min, StorageValue max) const {
-    if (min == max && !isFalseConstant(dataType.getPhysicalType(), buffer, numValues)) {
-        return ColumnChunkMetadata(INVALID_PAGE_IDX, 0, numValues,
-            CompressionMetadata(min, max, CompressionType::CONSTANT));
+    if (min == max) {
+        if (!isFalseConstant(dataType.getPhysicalType(), buffer, numValues)) {
+            return ColumnChunkMetadata(INVALID_PAGE_IDX, 0, numValues,
+                CompressionMetadata(min, max, CompressionType::CONSTANT));
+        }
+        // min == max but the bytes differ: either a wrong min/max fold (gh-1447) or
+        // differently-stuffed null slots. INTEGER_BITPACKING would derive bitWidth 0
+        // (0 pages), which cannot hold the variation and trips the flush assertion,
+        // so store the bytes verbatim instead. Always correct, just less compressed.
+        switch (dataType.getPhysicalType()) {
+        case PhysicalTypeID::INT8:
+        case PhysicalTypeID::INT16:
+        case PhysicalTypeID::INT32:
+        case PhysicalTypeID::INT64:
+        case PhysicalTypeID::INT128:
+        case PhysicalTypeID::UINT8:
+        case PhysicalTypeID::UINT16:
+        case PhysicalTypeID::UINT32:
+        case PhysicalTypeID::UINT64:
+        case PhysicalTypeID::INTERNAL_ID: {
+            return uncompressedGetMetadata(dataType.getPhysicalType(), numValues, min, max);
+        }
+        default: {
+            break;
+        }
+        }
     }
     switch (dataType.getPhysicalType()) {
     case PhysicalTypeID::BOOL: {
@@ -259,21 +282,11 @@ CompressionMetadata createFloatMetadata(CompressionType compressionType,
         }
     }
 
-    // NOTE(gh-1447): plain loop instead of std::minmax_element so encoded min/max never
-    // depends on MSVC's vectorized STL path.
-    auto minEncoded = floatEncodedValues[0];
-    auto maxEncoded = floatEncodedValues[0];
-    for (size_t i = 1; i < floatEncodedValues.size(); ++i) {
-        if (floatEncodedValues[i] < minEncoded) {
-            minEncoded = floatEncodedValues[i];
-        }
-        if (floatEncodedValues[i] > maxEncoded) {
-            maxEncoded = floatEncodedValues[i];
-        }
-    }
+    const auto& [minEncoded, maxEncoded] =
+        std::minmax_element(floatEncodedValues.begin(), floatEncodedValues.end());
 
-    return CompressionMetadata(min, max, compressionType, alpMetadata, StorageValue{minEncoded},
-        StorageValue{maxEncoded}, physicalType);
+    return CompressionMetadata(min, max, compressionType, alpMetadata, StorageValue{*minEncoded},
+        StorageValue{*maxEncoded}, physicalType);
 }
 } // namespace
 

@@ -103,11 +103,13 @@ TEST(IntegerConstantGuardTests, Int8IssuePatternIsNotConstant) {
 
 TEST(IntegerConstantGuardTests, WrongMinMaxCannotForceConstantUint8) {
     // Simulates the MSVC bug: min/max fold reports min == max on non-constant data.
-    // The bitwise guard must prevent CONSTANT.
+    // The bitwise guard must prevent CONSTANT, and the fallback must be UNCOMPRESSED
+    // (bitWidth-0 bitpacking would allocate 0 pages and trip the flush assertion).
     std::vector<uint8_t> buffer{97, 98, 97, 98, 115};
     const auto metadata = decideWithForcedMinMax<uint8_t>(buffer, LogicalType::UINT8(),
         StorageValue(static_cast<uint8_t>(97)), StorageValue(static_cast<uint8_t>(97)));
-    EXPECT_NE(metadata.compMeta.compression, CompressionType::CONSTANT);
+    EXPECT_EQ(metadata.compMeta.compression, CompressionType::UNCOMPRESSED);
+    EXPECT_GT(metadata.getNumPages(), 0u);
 }
 
 TEST(IntegerConstantGuardTests, WrongMinMaxCannotForceConstantInt8) {
