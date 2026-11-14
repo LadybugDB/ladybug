@@ -491,8 +491,24 @@ void NodeBatchInsert::initGlobalStateInternal(ExecutionContext* context) {
         info->columnTypes.push_back(type.copy());
         info->warningDataColumns.push_back(dataColumnIdx++);
     }
-    // Init shared state
+    // Init shared state. A cached plan template and its clones share it, so it still holds the
+    // targets, counters and result table of an earlier execution. The result table is replaced,
+    // not cleared, since the earlier execution's query result may still read it.
     auto nodeSharedState = sharedState->ptrCast<NodeBatchInsertSharedState>();
+    nodeSharedState->fTable =
+        FactorizedTableUtils::getNodeCopyResultFTable(MemoryManager::Get(*clientContext));
+    nodeSharedState->numRows.store(0);
+    {
+        std::lock_guard lck{nodeSharedState->erroredRowMutex};
+        *nodeSharedState->numErroredRows = 0;
+    }
+    nodeSharedState->duplicatePKSkipResult = std::make_shared<DuplicatePKSkipResult>();
+    nodeSharedState->targets.clear();
+    nodeSharedState->partitionRefs.clear();
+    nodeSharedState->partitionHandles.clear();
+    nodeSharedState->partitionKeyColumnIdx = INVALID_COLUMN_ID;
+    nodeSharedState->partitionConstraint = nullptr;
+    nodeSharedState->listRouter.reset();
     nodeSharedState->pkColumnID = pkColumnID;
     nodeSharedState->pkType = pkDefinition.getType().copy();
     nodeSharedState->skipDuplicatePK = info->ptrCast<NodeBatchInsertInfo>()->skipDuplicatePK;
