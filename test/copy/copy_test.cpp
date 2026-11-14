@@ -1142,5 +1142,52 @@ TEST_F(CopyTest, RelCopyBuildsWorkerStateOnFirstPartition) {
     ASSERT_EQ(tuple->getValue(0)->getValue<int64_t>(), 2);
     ASSERT_EQ(tuple->getValue(1)->getValue<int64_t>(), 2020);
 }
+
+static void checkCountAndSum(main::Connection& conn, const std::string& query, int64_t count,
+    int64_t sum, int run) {
+    auto result = conn.query(query);
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_TRUE(result->hasNext());
+    auto tuple = result->getNext();
+    EXPECT_EQ(tuple->getValue(0)->getValue<int64_t>(), count) << "run " << run;
+    EXPECT_EQ(tuple->getValue(1)->getValue<int64_t>(), sum) << "run " << run;
+}
+
+static bool cachedPlanExists(main::Connection& conn, const main::PreparedStatement& statement) {
+    const auto& manager = conn.getClientContext()->getCachedPreparedStatementManager();
+    return manager.containsStatement(statement.getName()) &&
+           manager.getCachedStatement(statement.getName())->physicalPlanCache != nullptr;
+}
+
+static void usePlanPool(main::Connection& conn) {
+    for (auto query :
+        {"CALL enable_cached_prepared_statement='both'", "CALL physical_plan_pool_per_thread=5"}) {
+        auto result = conn.query(query);
+        ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    }
+}
+
+// The first execution maps a plan, the second clones the cached plan template and the third reuses
+// the second's pooled plan.
+TEST_F(CopyTest, PreparedRelCopyReexecutedFromPooledPlan) {
+    createDBAndConn();
+    usePlanPool(*conn);
+    for (auto query : {"CREATE NODE TABLE N(id STRING, PRIMARY KEY(id))",
+             "CREATE REL TABLE E(FROM N TO N, p INT64)",
+             "COPY N FROM (UNWIND range(0, 9) AS i RETURN 'k' + CAST(i AS STRING))"}) {
+        auto result = conn->query(query);
+        ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    }
+    auto copyRels = conn->prepare("COPY E FROM (MATCH (n:N) RETURN n.id, 'k5', 7)");
+    ASSERT_TRUE(copyRels->isSuccess()) << copyRels->getErrorMessage();
+    for (auto run = 0; run < 3; ++run) {
+        auto result = conn->execute(copyRels.get());
+        ASSERT_TRUE(result->isSuccess()) << "run " << run << ": " << result->getErrorMessage();
+        ASSERT_TRUE(cachedPlanExists(*conn, *copyRels));
+        checkCountAndSum(*conn, "MATCH ()-[e:E]->() RETURN count(*), CAST(sum(e.p) AS INT64)",
+            10 * (run + 1), 70 * (run + 1), run);
+    }
+}
+
 } // namespace testing
 } // namespace lbug
