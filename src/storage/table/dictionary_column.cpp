@@ -89,18 +89,10 @@ void DictionaryColumn::scan(const SegmentState& offsetState, const SegmentState&
         firstOffsetToScan = offsetsToScan.front().first;
         lastOffsetToScan = offsetsToScan.back().first;
     } else {
-        // NOTE(gh-1447): plain loop instead of std::minmax_element so scan bounds never
-        // depend on MSVC's vectorized STL path.
-        firstOffsetToScan = offsetsToScan[0].first;
-        lastOffsetToScan = offsetsToScan[0].first;
-        for (size_t i = 1; i < offsetsToScan.size(); ++i) {
-            if (offsetsToScan[i].first < firstOffsetToScan) {
-                firstOffsetToScan = offsetsToScan[i].first;
-            }
-            if (offsetsToScan[i].first > lastOffsetToScan) {
-                lastOffsetToScan = offsetsToScan[i].first;
-            }
-        }
+        const auto& [min, max] =
+            std::minmax_element(offsetsToScan.begin(), offsetsToScan.end(), comp);
+        firstOffsetToScan = min->first;
+        lastOffsetToScan = max->first;
     }
     // TODO(bmwinger): scan batches of adjacent values.
     // Ideally we scan values together until we reach empty pages
@@ -152,18 +144,10 @@ DictionaryColumn::materializeToStringChunkDictionary(const SegmentState& offsetS
         firstOffsetToScan = indexesToScan.front();
         lastOffsetToScan = indexesToScan.back();
     } else {
-        // NOTE(gh-1447): plain loop instead of std::minmax_element so scan bounds never
-        // depend on MSVC's vectorized STL path.
-        firstOffsetToScan = indexesToScan[0];
-        lastOffsetToScan = indexesToScan[0];
-        for (size_t i = 1; i < indexesToScan.size(); ++i) {
-            if (indexesToScan[i] < firstOffsetToScan) {
-                firstOffsetToScan = indexesToScan[i];
-            }
-            if (indexesToScan[i] > lastOffsetToScan) {
-                lastOffsetToScan = indexesToScan[i];
-            }
-        }
+        const auto& [min, max] =
+            std::minmax_element(indexesToScan.begin(), indexesToScan.end(), comp);
+        firstOffsetToScan = *min;
+        lastOffsetToScan = *max;
     }
 
     auto numOffsetsToScan = lastOffsetToScan - firstOffsetToScan + 1;
