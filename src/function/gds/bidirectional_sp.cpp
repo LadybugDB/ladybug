@@ -127,6 +127,8 @@ public:
     }
 
     // Returns false when the budget ran out before the search finished.
+    // No node is on both sides and each level is scanned to its end, so the first expansion that
+    // meets records every shortest path, and only those.
     // An empty level means that end has no more reachable nodes, so no path is left to find.
     bool run() {
         while (!found() && fromSource.depth + fromTarget.depth < maxLength &&
