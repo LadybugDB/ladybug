@@ -488,7 +488,7 @@ void NodeTable::initInsertState(main::ClientContext* context, TableInsertState& 
 void NodeTable::insert(Transaction* transaction, TableInsertState& insertState) {
     const auto& nodeInsertState = insertState.cast<NodeTableInsertState>();
     UniqueConstraintChecker::checkInsert(transaction->getClientContext(), this,
-        nodeInsertState.propertyVectors);
+        nodeInsertState.propertyVectors, nullptr, nullptr);
     auto& nodeIDSelVector = nodeInsertState.nodeIDVector.state->getSelVector();
     DASSERT(nodeInsertState.propertyVectors[0]->state->getSelVector().getSelSize() == 1);
     DASSERT(nodeIDSelVector.getSelSize() == 1);

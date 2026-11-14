@@ -394,8 +394,10 @@ void RelTable::checkRelMultiplicityConstraint(Transaction* transaction,
 
 void RelTable::insert(Transaction* transaction, TableInsertState& insertState) {
     checkRelMultiplicityConstraint(transaction, insertState);
+    auto& constraintInsertState = insertState.cast<RelTableInsertState>();
     UniqueConstraintChecker::checkInsert(transaction->getClientContext(), this,
-        insertState.cast<RelTableInsertState>().propertyVectors);
+        constraintInsertState.propertyVectors, &constraintInsertState.srcNodeIDVector,
+        &constraintInsertState.dstNodeIDVector);
 
     DASSERT(transaction->getLocalStorage());
     const auto localTable = transaction->getLocalStorage()->getOrCreateLocalTable(*this);
