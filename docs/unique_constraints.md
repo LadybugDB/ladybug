@@ -43,7 +43,9 @@ Endpoint parts work in any position and mix freely with property parts.
   to `+0.0`); no lossy string form is used, so `0.1` vs `0.1000001`, `['a,b']` vs
   `['a', 'b']`, and struct field-boundary collisions can never false-positive.
 - Only native (non-partitioned, non-columnar) tables are supported; foreign and
-  partitioned tables are rejected at bind time with a clear error.
+  partitioned tables are rejected at bind time with a clear error. Rel tables with
+  BWD-only storage are rejected too (the engine cannot address that layout through
+  the directional table data the scans use).
 
 ## Enforcement points
 

@@ -1,5 +1,6 @@
 #include "storage/unique_constraint_checker.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <limits>
