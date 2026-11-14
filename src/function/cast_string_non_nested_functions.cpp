@@ -83,11 +83,7 @@ bool TryCastStringToTimestamp::tryCast<timestamp_ms_t>(const char* input, uint64
     if (!Timestamp::tryConvertTimestamp(input, len, result)) {
         return false;
     }
-    try {
-        result = Timestamp::getEpochMilliSeconds(result);
-    } catch (const OverflowException&) {
-        return false;
-    }
+    result = Timestamp::getEpochMilliSeconds(result);
     return true;
 }
 
@@ -97,11 +93,7 @@ bool TryCastStringToTimestamp::tryCast<timestamp_sec_t>(const char* input, uint6
     if (!Timestamp::tryConvertTimestamp(input, len, result)) {
         return false;
     }
-    try {
-        result = Timestamp::getEpochSeconds(result);
-    } catch (const OverflowException&) {
-        return false;
-    }
+    result = Timestamp::getEpochSeconds(result);
     return true;
 }
 
@@ -112,27 +104,16 @@ void TryCastStringToTimestamp::cast<timestamp_ns_t>(const char* input, uint64_t 
         throw ConversionException(Timestamp::getTimestampConversionExceptionMsg(input, len,
             LogicalTypeUtils::toString(typeID)));
     }
-    result = Timestamp::getEpochNanoSeconds(result);
-}
-
-template<>
-void TryCastStringToTimestamp::cast<timestamp_ms_t>(const char* input, uint64_t len,
-    timestamp_t& result, LogicalTypeID typeID) {
-    if (!Timestamp::tryConvertTimestamp(input, len, result)) {
+    try {
+        result = Timestamp::getEpochNanoSeconds(result);
+    } catch (const OverflowException&) {
+        // Report range failures as conversion errors (naming the value and TIMESTAMP_NS) so
+        // that COPY ... (IGNORE_ERRORS=true) skips the row with a warning instead of aborting
+        // the whole file, matching e.g. CAST('300' AS INT8). The CSV reader only skips rows on
+        // ConversionException. tryCast<timestamp_ns_t> already returns failure here.
         throw ConversionException(Timestamp::getTimestampConversionExceptionMsg(input, len,
             LogicalTypeUtils::toString(typeID)));
     }
-    result = Timestamp::getEpochMilliSeconds(result);
-}
-
-template<>
-void TryCastStringToTimestamp::cast<timestamp_sec_t>(const char* input, uint64_t len,
-    timestamp_t& result, LogicalTypeID typeID) {
-    if (!Timestamp::tryConvertTimestamp(input, len, result)) {
-        throw ConversionException(Timestamp::getTimestampConversionExceptionMsg(input, len,
-            LogicalTypeUtils::toString(typeID)));
-    }
-    result = Timestamp::getEpochSeconds(result);
 }
 
 static bool isDate(std::string_view str) {

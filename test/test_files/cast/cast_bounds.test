@@ -116,7 +116,7 @@ True
 -LOG TimestampNsOutOfRange
 -STATEMENT RETURN CAST('9999-01-01 00:00:00' AS TIMESTAMP_NS)
 ---- error
-Overflow exception: Value 253370764800000000 * 1000 is not within INT64 range.
+Conversion exception: Error occurred during parsing TIMESTAMP_NS. Given: "9999-01-01 00:00:00". Expected format: (YYYY-MM-DD hh:mm:ss[.zzzzzz][+-TT[:tt]])
 -STATEMENT RETURN CAST(CAST('9999-01-01 00:00:00' AS TIMESTAMP) AS TIMESTAMP_NS)
 ---- error
 Overflow exception: Value 253370764800000000 * 1000 is not within INT64 range.
