@@ -35,6 +35,8 @@ std::string CatalogEntryTypeUtils::toString(CatalogEntryType type) {
         return "TYPE_ENTRY";
     case CatalogEntryType::INDEX_ENTRY:
         return "INDEX_ENTRY";
+    case CatalogEntryType::CONSTRAINT_ENTRY:
+        return "CONSTRAINT_ENTRY";
     case CatalogEntryType::GRAPH_ENTRY:
         return "GRAPH_ENTRY";
     }

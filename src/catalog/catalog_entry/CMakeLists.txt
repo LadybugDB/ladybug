@@ -11,7 +11,8 @@ add_library(lbug_catalog_entry
         scalar_macro_catalog_entry.cpp
         type_catalog_entry.cpp
         sequence_catalog_entry.cpp
-        index_catalog_entry.cpp)
+        index_catalog_entry.cpp
+        constraint_catalog_entry.cpp)
 
 set(ALL_OBJECT_FILES
         ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:lbug_catalog_entry>

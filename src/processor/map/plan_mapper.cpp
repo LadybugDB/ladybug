@@ -109,6 +109,12 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapOperator(const LogicalOperator*
     case LogicalOperatorType::CREATE_INDEX: {
         physicalOperator = mapCreateIndex(logicalOperator);
     } break;
+    case LogicalOperatorType::CREATE_CONSTRAINT: {
+        physicalOperator = mapCreateConstraint(logicalOperator);
+    } break;
+    case LogicalOperatorType::DROP_CONSTRAINT: {
+        physicalOperator = mapDropConstraint(logicalOperator);
+    } break;
     case LogicalOperatorType::CREATE_TYPE: {
         physicalOperator = mapCreateType(logicalOperator);
     } break;

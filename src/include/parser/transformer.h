@@ -211,6 +211,11 @@ public:
         CypherParser::IC_PartitionByContext* ctx);
     std::unique_ptr<Statement> transformCreateRelGroup(CypherParser::IC_CreateRelTableContext& ctx);
     std::unique_ptr<Statement> transformCreateIndex(CypherParser::IC_CreateIndexContext& ctx);
+    std::unique_ptr<Statement> transformCreateConstraint(
+        CypherParser::IC_CreateConstraintContext& ctx);
+    std::unique_ptr<Statement> transformDropConstraint(CypherParser::IC_DropConstraintContext& ctx);
+    std::unique_ptr<Statement> transformShowConstraints(
+        CypherParser::IC_ShowConstraintsContext& ctx);
     std::unique_ptr<Statement> transformCreateSequence(CypherParser::IC_CreateSequenceContext& ctx);
     std::unique_ptr<Statement> transformCreateType(CypherParser::IC_CreateTypeContext& ctx);
     std::unique_ptr<Statement> transformDrop(CypherParser::IC_DropContext& ctx);

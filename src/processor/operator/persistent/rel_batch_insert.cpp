@@ -15,6 +15,7 @@
 #include "storage/table/column_chunk_data.h"
 #include "storage/table/csr_chunked_node_group.h"
 #include "storage/table/rel_table.h"
+#include "storage/unique_constraint_checker.h"
 #include "transaction/transaction_context.h"
 #include <format>
 
@@ -286,6 +287,11 @@ void RelBatchInsert::finalizeInternal(ExecutionContext* context) {
             warningContext->defaultPopulateAllWarnings(context->queryID);
         }
     }
+    // UNIQUE constraints are validated once at the end of the load (rather than per row):
+    // a violation aborts the transaction and discards the whole COPY. Group validation
+    // covers all (src, dst) pair tables, so cross-pair duplicates are caught.
+    storage::UniqueConstraintChecker::validateTableConstraints(context->clientContext,
+        sharedState->table->ptrCast<storage::RelTable>());
     sharedState->numRows.store(0);
     sharedState->table->cast<RelTable>().setHasChanges();
     partitionerSharedState->resetState(relInfo->partitioningIdx);

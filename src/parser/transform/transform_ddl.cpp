@@ -1,11 +1,16 @@
+#include "common/enums/query_rel_type.h"
 #include "common/exception/parser.h"
 #include "parser/ddl/alter.h"
+#include "parser/ddl/create_constraint.h"
 #include "parser/ddl/create_index.h"
 #include "parser/ddl/create_sequence.h"
 #include "parser/ddl/create_table.h"
 #include "parser/ddl/create_type.h"
 #include "parser/ddl/drop.h"
+#include "parser/ddl/drop_constraint.h"
 #include "parser/ddl/drop_info.h"
+#include "parser/ddl/show_constraints.h"
+#include "parser/query/graph_pattern/rel_pattern.h"
 #include "parser/transformer.h"
 #include <format>
 
@@ -276,6 +281,71 @@ std::unique_ptr<Statement> Transformer::transformCreateType(
     auto name = transformSchemaName(*ctx.oC_SchemaName());
     auto type = transformDataType(*ctx.iC_DataType());
     return std::make_unique<CreateType>(name, type);
+}
+
+std::unique_ptr<Statement> Transformer::transformCreateConstraint(
+    CypherParser::IC_CreateConstraintContext& ctx) {
+    auto constraintName = transformSchemaName(*ctx.oC_SchemaName());
+    auto onConflict = transformConflictAction(ctx.iC_IfNotExists());
+    auto& patternCtx = *ctx.iC_ConstraintPattern();
+    std::string variableName;
+    std::string tableName;
+    auto isRelConstraint = false;
+    if (patternCtx.iC_ConstraintNodePattern() != nullptr) {
+        auto& nodeCtx = *patternCtx.iC_ConstraintNodePattern();
+        if (nodeCtx.oC_Variable() != nullptr) {
+            variableName = transformVariable(*nodeCtx.oC_Variable());
+        }
+        tableName = transformLabelName(*nodeCtx.oC_LabelName());
+    } else {
+        auto& relCtx = *patternCtx.iC_ConstraintRelPattern();
+        auto relPattern = transformRelationshipPattern(*relCtx.oC_RelationshipPattern());
+        if (common::QueryRelTypeUtils::isRecursive(relPattern.getRelType())) {
+            throw ParserException("CREATE CONSTRAINT does not support recursive relationship "
+                                  "patterns, e.g. use FOR ()-[r:RELTYPE]-().");
+        }
+        const auto& tableNames = relPattern.getTableNames();
+        if (tableNames.size() != 1) {
+            throw ParserException("CREATE CONSTRAINT requires exactly one relationship type, "
+                                  "e.g. FOR ()-[r:RELTYPE]-().");
+        }
+        variableName = relPattern.getVariableName();
+        tableName = tableNames[0];
+        isRelConstraint = true;
+    }
+    auto& requireCtx = *ctx.iC_ConstraintRequire();
+    std::vector<std::string> propertyNames;
+    for (auto propCtx : requireCtx.iC_ConstraintProperty()) {
+        auto propVar = transformVariable(*propCtx->oC_Variable());
+        if (!variableName.empty() && propVar != variableName) {
+            throw ParserException("Constraint property variable must match the pattern "
+                                  "variable.");
+        }
+        if (variableName.empty()) {
+            variableName = std::move(propVar);
+        }
+        propertyNames.push_back(transformPropertyKeyName(*propCtx->oC_PropertyKeyName()));
+    }
+    if (propertyNames.empty()) {
+        throw ParserException("CREATE CONSTRAINT requires at least one property.");
+    }
+    return std::make_unique<CreateConstraint>(
+        CreateConstraintInfo{std::move(constraintName), std::move(variableName),
+            std::move(tableName), isRelConstraint, std::move(propertyNames), onConflict});
+}
+
+std::unique_ptr<Statement> Transformer::transformDropConstraint(
+    CypherParser::IC_DropConstraintContext& ctx) {
+    auto constraintName = transformSchemaName(*ctx.oC_SchemaName());
+    auto onConflict = ctx.iC_IfExists() ? common::ConflictAction::ON_CONFLICT_DO_NOTHING :
+                                          common::ConflictAction::ON_CONFLICT_THROW;
+    return std::make_unique<DropConstraint>(
+        DropConstraintInfo{std::move(constraintName), onConflict});
+}
+
+std::unique_ptr<Statement> Transformer::transformShowConstraints(
+    CypherParser::IC_ShowConstraintsContext& /*ctx*/) {
+    return std::make_unique<ShowConstraints>();
 }
 
 DropType transformDropType(CypherParser::IC_DropContext& ctx) {

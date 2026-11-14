@@ -33,6 +33,7 @@
 #include "storage/table/chunked_node_group.h"
 #include "storage/table/node_table.h"
 #include "storage/table/string_chunk_data.h"
+#include "storage/unique_constraint_checker.h"
 #include "transaction/transaction.h"
 #include <format>
 
@@ -1067,6 +1068,14 @@ void NodeBatchInsert::finalize(ExecutionContext* context) {
         }
         for (auto& index : sharedTarget.table->getIndexes()) {
             index.finalize(clientContext);
+        }
+    }
+    // UNIQUE constraints are validated once at the end of the load (rather than per row):
+    // a violation aborts the transaction and discards the whole COPY.
+    for (auto& sharedTarget : nodeSharedState->targets) {
+        if (sharedTarget.table != nullptr) {
+            storage::UniqueConstraintChecker::validateTableConstraints(clientContext,
+                sharedTarget.table);
         }
     }
     // we want to flush all index errors before children call finalize

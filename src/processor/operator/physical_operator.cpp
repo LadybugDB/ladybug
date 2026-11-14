@@ -37,6 +37,8 @@ std::string PhysicalOperatorUtils::operatorTypeToString(PhysicalOperatorType ope
         return "COUNT_REL_TABLE";
     case PhysicalOperatorType::CREATE_MACRO:
         return "CREATE_MACRO";
+    case PhysicalOperatorType::CREATE_CONSTRAINT:
+        return "CREATE_CONSTRAINT";
     case PhysicalOperatorType::CREATE_INDEX:
         return "CREATE_INDEX";
     case PhysicalOperatorType::CREATE_SEQUENCE:
@@ -53,6 +55,8 @@ std::string PhysicalOperatorUtils::operatorTypeToString(PhysicalOperatorType ope
         return "DELETE";
     case PhysicalOperatorType::DROP:
         return "DROP";
+    case PhysicalOperatorType::DROP_CONSTRAINT:
+        return "DROP_CONSTRAINT";
     case PhysicalOperatorType::DUMMY_SINK:
         return "DUMMY_SINK";
     case PhysicalOperatorType::DUMMY_SIMPLE_SINK:

@@ -69,6 +69,12 @@ LogicalPlan Planner::planStatement(const BoundStatement& statement) {
     case StatementType::CREATE_INDEX: {
         return planCreateIndex(statement);
     }
+    case StatementType::CREATE_CONSTRAINT: {
+        return planCreateConstraint(statement);
+    }
+    case StatementType::DROP_CONSTRAINT: {
+        return planDropConstraint(statement);
+    }
     case StatementType::CREATE_SEQUENCE: {
         return planCreateSequence(statement);
     }

@@ -10,13 +10,16 @@
 #include "binder/bound_transaction_statement.h"
 #include "binder/bound_use_database.h"
 #include "binder/ddl/bound_alter.h"
+#include "binder/ddl/bound_create_constraint.h"
 #include "binder/ddl/bound_create_index.h"
 #include "binder/ddl/bound_create_sequence.h"
 #include "binder/ddl/bound_create_table.h"
 #include "binder/ddl/bound_create_type.h"
 #include "binder/ddl/bound_drop.h"
+#include "binder/ddl/bound_drop_constraint.h"
 #include "extension/planner_extension.h"
 #include "planner/operator/ddl/logical_alter.h"
+#include "planner/operator/ddl/logical_constraint.h"
 #include "planner/operator/ddl/logical_create_index.h"
 #include "planner/operator/ddl/logical_create_sequence.h"
 #include "planner/operator/ddl/logical_create_table.h"
@@ -78,6 +81,18 @@ LogicalPlan Planner::planCreateTable(const BoundStatement& statement) {
 LogicalPlan Planner::planCreateIndex(const BoundStatement& statement) {
     auto& createIndex = statement.constCast<BoundCreateIndex>();
     auto op = std::make_shared<LogicalCreateIndex>(createIndex.getInfo().copy());
+    return getSimplePlan(std::move(op));
+}
+
+LogicalPlan Planner::planCreateConstraint(const BoundStatement& statement) {
+    auto& createConstraint = statement.constCast<BoundCreateConstraint>();
+    auto op = std::make_shared<LogicalCreateConstraint>(createConstraint.getInfo().copy());
+    return getSimplePlan(std::move(op));
+}
+
+LogicalPlan Planner::planDropConstraint(const BoundStatement& statement) {
+    auto& dropConstraint = statement.constCast<BoundDropConstraint>();
+    auto op = std::make_shared<LogicalDropConstraint>(dropConstraint.getInfo());
     return getSimplePlan(std::move(op));
 }
 

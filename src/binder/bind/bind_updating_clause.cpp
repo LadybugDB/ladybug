@@ -9,6 +9,7 @@
 #include "binder/query/updating_clause/bound_merge_clause.h"
 #include "binder/query/updating_clause/bound_set_clause.h"
 #include "catalog/catalog.h"
+#include "catalog/catalog_entry/constraint_catalog_entry.h"
 #include "catalog/catalog_entry/index_catalog_entry.h"
 #include "catalog/catalog_entry/node_table_catalog_entry.h"
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
@@ -583,6 +584,23 @@ BoundSetPropertyInfo Binder::bindSetPropertyInfo(const ParsedExpression* column,
                 std::format("Cannot set property {} in table {} because it is used in one or more "
                             "indexes which is unloaded.",
                     property.getPropertyName(), entry->getName()));
+        }
+    }
+    // Check unique constraint: SET on a constrained property could silently create
+    // duplicates, and per-row revalidation is not implemented yet. Refuse with a clear
+    // error rather than risk violating the constraint.
+    for (auto entry : nodeOrRel.getEntries()) {
+        if (!property.hasProperty(entry->getTableID())) {
+            continue;
+        }
+        auto propertyID = entry->getPropertyID(property.getPropertyName());
+        for (auto* constraint : catalog->getConstraintEntries(transaction, entry->getTableID())) {
+            if (constraint->containsPropertyID(propertyID)) {
+                throw BinderException(std::format(
+                    "Cannot set property {} in table {} because it is used in unique "
+                    "constraint {}. Try delete and then insert with the new value.",
+                    property.getPropertyName(), entry->getName(), constraint->getConstraintName()));
+            }
         }
     }
     // Check primary key constraint
