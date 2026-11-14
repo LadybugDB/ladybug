@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <optional>
 
 #include "binder/binder.h"
@@ -615,7 +616,16 @@ std::unique_ptr<BoundStatement> Binder::bindCreateConstraint(const Statement& st
         throw BinderException("CREATE CONSTRAINT is only supported on native node and rel tables.");
     }
     // Immutable columnar formats manage their own storage layout; scan-based enforcement
-    // does not cover them.
+    // does not cover them. BWD-only rel storage is rejected too: the engine cannot
+    // address it through the directional table data used by the scans.
+    if (tableEntry->getTableType() == common::TableType::REL) {
+        auto directions = tableEntry->ptrCast<RelGroupCatalogEntry>()->getRelDataDirections();
+        if (std::find(directions.begin(), directions.end(), common::RelDataDirection::FWD) ==
+            directions.end()) {
+            throw BinderException("CREATE CONSTRAINT is not supported on rel tables without "
+                                  "forward storage direction.");
+        }
+    }
     if (tableEntry->getTableType() == common::TableType::NODE) {
         if (tableEntry->ptrCast<NodeTableCatalogEntry>()->getStorageFormat() !=
             common::StorageFormat::NONE) {
