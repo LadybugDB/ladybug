@@ -250,6 +250,10 @@ public:
     uint64_t computeHash() const;
 
     uint32_t getChildrenSize() const { return childrenSize; }
+    const Value* getChildValue(uint32_t idx) const {
+        DASSERT(idx < childrenSize);
+        return children[idx].get();
+    }
 
 private:
     Value();

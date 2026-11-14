@@ -646,9 +646,35 @@ std::unique_ptr<BoundStatement> Binder::bindCreateConstraint(const Statement& st
         catalog->containsConstraint(transaction, info.constraintName)) {
         throw BinderException(std::format("Constraint {} already exists.", info.constraintName));
     }
+    // Endpoint references (src/dst) are only meaningful on rel patterns. They resolve to
+    // the edge's endpoints unless the table defines a real property with that name, in
+    // which case the property wins and the endpoint is not referenceable.
+    auto resolveEndpoint = [&](const std::string& propertyName,
+                               std::optional<common::property_id_t>& endpointID) -> bool {
+        if (!info.isRelConstraint) {
+            return false;
+        }
+        if (common::StringUtils::caseInsensitiveEquals(propertyName, "src")) {
+            endpointID = ConstraintCatalogEntry::SRC_ENDPOINT_ID;
+        } else if (common::StringUtils::caseInsensitiveEquals(propertyName, "dst")) {
+            endpointID = ConstraintCatalogEntry::DST_ENDPOINT_ID;
+        } else {
+            return false;
+        }
+        return !tableEntry->containsProperty(propertyName);
+    };
     std::vector<common::property_id_t> propertyIDs;
     case_insensitve_set_t seenProperties;
     for (auto& propertyName : info.propertyNames) {
+        std::optional<common::property_id_t> endpointID;
+        if (resolveEndpoint(propertyName, endpointID)) {
+            if (!seenProperties.insert("\x00endpoint:" + propertyName).second) {
+                throw BinderException(
+                    std::format("Duplicated property {} in CREATE CONSTRAINT.", propertyName));
+            }
+            propertyIDs.push_back(*endpointID);
+            continue;
+        }
         validateColumnExistence(tableEntry, propertyName);
         if (!seenProperties.insert(propertyName).second) {
             throw BinderException(

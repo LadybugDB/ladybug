@@ -5,6 +5,7 @@
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
 #include "catalog/catalog_entry/table_catalog_entry.h"
 #include "common/exception/binder.h"
+#include "common/string_utils.h"
 #include "processor/execution_context.h"
 #include "storage/buffer_manager/memory_manager.h"
 #include "storage/storage_manager.h"
@@ -42,25 +43,36 @@ void CreateConstraint::executeInternal(ExecutionContext* context) {
     if (tableEntry == nullptr) {
         throw BinderException(std::format("Table {} does not exist.", info.tableName));
     }
-    // Re-resolve property IDs by name: the bound IDs may predate same-transaction schema
-    // changes (e.g. DROP + re-ADD COLUMN).
+    // Re-resolve key parts by name: the bound IDs may predate same-transaction schema
+    // changes (e.g. DROP + re-ADD COLUMN). Endpoint references (src/dst) resolve to
+    // sentinels unless the table defines a real property with that name.
     std::vector<property_id_t> propertyIDs;
-    std::vector<column_id_t> columnIDs;
     for (auto& propertyName : info.propertyNames) {
+        auto endpointID = property_id_t{INVALID_PROPERTY_ID};
+        if (info.isRelConstraint) {
+            if (StringUtils::caseInsensitiveEquals(propertyName, "src")) {
+                endpointID = ConstraintCatalogEntry::SRC_ENDPOINT_ID;
+            } else if (StringUtils::caseInsensitiveEquals(propertyName, "dst")) {
+                endpointID = ConstraintCatalogEntry::DST_ENDPOINT_ID;
+            }
+        }
+        if (endpointID != INVALID_PROPERTY_ID && !tableEntry->containsProperty(propertyName)) {
+            propertyIDs.push_back(endpointID);
+            continue;
+        }
         if (!tableEntry->containsProperty(propertyName)) {
             throw BinderException(std::format("Table {} does not have property {}.",
                 tableEntry->getName(), propertyName));
         }
         propertyIDs.push_back(tableEntry->getPropertyID(propertyName));
-        columnIDs.push_back(tableEntry->getColumnID(propertyName));
     }
+    const auto parts = storage::UniqueConstraintChecker::resolveParts(tableEntry, propertyIDs);
     if (info.isRelConstraint) {
-        auto* groupEntry = tableEntry->ptrCast<RelGroupCatalogEntry>();
-        storage::UniqueConstraintChecker::validateRelGroupNoDuplicates(clientContext, groupEntry,
-            columnIDs, info.constraintName);
+        storage::UniqueConstraintChecker::validateRelGroupNoDuplicates(clientContext, tableEntry,
+            parts, info.constraintName);
     } else {
         auto table = storage::StorageManager::Get(*clientContext)->getTable(info.tableID);
-        storage::UniqueConstraintChecker::validateNoDuplicates(clientContext, table, columnIDs,
+        storage::UniqueConstraintChecker::validateNoDuplicates(clientContext, table, parts,
             info.constraintName);
     }
     auto entry = std::make_unique<ConstraintCatalogEntry>(info.constraintName, info.tableID,

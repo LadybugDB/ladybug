@@ -1,5 +1,6 @@
 #pragma once
 
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -39,6 +40,18 @@ struct LBUG_API ConstraintToCypherInfo : ToCypherInfo {
 
 class LBUG_API ConstraintCatalogEntry final : public CatalogEntry {
 public:
+    // Sentinel property IDs for edge-endpoint key parts. Endpoints are not table
+    // properties, so they need IDs that can never collide with real property IDs.
+    // The REQUIRE names ("src"/"dst", any case) are stored in propertyNames for display.
+    static constexpr common::property_id_t SRC_ENDPOINT_ID =
+        std::numeric_limits<common::property_id_t>::max() - 1;
+    static constexpr common::property_id_t DST_ENDPOINT_ID =
+        std::numeric_limits<common::property_id_t>::max() - 2;
+
+    static bool isEndpointPropertyID(common::property_id_t propertyID) {
+        return propertyID == SRC_ENDPOINT_ID || propertyID == DST_ENDPOINT_ID;
+    }
+
     ConstraintCatalogEntry(std::string constraintName, common::table_id_t tableID,
         std::string tableName, bool isRelConstraint, std::vector<common::property_id_t> propertyIDs,
         std::vector<std::string> propertyNames,
@@ -61,6 +74,11 @@ public:
     const std::vector<common::property_id_t>& getPropertyIDs() const { return propertyIDs; }
     const std::vector<std::string>& getPropertyNames() const { return propertyNames; }
     bool containsPropertyID(common::property_id_t propertyID) const;
+
+    // Display names for SHOW CONSTRAINTS / toCypher: endpoint parts render from the
+    // cached REQUIRE names, real properties re-resolve live so RENAME PROPERTY is
+    // reflected. Falls back to cached names when the table is gone.
+    std::vector<std::string> resolvePropertyNames(const main::ClientContext* context) const;
 
     void serialize(common::Serializer& serializer) const override;
     static std::unique_ptr<ConstraintCatalogEntry> deserialize(common::Deserializer& deserializer);

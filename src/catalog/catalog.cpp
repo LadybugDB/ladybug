@@ -21,6 +21,7 @@
 #include "function/function_collection.h"
 #include "main/client_context.h"
 #include "main/database_manager.h"
+#include "storage/storage_version_info.h"
 #include "transaction/transaction.h"
 #include <format>
 
@@ -953,7 +954,13 @@ void Catalog::deserialize(Deserializer& deSer) {
     registerBuiltInFunctions();
     types = CatalogSet::deserialize(this, deSer);
     indexes = CatalogSet::deserialize(this, deSer);
-    constraints = CatalogSet::deserialize(this, deSer);
+    // UNIQUE constraints were added in storage version 52. Older files have no constraint
+    // entries, so the sets from macros on would otherwise land one slot off.
+    if (deSer.getStorageVersion() >= storage::StorageVersionInfo::STORAGE_VERSION_52) {
+        constraints = CatalogSet::deserialize(this, deSer);
+    } else {
+        constraints = std::make_unique<CatalogSet>(this);
+    }
     macros = CatalogSet::deserialize(this, deSer);
     internalTables = CatalogSet::deserialize(this, deSer);
     internalSequences = CatalogSet::deserialize(this, deSer);
