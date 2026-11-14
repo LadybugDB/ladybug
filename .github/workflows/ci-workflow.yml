@@ -341,7 +341,7 @@ jobs:
 
   minimal-linux-extension-test:
     name: minimal linux extension test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.platform == 'linux' || github.event.inputs.platform == 'all' }}
     env:
       GEN: Ninja
