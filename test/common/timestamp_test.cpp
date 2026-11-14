@@ -1,4 +1,7 @@
+#include <limits>
+
 #include "common/exception/conversion.h"
+#include "common/exception/overflow.h"
 #include "common/types/date_t.h"
 #include "common/types/timestamp_t.h"
 #include "gtest/gtest.h"
@@ -124,4 +127,35 @@ TEST(TimestampTests, toString) {
     EXPECT_EQ(Timestamp::toString(timestamp_t(1691798400000000)), "2023-08-12 00:00:00");
     EXPECT_EQ(Timestamp::toString(timestamp_t(4501210883005612)), "2112-08-21 08:21:23.005612");
     EXPECT_EQ(Timestamp::toString(timestamp_t(704452976000000)), "1992-04-28 09:22:56");
+}
+
+TEST(TimestampTests, FromEpochSecondsOverflow) {
+    // Sibling of the EpochMsOverflow cases in test/test_files/function/timestamp.test,
+    // for the seconds path: fromEpochSeconds multiplies by MICROS_PER_SEC (1000000)
+    // through the checked Multiply overload and must throw on overflow instead of
+    // wrapping. No SQL surface can construct a TIMESTAMP_SEC value large enough to
+    // reach this overflow (every SQL construction divides an int64 microsecond
+    // timestamp by MICROS_PER_SEC first), so the case lives in this unit test.
+    try {
+        Timestamp::fromEpochSeconds(std::numeric_limits<int64_t>::max());
+        FAIL();
+    } catch (OverflowException& e) {
+        ASSERT_STREQ(e.what(), "Overflow exception: Value 9223372036854775807 * 1000000 "
+                               "is not within INT64 range.");
+    } catch (std::exception& e) {
+        FAIL();
+    }
+
+    try {
+        Timestamp::fromEpochSeconds(std::numeric_limits<int64_t>::min());
+        FAIL();
+    } catch (OverflowException& e) {
+        ASSERT_STREQ(e.what(), "Overflow exception: Value -9223372036854775808 * 1000000 "
+                               "is not within INT64 range.");
+    } catch (std::exception& e) {
+        FAIL();
+    }
+
+    // In-range control: 253370764800 sec is 9999-01-01 00:00:00 in microseconds.
+    EXPECT_EQ(Timestamp::fromEpochSeconds(253370764800).value, 253370764800000000);
 }
