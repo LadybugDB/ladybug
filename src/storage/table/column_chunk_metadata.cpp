@@ -24,7 +24,11 @@ namespace {
 // other distinct values, and -0.0 compares equal to 0.0 while differing bitwise.
 // Declaring such chunks CONSTANT would silently replace every value with a single
 // one on flush (gh-1043). Bitwise comparison also keeps distinct NaN payloads apart.
-template<std::floating_point T>
+// The same guard is required for integer types: a wrong min/max (e.g. MSVC's
+// vectorized std::minmax_element returning min == max for non-constant uint8_t/int8_t
+// data, gh-1447) must only cost compression, never data. Verifying bitwise equality
+// before choosing CONSTANT turns any such min/max error into a compression miss.
+template<typename T>
 bool isBitwiseConstant(std::span<const uint8_t> buffer, uint64_t numValues) {
     if (numValues <= 1) {
         return true;
@@ -44,13 +48,33 @@ bool isBitwiseConstant(std::span<const uint8_t> buffer, uint64_t numValues) {
 // in-memory ConstantCompression::analyze behavior (which memcmps null slots too).
 // This is conservative: a constant value with differently-stuffed null slots falls
 // back to ALP/uncompressed, which is always correct.
-bool isFalseConstantFloat(PhysicalTypeID physicalType, std::span<const uint8_t> buffer,
+bool isFalseConstant(PhysicalTypeID physicalType, std::span<const uint8_t> buffer,
     uint64_t numValues) {
     switch (physicalType) {
     case PhysicalTypeID::DOUBLE:
         return !isBitwiseConstant<double>(buffer, numValues);
     case PhysicalTypeID::FLOAT:
         return !isBitwiseConstant<float>(buffer, numValues);
+    case PhysicalTypeID::INT8:
+        return !isBitwiseConstant<int8_t>(buffer, numValues);
+    case PhysicalTypeID::INT16:
+        return !isBitwiseConstant<int16_t>(buffer, numValues);
+    case PhysicalTypeID::INT32:
+        return !isBitwiseConstant<int32_t>(buffer, numValues);
+    case PhysicalTypeID::INT64:
+        return !isBitwiseConstant<int64_t>(buffer, numValues);
+    case PhysicalTypeID::INT128:
+        return !isBitwiseConstant<int128_t>(buffer, numValues);
+    case PhysicalTypeID::UINT8:
+        return !isBitwiseConstant<uint8_t>(buffer, numValues);
+    case PhysicalTypeID::UINT16:
+        return !isBitwiseConstant<uint16_t>(buffer, numValues);
+    case PhysicalTypeID::UINT32:
+        return !isBitwiseConstant<uint32_t>(buffer, numValues);
+    case PhysicalTypeID::UINT64:
+        return !isBitwiseConstant<uint64_t>(buffer, numValues);
+    case PhysicalTypeID::INTERNAL_ID:
+        return !isBitwiseConstant<offset_t>(buffer, numValues);
     default:
         return false;
     }
@@ -59,7 +83,7 @@ bool isFalseConstantFloat(PhysicalTypeID physicalType, std::span<const uint8_t> 
 
 ColumnChunkMetadata GetCompressionMetadata::operator()(std::span<const uint8_t> buffer,
     uint64_t numValues, StorageValue min, StorageValue max) const {
-    if (min == max && !isFalseConstantFloat(dataType.getPhysicalType(), buffer, numValues)) {
+    if (min == max && !isFalseConstant(dataType.getPhysicalType(), buffer, numValues)) {
         return ColumnChunkMetadata(INVALID_PAGE_IDX, 0, numValues,
             CompressionMetadata(min, max, CompressionType::CONSTANT));
     }
@@ -235,11 +259,21 @@ CompressionMetadata createFloatMetadata(CompressionType compressionType,
         }
     }
 
-    const auto& [minEncoded, maxEncoded] =
-        std::minmax_element(floatEncodedValues.begin(), floatEncodedValues.end());
+    // NOTE(gh-1447): plain loop instead of std::minmax_element so encoded min/max never
+    // depends on MSVC's vectorized STL path.
+    auto minEncoded = floatEncodedValues[0];
+    auto maxEncoded = floatEncodedValues[0];
+    for (size_t i = 1; i < floatEncodedValues.size(); ++i) {
+        if (floatEncodedValues[i] < minEncoded) {
+            minEncoded = floatEncodedValues[i];
+        }
+        if (floatEncodedValues[i] > maxEncoded) {
+            maxEncoded = floatEncodedValues[i];
+        }
+    }
 
-    return CompressionMetadata(min, max, compressionType, alpMetadata, StorageValue{*minEncoded},
-        StorageValue{*maxEncoded}, physicalType);
+    return CompressionMetadata(min, max, compressionType, alpMetadata, StorageValue{minEncoded},
+        StorageValue{maxEncoded}, physicalType);
 }
 } // namespace
 
