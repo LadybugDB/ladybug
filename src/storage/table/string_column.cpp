@@ -100,9 +100,20 @@ void StringColumn::writeSegment(ColumnChunkData& persistentChunk, SegmentState& 
     indexColumn->writeValuesInternal(getChildState(state, ChildStateIndex::INDEX),
         dstOffsetInSegment, reinterpret_cast<const uint8_t*>(&indices[0]), &nullMask,
         0 /*srcOffset*/, numValues);
-    auto [min, max] = std::minmax_element(indices.begin(), indices.end());
-    auto minWritten = StorageValue(*min);
-    auto maxWritten = StorageValue(*max);
+    // NOTE(gh-1447): plain loop instead of std::minmax_element so statistics never depend
+    // on MSVC's vectorized STL path.
+    auto minIdx = indices[0];
+    auto maxIdx = indices[0];
+    for (size_t i = 1; i < indices.size(); ++i) {
+        if (indices[i] < minIdx) {
+            minIdx = indices[i];
+        }
+        if (indices[i] > maxIdx) {
+            maxIdx = indices[i];
+        }
+    }
+    auto minWritten = StorageValue(minIdx);
+    auto maxWritten = StorageValue(maxIdx);
     updateStatistics(persistentChunk.getMetadata(), dstOffsetInSegment + numValues - 1, minWritten,
         maxWritten);
     indexColumn->updateStatistics(stringPersistentChunk.getIndexColumnChunk()->getMetadata(),
