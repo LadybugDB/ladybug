@@ -57,6 +57,27 @@ std::unique_ptr<ConstraintCatalogEntry> ConstraintCatalogEntry::deserialize(
         isRelConstraint, std::move(propertyIDs), std::move(propertyNames), constraintType);
 }
 
+std::vector<std::string> ConstraintCatalogEntry::resolvePropertyNames(
+    const main::ClientContext* context) const {
+    std::vector<std::string> liveNames = propertyNames;
+    if (context == nullptr) {
+        return liveNames;
+    }
+    auto* catalog = Catalog::Get(*context);
+    auto* transaction = transaction::Transaction::Get(*context);
+    auto* tableEntry = catalog->getTableCatalogEntry(transaction, tableID);
+    if (tableEntry == nullptr) {
+        return liveNames;
+    }
+    for (auto i = 0u; i < propertyIDs.size() && i < liveNames.size(); i++) {
+        if (isEndpointPropertyID(propertyIDs[i])) {
+            continue;
+        }
+        liveNames[i] = tableEntry->getProperty(propertyIDs[i]).getName();
+    }
+    return liveNames;
+}
+
 std::string ConstraintCatalogEntry::toCypher(const ToCypherInfo& info) const {
     // e.g. CREATE CONSTRAINT review_unique FOR ()-[r:REVIEWED]-() REQUIRE (r.userId, r.productId)
     // IS UNIQUE;
@@ -71,11 +92,8 @@ std::string ConstraintCatalogEntry::toCypher(const ToCypherInfo& info) const {
         auto* transaction = transaction::Transaction::Get(*context);
         if (auto* tableEntry = catalog->getTableCatalogEntry(transaction, tableID)) {
             liveTableName = tableEntry->getName();
-            livePropertyNames.clear();
-            for (auto propertyID : propertyIDs) {
-                livePropertyNames.push_back(tableEntry->getProperty(propertyID).getName());
-            }
         }
+        livePropertyNames = resolvePropertyNames(context);
     }
     std::string requireList;
     const std::string var = isRelConstraint ? "r" : "n";

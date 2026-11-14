@@ -1,5 +1,8 @@
 #include "storage/unique_constraint_checker.h"
 
+#include <cmath>
+#include <cstring>
+#include <limits>
 #include <unordered_set>
 
 #include "catalog/catalog.h"
@@ -10,6 +13,7 @@
 #include "common/data_chunk/data_chunk_state.h"
 #include "common/exception/runtime.h"
 #include "common/system_config.h"
+#include "common/types/types.h"
 #include "common/types/value/value.h"
 #include "common/vector/value_vector.h"
 #include "main/client_context.h"
@@ -17,6 +21,7 @@
 #include "storage/local_storage/local_node_table.h"
 #include "storage/local_storage/local_storage.h"
 #include "storage/storage_manager.h"
+#include "storage/table/csr_node_group.h"
 #include "storage/table/node_group_collection.h"
 #include "storage/table/node_table.h"
 #include "storage/table/rel_table.h"
@@ -29,25 +34,151 @@ using namespace lbug::common;
 namespace lbug {
 namespace storage {
 
-std::optional<std::string> UniqueConstraintChecker::buildKey(
-    const std::vector<ValueVector*>& keyVectors) {
-    DASSERT(!keyVectors.empty());
-    std::string key;
-    for (auto* vec : keyVectors) {
-        DASSERT(vec->state->getSelVector().getSelSize() == 1);
-        const auto p = vec->state->getSelVector()[0];
-        if (vec->isNull(p)) {
-            return std::nullopt;
-        }
-        auto val = vec->getAsValue(p);
-        key.push_back(static_cast<char>(vec->dataType.getLogicalTypeID()));
-        key += val->toString();
-        key.push_back('\x1f');
-    }
-    return key;
+namespace {
+
+// Logical type tag first, so values of different (but physically identical) types never
+// collide, then a null flag, then the payload. Fixed-size payloads are raw bytes;
+// variable-size payloads are length-prefixed so concatenations stay unambiguous
+// (e.g. ['a,b'] vs ['a','b'], or {a:'x', b:'y, b: z'} vs {a:'x, b: y', b:'z'}).
+// FLOAT/DOUBLE normalize -0.0 to +0.0 to match Value::operator==; NaN payloads are kept
+// bit-exact (same-bits NaNs conflict, mirroring exact physical comparison).
+void appendUint16(std::string& out, uint16_t v) {
+    out.append(reinterpret_cast<const char*>(&v), sizeof(v));
 }
 
-static bool rowIsNull(const std::vector<ValueVector*>& vectors, sel_t pos) {
+void appendUint64(std::string& out, uint64_t v) {
+    out.append(reinterpret_cast<const char*>(&v), sizeof(v));
+}
+
+void appendRawBytes(std::string& out, const void* data, size_t n) {
+    out.append(reinterpret_cast<const char*>(data), n);
+}
+
+void appendExactValue(std::string& out, const Value& value);
+
+void appendExactChildren(std::string& out, const Value& value) {
+    const auto count = value.getChildrenSize();
+    appendUint64(out, count);
+    for (auto i = 0u; i < count; i++) {
+        const auto* child = value.getChildValue(i);
+        if (child == nullptr || child->isNull()) {
+            out.push_back(0);
+            continue;
+        }
+        out.push_back(1);
+        appendExactValue(out, *child);
+    }
+}
+
+void appendExactValue(std::string& out, const Value& value) {
+    const auto& type = value.getDataType();
+    appendUint16(out, static_cast<uint16_t>(type.getLogicalTypeID()));
+    if (value.isNull()) {
+        out.push_back(0);
+        return;
+    }
+    out.push_back(1);
+    switch (type.getPhysicalType()) {
+    case PhysicalTypeID::BOOL: {
+        out.push_back(value.val.booleanVal ? 1 : 0);
+    } break;
+    case PhysicalTypeID::INT8: {
+        out.push_back(static_cast<char>(value.val.int8Val));
+    } break;
+    case PhysicalTypeID::INT16: {
+        appendRawBytes(out, &value.val.int16Val, sizeof(value.val.int16Val));
+    } break;
+    case PhysicalTypeID::INT32: {
+        appendRawBytes(out, &value.val.int32Val, sizeof(value.val.int32Val));
+    } break;
+    case PhysicalTypeID::INT64: {
+        appendRawBytes(out, &value.val.int64Val, sizeof(value.val.int64Val));
+    } break;
+    case PhysicalTypeID::INT128: {
+        appendRawBytes(out, &value.val.int128Val, sizeof(value.val.int128Val));
+    } break;
+    case PhysicalTypeID::UINT8: {
+        out.push_back(static_cast<char>(value.val.uint8Val));
+    } break;
+    case PhysicalTypeID::UINT16: {
+        appendRawBytes(out, &value.val.uint16Val, sizeof(value.val.uint16Val));
+    } break;
+    case PhysicalTypeID::UINT32: {
+        appendRawBytes(out, &value.val.uint32Val, sizeof(value.val.uint32Val));
+    } break;
+    case PhysicalTypeID::UINT64: {
+        appendRawBytes(out, &value.val.uint64Val, sizeof(value.val.uint64Val));
+    } break;
+    case PhysicalTypeID::UINT128: {
+        appendRawBytes(out, &value.val.uint128Val, sizeof(value.val.uint128Val));
+    } break;
+    case PhysicalTypeID::FLOAT:
+    case PhysicalTypeID::ALP_EXCEPTION_FLOAT: {
+        auto v = value.val.floatVal;
+        if (v == 0) {
+            v = 0.0f;
+        }
+        appendRawBytes(out, &v, sizeof(v));
+    } break;
+    case PhysicalTypeID::DOUBLE:
+    case PhysicalTypeID::ALP_EXCEPTION_DOUBLE: {
+        auto v = value.val.doubleVal;
+        if (v == 0) {
+            v = 0.0;
+        }
+        appendRawBytes(out, &v, sizeof(v));
+    } break;
+    case PhysicalTypeID::INTERVAL: {
+        const auto& iv = value.val.intervalVal;
+        appendRawBytes(out, &iv.months, sizeof(iv.months));
+        appendRawBytes(out, &iv.days, sizeof(iv.days));
+        appendRawBytes(out, &iv.micros, sizeof(iv.micros));
+    } break;
+    case PhysicalTypeID::INTERNAL_ID: {
+        const auto& id = value.val.internalIDVal;
+        appendRawBytes(out, &id.offset, sizeof(id.offset));
+        appendRawBytes(out, &id.tableID, sizeof(id.tableID));
+    } break;
+    case PhysicalTypeID::STRING:
+    case PhysicalTypeID::JSON: {
+        appendUint64(out, value.strVal.size());
+        out.append(value.strVal);
+    } break;
+    case PhysicalTypeID::LIST:
+    case PhysicalTypeID::ARRAY: {
+        appendExactChildren(out, value);
+    } break;
+    case PhysicalTypeID::STRUCT: {
+        // Field names disambiguate structs whose values coincide field-wise.
+        const auto& fields = StructType::getFields(type);
+        appendUint64(out, fields.size());
+        for (auto& field : fields) {
+            appendUint64(out, field.getName().size());
+            out.append(field.getName());
+        }
+        appendExactChildren(out, value);
+    } break;
+    default: {
+        // MAP materializes through the LIST/STRUCT cases above; NODE/REL/POINTER/ANY can
+        // never be stored property values. Fall back to the display form rather than
+        // failing closed on exotic extension types.
+        appendUint64(out, value.toString().size());
+        out.append(value.toString());
+    } break;
+    }
+}
+
+// Internal-ID bytes identical to what appendExactValue emits for an INTERNAL_ID value,
+// so scan-side SRC keys (built from the bound offset) match insert-side SRC keys (built
+// from the bound node-ID vector).
+void appendNodeIDBytes(std::string& out, offset_t offset, table_id_t tableID) {
+    appendUint16(out, static_cast<uint16_t>(LogicalTypeID::INTERNAL_ID));
+    out.push_back(1);
+    appendRawBytes(out, &offset, sizeof(offset));
+    appendRawBytes(out, &tableID, sizeof(tableID));
+}
+
+bool rowIsNull(const std::vector<ValueVector*>& vectors, sel_t pos) {
     for (auto* vec : vectors) {
         if (vec->isNull(pos)) {
             return true;
@@ -56,13 +187,78 @@ static bool rowIsNull(const std::vector<ValueVector*>& vectors, sel_t pos) {
     return false;
 }
 
-static std::string buildKeyFromRow(const std::vector<ValueVector*>& vectors, sel_t pos) {
+std::string buildKeyFromRow(const std::vector<ValueVector*>& vectors, sel_t pos) {
     std::string key;
     for (auto* vec : vectors) {
         auto val = vec->getAsValue(pos);
-        key.push_back(static_cast<char>(vec->dataType.getLogicalTypeID()));
-        key += val->toString();
-        key.push_back('\x1f');
+        appendExactValue(key, *val);
+    }
+    return key;
+}
+
+void throwDuplicateError(const std::string& constraintName) {
+    throw RuntimeException(
+        std::format("Unique constraint {} violated: duplicate key.", constraintName));
+}
+
+} // namespace
+
+std::vector<UniqueConstraintChecker::ResolvedPart> UniqueConstraintChecker::resolveParts(
+    TableCatalogEntry* tableEntry, const std::vector<property_id_t>& propertyIDs) {
+    std::vector<ResolvedPart> parts;
+    // Insert-state vectors are positionally aligned with the table's current property list
+    // (unlike storage column IDs, positions have no gaps after DROP COLUMN).
+    const auto properties = tableEntry->getProperties();
+    for (auto propertyID : propertyIDs) {
+        if (propertyID == ConstraintCatalogEntry::SRC_ENDPOINT_ID) {
+            parts.push_back(
+                ResolvedPart{ResolvedPart::Kind::SRC, INVALID_COLUMN_ID, INVALID_COLUMN_ID});
+            continue;
+        }
+        if (propertyID == ConstraintCatalogEntry::DST_ENDPOINT_ID) {
+            parts.push_back(
+                ResolvedPart{ResolvedPart::Kind::DST, NBR_ID_COLUMN_ID, INVALID_COLUMN_ID});
+            continue;
+        }
+        uint32_t position = INVALID_COLUMN_ID;
+        for (auto i = 0u; i < properties.size(); i++) {
+            if (tableEntry->getPropertyID(properties[i].getName()) == propertyID) {
+                position = i;
+                break;
+            }
+        }
+        if (position == INVALID_COLUMN_ID) {
+            throw RuntimeException(std::format(
+                "Unique constraint internal error: property ID {} not found in table {}.",
+                propertyID, tableEntry->getName()));
+        }
+        const auto columnID = tableEntry->getColumnID(properties[position].getName());
+        parts.push_back(ResolvedPart{ResolvedPart::Kind::PROPERTY, columnID, position});
+    }
+    return parts;
+}
+
+std::vector<UniqueConstraintChecker::ResolvedPart> UniqueConstraintChecker::resolveParts(
+    TableCatalogEntry* tableEntry, const ConstraintCatalogEntry* constraint) {
+    return resolveParts(tableEntry, constraint->getPropertyIDs());
+}
+
+std::optional<std::string> UniqueConstraintChecker::buildKey(const std::vector<ResolvedPart>& parts,
+    const std::vector<ValueVector*>& keyVectors) {
+    DASSERT(!parts.empty() && parts.size() == keyVectors.size());
+    std::string key;
+    for (auto i = 0u; i < parts.size(); i++) {
+        auto* vec = keyVectors[i];
+        if (vec == nullptr) {
+            return std::nullopt;
+        }
+        DASSERT(vec->state->getSelVector().getSelSize() == 1);
+        const auto p = vec->state->getSelVector()[0];
+        if (vec->isNull(p)) {
+            return std::nullopt;
+        }
+        auto val = vec->getAsValue(p);
+        appendExactValue(key, *val);
     }
     return key;
 }
@@ -91,11 +287,15 @@ static void scanNodeGroups(transaction::Transaction* transaction, NodeTable* tab
             if (res == NODE_GROUP_SCAN_EMPTY_RESULT) {
                 break;
             }
-            for (auto i = 0u; i < res.numRows; i++) {
-                if (rowIsNull(outVectors, i)) {
+            // Rows are written densely from position 0; visibility (deleted rows, own
+            // uncommitted state) is expressed through the output selection vector.
+            const auto& sel = chunkState->getSelVector();
+            for (auto s = 0u; s < sel.getSelSize(); s++) {
+                const auto pos = sel[s];
+                if (rowIsNull(outVectors, pos)) {
                     continue;
                 }
-                onKey(buildKeyFromRow(outVectors, i));
+                onKey(buildKeyFromRow(outVectors, pos));
                 if (*stopFlag) {
                     return;
                 }
@@ -133,17 +333,42 @@ static void scanCommittedAndLocalNodeKeys(transaction::Transaction* transaction,
 }
 
 static void scanRelPairKeys(main::ClientContext* context, RelTable* pairTable,
-    const std::vector<column_id_t>& columnIDs, const std::function<void(std::string&&)>& onKey,
-    bool* stopFlag) {
+    const std::vector<UniqueConstraintChecker::ResolvedPart>& parts,
+    const std::function<void(std::string&&)>& onKey, bool* stopFlag) {
+    using ResolvedPart = UniqueConstraintChecker::ResolvedPart;
     auto transaction = transaction::Transaction::Get(*context);
     auto mm = MemoryManager::Get(*context);
     auto storageManager = StorageManager::Get(*context);
-    auto* srcNodeTable =
-        storageManager->getTable(pairTable->getFromNodeTableID())->ptrCast<NodeTable>();
+    // Use whichever CSR direction the table physically stores; attribute bound/neighbour
+    // to SRC/DST accordingly.
+    auto* groupEntry = Catalog::Get(*context)
+                           ->getTableCatalogEntry(transaction, pairTable->getRelGroupID())
+                           ->ptrCast<RelGroupCatalogEntry>();
+    const auto& storedDirections = groupEntry->getRelDataDirections();
+    const auto scanDirection = std::find(storedDirections.begin(), storedDirections.end(),
+                                   RelDataDirection::FWD) != storedDirections.end() ?
+                                   RelDataDirection::FWD :
+                                   RelDataDirection::BWD;
+    const auto boundIsSrc = scanDirection == RelDataDirection::FWD;
+    const auto boundTableID =
+        boundIsSrc ? pairTable->getFromNodeTableID() : pairTable->getToNodeTableID();
+    auto* boundNodeTable = storageManager->getTable(boundTableID)->ptrCast<NodeTable>();
+    // Scan columns cover DST (neighbour IDs) and plain properties; SRC comes from the
+    // bound node of each single-parent batch.
+    std::vector<column_id_t> scanColumnIDs;
+    // scanIdx[j] = output position of parts[j], or -1 for SRC.
+    std::vector<int64_t> scanIdx;
+    for (auto& part : parts) {
+        if (part.kind == ResolvedPart::Kind::SRC) {
+            scanIdx.push_back(-1);
+            continue;
+        }
+        scanIdx.push_back(scanColumnIDs.size());
+        scanColumnIDs.push_back(part.scanColumnID);
+    }
     std::vector<LogicalType> columnTypes;
-    for (auto columnID : columnIDs) {
-        columnTypes.push_back(
-            pairTable->getColumn(columnID, RelDataDirection::FWD)->getDataType().copy());
+    for (auto columnID : scanColumnIDs) {
+        columnTypes.push_back(pairTable->getColumn(columnID, scanDirection)->getDataType().copy());
     }
     auto chunk = Table::constructDataChunk(mm, std::move(columnTypes));
     std::vector<ValueVector*> outVectors;
@@ -155,31 +380,46 @@ static void scanRelPairKeys(main::ClientContext* context, RelTable* pairTable,
     auto outState = chunk.state;
     auto scanState =
         std::make_unique<RelTableScanState>(*mm, boundVector.get(), outVectors, outState);
-    scanState->setToTable(transaction, pairTable, columnIDs, {}, RelDataDirection::FWD);
-    const auto numSrcNodes = srcNodeTable->getNumTotalRows(transaction);
+    scanState->setToTable(transaction, pairTable, scanColumnIDs, {}, scanDirection);
+    const auto numBoundNodes = boundNodeTable->getNumTotalRows(transaction);
     auto nextOffset = 0u;
-    while (nextOffset < numSrcNodes) {
+    while (nextOffset < numBoundNodes) {
         if (*stopFlag) {
             return;
         }
         // One bound parent per batch: mirrors the common single-parent scan path and
-        // avoids the packed multi-parent output layout.
-        const auto batchSize = std::min<row_idx_t>(1, numSrcNodes - nextOffset);
+        // attributes every row of the batch to that parent.
+        const auto batchSize = std::min<row_idx_t>(1, numBoundNodes - nextOffset);
         boundVector->state->setToUnflat();
         boundVector->state->getSelVectorUnsafe().setToUnfiltered(batchSize);
         for (auto i = 0u; i < batchSize; i++) {
-            boundVector->setValue<nodeID_t>(i,
-                nodeID_t{nextOffset + i, pairTable->getFromNodeTableID()});
+            boundVector->setValue<nodeID_t>(i, nodeID_t{nextOffset + i, boundTableID});
         }
         nextOffset += batchSize;
         pairTable->initScanState(transaction, *scanState);
         while (pairTable->scan(transaction, *scanState)) {
-            const auto outputSize = scanState->outState->getSelVector().getSelSize();
-            for (auto i = 0u; i < outputSize; i++) {
-                if (rowIsNull(outVectors, i)) {
+            const auto& sel = scanState->outState->getSelVector();
+            for (auto s = 0u; s < sel.getSelSize(); s++) {
+                const auto pos = sel[s];
+                std::string key;
+                auto skip = false;
+                for (auto j = 0u; j < parts.size(); j++) {
+                    if (parts[j].kind == ResolvedPart::Kind::SRC) {
+                        appendNodeIDBytes(key, nextOffset - batchSize, boundTableID);
+                        continue;
+                    }
+                    auto* vec = outVectors[scanIdx[j]];
+                    if (vec->isNull(pos)) {
+                        skip = true;
+                        break;
+                    }
+                    auto val = vec->getAsValue(pos);
+                    appendExactValue(key, *val);
+                }
+                if (skip) {
                     continue;
                 }
-                onKey(buildKeyFromRow(outVectors, i));
+                onKey(std::move(key));
                 if (*stopFlag) {
                     return;
                 }
@@ -191,32 +431,32 @@ static void scanRelPairKeys(main::ClientContext* context, RelTable* pairTable,
 }
 
 void UniqueConstraintChecker::collectExistingKeys(main::ClientContext* context, Table* table,
-    const std::vector<column_id_t>& columnIDs, const std::function<void(std::string&&)>& onKey) {
-    if (columnIDs.empty()) {
+    const std::vector<ResolvedPart>& parts, const std::function<void(std::string&&)>& onKey) {
+    if (parts.empty()) {
         return;
     }
     if (table->getTableType() == TableType::NODE) {
         auto transaction = transaction::Transaction::Get(*context);
         auto mm = MemoryManager::Get(*context);
+        std::vector<column_id_t> columnIDs;
+        for (auto& part : parts) {
+            DASSERT(part.kind == ResolvedPart::Kind::PROPERTY);
+            columnIDs.push_back(part.scanColumnID);
+        }
         bool stop = false;
         scanCommittedAndLocalNodeKeys(transaction, table->ptrCast<NodeTable>(), columnIDs, mm,
             onKey, &stop);
         return;
     }
     bool stop = false;
-    scanRelPairKeys(context, table->ptrCast<RelTable>(), columnIDs, onKey, &stop);
-}
-
-static void throwDuplicateError(const std::string& constraintName) {
-    throw RuntimeException(
-        std::format("Unique constraint {} violated: duplicate key.", constraintName));
+    scanRelPairKeys(context, table->ptrCast<RelTable>(), parts, onKey, &stop);
 }
 
 void UniqueConstraintChecker::validateNoDuplicates(main::ClientContext* context, Table* table,
-    const std::vector<column_id_t>& columnIDs, const std::string& constraintName) {
+    const std::vector<ResolvedPart>& parts, const std::string& constraintName) {
     std::unordered_set<std::string> seen;
     bool failed = false;
-    collectExistingKeys(context, table, columnIDs, [&](std::string&& key) {
+    collectExistingKeys(context, table, parts, [&](std::string&& key) {
         if (failed) {
             return;
         }
@@ -230,16 +470,16 @@ void UniqueConstraintChecker::validateNoDuplicates(main::ClientContext* context,
 }
 
 bool UniqueConstraintChecker::hasDuplicate(main::ClientContext* context, Table* table,
-    const std::vector<column_id_t>& columnIDs, const std::vector<ValueVector*>& keyVectors) {
-    if (context == nullptr || columnIDs.empty() || keyVectors.empty()) {
+    const std::vector<ResolvedPart>& parts, const std::vector<ValueVector*>& keyVectors) {
+    if (context == nullptr || parts.empty() || keyVectors.size() != parts.size()) {
         return false;
     }
-    auto key = buildKey(keyVectors);
+    auto key = buildKey(parts, keyVectors);
     if (!key.has_value()) {
         return false;
     }
     bool found = false;
-    collectExistingKeys(context, table, columnIDs, [&](std::string&& existing) {
+    collectExistingKeys(context, table, parts, [&](std::string&& existing) {
         if (!found && existing == *key) {
             found = true;
         }
@@ -247,32 +487,23 @@ bool UniqueConstraintChecker::hasDuplicate(main::ClientContext* context, Table* 
     return found;
 }
 
-static std::vector<column_id_t> resolveColumnIDs(catalog::TableCatalogEntry* tableEntry,
-    const std::vector<property_id_t>& propertyIDs) {
-    std::vector<column_id_t> columnIDs;
-    for (auto propertyID : propertyIDs) {
-        columnIDs.push_back(tableEntry->getColumnID(tableEntry->getProperty(propertyID).getName()));
-    }
-    return columnIDs;
-}
-
 void UniqueConstraintChecker::validateRelGroupNoDuplicates(main::ClientContext* context,
-    RelGroupCatalogEntry* groupEntry, const std::vector<column_id_t>& columnIDs,
+    TableCatalogEntry* groupEntry, const std::vector<ResolvedPart>& parts,
     const std::string& constraintName) {
     auto storageManager = StorageManager::Get(*context);
+    auto& relGroupEntry = groupEntry->constCast<RelGroupCatalogEntry>();
     std::unordered_set<std::string> seen;
-    for (auto& pairInfo : groupEntry->getRelEntryInfos()) {
+    for (auto& pairInfo : relGroupEntry.getRelEntryInfos()) {
         auto* pairTable = storageManager->getTable(pairInfo.oid);
         bool failed = false;
-        UniqueConstraintChecker::collectExistingKeys(context, pairTable, columnIDs,
+        UniqueConstraintChecker::collectExistingKeys(context, pairTable, parts,
             [&](std::string&& key) {
                 if (!failed && !seen.insert(key).second) {
                     failed = true;
                 }
             });
         if (failed) {
-            throw RuntimeException(
-                std::format("Unique constraint {} violated: duplicate key.", constraintName));
+            throwDuplicateError(constraintName);
         }
     }
 }
@@ -288,8 +519,7 @@ void UniqueConstraintChecker::validateTableConstraints(main::ClientContext* cont
         }
         auto* tableEntry = catalog->getTableCatalogEntry(transaction, tableID);
         for (auto* constraint : constraints) {
-            validateNoDuplicates(context, table,
-                resolveColumnIDs(tableEntry, constraint->getPropertyIDs()),
+            validateNoDuplicates(context, table, resolveParts(tableEntry, constraint),
                 constraint->getConstraintName());
         }
         return;
@@ -300,17 +530,16 @@ void UniqueConstraintChecker::validateTableConstraints(main::ClientContext* cont
     if (constraints.empty()) {
         return;
     }
-    auto* groupEntry =
-        catalog->getTableCatalogEntry(transaction, groupID)->ptrCast<RelGroupCatalogEntry>();
+    auto* groupEntry = catalog->getTableCatalogEntry(transaction, groupID);
     for (auto* constraint : constraints) {
-        validateRelGroupNoDuplicates(context, groupEntry,
-            resolveColumnIDs(groupEntry, constraint->getPropertyIDs()),
+        validateRelGroupNoDuplicates(context, groupEntry, resolveParts(groupEntry, constraint),
             constraint->getConstraintName());
     }
 }
 
 void UniqueConstraintChecker::checkInsert(main::ClientContext* context, Table* table,
-    const std::vector<ValueVector*>& propertyVectors) {
+    const std::vector<ValueVector*>& propertyVectors, const ValueVector* srcNodeIDVector,
+    const ValueVector* dstNodeIDVector) {
     if (context == nullptr) {
         return;
     }
@@ -327,16 +556,18 @@ void UniqueConstraintChecker::checkInsert(main::ClientContext* context, Table* t
         }
         auto* tableEntry = catalog->getTableCatalogEntry(transaction, tableID);
         for (auto* constraint : constraints) {
-            std::vector<column_id_t> columnIDs;
+            auto parts = resolveParts(tableEntry, constraint);
             std::vector<ValueVector*> keyVectors;
-            for (auto propertyID : constraint->getPropertyIDs()) {
-                const auto columnID =
-                    tableEntry->getColumnID(tableEntry->getProperty(propertyID).getName());
-                columnIDs.push_back(columnID);
-                DASSERT(columnID < propertyVectors.size());
-                keyVectors.push_back(propertyVectors[columnID]);
+            for (auto& part : parts) {
+                if (part.kind != ResolvedPart::Kind::PROPERTY ||
+                    part.propertyPosition >= propertyVectors.size()) {
+                    throw RuntimeException(std::format(
+                        "Unique constraint {} internal error: insert state has {} vectors.",
+                        constraint->getConstraintName(), propertyVectors.size()));
+                }
+                keyVectors.push_back(propertyVectors[part.propertyPosition]);
             }
-            if (hasDuplicate(context, table, columnIDs, keyVectors)) {
+            if (hasDuplicate(context, table, parts, keyVectors)) {
                 throwDuplicateError(constraint->getConstraintName());
             }
         }
@@ -349,42 +580,35 @@ void UniqueConstraintChecker::checkInsert(main::ClientContext* context, Table* t
         return;
     }
     auto* groupEntry = catalog->getTableCatalogEntry(transaction, groupID);
-    auto& relGroupEntry = groupEntry->constCast<RelGroupCatalogEntry>();
-    // The insert state's vectors align 1:1 with the group properties in order, including
-    // the internal _ID property at index 0 (see bindInsertColumnDataExprs over
-    // entry->getProperties() and LocalRelTable::insert).
-    const auto groupProperties = relGroupEntry.getProperties();
     auto storageManager = StorageManager::Get(*context);
     for (auto* constraint : constraints) {
-        std::vector<column_id_t> columnIDs;
+        auto parts = resolveParts(groupEntry, constraint);
         std::vector<ValueVector*> keyVectors;
-        for (auto propertyID : constraint->getPropertyIDs()) {
-            column_id_t propPos = INVALID_COLUMN_ID;
-            for (auto i = 0u; i < groupProperties.size(); i++) {
-                if (groupEntry->getPropertyID(groupProperties[i].getName()) == propertyID) {
-                    propPos = i;
-                    break;
+        for (auto& part : parts) {
+            if (part.kind == ResolvedPart::Kind::SRC) {
+                keyVectors.push_back(const_cast<ValueVector*>(srcNodeIDVector));
+            } else if (part.kind == ResolvedPart::Kind::DST) {
+                keyVectors.push_back(const_cast<ValueVector*>(dstNodeIDVector));
+            } else {
+                if (part.propertyPosition >= propertyVectors.size()) {
+                    throw RuntimeException(std::format(
+                        "Unique constraint {} internal error: insert state has {} vectors.",
+                        constraint->getConstraintName(), propertyVectors.size()));
                 }
+                keyVectors.push_back(propertyVectors[part.propertyPosition]);
             }
-            if (propPos == INVALID_COLUMN_ID || propPos >= propertyVectors.size()) {
-                std::string groupProps;
-                for (auto& gp : groupProperties) {
-                    groupProps += gp.getName() + ",";
-                }
-                throw RuntimeException(
-                    std::format("Unique constraint {} internal error: propertyID {} not mapped "
-                                "(group props: {} vectors: {}).",
-                        constraint->getConstraintName(), propertyID, groupProps,
-                        propertyVectors.size()));
-            }
-            const auto columnID = groupEntry->getColumnID(groupProperties[propPos].getName());
-            columnIDs.push_back(columnID);
-            keyVectors.push_back(propertyVectors[propPos]);
+        }
+        // A null endpoint means the row is not inserted at all (see LocalRelTable::insert),
+        // so there is nothing to check.
+        if (std::any_of(keyVectors.begin(), keyVectors.end(),
+                [](ValueVector* vec) { return vec == nullptr; })) {
+            continue;
         }
         // The constraint spans the whole rel group: check every (src, dst) pair table.
+        auto& relGroupEntry = groupEntry->constCast<RelGroupCatalogEntry>();
         for (auto& pairInfo : relGroupEntry.getRelEntryInfos()) {
             auto* pairTable = storageManager->getTable(pairInfo.oid);
-            if (hasDuplicate(context, pairTable, columnIDs, keyVectors)) {
+            if (hasDuplicate(context, pairTable, parts, keyVectors)) {
                 throwDuplicateError(constraint->getConstraintName());
             }
         }

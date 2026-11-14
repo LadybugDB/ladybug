@@ -13,26 +13,37 @@ CREATE CONSTRAINT follow_key
 FOR ()-[r:FOLLOWS]->()
 REQUIRE r.since IS UNIQUE;
 
+-- Edge endpoints: the original (src, colA, dst) ask. Direction arrows are accepted
+-- but ignored; exactly one rel type (or one node label) is required.
+CREATE CONSTRAINT review_edge_unique
+FOR ()-[r:REVIEWED]-()
+REQUIRE (r.src, r.userId, r.dst) IS UNIQUE;
+
 -- Node-table UNIQUE
 CREATE CONSTRAINT user_email_unique
 FOR (u:User)
 REQUIRE u.email IS UNIQUE;
 
-SHOW CONSTRAINTS;
-CALL show_constraints() RETURN *;
+SHOW CONSTRAINTS;                   -- also: CALL show_constraints() RETURN *;
 DROP CONSTRAINT review_unique IF EXISTS;
 ```
 
+`src`/`dst` in `REQUIRE` refer to the edge's endpoints — unless the rel table defines a
+real property with that name, in which case the property wins (backwards compatible).
+Endpoint parts work in any position and mix freely with property parts.
+
 ## Semantics
 
-- A UNIQUE constraint enforces that the tuple of the listed properties is distinct across
-  all rows of one node table or one rel group (all `(FROM, TO)` pairs share the key set,
-  so cross-pair duplicates are caught).
-- `NULL` is treated as distinct (SQL semantics): a row with `NULL` in any constrained
-  property never conflicts, so multiple `NULL`s are allowed.
-- Direction arrows in `FOR ()-[r:T]-()` are accepted but ignored; exactly one rel type
-  (or one node label) is required.
-- Only native (non-partitioned, non-columnar) tables are supported.
+- A UNIQUE constraint enforces that its key parts are jointly distinct across all rows
+  of one node table or one rel group (all `(FROM, TO)` pairs share one key set, so
+  cross-pair duplicates are caught).
+- `NULL` is treated as distinct (SQL standard behavior for unique constraints): any row
+  with NULL in a constrained part never conflicts, so multiple `NULL`s are allowed.
+- Keys are exact per physical type (raw bytes with length prefixes, `-0.0` normalized
+  to `+0.0`); no lossy string form is used, so `0.1` vs `0.1000001`, `['a,b']` vs
+  `['a', 'b']`, and struct field-boundary collisions can never false-positive.
+- Only native (non-partitioned, non-columnar) tables are supported; foreign and
+  partitioned tables are rejected at bind time with a clear error.
 
 ## Enforcement points
 
@@ -44,19 +55,27 @@ DROP CONSTRAINT review_unique IF EXISTS;
   already exist (delete/deduplicate first, then create).
 - `SET` on a constrained property is rejected at bind time with a clear error
   (`... Try delete and then insert with the new value.`); per-row revalidation on
-  update is not implemented yet.
+  update is not implemented yet. `SET r.src` / `SET r.dst` fail as unknown properties.
 - `DROP TABLE` drops the table's constraints; `DROP PROPERTY` of a constrained property
   is rejected until the constraint is dropped; `RENAME TABLE/PROPERTY` is reflected in
-  `SHOW CONSTRAINTS` and `EXPORT DATABASE`.
+  `SHOW CONSTRAINTS` and `EXPORT DATABASE` (endpoint references are unaffected).
+
+## On-disk format
+
+Constraints persist in their own catalog set with checkpoint and WAL replay support
+(storage version 52; files written by older versions open with an empty set).
+`EXPORT DATABASE` re-emits them after tables/indexes; `IMPORT DATABASE` replays them.
 
 ## Implementation notes (MVP limitations)
 
-- Enforcement is **scan-based**: each check scans the table (`O(table)` per single-row
-  insert, one full scan per `COPY`, one per `CREATE CONSTRAINT`). Bulk single-row
-  inserts are slow; prefer `COPY FROM` for loads. A future index-backed implementation
-  can replace `storage/UniqueConstraintChecker` without touching the catalog shape.
-- Value comparison is exact per physical type. `NaN`, `-0.0`, and decimal-scale
-  variants follow canonical string form and may compare as distinct.
+- Enforcement is **scan-based**: each check scans the table (one full scan per
+  single-row insert, one per `COPY`, one per `CREATE CONSTRAINT`), reading only
+  transaction-visible rows. Bulk single-row inserts are slow; prefer `COPY FROM` for
+  loads. A future index-backed implementation can replace
+  `storage/UniqueConstraintChecker` without touching the catalog entry shape.
+- NaN handling: identical NaN bit patterns conflict; NaN never equals anything else is
+  not distinguished (documented divergence from `Value::operator==`, which is false
+  for NaN).
 - Concurrent writers share the check-then-insert race of the existing PK path; the
   second committer does not re-validate.
 - Only `UNIQUE` is enforced. The catalog entry reserves `KEY` / `NOT NULL` / `CHECK`

@@ -91,13 +91,9 @@ static std::unique_ptr<TableFuncBindData> bindFunc(const main::ClientContext* co
         // resolve defensively so SHOW never fails). Names are resolved live so RENAME
         // TABLE/PROPERTY is reflected.
         auto tableName = constraintEntry->getTableName();
-        auto propertyNames = constraintEntry->getPropertyNames();
+        auto propertyNames = constraintEntry->resolvePropertyNames(context);
         if (tableEntry != nullptr) {
             tableName = tableEntry->getName();
-            propertyNames.clear();
-            for (auto propertyID : constraintEntry->getPropertyIDs()) {
-                propertyNames.push_back(tableEntry->getProperty(propertyID).getName());
-            }
         }
         auto tableType = constraintEntry->isRel() ? "REL" : "NODE";
         ConstraintToCypherInfo cypherInfo{context};
