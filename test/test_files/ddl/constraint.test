@@ -24,7 +24,7 @@ Constraint review_unique has been created.
 review_unique|REVIEWED|REL|[userId,productId]
 -STATEMENT SHOW CONSTRAINTS
 ---- 1
-review_unique|REVIEWED|REL|[userId,productId]|CREATE CONSTRAINT review_unique FOR ()-[r:REVIEWED]-() REQUIRE (r.userId, r.productId) IS UNIQUE;
+review_unique|REVIEWED|REL|[userId,productId]|CREATE CONSTRAINT `review_unique` FOR ()-[r:`REVIEWED`]-() REQUIRE (r.`userId`, r.`productId`) IS UNIQUE;
 -STATEMENT DROP CONSTRAINT review_unique
 ---- 1
 Constraint review_unique has been dropped.
@@ -335,3 +335,50 @@ review_unique|REVIEWED|REL|[userId,productId]
 -STATEMENT MATCH (u:User {id: 1}), (p:Product {id: 10}) CREATE (u)-[r:REVIEWED {userId: 1, productId: 100}]->(p)
 ---- error
 Runtime exception: Unique constraint review_unique violated: duplicate key.
+
+-CASE EndpointNameReservation
+-STATEMENT CREATE NODE TABLE User(id INT64, PRIMARY KEY(id))
+---- ok
+-STATEMENT CREATE NODE TABLE Product(id INT64, PRIMARY KEY(id))
+---- ok
+-STATEMENT CREATE REL TABLE R(FROM User TO Product, k INT64)
+---- ok
+-STATEMENT CREATE CONSTRAINT pair FOR ()-[r:R]-() REQUIRE (r.src, r.dst) IS UNIQUE
+---- 1
+Constraint pair has been created.
+-STATEMENT ALTER TABLE R ADD src STRING
+---- error
+Binder exception: Cannot add or rename a property to src in table R because it conflicts with the src endpoint of unique constraint pair. Drop the constraint first or choose a different name.
+-STATEMENT ALTER TABLE R RENAME k TO dst
+---- error
+Binder exception: Cannot add or rename a property to dst in table R because it conflicts with the dst endpoint of unique constraint pair. Drop the constraint first or choose a different name.
+-STATEMENT ALTER TABLE R ADD other STRING
+---- ok
+-STATEMENT ALTER TABLE R RENAME k TO k2
+---- ok
+-STATEMENT DROP CONSTRAINT pair
+---- 1
+Constraint pair has been dropped.
+-STATEMENT ALTER TABLE R ADD src STRING
+---- ok
+-STATEMENT CALL show_constraints() RETURN count(*)
+---- 1
+0
+
+-CASE ConstraintQuotedNames
+-STATEMENT CREATE NODE TABLE `My Table`(id INT64, `my col` STRING, PRIMARY KEY(id))
+---- ok
+-STATEMENT CREATE (`My Table` {id: 1, `my col`: 'a'})
+---- ok
+-STATEMENT CREATE CONSTRAINT `my cons` FOR (u:`My Table`) REQUIRE u.`my col` IS UNIQUE
+---- 1
+Constraint my cons has been created.
+-STATEMENT SHOW CONSTRAINTS
+---- 1
+my cons|My Table|NODE|[my col]|CREATE CONSTRAINT `my cons` FOR (n:`My Table`) REQUIRE (n.`my col`) IS UNIQUE;
+-STATEMENT CREATE (`My Table` {id: 2, `my col`: 'a'})
+---- error
+Runtime exception: Unique constraint my cons violated: duplicate key.
+-STATEMENT DROP CONSTRAINT `my cons`
+---- 1
+Constraint my cons has been dropped.

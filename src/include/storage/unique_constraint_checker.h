@@ -67,8 +67,10 @@ struct UniqueConstraintChecker {
 
     // Full-table scan collecting canonical keys of all visible non-NULL rows. Sees exactly
     // what the calling transaction sees (committed snapshot + own uncommitted writes).
+    // Sets *stopFlag to request an early exit; scanners check it between batches and rows.
     static void collectExistingKeys(main::ClientContext* context, Table* table,
-        const std::vector<ResolvedPart>& parts, const std::function<void(std::string&&)>& onKey);
+        const std::vector<ResolvedPart>& parts, const std::function<void(std::string&&)>& onKey,
+        bool* stopFlag);
 
     // Full validation used by CREATE CONSTRAINT.
     static void validateNoDuplicates(main::ClientContext* context, Table* table,

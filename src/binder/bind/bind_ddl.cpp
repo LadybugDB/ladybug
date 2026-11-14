@@ -983,12 +983,47 @@ std::unique_ptr<BoundStatement> Binder::bindRenameTable(const Statement& stateme
     return std::make_unique<BoundAlter>(std::move(boundInfo));
 }
 
+// An endpoint key part (src/dst) is stored by REQUIRE name and resolved at bind time, with
+// a real property of the same name winning. If the table later gains such a property via
+// ADD or RENAME ... TO, the next bind (e.g. on IMPORT DATABASE, which replays the
+// exported r.src spelling) would silently switch the constraint from the endpoint to the
+// property. Keep the names unambiguous by rejecting those schema changes while an
+// endpoint constraint exists on the table.
+static void validateNoEndpointNameConflict(const main::ClientContext* clientContext,
+    const std::string& tableName, const std::string& propertyName) {
+    if (!common::StringUtils::caseInsensitiveEquals(propertyName, "src") &&
+        !common::StringUtils::caseInsensitiveEquals(propertyName, "dst")) {
+        return;
+    }
+    auto* catalog = Catalog::Get(*clientContext);
+    auto* transaction = transaction::Transaction::Get(*clientContext);
+    if (!catalog->containsTable(transaction, tableName)) {
+        return;
+    }
+    auto* tableEntry = catalog->getTableCatalogEntry(transaction, tableName);
+    if (tableEntry->getType() != CatalogEntryType::REL_GROUP_ENTRY) {
+        return;
+    }
+    for (auto* constraint : catalog->getConstraintEntries(transaction, tableEntry->getTableID())) {
+        for (auto propertyID : constraint->getPropertyIDs()) {
+            if (ConstraintCatalogEntry::isEndpointPropertyID(propertyID)) {
+                throw BinderException(std::format(
+                    "Cannot add or rename a property to {} in table {} because it conflicts "
+                    "with the {} endpoint of unique constraint {}. Drop the constraint first "
+                    "or choose a different name.",
+                    propertyName, tableName, propertyName, constraint->getConstraintName()));
+            }
+        }
+    }
+}
+
 std::unique_ptr<BoundStatement> Binder::bindAddProperty(const Statement& statement) {
     auto& alter = statement.constCast<Alter>();
     auto info = alter.getInfo();
     auto extraInfo = info->extraInfo->ptrCast<ExtraAddPropertyInfo>();
     auto tableName = info->tableName;
     auto propertyName = extraInfo->propertyName;
+    validateNoEndpointNameConflict(clientContext, tableName, propertyName);
     auto type = LogicalType::convertFromString(extraInfo->dataType, clientContext);
     auto columnDefinition = ColumnDefinition(propertyName, type.copy());
     auto defaultExpr =
@@ -1043,6 +1078,7 @@ std::unique_ptr<BoundStatement> Binder::bindRenameProperty(const Statement& stat
     auto tableName = info->tableName;
     auto propertyName = extraInfo->propertyName;
     auto newName = extraInfo->newName;
+    validateNoEndpointNameConflict(clientContext, tableName, newName);
     auto boundExtraInfo = std::make_unique<BoundExtraRenamePropertyInfo>(newName, propertyName);
     auto boundInfo = BoundAlterInfo(AlterType::RENAME_PROPERTY, tableName,
         std::move(boundExtraInfo), info->onConflict);

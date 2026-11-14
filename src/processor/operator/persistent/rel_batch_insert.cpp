@@ -288,11 +288,18 @@ void RelBatchInsert::finalizeInternal(ExecutionContext* context) {
             warningContext->defaultPopulateAllWarnings(context->queryID);
         }
     }
-    // UNIQUE constraints are validated once at the end of the load (rather than per row):
-    // a violation aborts the transaction and discards the whole COPY. Group validation
-    // covers all (src, dst) pair tables, so cross-pair duplicates are caught.
-    storage::UniqueConstraintChecker::validateTableConstraints(context->clientContext,
-        sharedState->table->ptrCast<storage::RelTable>());
+    // UNIQUE constraints are validated once at the end of the load (rather than per
+    // row): a violation aborts the transaction and discards the whole COPY. Group
+    // validation covers all (src, dst) pair tables, so cross-pair duplicates are caught.
+    // finalizeInternal runs once per stored direction (BWD first, then FWD), but only
+    // the FWD pass can see this COPY's rows: the BWD pass runs before any of them exist.
+    // Every constrained table has forward storage (enforced at bind time), so validating
+    // in the FWD branch alone halves the cost for default storage without missing
+    // duplicates.
+    if (relInfo->direction == RelDataDirection::FWD) {
+        storage::UniqueConstraintChecker::validateTableConstraints(context->clientContext,
+            sharedState->table->ptrCast<storage::RelTable>());
+    }
     sharedState->numRows.store(0);
     sharedState->table->cast<RelTable>().setHasChanges();
     partitionerSharedState->resetState(relInfo->partitioningIdx);
