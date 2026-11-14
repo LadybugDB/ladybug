@@ -289,7 +289,9 @@ void RecursiveExtend::executeInternal(ExecutionContext* context) {
             auto sourceNodeID = nodeID_t{offset, tableID};
             computeState->initSource(sourceNodeID);
             auto outputMask = sharedState->getOutputNodeMaskMap();
-            if (!computeState->edgeCompute->runSinglePairSearch(context, graph,
+            // The single-pair searches take no lower bound and assume it is 1.
+            if (bindData.lowerBound != 1 ||
+                !computeState->edgeCompute->runSinglePairSearch(context, graph,
                     bindData.extendDirection, bindData.upperBound, sourceNodeID, outputMask)) {
                 GDSUtils::runRecursiveJoinEdgeCompute(context, *computeState, graph,
                     bindData.extendDirection, bindData.upperBound, outputMask, propertyNames);
