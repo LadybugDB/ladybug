@@ -311,6 +311,18 @@ bool TryCastStringToTimestamp::tryCast<timestamp_sec_t>(const char* input, uint6
     timestamp_t& result);
 
 template<>
+void TryCastStringToTimestamp::cast<timestamp_ns_t>(const char* input, uint64_t len,
+    timestamp_t& result, LogicalTypeID typeID);
+
+template<>
+void TryCastStringToTimestamp::cast<timestamp_ms_t>(const char* input, uint64_t len,
+    timestamp_t& result, LogicalTypeID typeID);
+
+template<>
+void TryCastStringToTimestamp::cast<timestamp_sec_t>(const char* input, uint64_t len,
+    timestamp_t& result, LogicalTypeID typeID);
+
+template<>
 bool inline TryCastStringToTimestamp::tryCast<timestamp_tz_t>(const char* input, uint64_t len,
     timestamp_t& result) {
     return Timestamp::tryConvertTimestamp(input, len, result);

@@ -104,6 +104,36 @@ bool TryCastStringToTimestamp::tryCast<timestamp_sec_t>(const char* input, uint6
     return true;
 }
 
+template<>
+void TryCastStringToTimestamp::cast<timestamp_ns_t>(const char* input, uint64_t len,
+    timestamp_t& result, LogicalTypeID typeID) {
+    if (!Timestamp::tryConvertTimestamp(input, len, result)) {
+        throw ConversionException(Timestamp::getTimestampConversionExceptionMsg(input, len,
+            LogicalTypeUtils::toString(typeID)));
+    }
+    result = Timestamp::getEpochNanoSeconds(result);
+}
+
+template<>
+void TryCastStringToTimestamp::cast<timestamp_ms_t>(const char* input, uint64_t len,
+    timestamp_t& result, LogicalTypeID typeID) {
+    if (!Timestamp::tryConvertTimestamp(input, len, result)) {
+        throw ConversionException(Timestamp::getTimestampConversionExceptionMsg(input, len,
+            LogicalTypeUtils::toString(typeID)));
+    }
+    result = Timestamp::getEpochMilliSeconds(result);
+}
+
+template<>
+void TryCastStringToTimestamp::cast<timestamp_sec_t>(const char* input, uint64_t len,
+    timestamp_t& result, LogicalTypeID typeID) {
+    if (!Timestamp::tryConvertTimestamp(input, len, result)) {
+        throw ConversionException(Timestamp::getTimestampConversionExceptionMsg(input, len,
+            LogicalTypeUtils::toString(typeID)));
+    }
+    result = Timestamp::getEpochSeconds(result);
+}
+
 static bool isDate(std::string_view str) {
     return RE2::FullMatch(str, Date::regexPattern());
 }
