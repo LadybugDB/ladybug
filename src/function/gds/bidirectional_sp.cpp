@@ -200,7 +200,7 @@ private:
                 if (bound.tableID != scan->boundTableID) {
                     continue;
                 }
-                const auto boundPaths = countPaths ? side.find(bound)->numPaths : 0;
+                const auto boundPaths = countPaths ? side.visits.at(bound).numPaths : 0;
                 auto edges = scan->isFwd ? graph->scanFwd(bound, *scan->state) :
                                            graph->scanBwd(bound, *scan->state);
                 for (const auto chunk : edges) {
@@ -295,7 +295,7 @@ private:
         std::vector<nodeID_t> sourceStack, targetStack;
         for (auto i = 0u; i < numMeetings; ++i) {
             const auto& meeting = meetings[i];
-            const auto targetDist = fromTarget.find(meeting.targetSide)->dist;
+            const auto targetDist = fromTarget.visits.at(meeting.targetSide).dist;
             addPathParent(best - targetDist, meeting.sourceSide, meeting.edge, meeting.targetSide,
                 meeting.isFwd);
             sourceStack.push_back(meeting.sourceSide);
@@ -308,10 +308,10 @@ private:
             if (!done.insert(child).second) {
                 continue;
             }
-            const auto* visit = fromSource.find(child);
-            for (auto idx = visit->firstParent; idx != NO_PARENT;) {
+            const auto& visit = fromSource.visits.at(child);
+            for (auto idx = visit.firstParent; idx != NO_PARENT;) {
                 const auto& parent = fromSource.parents[idx];
-                addPathParent(visit->dist, parent.node, parent.edge, child, parent.isFwd);
+                addPathParent(visit.dist, parent.node, parent.edge, child, parent.isFwd);
                 sourceStack.push_back(parent.node);
                 idx = parent.next;
             }
@@ -323,11 +323,10 @@ private:
             if (!done.insert(node).second) {
                 continue;
             }
-            const auto* visit = fromTarget.find(node);
-            for (auto idx = visit->firstParent; idx != NO_PARENT;) {
+            const auto& visit = fromTarget.visits.at(node);
+            for (auto idx = visit.firstParent; idx != NO_PARENT;) {
                 const auto& parent = fromTarget.parents[idx];
-                addPathParent(best - visit->dist + 1, node, parent.edge, parent.node,
-                    !parent.isFwd);
+                addPathParent(best - visit.dist + 1, node, parent.edge, parent.node, !parent.isFwd);
                 targetStack.push_back(parent.node);
                 idx = parent.next;
             }
