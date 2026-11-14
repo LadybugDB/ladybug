@@ -44,6 +44,9 @@ private:
     virtual void visitDrop(const Statement& /*statement*/) {}
     virtual void visitCreateTable(const Statement& /*statement*/) {}
     virtual void visitCreateIndex(const Statement& /*statement*/) {}
+    virtual void visitCreateConstraint(const Statement& /*statement*/) {}
+    virtual void visitDropConstraint(const Statement& /*statement*/) {}
+    virtual void visitShowConstraints(const Statement& /*statement*/) {}
     virtual void visitCreateType(const Statement& /*statement*/) {}
     virtual void visitAlter(const Statement& /*statement*/) {}
     virtual void visitAnalyze(const Statement& /*statement*/) {}

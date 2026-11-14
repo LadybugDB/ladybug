@@ -240,6 +240,7 @@ FunctionCollection* FunctionCollection::getFunctions() {
         TABLE_FUNCTION(FileInfoFunction), TABLE_FUNCTION(DiskSizeInfoFunction),
         TABLE_FUNCTION(DiskInfoFunction), TABLE_FUNCTION(ShowLoadedExtensionsFunction),
         TABLE_FUNCTION(ShowOfficialExtensionsFunction), TABLE_FUNCTION(ShowIndexesFunction),
+        STANDALONE_TABLE_FUNCTION(ShowConstraintsFunction),
         TABLE_FUNCTION(ShowProjectedGraphsFunction), TABLE_FUNCTION(ProjectedGraphInfoFunction),
         TABLE_FUNCTION(ShowMacrosFunction),
 

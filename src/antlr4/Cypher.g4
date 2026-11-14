@@ -13,6 +13,9 @@ oC_Statement
         | iC_CreateNodeTable
         | iC_CreateRelTable
         | iC_CreateIndex
+        | iC_CreateConstraint
+        | iC_DropConstraint
+        | iC_ShowConstraints
         | iC_CreateSequence
         | iC_CreateType
         | iC_Drop
@@ -156,6 +159,32 @@ iC_IndexRelationshipPattern
 
 iC_IndexPropertyPattern
     : '(' SP? oC_Variable SP? '.' SP? oC_PropertyKeyName SP? ')' ;
+
+iC_CreateConstraint
+    : CREATE SP CONSTRAINT SP oC_SchemaName (SP iC_IfNotExists)? SP FOR SP iC_ConstraintPattern SP REQUIRE SP iC_ConstraintRequire SP IS SP UNIQUE ;
+
+iC_ConstraintPattern
+    : iC_ConstraintNodePattern
+        | iC_ConstraintRelPattern ;
+
+iC_ConstraintNodePattern
+    : '(' SP? oC_Variable? SP? ':' SP? oC_LabelName SP? ')' ;
+
+iC_ConstraintRelPattern
+    : '(' SP? ')' SP? oC_RelationshipPattern SP? '(' SP? ')' ;
+
+iC_ConstraintRequire
+    : '(' SP? iC_ConstraintProperty ( SP? ',' SP? iC_ConstraintProperty )* SP? ')'
+        | iC_ConstraintProperty ;
+
+iC_ConstraintProperty
+    : oC_Variable SP? '.' SP? oC_PropertyKeyName ;
+
+iC_DropConstraint
+    : DROP SP CONSTRAINT SP oC_SchemaName (SP iC_IfExists)? ;
+
+iC_ShowConstraints
+    : SHOW SP CONSTRAINTS ;
 
 iC_CreateFromToConnections
     : iC_CreateFromToConnection ( SP? ',' SP? iC_CreateFromToConnection )* ;
@@ -800,6 +829,8 @@ iC_NonReservedKeywords
         | CHECKPOINT
         | COMMENT
         | COMMIT
+        | CONSTRAINT
+        | CONSTRAINTS
         | CONTAINS
         | COPY
         | COUNT
@@ -833,11 +864,13 @@ iC_NonReservedKeywords
         | REL
         | RANGE
         | RENAME
+        | REQUIRE
         | RETURN
         | ROLLBACK
         | ROLE
         | SEQUENCE
         | SET
+        | SHOW
         | START
         | STRUCT
         | L_SKIP
@@ -845,6 +878,7 @@ iC_NonReservedKeywords
         | LIST
         | TRANSACTION
         | TYPE
+        | UNIQUE
         | USE
         | UNINSTALL
         | UPDATE

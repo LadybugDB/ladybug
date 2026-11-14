@@ -121,6 +121,8 @@ public:
     // Plan simple statement.
     LogicalPlan planCreateTable(const binder::BoundStatement& statement);
     LogicalPlan planCreateIndex(const binder::BoundStatement& statement);
+    LogicalPlan planCreateConstraint(const binder::BoundStatement& statement);
+    LogicalPlan planDropConstraint(const binder::BoundStatement& statement);
     LogicalPlan planCreateType(const binder::BoundStatement& statement);
     LogicalPlan planCreateSequence(const binder::BoundStatement& statement);
     LogicalPlan planCreateMacro(const binder::BoundStatement& statement);

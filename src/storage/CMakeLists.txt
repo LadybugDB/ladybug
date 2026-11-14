@@ -23,6 +23,7 @@ add_library(lbug_storage
         shadow_utils.cpp
         partition_storage_registry.cpp
         storage_manager.cpp
+        unique_constraint_checker.cpp
         storage_utils.cpp
         storage_version_info.cpp
         undo_buffer.cpp)

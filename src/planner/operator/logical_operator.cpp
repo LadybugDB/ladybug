@@ -32,6 +32,8 @@ std::string LogicalOperatorUtils::logicalOperatorTypeToString(LogicalOperatorTyp
         return "COUNT_REL_TABLE";
     case LogicalOperatorType::CREATE_MACRO:
         return "CREATE_MACRO";
+    case LogicalOperatorType::CREATE_CONSTRAINT:
+        return "CREATE_CONSTRAINT";
     case LogicalOperatorType::CREATE_INDEX:
         return "CREATE_INDEX";
     case LogicalOperatorType::CREATE_SEQUENCE:
@@ -48,6 +50,8 @@ std::string LogicalOperatorUtils::logicalOperatorTypeToString(LogicalOperatorTyp
         return "DISTINCT";
     case LogicalOperatorType::DROP:
         return "DROP";
+    case LogicalOperatorType::DROP_CONSTRAINT:
+        return "DROP_CONSTRAINT";
     case LogicalOperatorType::DUMMY_SCAN:
         return "DUMMY_SCAN";
     case LogicalOperatorType::DUMMY_SINK:

@@ -48,6 +48,7 @@ class RelGroupCatalogEntry;
 class FunctionCatalogEntry;
 class SequenceCatalogEntry;
 class IndexCatalogEntry;
+class ConstraintCatalogEntry;
 
 template<typename T>
 concept TableCatalogEntryType =
@@ -165,6 +166,29 @@ public:
     // Create index entry.
     common::oid_t createIndex(transaction::Transaction* transaction,
         std::unique_ptr<CatalogEntry> indexCatalogEntry, bool skipLoggingToWAL = false);
+    // ----------------------------- Constraints ----------------------------
+
+    // Check if a constraint with the given name exists.
+    bool containsConstraint(const transaction::Transaction* transaction,
+        const std::string& name) const;
+    // Get constraint entry with name.
+    ConstraintCatalogEntry* getConstraint(const transaction::Transaction* transaction,
+        const std::string& name) const;
+    // Get all constraint entries.
+    std::vector<ConstraintCatalogEntry*> getConstraintEntries(
+        const transaction::Transaction* transaction) const;
+    // Get all constraint entries for given table.
+    std::vector<ConstraintCatalogEntry*> getConstraintEntries(
+        const transaction::Transaction* transaction, common::table_id_t tableID) const;
+
+    // Create constraint entry.
+    common::oid_t createConstraint(transaction::Transaction* transaction,
+        std::unique_ptr<CatalogEntry> constraintCatalogEntry, bool skipLoggingToWAL = false);
+    // Drop all constraint entries within a table.
+    void dropAllConstraints(transaction::Transaction* transaction, common::table_id_t tableID);
+    // Drop constraint entry with name.
+    void dropConstraint(transaction::Transaction* transaction, const std::string& name);
+    void dropConstraintByOID(transaction::Transaction* transaction, common::oid_t constraintOID);
     // Drop all index entries within a table.
     void dropAllIndexes(transaction::Transaction* transaction, common::table_id_t tableID);
     // Drop index entry with name.
@@ -323,6 +347,7 @@ private:
     std::unique_ptr<CatalogSet> functions;
     std::unique_ptr<CatalogSet> types;
     std::unique_ptr<CatalogSet> indexes;
+    std::unique_ptr<CatalogSet> constraints;
     std::unique_ptr<CatalogSet> macros;
     std::unique_ptr<CatalogSet> internalTables;
     std::unique_ptr<CatalogSet> internalSequences;

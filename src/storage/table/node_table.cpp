@@ -17,6 +17,7 @@
 #include "storage/local_storage/local_table.h"
 #include "storage/predicate/constant_predicate.h"
 #include "storage/storage_manager.h"
+#include "storage/unique_constraint_checker.h"
 #include "storage/wal/local_wal.h"
 #include "transaction/transaction.h"
 #include <format>
@@ -482,6 +483,8 @@ void NodeTable::initInsertState(main::ClientContext* context, TableInsertState& 
 
 void NodeTable::insert(Transaction* transaction, TableInsertState& insertState) {
     const auto& nodeInsertState = insertState.cast<NodeTableInsertState>();
+    UniqueConstraintChecker::checkInsert(transaction->getClientContext(), this,
+        nodeInsertState.propertyVectors);
     auto& nodeIDSelVector = nodeInsertState.nodeIDVector.state->getSelVector();
     DASSERT(nodeInsertState.propertyVectors[0]->state->getSelVector().getSelSize() == 1);
     DASSERT(nodeIDSelVector.getSelSize() == 1);

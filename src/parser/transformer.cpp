@@ -46,6 +46,12 @@ std::unique_ptr<Statement> Transformer::transformStatement(CypherParser::OC_Stat
         return transformCreateRelGroup(*ctx.iC_CreateRelTable());
     } else if (ctx.iC_CreateIndex()) {
         return transformCreateIndex(*ctx.iC_CreateIndex());
+    } else if (ctx.iC_CreateConstraint()) {
+        return transformCreateConstraint(*ctx.iC_CreateConstraint());
+    } else if (ctx.iC_DropConstraint()) {
+        return transformDropConstraint(*ctx.iC_DropConstraint());
+    } else if (ctx.iC_ShowConstraints()) {
+        return transformShowConstraints(*ctx.iC_ShowConstraints());
     } else if (ctx.iC_CreateSequence()) {
         return transformCreateSequence(*ctx.iC_CreateSequence());
     } else if (ctx.iC_CreateType()) {

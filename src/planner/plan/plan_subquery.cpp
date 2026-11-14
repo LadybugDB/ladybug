@@ -498,6 +498,8 @@ bool isNullFreeOperator(LogicalOperatorType type) {
     case LogicalOperatorType::ATTACH_DATABASE:
     case LogicalOperatorType::COPY_FROM:
     case LogicalOperatorType::COPY_TO:
+    case LogicalOperatorType::CREATE_CONSTRAINT:
+    case LogicalOperatorType::DROP_CONSTRAINT:
     case LogicalOperatorType::CREATE_GRAPH:
     case LogicalOperatorType::CREATE_INDEX:
     case LogicalOperatorType::CREATE_MACRO:
