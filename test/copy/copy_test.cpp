@@ -598,6 +598,34 @@ TEST_F(CopyTest, NodeCopyWithoutDefaultHashIndexSpillsStringPKDetectsCrossChunkD
     ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 0);
 }
 
+// A prepared COPY re-executes from a cached plan template. The no-index lookup map must be built
+// for each execution: one kept from the first run would still map 'k5' to the deleted node.
+TEST_F(CopyTest, RelCopyWithoutDefaultHashIndexReexecutedAfterKeyMoved) {
+    createDBAndConn();
+    for (auto query : {"CALL enable_default_hash_index=false",
+             "CREATE NODE TABLE N(id STRING, PRIMARY KEY(id))", "CREATE REL TABLE E(FROM N TO N)",
+             "COPY N FROM (UNWIND range(0, 9) AS i RETURN 'k' + CAST(i AS STRING))"}) {
+        auto result = conn->query(query);
+        ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    }
+    auto copyRels = conn->prepare("COPY E FROM (MATCH (n:N) RETURN n.id, 'k5')");
+    ASSERT_TRUE(copyRels->isSuccess()) << copyRels->getErrorMessage();
+    auto result = conn->execute(copyRels.get());
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+
+    result = conn->query("MATCH (n:N {id: 'k5'}) DETACH DELETE n");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    result = conn->query("CREATE (:N {id: 'k5'})");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    result = conn->execute(copyRels.get());
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+
+    result = conn->query("MATCH (a:N)-[:E]->(b:N {id: 'k5'}) RETURN COUNT(*)");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_TRUE(result->hasNext());
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 10);
+}
+
 TEST_F(CopyTest, NodeCopyBMExceptionRecoverySameConnection) {
     if (inMemMode) {
         GTEST_SKIP();

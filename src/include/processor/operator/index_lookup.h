@@ -80,9 +80,13 @@ public:
         std::unique_ptr<PhysicalOperator> child, common::idx_t id,
         std::unique_ptr<OPPrintInfo> printInfo);
 
+    void initGlobalStateInternal(ExecutionContext* context) override;
+
     void initLocalStateInternal(ResultSet* resultSet, ExecutionContext* context) override;
 
     bool getNextTuplesInternal(ExecutionContext* context) final;
+
+    void finalizeInternal(ExecutionContext* context) override;
 
     std::unique_ptr<PhysicalOperator> copy() final {
         return std::make_unique<IndexLookup>(copyVector(infos), warningDataVectorPos,
