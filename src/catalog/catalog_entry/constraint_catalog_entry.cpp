@@ -98,14 +98,17 @@ std::string ConstraintCatalogEntry::toCypher(const ToCypherInfo& info) const {
     std::string requireList;
     const std::string var = isRelConstraint ? "r" : "n";
     for (auto i = 0u; i < livePropertyNames.size(); i++) {
-        requireList += (i == 0 ? var + "." : ", " + var + ".") + livePropertyNames[i];
+        requireList += (i == 0 ? var + "." : ", " + var + ".") +
+                       common::StringUtils::quoteIdentifier(livePropertyNames[i]);
     }
     if (isRelConstraint) {
         return std::format("CREATE CONSTRAINT {} FOR ()-[r:{}]-() REQUIRE ({}) IS UNIQUE;",
-            getName(), liveTableName, requireList);
+            common::StringUtils::quoteIdentifier(getName()),
+            common::StringUtils::quoteIdentifier(liveTableName), requireList);
     }
-    return std::format("CREATE CONSTRAINT {} FOR (n:{}) REQUIRE ({}) IS UNIQUE;", getName(),
-        liveTableName, requireList);
+    return std::format("CREATE CONSTRAINT {} FOR (n:{}) REQUIRE ({}) IS UNIQUE;",
+        common::StringUtils::quoteIdentifier(getName()),
+        common::StringUtils::quoteIdentifier(liveTableName), requireList);
 }
 
 void ConstraintCatalogEntry::copyFrom(const CatalogEntry& other) {

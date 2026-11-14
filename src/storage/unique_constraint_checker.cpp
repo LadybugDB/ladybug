@@ -382,15 +382,37 @@ static void scanRelPairKeys(main::ClientContext* context, RelTable* pairTable,
     auto scanState =
         std::make_unique<RelTableScanState>(*mm, boundVector.get(), outVectors, outState);
     scanState->setToTable(transaction, pairTable, scanColumnIDs, {}, scanDirection);
+    // Multi-parent batches: the persistent CSR path packs children of several bound parents
+    // into one output batch (served parents in the bound selection vector,
+    // packedChildOffsets prefix-summing their rows); other paths keep one parent per batch.
+    // Both shapes are handled below. Batching amortizes one initScanState per parent.
+    scanState->packedMultiParentScan = true;
     const auto numBoundNodes = boundNodeTable->getNumTotalRows(transaction);
     auto nextOffset = 0u;
+    // One output row's SRC endpoint is its batch parent; DST/properties come from the
+    // scan's own output vectors. Emits the row's key unless a part is NULL.
+    auto emitRowKey = [&](sel_t pos, offset_t parentOffset) {
+        std::string key;
+        for (auto j = 0u; j < parts.size(); j++) {
+            if (parts[j].kind == ResolvedPart::Kind::SRC) {
+                appendNodeIDBytes(key, parentOffset, boundTableID);
+                continue;
+            }
+            auto* vec = outVectors[scanIdx[j]];
+            if (vec->isNull(pos)) {
+                return;
+            }
+            auto val = vec->getAsValue(pos);
+            appendExactValue(key, *val);
+        }
+        onKey(std::move(key));
+    };
     while (nextOffset < numBoundNodes) {
         if (*stopFlag) {
             return;
         }
-        // One bound parent per batch: mirrors the common single-parent scan path and
-        // attributes every row of the batch to that parent.
-        const auto batchSize = std::min<row_idx_t>(1, numBoundNodes - nextOffset);
+        const auto batchSize =
+            std::min<row_idx_t>(DEFAULT_VECTOR_CAPACITY, numBoundNodes - nextOffset);
         boundVector->state->setToUnflat();
         boundVector->state->getSelVectorUnsafe().setToUnfiltered(batchSize);
         for (auto i = 0u; i < batchSize; i++) {
@@ -400,27 +422,27 @@ static void scanRelPairKeys(main::ClientContext* context, RelTable* pairTable,
         pairTable->initScanState(transaction, *scanState);
         while (pairTable->scan(transaction, *scanState)) {
             const auto& sel = scanState->outState->getSelVector();
-            for (auto s = 0u; s < sel.getSelSize(); s++) {
-                const auto pos = sel[s];
-                std::string key;
-                auto skip = false;
-                for (auto j = 0u; j < parts.size(); j++) {
-                    if (parts[j].kind == ResolvedPart::Kind::SRC) {
-                        appendNodeIDBytes(key, nextOffset - batchSize, boundTableID);
-                        continue;
+            const auto& boundSel = boundVector->state->getSelVector();
+            const auto boundSelSize = boundSel.getSelSize();
+            if (boundSelSize > 1) {
+                // Packed multi-parent batch: rows [packedChildOffsets[p],
+                // packedChildOffsets[p+1]) belong to parent p.
+                const auto& childOffsets = scanState->packedChildOffsets;
+                DASSERT(childOffsets.size() == size_t(boundSelSize) + 1);
+                for (auto p = 0u; p < static_cast<uint32_t>(boundSelSize); ++p) {
+                    const auto parentOffset = boundVector->readNodeOffset(boundSel[p]);
+                    for (auto r = childOffsets[p]; r < childOffsets[p + 1]; ++r) {
+                        emitRowKey(sel[r], parentOffset);
                     }
-                    auto* vec = outVectors[scanIdx[j]];
-                    if (vec->isNull(pos)) {
-                        skip = true;
-                        break;
+                    if (*stopFlag) {
+                        return;
                     }
-                    auto val = vec->getAsValue(pos);
-                    appendExactValue(key, *val);
                 }
-                if (skip) {
-                    continue;
+            } else {
+                const auto parentOffset = boundVector->readNodeOffset(boundSel[0]);
+                for (auto s = 0u; s < sel.getSelSize(); s++) {
+                    emitRowKey(sel[s], parentOffset);
                 }
-                onKey(std::move(key));
                 if (*stopFlag) {
                     return;
                 }
@@ -432,7 +454,8 @@ static void scanRelPairKeys(main::ClientContext* context, RelTable* pairTable,
 }
 
 void UniqueConstraintChecker::collectExistingKeys(main::ClientContext* context, Table* table,
-    const std::vector<ResolvedPart>& parts, const std::function<void(std::string&&)>& onKey) {
+    const std::vector<ResolvedPart>& parts, const std::function<void(std::string&&)>& onKey,
+    bool* stopFlag) {
     if (parts.empty()) {
         return;
     }
@@ -444,27 +467,28 @@ void UniqueConstraintChecker::collectExistingKeys(main::ClientContext* context, 
             DASSERT(part.kind == ResolvedPart::Kind::PROPERTY);
             columnIDs.push_back(part.scanColumnID);
         }
-        bool stop = false;
         scanCommittedAndLocalNodeKeys(transaction, table->ptrCast<NodeTable>(), columnIDs, mm,
-            onKey, &stop);
+            onKey, stopFlag);
         return;
     }
-    bool stop = false;
-    scanRelPairKeys(context, table->ptrCast<RelTable>(), parts, onKey, &stop);
+    scanRelPairKeys(context, table->ptrCast<RelTable>(), parts, onKey, stopFlag);
 }
 
 void UniqueConstraintChecker::validateNoDuplicates(main::ClientContext* context, Table* table,
     const std::vector<ResolvedPart>& parts, const std::string& constraintName) {
     std::unordered_set<std::string> seen;
     bool failed = false;
-    collectExistingKeys(context, table, parts, [&](std::string&& key) {
-        if (failed) {
-            return;
-        }
-        if (!seen.insert(key).second) {
-            failed = true;
-        }
-    });
+    collectExistingKeys(
+        context, table, parts,
+        [&](std::string&& key) {
+            if (failed) {
+                return;
+            }
+            if (!seen.insert(key).second) {
+                failed = true;
+            }
+        },
+        &failed);
     if (failed) {
         throwDuplicateError(constraintName);
     }
@@ -480,11 +504,14 @@ bool UniqueConstraintChecker::hasDuplicate(main::ClientContext* context, Table* 
         return false;
     }
     bool found = false;
-    collectExistingKeys(context, table, parts, [&](std::string&& existing) {
-        if (!found && existing == *key) {
-            found = true;
-        }
-    });
+    collectExistingKeys(
+        context, table, parts,
+        [&](std::string&& existing) {
+            if (!found && existing == *key) {
+                found = true;
+            }
+        },
+        &found);
     return found;
 }
 
@@ -497,12 +524,14 @@ void UniqueConstraintChecker::validateRelGroupNoDuplicates(main::ClientContext* 
     for (auto& pairInfo : relGroupEntry.getRelEntryInfos()) {
         auto* pairTable = storageManager->getTable(pairInfo.oid);
         bool failed = false;
-        UniqueConstraintChecker::collectExistingKeys(context, pairTable, parts,
+        UniqueConstraintChecker::collectExistingKeys(
+            context, pairTable, parts,
             [&](std::string&& key) {
                 if (!failed && !seen.insert(key).second) {
                     failed = true;
                 }
-            });
+            },
+            &failed);
         if (failed) {
             throwDuplicateError(constraintName);
         }

@@ -61,6 +61,9 @@ Endpoint parts work in any position and mix freely with property parts.
 - `DROP TABLE` drops the table's constraints; `DROP PROPERTY` of a constrained property
   is rejected until the constraint is dropped; `RENAME TABLE/PROPERTY` is reflected in
   `SHOW CONSTRAINTS` and `EXPORT DATABASE` (endpoint references are unaffected).
+  `ALTER TABLE ... ADD src/dst` and `RENAME ... TO src/dst` are rejected while an
+  endpoint (`r.src`/`r.dst`) constraint exists on the table, so the exported spelling
+  can never silently switch from the endpoint to a property.
 
 ## On-disk format
 
@@ -72,9 +75,14 @@ Constraints persist in their own catalog set with checkpoint and WAL replay supp
 
 - Enforcement is **scan-based**: each check scans the table (one full scan per
   single-row insert, one per `COPY`, one per `CREATE CONSTRAINT`), reading only
-  transaction-visible rows. Bulk single-row inserts are slow; prefer `COPY FROM` for
-  loads. A future index-backed implementation can replace
+  transaction-visible rows. Rel scans bind up to one vector (2048) of source nodes per
+  batch and stop at the first duplicate for point checks. Bulk single-row inserts are
+  slow; prefer `COPY FROM` for loads. A future index-backed implementation can replace
   `storage/UniqueConstraintChecker` without touching the catalog entry shape.
+- Validation builds one in-memory key per row (`COPY`, `CREATE CONSTRAINT` success path)
+  in an `unordered_set` that the buffer manager does not track; very large constrained
+  tables can use significant heap during validation. Point checks (`CREATE`/`MERGE`)
+  stream and stop at the first match instead.
 - NaN handling: identical NaN bit patterns conflict; NaN never equals anything else is
   not distinguished (documented divergence from `Value::operator==`, which is false
   for NaN).
