@@ -1,6 +1,7 @@
 #include "function/cast/functions/cast_string_non_nested_functions.h"
 
 #include "common/constants.h"
+#include "common/exception/overflow.h"
 #include "common/types/date_t.h"
 #include "common/types/interval_t.h"
 #include "common/types/timestamp_t.h"
@@ -70,7 +71,7 @@ bool TryCastStringToTimestamp::tryCast<timestamp_ns_t>(const char* input, uint64
     }
     try {
         result = Timestamp::getEpochNanoSeconds(result);
-    } catch (...) {
+    } catch (const OverflowException&) {
         return false;
     }
     return true;
@@ -84,7 +85,7 @@ bool TryCastStringToTimestamp::tryCast<timestamp_ms_t>(const char* input, uint64
     }
     try {
         result = Timestamp::getEpochMilliSeconds(result);
-    } catch (...) {
+    } catch (const OverflowException&) {
         return false;
     }
     return true;
@@ -98,7 +99,7 @@ bool TryCastStringToTimestamp::tryCast<timestamp_sec_t>(const char* input, uint6
     }
     try {
         result = Timestamp::getEpochSeconds(result);
-    } catch (...) {
+    } catch (const OverflowException&) {
         return false;
     }
     return true;
