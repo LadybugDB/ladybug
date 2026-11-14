@@ -635,6 +635,10 @@ void Checkpointer::rollback() try {
     for (const auto& target : checkpointTargets) {
         target.storageManager->rollbackCheckpoint(*target.catalog, &clientContext);
     }
+    if (checkpointTargets.empty() && mainStorageManager != nullptr) {
+        mainStorageManager->rollbackCheckpoint(*clientContext.getDatabase()->getCatalog(),
+            &clientContext);
+    }
     // Discard children's in-progress shadow pages so a later open cannot replay them.
     if (!isInMemory) {
         auto bufferManager = MemoryManager::Get(clientContext)->getBufferManager();

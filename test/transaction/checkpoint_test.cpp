@@ -7131,6 +7131,39 @@ TEST_F(ReviewFixesTest, ReclaimTailMergesWithDeserializedFSMEntries) {
     }
 }
 
+TEST_F(ReviewFixesTest, FailedCheckpointRollbackReclaimsNewPages) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+
+    conn->query("CALL auto_checkpoint=false;");
+    ASSERT_TRUE(
+        conn->query("CREATE NODE TABLE t_rollback(id INT64 PRIMARY KEY, val STRING);")->isSuccess());
+    ASSERT_TRUE(conn->query("CHECKPOINT;")->isSuccess());
+
+    auto* context = getClientContext(*conn);
+    auto* storageManager = StorageManager::Get(*context);
+    auto* dataFH = storageManager->getDataFH();
+
+    const auto basePages = dataFH->getNumPages();
+    ASSERT_GT(basePages, 0u);
+
+    // Simulate allocation of new pages by an in-progress checkpoint that fails before commit
+    dataFH->addNewPages(16);
+    EXPECT_EQ(dataFH->getNumPages(), basePages + 16);
+
+    // Rollback of the checkpoint should rewind/reclaim tail pages back to basePages
+    storageManager->rollbackCheckpoint(*context->getDatabase()->getCatalog(), context);
+    EXPECT_EQ(dataFH->getNumPages(), basePages);
+
+    // Retrying a failed checkpoint that allocates pages again should rewind again,
+    // avoiding unbounded growth
+    dataFH->addNewPages(16);
+    EXPECT_EQ(dataFH->getNumPages(), basePages + 16);
+    storageManager->rollbackCheckpoint(*context->getDatabase()->getCatalog(), context);
+    EXPECT_EQ(dataFH->getNumPages(), basePages);
+}
+
 TEST_F(ReviewFixesTest, ExplicitCheckpointLeavesPageManagerCleanAfterSecondaryArtIndex) {
     if (inMemMode) {
         GTEST_SKIP();

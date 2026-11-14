@@ -580,6 +580,10 @@ void StorageManager::finalizeCheckpoint(main::ClientContext& context) {
 
 void StorageManager::rollbackCheckpoint(const Catalog& catalog, main::ClientContext* context) {
     std::unique_lock lck{mtx};
+    const auto* header =
+        context != nullptr ? getOrInitDatabaseHeader(*context) : databaseHeader.get();
+    const common::page_idx_t checkpointNumPages = header != nullptr ? header->dataFileNumPages : 0;
+
     const auto nodeTableEntries = catalog.getNodeTableEntries(&DUMMY_CHECKPOINT_TRANSACTION);
     for (const auto tableEntry : nodeTableEntries) {
         // Partitioned parents hold no physical storage; only their partition subgraphs do.
@@ -593,13 +597,18 @@ void StorageManager::rollbackCheckpoint(const Catalog& catalog, main::ClientCont
                 PartitionStorageRegistry::Get(context)->tryGet(tableEntry->getTableID());
             if (childSM != nullptr && childSM->containsTable(tableEntry->getTableID())) {
                 childSM->getTable(tableEntry->getTableID())->rollbackCheckpoint();
-                childSM->getDataFH()->getPageManager()->rollbackCheckpoint();
+                const auto* childHeader = context != nullptr ?
+                                              childSM->getOrInitDatabaseHeader(*context) :
+                                              childSM->databaseHeader.get();
+                const common::page_idx_t childNumPages =
+                    childHeader != nullptr ? childHeader->dataFileNumPages : 0;
+                childSM->getDataFH()->getPageManager()->rollbackCheckpoint(childNumPages);
             }
             continue;
         }
         tables.at(tableEntry->getTableID())->rollbackCheckpoint();
     }
-    dataFH->getPageManager()->rollbackCheckpoint();
+    dataFH->getPageManager()->rollbackCheckpoint(checkpointNumPages);
 }
 
 std::optional<std::reference_wrapper<const IndexType>> StorageManager::getIndexType(
