@@ -4,6 +4,7 @@
 #include <sstream>
 
 #include "catalog/catalog.h"
+#include "catalog/catalog_entry/constraint_catalog_entry.h"
 #include "catalog/catalog_entry/index_catalog_entry.h"
 #include "catalog/catalog_entry/node_table_catalog_entry.h"
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
@@ -123,6 +124,11 @@ std::string getIndexCypher(ClientContext* clientContext, const FileScanInfo& exp
         if (!indexCypher.empty()) {
             ss << indexCypher << std::endl;
         }
+    }
+    // UNIQUE constraints are re-created after tables (and their indexes) on import.
+    catalog::ConstraintToCypherInfo constraintInfo{clientContext};
+    for (auto entry : catalog->getConstraintEntries(transaction)) {
+        ss << entry->toCypher(constraintInfo) << std::endl;
     }
     return ss.str();
 }

@@ -18,6 +18,7 @@
 #include "storage/table/column_chunk.h"
 #include "storage/table/column_chunk_data.h"
 #include "storage/table/rel_table_data.h"
+#include "storage/unique_constraint_checker.h"
 #include "storage/wal/local_wal.h"
 #include "transaction/transaction.h"
 #include <format>
@@ -393,6 +394,8 @@ void RelTable::checkRelMultiplicityConstraint(Transaction* transaction,
 
 void RelTable::insert(Transaction* transaction, TableInsertState& insertState) {
     checkRelMultiplicityConstraint(transaction, insertState);
+    UniqueConstraintChecker::checkInsert(transaction->getClientContext(), this,
+        insertState.cast<RelTableInsertState>().propertyVectors);
 
     DASSERT(transaction->getLocalStorage());
     const auto localTable = transaction->getLocalStorage()->getOrCreateLocalTable(*this);
