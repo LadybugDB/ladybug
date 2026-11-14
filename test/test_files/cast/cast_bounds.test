@@ -126,3 +126,15 @@ Overflow exception: Value 253370764800000000 * 1000 is not within INT64 range.
 -STATEMENT RETURN CAST(CAST('1600-01-01 00:00:00' AS TIMESTAMP) AS TIMESTAMP_NS)
 ---- error
 Overflow exception: Value -11676096000000000 * 1000 is not within INT64 range.
+
+-CASE timestamp_ns_trycast
+-LOG TimestampNsTryCastOverflowReturnsFailure
+-STATEMENT WITH CAST('9999-01-01 00:00:00' AS UNION(ns TIMESTAMP_NS, s STRING)) AS u RETURN u, union_tag(u);
+---- 1
+9999-01-01 00:00:00|s
+-STATEMENT WITH CAST('2020-01-02 03:04:05.123456789' AS UNION(ns TIMESTAMP_NS, s STRING)) AS u RETURN u, union_tag(u);
+---- 1
+2020-01-02 03:04:05.123456|ns
+-STATEMENT RETURN CAST('9999-01-01 00:00:00' AS UNION(ns TIMESTAMP_NS));
+---- error
+Conversion exception: Could not convert to union type UNION(ns TIMESTAMP_NS): 9999-01-01 00:00:00.
