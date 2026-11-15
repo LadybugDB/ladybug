@@ -16,6 +16,7 @@
 #include <regex>
 #include <sstream>
 
+#include "agent_mode.h"
 #include "binder/binder.h"
 #include "catalog/catalog.h"
 #include "catalog/catalog_entry/catalog_entry.h"
@@ -74,8 +75,15 @@ struct ShellCommand {
     const char* ERRORS = ":render_errors";
     const char* COMPLETE = ":render_completion";
     const char* SCHEMA = ":schema";
-    const std::array<const char*, 13> commandList = {HELP, CLEAR, QUIT, MAX_ROWS, MAX_WIDTH, MODE,
-        STATS, MULTI, SINGLE, HIGHLIGHT, ERRORS, COMPLETE, SCHEMA};
+    const char* MAXROWS = ":maxrows";
+    const char* MAXBYTES = ":maxbytes";
+    const char* MAXCELLWIDTH = ":maxcellwidth";
+    const char* TABLES = ":tables";
+    const char* SHOW = ":show";
+    const char* EXPLAIN_FMT = ":explain";
+    const std::array<const char*, 19> commandList = {HELP, CLEAR, QUIT, MAX_ROWS, MAX_WIDTH, MODE,
+        STATS, MULTI, SINGLE, HIGHLIGHT, ERRORS, COMPLETE, SCHEMA, MAXROWS, MAXBYTES, MAXCELLWIDTH,
+        TABLES, SHOW, EXPLAIN_FMT};
 } shellCommand;
 
 const char* TAB = "    ";
@@ -413,39 +421,76 @@ std::string findClosestCommand(std::string lineStr) {
     return closestCommand;
 }
 
+static std::string normalizeShellCommand(const std::string& raw) {
+    // Accept both ':' and '.' prefixes and match case-insensitively.
+    std::string cmd = raw;
+    if (!cmd.empty() && (cmd[0] == ':' || cmd[0] == '.')) {
+        cmd = cmd.substr(1);
+    }
+    std::transform(cmd.begin(), cmd.end(), cmd.begin(),
+        [](unsigned char c) { return std::tolower(c); });
+    return cmd;
+}
+
 int EmbeddedShell::processShellCommands(std::string lineStr) {
     std::istringstream iss(lineStr);
-    std::string command, arg;
-    iss >> command >> arg;
-    if (command == shellCommand.HELP) {
-        printHelp();
-    } else if (command == shellCommand.CLEAR) {
+    std::string rawCommand, arg;
+    iss >> rawCommand >> arg;
+    std::string command = normalizeShellCommand(rawCommand);
+    if (command == "help") {
+        if (arg == "agent") {
+            printAgentHelp();
+        } else {
+            printHelp();
+        }
+    } else if (command == "clear") {
         linenoiseClearScreen();
-    } else if (command == shellCommand.QUIT) {
+    } else if (command == "quit" || command == "exit") {
         return -1;
-    } else if (command == shellCommand.MAX_ROWS) {
+    } else if (command == "max_rows") {
         setMaxRows(arg);
-    } else if (command == shellCommand.MAX_WIDTH) {
+    } else if (command == "max_width") {
         setMaxWidth(arg);
-    } else if (command == shellCommand.MODE) {
+    } else if (command == "mode") {
         setMode(arg);
-    } else if (command == shellCommand.STATS) {
-        setStats(arg);
-    } else if (command == shellCommand.MULTI) {
+    } else if (command == "stats") {
+        if (arg.empty()) {
+            printAgentStatus();
+        } else {
+            setStats(arg);
+        }
+    } else if (command == "multiline") {
         setLinenoiseMode(1);
-    } else if (command == shellCommand.SINGLE) {
+    } else if (command == "singleline") {
         setLinenoiseMode(0);
-    } else if (command == shellCommand.HIGHLIGHT) {
+    } else if (command == "highlight") {
         setHighlighting(arg);
-    } else if (command == shellCommand.ERRORS) {
+    } else if (command == "render_errors" || command == "errors") {
         setErrors(arg);
-    } else if (command == shellCommand.COMPLETE) {
+    } else if (command == "render_completion" || command == "complete") {
         setComplete(arg);
-    } else if (command == shellCommand.SCHEMA) {
+    } else if (command == "schema") {
         printSchema();
+    } else if (command == "maxrows" || command == "maxbytes" || command == "maxcellwidth") {
+        setAgentCap(command, arg);
+    } else if (command == "tables") {
+        printAgentTables();
+    } else if (command == "show") {
+        printAgentStatus();
+    } else if (command == "explain") {
+        setExplainFormat(arg);
     } else {
-        printf("Error: Unknown command: \"%s\". Enter \":help\" for help\n", lineStr.c_str());
-        printf("Did you mean: \"%s\"?\n", findClosestCommand(lineStr).c_str());
+        hadError = true;
+        if (agentMode) {
+            fprintf(stderr, "%s\n",
+                agent::shellErrorJson("Unknown command: \"" + lineStr +
+                                      "\". Enter "
+                                      "\".help\" for help")
+                    .c_str());
+        } else {
+            printf("Error: Unknown command: \"%s\". Enter \":help\" for help\n", lineStr.c_str());
+            printf("Did you mean: \"%s\"?\n", findClosestCommand(lineStr).c_str());
+        }
     }
     return 0;
 }
@@ -462,6 +507,11 @@ EmbeddedShell::EmbeddedShell(std::shared_ptr<Database> database, std::shared_ptr
     maxPrintWidth = shellConfig.maxPrintWidth;
     printer = std::move(shellConfig.printer);
     stats = shellConfig.stats;
+    agentMode = shellConfig.agentMode;
+    agentEnv = shellConfig.agentEnv;
+    agentAutoDetected = shellConfig.agentAutoDetected;
+    agentFlagGiven = shellConfig.agentFlagGiven;
+    stdoutIsTTY = shellConfig.stdoutIsTTY;
     catalogVersion = database->catalog->getVersion();
     updateTableNames();
     updateFunctionAndTypeNames();
@@ -574,8 +624,9 @@ std::vector<std::unique_ptr<QueryResult>> EmbeddedShell::processInput(std::strin
         }
         unicodeInput += ';';
     }
-    // process shell commands
-    if (!continueLine && unicodeInput[0] == ':') {
+    // process shell commands (':' commands and DuckDB-style '.' commands)
+    if (!continueLine && !unicodeInput.empty() &&
+        (unicodeInput[0] == ':' || unicodeInput[0] == '.')) {
         processShellCommands(unicodeInput);
         // process queries
     } else if (!unicodeInput.empty() && cypherComplete((char*)unicodeInput.c_str())) {
@@ -607,8 +658,15 @@ std::vector<std::unique_ptr<QueryResult>> EmbeddedShell::processInput(std::strin
 }
 
 void EmbeddedShell::printErrorMessage(std::string input, QueryResult& queryResult) {
+    hadError = true;
     input = input.erase(input.find_last_not_of(" \t\n\r\f\v") + 1);
     std::string errMsg = queryResult.getErrorMessage();
+    if (agentMode) {
+        std::string stripped;
+        auto type = agent::exceptionTypeFromMessage(errMsg, stripped);
+        fprintf(stderr, "%s\n", agent::formatErrorJson(type, stripped).c_str());
+        return;
+    }
     printf("Error: %s\n", errMsg.c_str());
     if (errMsg.find(ParserException::ERROR_PREFIX) == 0) {
         std::string trimmedinput = input;
@@ -708,6 +766,10 @@ void EmbeddedShell::run() {
         free(line);
     }
 
+    if (!agentMode && agentEnv.empty() && !agentFlagGiven && !stdoutIsTTY && hadError) {
+        fprintf(stderr, "hint: --agent renders errors as JSON and results compactly for AI coding "
+                        "agents (lbug --help lists all options; --no_agent disables this hint)\n");
+    }
 #ifndef _WIN32
     /* Don't even check the return value as it's too late. */
     if (noEcho && tcsetattr(STDIN_FILENO, TCSANOW, &orig_termios) != -1) {
@@ -775,6 +837,7 @@ void printModeInfo() {
 }
 
 void EmbeddedShell::setMode(const std::string& modeString) {
+    modeExplicitlySet = true;
     if (modeString.empty()) {
         printModeInfo();
         return;
@@ -873,6 +936,13 @@ void EmbeddedShell::printHelp() {
     printf("%s%s [on|off] %stoggle completion highlighting on or off\n", TAB, shellCommand.COMPLETE,
         TAB);
     printf("%s%s %sprint database schema\n", TAB, shellCommand.SCHEMA, TAB);
+    printf("%s%s [N] %sset agent-mode row cap (0/-1 = unlimited)\n", TAB, ":maxrows", TAB);
+    printf("%s%s [N] %sset agent-mode byte cap (0/-1 = unlimited)\n", TAB, ":maxbytes", TAB);
+    printf("%s%s [N] %sset agent-mode max cell width\n", TAB, ":maxcellwidth", TAB);
+    printf("%s%s %slist tables with row counts and columns\n", TAB, ":tables", TAB);
+    printf("%s%s %sshow agent status\n", TAB, ":show", TAB);
+    printf("%s%s [compact|box|auto] %sset EXPLAIN format\n", TAB, ":explain", TAB);
+    printf("%s%s %sagent mode help\n", TAB, ":help agent", TAB);
     printf("\n");
     printf("%sNote: you can change and see several system configurations, such as num-threads, \n",
         TAB);
@@ -1082,7 +1152,15 @@ std::string escapeCsvString(const std::string& field, const std::string& delimit
 void EmbeddedShell::printExecutionResult(QueryResult& queryResult) const {
     auto querySummary = queryResult.getQuerySummary();
     if (querySummary->isExplain()) {
+        if (explainFormat == "compact" || (agentMode && explainFormat == "auto")) {
+            printCompactExplain(queryResult);
+            return;
+        }
         printf("%s", queryResult.getNext()->toString().c_str());
+        return;
+    }
+    if (agentMode && !modeExplicitlySet && PrinterTypeUtils::isTableType(printer->printType)) {
+        printAgentExecutionResult(queryResult);
         return;
     }
     if (PrinterTypeUtils::isTableType(printer->printType)) {
@@ -1691,6 +1769,374 @@ void EmbeddedShell::printTruncatedExecutionResult(QueryResult& queryResult) cons
         }
         printf("Time: %.2fms (compiling), %.2fms (executing)\n", querySummary->getCompilingTime(),
             querySummary->getExecutionTime());
+    }
+}
+
+void EmbeddedShell::setAgentCap(const std::string& name, const std::string& value) {
+    int64_t* target = nullptr;
+    if (name == "maxrows") {
+        target = &agentMaxRows;
+    } else if (name == "maxbytes") {
+        target = &agentMaxBytes;
+    } else if (name == "maxcellwidth") {
+        target = &agentMaxCellWidth;
+    }
+    if (value.empty()) {
+        printf("agent %s is %lld (0/-1 = unlimited)\n", name.c_str(),
+            static_cast<long long>(*target));
+        return;
+    }
+    try {
+        int64_t parsed = std::stoll(value);
+        if (parsed < -1) {
+            printf("Cannot parse '%s' as %s. Expect a non-negative integer "
+                   "(0/-1 = unlimited).\n",
+                value.c_str(), name.c_str());
+            return;
+        }
+        *target = parsed;
+    } catch (std::exception&) {
+        printf("Cannot parse '%s' as %s. Expect a non-negative integer "
+               "(0/-1 = unlimited).\n",
+            value.c_str(), name.c_str());
+        return;
+    }
+    printf("agent %s set as %lld\n", name.c_str(), static_cast<long long>(*target));
+}
+
+void EmbeddedShell::setExplainFormat(const std::string& format) {
+    std::string lower = format;
+    std::transform(lower.begin(), lower.end(), lower.begin(),
+        [](unsigned char c) { return std::tolower(c); });
+    if (lower.empty()) {
+        printf("explain format is %s\n", explainFormat.c_str());
+        return;
+    }
+    if (lower == "compact") {
+        explainFormat = "compact";
+    } else if (lower == "box" || lower == "default") {
+        explainFormat = "box";
+    } else if (lower == "auto") {
+        explainFormat = "auto";
+    } else {
+        printf("Cannot parse '%s' as explain format. Expect 'compact', 'box' or 'auto'.\n",
+            format.c_str());
+        return;
+    }
+    printf("explain format set as %s\n", explainFormat.c_str());
+}
+
+void EmbeddedShell::printAgentExecutionResult(QueryResult& queryResult) const {
+    auto colNames = queryResult.getColumnNames();
+    auto colTypes = queryResult.getColumnDataTypes();
+    const auto numCols = queryResult.getNumColumns();
+    const uint64_t totalRows = queryResult.getNumTuples();
+    // Header carries the column types: | name:TYPE | n:INT64 |, then |---|.
+    std::string header = "|";
+    std::string separator = "|";
+    for (auto i = 0u; i < numCols; i++) {
+        header +=
+            " " + agent::markdownEscapeCell(colNames[i]) + ":" + colTypes[i].toString() + " |";
+        separator += "---|";
+    }
+    printf("%s\n%s\n", header.c_str(), separator.c_str());
+    if (numCols == 0) {
+        return;
+    }
+    const bool rowsLimited = agentMaxRows > 0 && totalRows > (uint64_t)agentMaxRows;
+    // Single pass: keep the first 20 and a rolling window of the last 20 rows,
+    // plus a byte count and an order-independent hash of the full result.
+    struct SampledRow {
+        std::string text;
+    };
+    std::vector<SampledRow> first;
+    std::vector<SampledRow> last;
+    first.reserve(20);
+    last.reserve(20);
+    uint64_t renderedBytes = 0;
+    uint64_t totalHash = 0;
+    queryResult.resetIterator();
+    while (queryResult.hasNext()) {
+        if (printInterrupted) {
+            return;
+        }
+        auto tuple = queryResult.getNext();
+        std::string rowText = "|";
+        uint64_t rowHash = 1469598103934665603ULL;
+        for (auto i = 0u; i < numCols; i++) {
+            std::string cell;
+            if (tuple->getValue(i)->isNull()) {
+                // Tagged so that NULL hashes differently from the string 'NULL'.
+                rowHash = agent::fnv1a("\x00NULL", 5, rowHash);
+                cell = "NULL";
+            } else {
+                std::string raw = tuple->getValue(i)->toString();
+                rowHash = agent::fnv1a("\x01", 1, rowHash);
+                rowHash = agent::fnv1a(raw.data(), raw.size(), rowHash);
+                if (agentMaxCellWidth > 0 && agent::utf8Length(raw) > (size_t)agentMaxCellWidth) {
+                    size_t omitted = 0;
+                    // NB: keep the truncation on its own statement: it writes `omitted`,
+                    // which is only read afterwards. Folding both into one `+` chain leaves
+                    // the order unspecified (operands of `operator+` are indeterminately
+                    // sequenced), so some toolchains report `+0 chars`.
+                    std::string kept = agent::utf8Truncate(raw, (size_t)agentMaxCellWidth, omitted);
+                    raw = kept + "…(+" + std::to_string(omitted) + " chars)";
+                }
+                cell = agent::markdownEscapeCell(raw);
+            }
+            rowText += " " + cell + " |";
+        }
+        rowHash = agent::fnv1a(reinterpret_cast<const char*>(&numCols), sizeof(numCols), rowHash);
+        totalHash ^= rowHash; // order-independent combination
+        renderedBytes += rowText.size() + 1;
+        SampledRow row{rowText};
+        if (first.size() < 20) {
+            first.push_back(row);
+        }
+        last.push_back(std::move(row));
+        if (last.size() > 20) {
+            last.erase(last.begin());
+        }
+    }
+    const bool bytesLimited = agentMaxBytes > 0 && renderedBytes > (uint64_t)agentMaxBytes;
+    const bool capped = rowsLimited || bytesLimited;
+    const bool sampled = capped && totalRows > 40;
+    if (!sampled) {
+        // Small enough to print in full: replay the first rows then the tail.
+        if (totalRows <= 20) {
+            for (auto& row : first) {
+                printf("%s\n", row.text.c_str());
+            }
+        } else {
+            queryResult.resetIterator();
+            while (queryResult.hasNext()) {
+                if (printInterrupted) {
+                    return;
+                }
+                auto tuple = queryResult.getNext();
+                std::string rowText = "|";
+                for (auto i = 0u; i < numCols; i++) {
+                    std::string cell;
+                    if (tuple->getValue(i)->isNull()) {
+                        cell = "NULL";
+                    } else {
+                        std::string raw = tuple->getValue(i)->toString();
+                        if (agentMaxCellWidth > 0 &&
+                            agent::utf8Length(raw) > (size_t)agentMaxCellWidth) {
+                            size_t omitted = 0;
+                            // NB: sequenced on purpose (see the first truncation loop above).
+                            std::string kept =
+                                agent::utf8Truncate(raw, (size_t)agentMaxCellWidth, omitted);
+                            raw = kept + "…(+" + std::to_string(omitted) + " chars)";
+                        }
+                        cell = agent::markdownEscapeCell(raw);
+                    }
+                    rowText += " " + cell + " |";
+                }
+                printf("%s\n", rowText.c_str());
+            }
+        }
+    } else {
+        for (auto& row : first) {
+            printf("%s\n", row.text.c_str());
+        }
+        std::string marker = "| … " + std::to_string(totalRows - 40) + " rows omitted … |";
+        for (auto i = 1u; i < numCols; i++) {
+            marker += " |";
+        }
+        printf("%s\n", marker.c_str());
+        for (auto& row : last) {
+            printf("%s\n", row.text.c_str());
+        }
+    }
+    std::string hash = agent::hashHex(totalHash == 0 ? 1469598103934665603ULL : totalHash);
+    if (sampled) {
+        std::string limitHint = rowsLimited ? ".maxrows 0" : ".maxbytes 0";
+        printf("first 20 and last 20 of %" PRIu64 " rows (%s for all), hash %s\n", totalRows,
+            limitHint.c_str(), hash.c_str());
+    } else if (capped) {
+        std::string limitHint = rowsLimited ? ".maxrows 0" : ".maxbytes 0";
+        printf("%" PRIu64 " rows (capped; %s for all), hash %s\n", totalRows, limitHint.c_str(),
+            hash.c_str());
+    } else if (totalRows == 0) {
+        printf("empty result, hash %s\n", hash.c_str());
+    } else if (totalRows >= 10) {
+        printf("%" PRIu64 " rows, hash %s\n", totalRows, hash.c_str());
+    }
+}
+
+void EmbeddedShell::printCompactExplain(QueryResult& queryResult) const {
+    queryResult.resetIterator();
+    if (!queryResult.hasNext()) {
+        return;
+    }
+    std::string plan = queryResult.getNext()->toString();
+    std::string compact = agent::compactPlan(plan);
+    if (compact.empty()) {
+        printf("%s", plan.c_str());
+        return;
+    }
+    printf("%s", compact.c_str());
+}
+
+void EmbeddedShell::printAgentStatus() const {
+    if (agentMode) {
+        std::string id = agentEnv.empty() ? "flag" : agent::agentIdForEnv(agentEnv);
+        if (agentAutoDetected && !agentEnv.empty()) {
+            printf("agent: on (%s, auto-detected via %s)\n", id.c_str(), agentEnv.c_str());
+        } else {
+            printf("agent: on (%s)\n", id.c_str());
+        }
+    } else {
+        printf("agent: off\n");
+    }
+    if (agentMode && !modeExplicitlySet) {
+        printf("mode: markdown (agent compact)\n");
+    }
+    printf("stats: %s\n", stats ? "on" : "off");
+    if (agentMode) {
+        printf("maxrows: %lld, maxbytes: %lld, maxcellwidth: %lld (0/-1 = unlimited)\n",
+            static_cast<long long>(agentMaxRows), static_cast<long long>(agentMaxBytes),
+            static_cast<long long>(agentMaxCellWidth));
+        printf("explain: %s\n", explainFormat.c_str());
+    }
+}
+
+void EmbeddedShell::printAgentHelp() const {
+    printf("Agent mode renders results and errors for AI coding agents.\n");
+    printf("It turns on automatically when an agent env var (e.g. CLAUDECODE) is set,\n");
+    printf("stdout is not a terminal, and no output-format flag was passed.\n");
+    printf("--agent forces it on, --no_agent forces it off, LBUG_AGENT_MODE=1 forces it on.\n");
+    printf("\n");
+    printf("Output rules:\n");
+    printf("  - results are Markdown tables, no padding; the header carries types\n");
+    printf("    (| name:STRING | n:INT64 |, then |---|---|)\n");
+    printf("  - at most 1000 rows / 10000 bytes print in full; beyond that the\n");
+    printf("    first and last 20 rows are shown around an explicit omitted-rows\n");
+    printf("    marker, plus a footer with a result hash\n");
+    printf("  - long cell values are cut at 500 chars with a …(+N chars) marker\n");
+    printf("  - errors go to stderr as JSON "
+           "{\"exception_type\": ..., \"exception_message\": ...}\n");
+    printf("  - EXPLAIN uses a compact one-operator-per-line plan\n");
+    printf("\n");
+    printf("Useful settings (explicit settings win over agent defaults):\n");
+    printf("  .maxrows N / .maxbytes N (0/-1 = unlimited), .maxcellwidth N\n");
+    printf("  .explain [compact|box|auto], .tables, .show (agent status)\n");
+    printf("  CALL current_setting('timeout')/SET max_execution_time to bound runtime;\n");
+    printf("  DESCRIBE <query> for result columns; SUMMARIZE for a quick profile.\n");
+}
+
+static std::string backtickQuote(const std::string& name) {
+    std::string out = "`";
+    for (char c : name) {
+        if (c == '`') {
+            out += "``";
+        } else {
+            out += c;
+        }
+    }
+    out += "`";
+    return out;
+}
+
+void EmbeddedShell::printAgentTables() {
+    auto tablesResult = conn->query("CALL show_tables() RETURN *");
+    if (!tablesResult->isSuccess()) {
+        printErrorMessage("CALL show_tables() RETURN *", *tablesResult);
+        return;
+    }
+    // Locate the name/type columns by name so internal renames stay working.
+    auto tableColNames = tablesResult->getColumnNames();
+    int nameIdx = -1, typeIdx = -1;
+    for (auto i = 0u; i < tableColNames.size(); i++) {
+        if (tableColNames[i] == "name") {
+            nameIdx = (int)i;
+        } else if (tableColNames[i] == "type") {
+            typeIdx = (int)i;
+        }
+    }
+    if (nameIdx < 0) {
+        printErrorMessage("CALL show_tables() RETURN *", *tablesResult);
+        return;
+    }
+    struct TableDesc {
+        std::string name;
+        std::string type;
+    };
+    std::vector<TableDesc> tables;
+    while (tablesResult->hasNext()) {
+        auto tuple = tablesResult->getNext();
+        TableDesc desc;
+        desc.name = tuple->getValue((uint32_t)nameIdx)->toString();
+        desc.type = typeIdx >= 0 ? tuple->getValue((uint32_t)typeIdx)->toString() : "";
+        tables.push_back(std::move(desc));
+    }
+    if (tables.empty()) {
+        printf("(no tables)\n");
+        return;
+    }
+    for (auto& table : tables) {
+        std::string lowerType = table.type;
+        std::transform(lowerType.begin(), lowerType.end(), lowerType.begin(),
+            [](unsigned char c) { return std::tolower(c); });
+        bool isRel = lowerType.find("rel") != std::string::npos;
+        // Approximate row count.
+        std::string countQuery =
+            isRel ? "MATCH ()-[r:" + backtickQuote(table.name) + "]->() RETURN COUNT(*) AS c" :
+                    "MATCH (n:" + backtickQuote(table.name) + ") RETURN COUNT(*) AS c";
+        std::string countStr = "~?";
+        auto countResult = conn->query(countQuery);
+        if (countResult->isSuccess() && countResult->hasNext()) {
+            countStr = "~" + countResult->getNext()->getValue(0)->toString();
+        }
+        // Columns via table_info.
+        std::string cols;
+        std::string quotedName = table.name;
+        {
+            std::string escaped;
+            for (char c : quotedName) {
+                if (c == '\'') {
+                    escaped += "''";
+                } else {
+                    escaped += c;
+                }
+            }
+            quotedName = std::move(escaped);
+        }
+        auto infoResult = conn->query("CALL table_info('" + quotedName + "') RETURN *");
+        if (infoResult->isSuccess()) {
+            auto infoCols = infoResult->getColumnNames();
+            int colNameIdx = -1, colTypeIdx = -1, pkIdx = -1;
+            for (auto i = 0u; i < infoCols.size(); i++) {
+                if (infoCols[i] == "name") {
+                    colNameIdx = (int)i;
+                } else if (infoCols[i] == "type") {
+                    colTypeIdx = (int)i;
+                } else if (infoCols[i] == "primary key") {
+                    pkIdx = (int)i;
+                }
+            }
+            bool firstCol = true;
+            while (infoResult->hasNext()) {
+                auto tuple = infoResult->getNext();
+                if (!firstCol) {
+                    cols += ", ";
+                }
+                firstCol = false;
+                cols += tuple->getValue((uint32_t)colNameIdx)->toString() + " " +
+                        tuple->getValue((uint32_t)colTypeIdx)->toString();
+                if (pkIdx >= 0 && tuple->getValue((uint32_t)pkIdx)->toString() == "True") {
+                    cols += " PK";
+                }
+            }
+        }
+        std::string typeLabel = lowerType.empty() ? "table" : lowerType;
+        if (cols.empty()) {
+            printf("%s (%s, %s rows)\n", table.name.c_str(), typeLabel.c_str(), countStr.c_str());
+        } else {
+            printf("%s (%s, %s rows): %s\n", table.name.c_str(), typeLabel.c_str(),
+                countStr.c_str(), cols.c_str());
+        }
     }
 }
 
