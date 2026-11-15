@@ -638,8 +638,11 @@ TEST_F(ApiTest, ImportDatabaseWithOneThreadAndThreadsSetToTwo) {
 
 TEST_F(ApiTest, DenseRecursiveJoinWithOneThread) {
     // The second hop's frontier of 3,000 nodes is dense, so its task goes through the scheduler.
-    // The thread that waits for it holds the only slot and has to run it: the caller, the pool's
-    // only worker under a timeout, and the caller again when the query may use two threads.
+    // The thread that waits for it holds the only slot, so the query hangs unless that thread runs
+    // the task or a launched thread takes its place. The runs reach the task as a one-thread task
+    // on the caller, as a one-thread task on the pool's only worker under a timeout, and as a
+    // two-thread task on the caller: threads=2 adds no worker to the one-slot pool, but the task
+    // then skips the one-thread shortcut.
     auto systemConfig = SystemConfig();
     systemConfig.maxNumThreads = 1;
     auto tempDir = TestHelper::getTempDir(getTestGroupAndName());
