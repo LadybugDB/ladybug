@@ -1314,5 +1314,28 @@ TEST_F(CopyTest, PreparedNodeCopyIntoPartitionedTableReexecuted) {
     }
 }
 
+TEST_F(CopyTest, CopyIntervalOverflowIgnoreErrors) {
+    createDBAndConn();
+    auto result =
+        conn->query("CREATE NODE TABLE intervalTable(id INT64, it INTERVAL, PRIMARY KEY(id))");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    const auto filePath =
+        writeCSV("interval_overflow.csv", {"1,1 year", "2,9223372036854775807 years", "3,2 days"});
+    result = conn->query(
+        std::format("COPY intervalTable FROM '{}' (HEADER=false, IGNORE_ERRORS=true)", filePath));
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    result =
+        conn->query("CALL show_warnings() RETURN message, line_number, skipped_line_or_record");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(result->getNumTuples(), 1u);
+    auto tuple = result->getNext();
+    EXPECT_EQ(tuple->getValue(0)->getValue<std::string>(),
+        "Overflow exception: Interval value is out of range");
+    EXPECT_EQ(tuple->getValue(1)->getValue<uint64_t>(), 2u);
+    result = conn->query("MATCH (t:intervalTable) RETURN t.id, t.it ORDER BY t.id");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(result->getNumTuples(), 2u);
+}
+
 } // namespace testing
 } // namespace lbug
