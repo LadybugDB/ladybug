@@ -115,7 +115,65 @@ Can not execute a write query inside a read-only transaction.
 -STATEMENT RETURN setval('big', 9000000000000000000);
 ---- 1
 9000000000000000000
+-STATEMENT CREATE SEQUENCE c CYCLE;
+---- ok
+-STATEMENT RETURN setval('c', 9000000000000000000);
+---- 1
+9000000000000000000
 -RELOADDB
 -STATEMENT RETURN currval('big'), nextval('big');
 ---- 1
 9000000000000000000|9000000000000000001
+-STATEMENT RETURN currval('c'), nextval('c');
+---- 1
+9000000000000000000|9000000000000000001
+
+-CASE SetvalUsageCountDoesNotWrap
+-LOG A fresh sequence spanning the whole int64 range can be set to its far end
+-STATEMENT CREATE SEQUENCE f MINVALUE -9223372036854775808 START -9223372036854775808 MAXVALUE 9223372036854775807;
+---- ok
+-STATEMENT RETURN setval('f', 9223372036854775807);
+---- 1
+9223372036854775807
+-STATEMENT RETURN currval('f');
+---- 1
+9223372036854775807
+-STATEMENT RETURN nextval('f');
+---- error
+Catalog exception: nextval: reached maximum value of sequence "f" 9223372036854775807
+-LOG Repeated large setvals on a CYCLE sequence keep it in use
+-STATEMENT CREATE SEQUENCE c CYCLE;
+---- ok
+-STATEMENT RETURN nextval('c');
+---- 1
+1
+-STATEMENT RETURN setval('c', 9223372036854775807);
+---- 1
+9223372036854775807
+-STATEMENT RETURN nextval('c');
+---- 1
+1
+-STATEMENT RETURN setval('c', 9223372036854775807);
+---- 1
+9223372036854775807
+-STATEMENT RETURN nextval('c');
+---- 1
+1
+-STATEMENT RETURN nextval('c');
+---- 1
+2
+-STATEMENT RETURN currval('c'), nextval('c');
+---- 1
+2|3
+
+-CASE SetvalNotAllowedInDefault
+-STATEMENT CREATE SEQUENCE s;
+---- ok
+-STATEMENT CREATE NODE TABLE T(id INT64 PRIMARY KEY, x INT64 DEFAULT setval('s', 10));
+---- error
+Binder exception: setval is not allowed in a DEFAULT expression.
+-STATEMENT CREATE NODE TABLE T(id INT64 PRIMARY KEY, x INT64 DEFAULT nextval('s'));
+---- ok
+-STATEMENT ALTER TABLE T ADD y INT64 DEFAULT 1 + setval('s', 20);
+---- error
+Binder exception: setval is not allowed in a DEFAULT expression.
