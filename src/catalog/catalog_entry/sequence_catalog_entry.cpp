@@ -1,5 +1,8 @@
 #include "catalog/catalog_entry/sequence_catalog_entry.h"
 
+#include <limits>
+#include <optional>
+
 #include "binder/ddl/bound_create_sequence_info.h"
 #include "common/exception/catalog.h"
 #include "common/exception/overflow.h"
@@ -29,6 +32,13 @@ int64_t SequenceCatalogEntry::currVal() {
             "\" is not yet defined. To define the sequence, call nextval first.");
     }
     return sequenceData.currVal;
+}
+
+// usageCount is only compared with 0, so it saturates instead of wrapping back to "unused".
+static uint64_t addUsage(uint64_t usageCount, uint64_t count) {
+    return count > std::numeric_limits<uint64_t>::max() - usageCount ?
+               std::numeric_limits<uint64_t>::max() :
+               usageCount + count;
 }
 
 void SequenceCatalogEntry::nextValNoLock() {
@@ -65,14 +75,15 @@ void SequenceCatalogEntry::nextValNoLock() {
         }
     }
     sequenceData.currVal = next;
-    sequenceData.usageCount++;
+    sequenceData.usageCount = addUsage(sequenceData.usageCount, 1);
 }
 
-// Moves a non-cycling sequence `count` nextval calls ahead in O(1), so that replaying a large
-// setval doesn't take `count` steps. Returns false, changing nothing, when the sequence cycles or
-// the result would leave its bounds; the caller then steps with nextValNoLock, which reports it.
+// Moves the sequence `count` nextval calls ahead in O(1), so that replaying a large setval doesn't
+// take `count` steps. Returns false, changing nothing, when the result would leave the bounds; the
+// caller then steps with nextValNoLock, which wraps a CYCLE sequence or reports the bound error.
+// Within the bounds no step on the way wraps, so a CYCLE sequence advances the same way.
 bool SequenceCatalogEntry::tryAdvanceNoLock(uint64_t count) {
-    if (sequenceData.cycle || count == 0) {
+    if (count == 0) {
         return false;
     }
     const auto steps = sequenceData.usageCount > 0 ? count : count - 1;
@@ -95,7 +106,7 @@ bool SequenceCatalogEntry::tryAdvanceNoLock(uint64_t count) {
     sequenceData.currVal =
         static_cast<int64_t>(sequenceData.increment > 0 ? static_cast<uint64_t>(from) + delta :
                                                           static_cast<uint64_t>(from) - delta);
-    sequenceData.usageCount += count;
+    sequenceData.usageCount = addUsage(sequenceData.usageCount, count);
     return true;
 }
 
@@ -131,8 +142,11 @@ void SequenceCatalogEntry::nextKVal(transaction::Transaction* transaction, const
 }
 
 int64_t SequenceCatalogEntry::setVal(transaction::Transaction* transaction, int64_t value) {
+    // Logged as nextval calls: a fresh sequence's first use (which returns its start value) as
+    // one change, then the steps from there as another, so neither count can exceed uint64.
+    std::optional<SequenceRollbackData> firstUse;
     SequenceRollbackData rollbackData{};
-    uint64_t count = 0;
+    uint64_t steps = 0;
     {
         std::lock_guard lck(mtx);
         if (value < sequenceData.minValue || value > sequenceData.maxValue) {
@@ -140,9 +154,6 @@ int64_t SequenceCatalogEntry::setVal(transaction::Transaction* transaction, int6
                 std::format("setval: value {} is out of bounds for sequence \"{}\" ({}..{})", value,
                     name, sequenceData.minValue, sequenceData.maxValue));
         }
-        // The sequence only moves forward, through values nextval would return, so the change is
-        // logged and replayed as that many nextval calls. A fresh sequence's first nextval
-        // returns its start value; later ones add the increment to the current value.
         const auto usedBefore = sequenceData.usageCount > 0;
         const auto from = usedBefore ? sequenceData.currVal : sequenceData.startValue;
         const auto forward = sequenceData.increment > 0 ? value >= from : value <= from;
@@ -159,17 +170,25 @@ int64_t SequenceCatalogEntry::setVal(transaction::Transaction* transaction, int6
                 "is not reachable from {} by increment {}",
                 name, value, from, sequenceData.increment));
         }
-        count = distance / step + (usedBefore ? 0 : 1);
-        if (count == 0) {
-            return value;
+        steps = distance / step;
+        if (!usedBefore) {
+            firstUse = SequenceRollbackData{sequenceData.usageCount, sequenceData.currVal};
+            sequenceData.usageCount = 1;
         }
-        rollbackData = SequenceRollbackData{sequenceData.usageCount, sequenceData.currVal};
-        // Equivalent to `count` calls of nextValNoLock: the target is in bounds and ahead of
-        // the current value, so none of them wraps or overflows.
-        sequenceData.currVal = value;
-        sequenceData.usageCount += count;
+        if (steps > 0) {
+            rollbackData = SequenceRollbackData{sequenceData.usageCount, sequenceData.currVal};
+            // Equivalent to `steps` calls of nextValNoLock: the target is in bounds and ahead of
+            // the current value, so none of them wraps or overflows.
+            sequenceData.currVal = value;
+            sequenceData.usageCount = addUsage(sequenceData.usageCount, steps);
+        }
     }
-    transaction->pushSequenceChange(this, count, rollbackData);
+    if (firstUse.has_value()) {
+        transaction->pushSequenceChange(this, 1, *firstUse);
+    }
+    if (steps > 0) {
+        transaction->pushSequenceChange(this, static_cast<int64_t>(steps), rollbackData);
+    }
     return value;
 }
 
