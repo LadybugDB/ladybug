@@ -9,6 +9,9 @@
 -STATEMENT UNWIND range(1, 100000) AS x RETURN sum(x)
 ---- 1
 5000050000
+-STATEMENT CALL current_setting('threads') RETURN CAST(threads AS INT64) > 0
+---- 1
+True
 
 -CASE UnsignedSettingsRejectValuesThatWrap
 -STATEMENT CALL checkpoint_threshold=-1
@@ -26,13 +29,32 @@ Runtime exception: var_length_extend_max_depth must be <= 4294967295, got 429496
 -STATEMENT CALL recursive_pattern_factor=-5
 ---- error
 Runtime exception: recursive_pattern_factor must be >= 0, got -5.
+-STATEMENT CALL recursive_pattern_factor=4294967296
+---- error
+Runtime exception: recursive_pattern_factor must be <= 4294967295, got 4294967296.
+-STATEMENT CALL physical_plan_pool_per_thread=-1
+---- error
+Runtime exception: physical_plan_pool_per_thread must be >= 0, got -1.
 -STATEMENT CALL var_length_extend_max_depth=7
 ---- ok
 -STATEMENT CALL current_setting('var_length_extend_max_depth') RETURN *
 ---- 1
 7
+-LOG A rejected value leaves the previous one in place
+-STATEMENT CALL var_length_extend_max_depth=-1
+---- error
+Runtime exception: var_length_extend_max_depth must be >= 0, got -1.
+-STATEMENT CALL current_setting('var_length_extend_max_depth') RETURN *
+---- 1
+7
 -STATEMENT CALL checkpoint_threshold=0
 ---- ok
+-STATEMENT CALL current_setting('checkpoint_threshold') RETURN *
+---- 1
+0
+-STATEMENT CALL checkpoint_threshold=-1
+---- error
+Runtime exception: checkpoint_threshold must be >= 0, got -1.
 -STATEMENT CALL current_setting('checkpoint_threshold') RETURN *
 ---- 1
 0
