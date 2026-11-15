@@ -312,6 +312,9 @@ TEST_F(RelDegreeTest, SequentialIndexEntryWithoutRangeHasNoRels) {
 }
 
 TEST_F(RelDegreeTest, CopyDoesNotRetainIndexesForEmptyPartitions) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
     run("CREATE NODE TABLE N(id INT64, PRIMARY KEY(id));");
     run("CREATE REL TABLE R(FROM N TO N);");
     run("COPY N FROM (UNWIND range(0, 262143) AS i RETURN i);");
@@ -344,6 +347,9 @@ TEST_F(RelDegreeTest, CopyDoesNotRetainIndexesForEmptyPartitions) {
 }
 
 TEST_F(RelDegreeTest, SparseCopyLeavesUntouchedNodeListsUnallocated) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
     run("CALL auto_checkpoint=false;");
     run("CREATE NODE TABLE N(id INT64, PRIMARY KEY(id));");
     run("CREATE REL TABLE R(FROM N TO N);");
@@ -373,6 +379,12 @@ TEST_F(RelDegreeTest, SparseCopyLeavesUntouchedNodeListsUnallocated) {
 }
 
 TEST_F(RelDegreeTest, NoChangeCheckpointDropsLegacyEmptyIndexesButPreservesPins) {
+    if (inMemMode) {
+        // In-memory CHECKPOINT only vacuums MVCC versions and never runs the storage
+        // checkpoint that drops empty CSR indexes, so this on-disk layout test cannot pass
+        // in memory.
+        GTEST_SKIP();
+    }
     run("CALL auto_checkpoint=false;");
     run("CREATE NODE TABLE N(id INT64, PRIMARY KEY(id));");
     run("CREATE REL TABLE R(FROM N TO N);");
