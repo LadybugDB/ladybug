@@ -35,6 +35,13 @@ INT64[]|INT64[]|INT64[]|INT64[]
 -STATEMENT RETURN list_concat(array_value(1, 2, 3), array_value(4, 5, 6));
 ---- 1
 [1,2,3,4,5,6]
+-LOG An ARRAY and a LIST, or ARRAYs of different sizes, still don't concatenate
+-STATEMENT RETURN list_concat(array_value(1, 2, 3), [4, 5, 6]);
+---- error
+Binder exception: Cannot bind LIST_CONCAT with parameter type INT64[3] and INT64[].
+-STATEMENT RETURN list_concat(array_value(1, 2, 3), array_value(4, 5));
+---- error
+Binder exception: Cannot bind LIST_CONCAT with parameter type INT64[3] and INT64[2].
 -LOG Functions that keep the length keep the ARRAY type
 -STATEMENT RETURN typeof(list_sort(array_value(3, 1, 2))), typeof(list_reverse(array_value(3, 1, 2)));
 ---- 1
