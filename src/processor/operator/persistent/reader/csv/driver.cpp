@@ -1,5 +1,6 @@
 #include "processor/operator/persistent/reader/csv/driver.h"
 
+#include "common/exception/overflow.h"
 #include "common/system_config.h"
 #include "function/cast/functions/cast_from_string_functions.h"
 #include "processor/operator/persistent/reader/csv/parallel_csv_reader.h"
@@ -45,6 +46,9 @@ bool ParsingDriver::addValue(uint64_t rowNum, common::column_id_t columnIdx, std
         function::CastString::copyStringToVector(&chunk.getValueVectorMutable(columnIdx), rowNum,
             value, &reader->option, valueWasQuoted);
     } catch (ConversionException& e) {
+        reader->handleCopyException(e.what());
+        return false;
+    } catch (OverflowException& e) {
         reader->handleCopyException(e.what());
         return false;
     }

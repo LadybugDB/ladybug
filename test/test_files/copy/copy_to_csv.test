@@ -177,3 +177,18 @@ Conversion exception: Error occurred during parsing TIMESTAMP_NS. Given: "9999-0
 ---- 2
 1|2020-01-02 03:04:05
 3|2021-06-01 12:00:00
+
+-CASE CopyIntervalOverflowIgnoreErrors
+-STATEMENT CREATE NODE TABLE intervalOverflow(id INT64, it INTERVAL, PRIMARY KEY(id));
+---- ok
+-STATEMENT COPY (UNWIND [1, 2, 3] AS id WITH id, ['1 year', '9223372036854775807 years', '2 days'][id] AS it RETURN id, it) TO "${DATABASE_PATH}/interval_overflow.csv" (HEADER=false)
+---- ok
+-STATEMENT COPY intervalOverflow FROM "${DATABASE_PATH}/interval_overflow.csv" (HEADER=false, IGNORE_ERRORS=true)
+---- ok
+-STATEMENT CALL show_warnings() RETURN message, line_number, skipped_line_or_record
+---- 1
+Overflow exception: Interval value is out of range|2|2,9223372036854775807 years
+-STATEMENT MATCH (t:intervalOverflow) RETURN t.id, t.it ORDER BY t.id
+---- 2
+1|1 year
+3|2 days
