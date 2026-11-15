@@ -395,6 +395,9 @@ TEST_F(RelDegreeTest, NoChangeCheckpointDropsLegacyEmptyIndexesButPreservesPins)
 
     // Recreate the old zero-row state without going through the now-guarded COPY append:
     // discard the staged rows through the base class, leaving an allocated but empty index.
+    // Reset version info first: truncate() only accepts always-deleted (delete==0) tails
+    // (see c33617145), but these staged rows are committed, so drop their versions along
+    // with the rows to simulate a legacy group with no rows and no version history.
     std::vector<std::shared_ptr<storage::CSRIndex>> pins;
     run("BEGIN TRANSACTION READ ONLY;");
     const auto* txn = transaction::Transaction::Get(*getClientContext(*conn));
@@ -407,6 +410,9 @@ TEST_F(RelDegreeTest, NoChangeCheckpointDropsLegacyEmptyIndexesButPreservesPins)
         ASSERT_NE(pin, nullptr);
         for (auto& entry : pin->indices) {
             entry.clear();
+        }
+        for (auto i = 0u; i < group.getNumChunkedGroups(); ++i) {
+            group.getChunkedNodeGroup(i)->resetVersionAndUpdateInfo();
         }
         group.storage::NodeGroup::rollbackInsert(0);
         ASSERT_NE(group.getCSRIndex(), nullptr);
