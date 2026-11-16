@@ -1,0 +1,66 @@
+-DATASET CSV tinysnb
+
+--
+
+-CASE BoundExpandDistinctOuter
+-LOG DISTINCT outer stays consistent through the bound-expand FLATTEN
+-STATEMENT MATCH (a:person)-[:knows]->(x:person) WITH DISTINCT a MATCH (a)-[:knows]->(b:person) RETURN count(*)
+---- 1
+14
+
+-LOG DISTINCT pair outer
+-STATEMENT MATCH (a:person)-[:knows]->(b:person) WITH DISTINCT a, b RETURN count(*)
+---- 1
+14
+
+-CASE BoundExpandGroupByConsistency
+-LOG GROUP BY outer must see the same fan-out in both legs
+-STATEMENT MATCH (a:person)-[:knows]->(x:person) WITH a, count(*) AS c MATCH (a)-[:knows]->(b:person) WITH a, c, count(*) AS n WHERE c <> n RETURN count(*)
+---- 1
+0
+
+-LOG GROUP BY outer with a LIMIT still sees the same fan-out
+-STATEMENT MATCH (a:person)-[:knows]->(x:person) WITH a, count(*) AS c LIMIT 1000 MATCH (a)-[:knows]->(b:person) WITH a, c, count(*) AS n WHERE c <> n RETURN count(*)
+---- 1
+0
+
+-CASE BoundExpandLimitOuter
+-LOG Literal LIMIT outer is provably small and takes the bound-expand path
+-STATEMENT MATCH (a:person) WITH a LIMIT 3 MATCH (a)-[:knows]->(b:person) RETURN a.ID, b.ID ORDER BY a.ID, b.ID
+-CHECK_ORDER
+---- 9
+0|2
+0|3
+0|5
+2|0
+2|3
+2|5
+3|0
+3|2
+3|5
+
+-LOG DISTINCT LIMIT outer keeps its FLATTEN through the optimizer
+-STATEMENT MATCH (a:person)-[:knows]->(x:person) WITH DISTINCT a LIMIT 1000 MATCH (a)-[:knows]->(b:person) RETURN count(*)
+---- 1
+14
+
+-CASE BoundExpandOrderByFallback
+-LOG Outer ORDER BY on a preserving path falls back to the hash join
+-STATEMENT MATCH (a:person) WITH a ORDER BY a.ID LIMIT 3 MATCH (a)-[:knows]->(b:person) RETURN a.ID, b.ID ORDER BY a.ID, b.ID
+-CHECK_ORDER
+---- 9
+0|2
+0|3
+0|5
+2|0
+2|3
+2|5
+3|0
+3|2
+3|5
+
+-CASE BoundExpandSecondHop
+-LOG DISTINCT neighbour outer expanding to a second hop stays consistent
+-STATEMENT MATCH (a:person)-[:knows]->(b:person) WITH DISTINCT b MATCH (b)-[:studyAt]->(o:organisation) RETURN count(*)
+---- 1
+3
