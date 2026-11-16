@@ -2354,7 +2354,9 @@ TEST_F(OptimizerTest, LatePropertiesSkipAggregate) {
     ASSERT_NE(join, nullptr);
     EXPECT_TRUE(scansNodeProperty(join->getChild(0).get(), "b", "fName"));
     EXPECT_TRUE(hasRowReducer(join->getChild(1).get()));
-    // The fetched rows' node IDs mask the scan.
+    // The fetched rows' node IDs mask the scan. This does not pin the forced SIP direction: the
+    // optimizer stores BUILD_TO_PROBE once it applies the mask, and tinysnb's build side is masked
+    // without the force too.
     EXPECT_TRUE(
         hasOperatorType(join->getChild(1).get(), planner::LogicalOperatorType::SEMI_MASKER));
 }

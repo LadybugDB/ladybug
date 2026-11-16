@@ -98,6 +98,9 @@ TEST_F(EmptyDBTest, LatePropertyFetchConditions) {
                     ->isSuccess());
     ASSERT_TRUE(conn->query("CREATE NODE TABLE Q(id INT64 PRIMARY KEY, name STRING)")->isSuccess());
     ASSERT_TRUE(conn->query("CREATE REL TABLE K(FROM P TO P, FROM P TO Q)")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE Pt(id INT64 PRIMARY KEY, name STRING) PARTITION BY "
+                            "HASH (name) PARTITIONS 1")
+                    ->isSuccess());
     ASSERT_TRUE(conn->query("BEGIN TRANSACTION")->isSuccess());
     auto context = conn->getClientContext();
     EXPECT_EQ(getLateFetches(context, "MATCH (a:P)-[:K]->(b:P) MATCH (b)-[:K]->(d:Q) "
@@ -177,6 +180,10 @@ TEST_F(EmptyDBTest, LatePropertyFetchConditions) {
              "RETURN a.id, collect(a.name) ORDER BY a.id",
              // One pattern: no reading clause follows the one that binds b.
              "MATCH (a:P)-[:K]->(b:P)-[:K]->(d:Q) WITH b, count(*) AS c RETURN b.name, c",
+             // A partitioned table and its child are not in the active storage manager, so these
+             // stay empty even without tryGetNativeNodeTable's explicit partition check.
+             "MATCH (a:Pt) WITH a LIMIT 5 RETURN a.name",
+             "MATCH (a:Pt_p0) WITH a LIMIT 5 RETURN a.name",
          }) {
         EXPECT_EQ(getLateFetches(context, query), "") << query;
     }
