@@ -2072,23 +2072,30 @@ bool Planner::tryPlanBoundExpand(const QueryGraphCollection& queryGraphCollectio
     // cardinality estimator; initialize it for this leg explicitly.
     cardinalityEstimator.init(*queryGraph);
     appendExtend(boundNode, nbrNode, rel, dir, getProperties(*rel), leftPlan);
+    // The extend binds the endpoints' internal IDs only; attach any still-missing node
+    // properties before filtering. Predicates (e.g. WHERE b.gender = 2) and downstream
+    // clauses reference them, and a PROPERTY expression with no materialized vector
+    // cannot be evaluated. Bound-node properties may likewise be absent from the outer
+    // plan (e.g. projected away by WITH), so cover both endpoints, the same way chained
+    // extends do (scan + inner join on the ID).
+    for (const auto& target : {nbrNode, boundNode}) {
+        expression_vector missing;
+        for (auto& prop : getProperties(*target)) {
+            if (!leftPlan.getSchema()->isExpressionInScope(*prop)) {
+                missing.push_back(prop);
+            }
+        }
+        if (missing.empty()) {
+            continue;
+        }
+        LogicalPlan propsPlan;
+        appendScanNodeTable(target->getInternalID(), target->getTableIDs(), missing, propsPlan,
+            target.get());
+        appendHashJoin(expression_vector{target->getInternalID()}, JoinType::INNER, leftPlan,
+            propsPlan, leftPlan);
+    }
     for (auto& pred : predicates) {
         appendFilter(pred, leftPlan);
-    }
-    // The extend binds the neighbour's internal ID only; attach node properties used
-    // downstream the same way chained extends do (scan + inner join on the ID).
-    expression_vector missing;
-    for (auto& prop : getProperties(*nbrNode)) {
-        if (!leftPlan.getSchema()->isExpressionInScope(*prop)) {
-            missing.push_back(prop);
-        }
-    }
-    if (!missing.empty()) {
-        LogicalPlan propsPlan;
-        appendScanNodeTable(nbrNode->getInternalID(), nbrNode->getTableIDs(), missing, propsPlan,
-            nbrNode.get());
-        appendHashJoin(expression_vector{nbrNode->getInternalID()}, JoinType::INNER, leftPlan,
-            propsPlan, leftPlan);
     }
     return true;
 }
