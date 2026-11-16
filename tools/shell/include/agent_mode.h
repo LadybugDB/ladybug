@@ -319,6 +319,9 @@ inline bool isProfilingLine(const std::string& trimmed) {
 // depth; each new row of boxes goes one level deeper.
 inline std::string compactPlan(const std::string& planText) {
     static const std::regex headerRegex(R"((?:^|\s)([A-Z][A-Z_0-9]*)\[(\d+)\])");
+    // PROFILE box plans contain a WallClockTime attribute on the root PROFILE
+    // operator; plain EXPLAIN plans do not.
+    const bool isProfile = planText.find("WallClockTime:") != std::string::npos;
     struct Entry {
         std::string name;
         std::vector<std::string> props;
@@ -394,7 +397,13 @@ inline std::string compactPlan(const std::string& planText) {
                 seg = seg.substr(entry.spanStart, entry.spanEnd - entry.spanStart);
             }
             auto trimmed = detail::trimBox(seg);
-            if (detail::isSeparatorLine(trimmed) || detail::isProfilingLine(trimmed)) {
+            if (detail::isSeparatorLine(trimmed)) {
+                continue;
+            }
+            // Plain EXPLAIN plans carry zeroed profiling counters (the profiler is
+            // disabled); hide them to keep the compact plan readable. PROFILE plans
+            // carry real per-operator timings, so preserve them.
+            if (!isProfile && detail::isProfilingLine(trimmed)) {
                 continue;
             }
             if (trimmed.empty()) {
