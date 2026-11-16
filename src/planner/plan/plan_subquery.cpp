@@ -2020,6 +2020,79 @@ void Planner::planOptionalMatch(const QueryGraphCollection& queryGraphCollection
     }
 }
 
+// ---- Bound expand for single-hop regular MATCH legs ----
+// Shape: MATCH (bound)-[e]->(nbr) (or the reverse) where exactly one endpoint's
+// internal ID is already bound by the outer plan (e.g. after a WITH DISTINCT) and no
+// predicate reaches into the outer scope. See the declaration in planner.h for why
+// extending directly beats the generic scan + hash-join plan here.
+bool Planner::tryPlanBoundExpand(const QueryGraphCollection& queryGraphCollection,
+    const expression_vector& predicates, LogicalPlan& leftPlan) {
+    if (!clientContext->getClientConfig()->enablePlanOptimizer) {
+        return false;
+    }
+    if (leftPlan.isEmpty() || leftPlan.hasUpdate() ||
+        queryGraphCollection.getNumQueryGraphs() != 1) {
+        return false;
+    }
+    auto queryGraph = queryGraphCollection.getQueryGraph(0);
+    if (queryGraph->getNumQueryRels() != 1) {
+        return false;
+    }
+    auto rel = queryGraph->getQueryRel(0);
+    if (rel->getRelType() != QueryRelType::NON_RECURSIVE) {
+        return false;
+    }
+    auto srcNode = rel->getSrcNode();
+    auto dstNode = rel->getDstNode();
+    if (*srcNode == *dstNode) {
+        return false;
+    }
+    // The bound bindings must be non-null: unlike the hash join (where NULL keys
+    // never match), an extend from a NULL binding does not preserve the drop, so a
+    // possibly-null outer (e.g. after an OPTIONAL MATCH) falls back.
+    if (subtreeHasNullSupply(leftPlan.getLastOperator().get())) {
+        return false;
+    }
+    const bool srcBound = leftPlan.getSchema()->isExpressionInScope(*srcNode->getInternalID());
+    const bool dstBound = leftPlan.getSchema()->isExpressionInScope(*dstNode->getInternalID());
+    if (srcBound == dstBound) {
+        return false;
+    }
+    auto boundNode = srcBound ? srcNode : dstNode;
+    auto nbrNode = srcBound ? dstNode : srcNode;
+    // Every predicate must be evaluable inside the leg (edge/node-local filters and
+    // constants). Anything reaching into the outer plan falls back to regular planning.
+    for (auto& pred : predicates) {
+        if (!getDependentExprs(pred, *leftPlan.getSchema()).empty()) {
+            return false;
+        }
+    }
+    auto dir = chainExtendDirection(*rel, *boundNode);
+    // Hand-built extends bypass DP enumeration, which normally initializes the
+    // cardinality estimator; initialize it for this leg explicitly.
+    cardinalityEstimator.init(*queryGraph);
+    appendExtend(boundNode, nbrNode, rel, dir, getProperties(*rel), leftPlan);
+    for (auto& pred : predicates) {
+        appendFilter(pred, leftPlan);
+    }
+    // The extend binds the neighbour's internal ID only; attach node properties used
+    // downstream the same way chained extends do (scan + inner join on the ID).
+    expression_vector missing;
+    for (auto& prop : getProperties(*nbrNode)) {
+        if (!leftPlan.getSchema()->isExpressionInScope(*prop)) {
+            missing.push_back(prop);
+        }
+    }
+    if (!missing.empty()) {
+        LogicalPlan propsPlan;
+        appendScanNodeTable(nbrNode->getInternalID(), nbrNode->getTableIDs(), missing, propsPlan,
+            nbrNode.get());
+        appendHashJoin(expression_vector{nbrNode->getInternalID()}, JoinType::INNER, leftPlan,
+            propsPlan, leftPlan);
+    }
+    return true;
+}
+
 void Planner::planRegularMatch(const QueryGraphCollection& queryGraphCollection,
     const expression_vector& predicates, LogicalPlan& leftPlan,
     std::shared_ptr<BoundJoinHintNode> hint) {
@@ -2035,6 +2108,11 @@ void Planner::planRegularMatch(const QueryGraphCollection& queryGraphCollection,
     }
     // Scalar-seeded chain for correlated PK equalities (e.g. Q6's t.ID = knownTagId).
     if (tryPlanScalarSeededChain(queryGraphCollection, predicates, leftPlan)) {
+        return;
+    }
+    // Bound expand for single-hop legs with one bound endpoint (e.g. IC5's second
+    // MATCH): extend directly from the outer bindings instead of scanning + joining.
+    if (hint == nullptr && tryPlanBoundExpand(queryGraphCollection, predicates, leftPlan)) {
         return;
     }
     expression_vector predicatesToPushDown, predicatesToPullUp;

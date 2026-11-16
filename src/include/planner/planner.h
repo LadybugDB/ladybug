@@ -321,6 +321,17 @@ public:
     // semantics. See plan_subquery.cpp for the conditions.
     bool tryUnnestCollectMembership(const binder::QueryGraphCollection& queryGraphCollection,
         binder::expression_vector& predicates, LogicalPlan& leftPlan);
+    // Plan a single-hop regular MATCH leg with exactly one bound endpoint as a bound
+    // expand from the outer bindings (e.g. LDBC SNB IC5's second MATCH). The generic
+    // path plans such legs standalone (full node/rel scans) and hash-joins them with
+    // the outer bindings, which scans and hashes edges that can never match when the
+    // bound side is selective. Extending directly from the bound bindings (correlated
+    // index-nested-loop over the CSR adjacency) skips the scans and the hash table
+    // entirely and coincides with the hash join output, duplicates included.
+    // Fires only for a single non-recursive rel with exactly one bound endpoint and
+    // no outer-dependent predicates; returns false otherwise (caller falls back).
+    bool tryPlanBoundExpand(const binder::QueryGraphCollection& queryGraphCollection,
+        const binder::expression_vector& predicates, LogicalPlan& leftPlan);
     // Property collect-membership unnest with PK-seeded chain (Q12): rewrites
     // `node.Prop IN COLLECT(node.Prop)` + plans the leg as a PK-seeded chain with an
     // anchor meet (see plan_subquery.cpp). Consumes the whole leg on success.
