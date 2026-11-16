@@ -145,7 +145,8 @@ NodeTable* StorageManager::tryGetNativeNodeTable(const main::ClientContext& cont
         return nullptr;
     }
     auto& nodeEntry = entry.constCast<catalog::NodeTableCatalogEntry>();
-    if (nodeEntry.getScanFunction().has_value() || nodeEntry.getReferencedEntry() != nullptr ||
+    if (nodeEntry.isPartitioned() || nodeEntry.isPartitionChild() ||
+        nodeEntry.getScanFunction().has_value() || nodeEntry.getReferencedEntry() != nullptr ||
         !nodeEntry.getForeignDatabaseName().empty() || !nodeEntry.getStorage().empty() ||
         nodeEntry.getStorageFormat() != StorageFormat::NONE) {
         return nullptr;
