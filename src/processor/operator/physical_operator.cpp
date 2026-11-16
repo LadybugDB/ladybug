@@ -3,6 +3,7 @@
 #include "common/exception/interrupt.h"
 #include "common/exception/runtime.h"
 #include "common/task_system/progress_bar.h"
+#include "common/usdt.h"
 #include "main/client_context.h"
 #include "processor/execution_context.h"
 
@@ -228,11 +229,16 @@ bool PhysicalOperator::getNextTuple(ExecutionContext* context) {
         }
     }
 #endif
+    // USDT operator_start/operator_end bracket the same region PROFILE times via
+    // OperatorMetrics::executionTime. Args are a cast and member loads only (see
+    // common/usdt.h), so a disabled probe costs just the NOP sled here.
+    LBUG_USDT_OPERATOR_START(static_cast<int>(operatorType), id, context->queryID);
     metrics->executionTime.start();
     auto result = getNextTuplesInternal(context);
     ProgressBar::Get(*context->clientContext)
         ->updateProgress(context->queryID, getProgress(context));
     metrics->executionTime.stop();
+    LBUG_USDT_OPERATOR_END(static_cast<int>(operatorType), id, context->queryID);
     return result;
 }
 

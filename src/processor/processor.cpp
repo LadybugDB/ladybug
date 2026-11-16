@@ -1,6 +1,7 @@
 #include "processor/processor.h"
 
 #include "common/task_system/progress_bar.h"
+#include "common/usdt.h"
 #include "main/client_context.h"
 #include "main/query_result.h"
 #include "processor/operator/sink.h"
@@ -72,6 +73,16 @@ std::unique_ptr<main::QueryResult> QueryProcessor::execute(PhysicalPlan* physica
         main::ClientContext* ctx;
         ~Guard() { ctx->registerQueryEnd(); }
     } guard{context->clientContext};
+    // USDT query_start/query_end bracket whole-query execution, mirroring the
+    // WallClockTime span PROFILE reports on the root operator. RAII so the end
+    // probe still fires if execution throws.
+    struct USDTQueryGuard {
+        uint64_t queryID;
+        explicit USDTQueryGuard(uint64_t queryID) : queryID{queryID} {
+            LBUG_USDT_QUERY_START(queryID);
+        }
+        ~USDTQueryGuard() { LBUG_USDT_QUERY_END(queryID); }
+    } usdtGuard{context->queryID};
     auto lastOperator = physicalPlan->lastOperator.get();
     // The root pipeline(task) consists of operators and its prevOperator only, because we
     // expect to have linear plans. For binary operators, e.g., HashJoin, we  keep probe and its
