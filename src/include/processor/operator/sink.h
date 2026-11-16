@@ -1,6 +1,8 @@
 #pragma once
 #include "common/exception/internal.h"
 #include "common/metric.h"
+#include "common/usdt.h"
+#include "processor/execution_context.h"
 #include "processor/operator/physical_operator.h"
 #include "processor/result/factorized_table.h"
 #include "processor/result/result_set_descriptor.h"
@@ -32,9 +34,14 @@ public:
 
     void execute(ResultSet* resultSet, ExecutionContext* context) {
         initLocalState(resultSet, context);
+        // USDT operator_start/operator_end bracket the same region PROFILE times via
+        // OperatorMetrics::executionTime. Args are a cast and member loads only (see
+        // common/usdt.h), so a disabled probe costs just the NOP sled here.
+        LBUG_USDT_OPERATOR_START(static_cast<int>(operatorType), id, context->queryID);
         metrics->executionTime.start();
         executeInternal(context);
         metrics->executionTime.stop();
+        LBUG_USDT_OPERATOR_END(static_cast<int>(operatorType), id, context->queryID);
     }
 
     virtual std::unique_ptr<main::QueryResult> getQueryResult() const {
