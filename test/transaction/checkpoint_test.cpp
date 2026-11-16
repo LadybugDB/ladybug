@@ -7137,8 +7137,8 @@ TEST_F(ReviewFixesTest, FailedCheckpointRollbackReclaimsNewPages) {
     }
 
     conn->query("CALL auto_checkpoint=false;");
-    ASSERT_TRUE(
-        conn->query("CREATE NODE TABLE t_rollback(id INT64 PRIMARY KEY, val STRING);")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE t_rollback(id INT64 PRIMARY KEY, val STRING);")
+                    ->isSuccess());
     ASSERT_TRUE(conn->query("CHECKPOINT;")->isSuccess());
 
     auto* context = getClientContext(*conn);
