@@ -248,7 +248,7 @@ TEST_F(FlakyCheckpointerTest, InterruptedCopyCheckpointKeepsPKIndexUsable) {
         conn->query("CREATE NODE TABLE Person(id INT64 PRIMARY KEY, name STRING, age INT64);")
             ->isSuccess());
     ASSERT_TRUE(conn->query("UNWIND range(0, 40) AS i CREATE (:Person {id: i, name: 'n', age: i});")
-            ->isSuccess());
+                    ->isSuccess());
     ASSERT_TRUE(conn->query("CHECKPOINT;")->isSuccess());
     const auto baselineIndexPages = readPKIndexPages(database.get(), "Person");
     ASSERT_FALSE(baselineIndexPages.empty());
@@ -632,10 +632,9 @@ TEST_F(CheckpointRetryAfterFailureTest, MainMarkerRecoversLegacyPartitionShadows
     if (inMemMode || systemConfig->checkpointThreshold == 0) {
         GTEST_SKIP();
     }
-    ASSERT_TRUE(
-        conn->query("CREATE NODE TABLE partitioned(id INT64 PRIMARY KEY, amount INT64) "
-                    "PARTITION BY HASH(amount) PARTITIONS 2;")
-            ->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE partitioned(id INT64 PRIMARY KEY, amount INT64) "
+                            "PARTITION BY HASH(amount) PARTITIONS 2;")
+                    ->isSuccess());
     checkpoint();
     ASSERT_TRUE(conn->query("CREATE (:partitioned_p0 {id: 1, amount: 10});")->isSuccess());
     ASSERT_TRUE(conn->query("CREATE (:partitioned_p1 {id: 2, amount: 6});")->isSuccess());
@@ -675,10 +674,9 @@ TEST_F(CheckpointRetryAfterFailureTest, LegacyMarkerRecoversAppliedChildrenWitho
     if (inMemMode || systemConfig->checkpointThreshold == 0) {
         GTEST_SKIP();
     }
-    ASSERT_TRUE(
-        conn->query("CREATE NODE TABLE partitioned(id INT64 PRIMARY KEY, amount INT64) "
-                    "PARTITION BY HASH(amount) PARTITIONS 2;")
-            ->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE partitioned(id INT64 PRIMARY KEY, amount INT64) "
+                            "PARTITION BY HASH(amount) PARTITIONS 2;")
+                    ->isSuccess());
     checkpoint();
     ASSERT_TRUE(conn->query("CREATE (:partitioned_p0 {id: 1, amount: 10});")->isSuccess());
     ASSERT_TRUE(conn->query("CREATE (:partitioned_p1 {id: 2, amount: 6});")->isSuccess());
@@ -728,10 +726,9 @@ TEST_F(CheckpointRetryAfterFailureTest, BundleMarkerRequiresEveryChildShadow) {
     if (inMemMode || systemConfig->checkpointThreshold == 0) {
         GTEST_SKIP();
     }
-    ASSERT_TRUE(
-        conn->query("CREATE NODE TABLE partitioned(id INT64 PRIMARY KEY, amount INT64) "
-                    "PARTITION BY HASH(amount) PARTITIONS 2;")
-            ->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE partitioned(id INT64 PRIMARY KEY, amount INT64) "
+                            "PARTITION BY HASH(amount) PARTITIONS 2;")
+                    ->isSuccess());
     checkpoint();
     ASSERT_TRUE(conn->query("CREATE (:partitioned_p0 {id: 1, amount: 10});")->isSuccess());
     ASSERT_TRUE(conn->query("CREATE (:partitioned_p1 {id: 2, amount: 6});")->isSuccess());
@@ -764,10 +761,9 @@ TEST_F(CheckpointRetryAfterFailureTest, MissingMainMarkerDiscardsPartitionShadow
     if (inMemMode || systemConfig->checkpointThreshold == 0) {
         GTEST_SKIP();
     }
-    ASSERT_TRUE(
-        conn->query("CREATE NODE TABLE partitioned(id INT64 PRIMARY KEY, amount INT64) "
-                    "PARTITION BY HASH(amount) PARTITIONS 2;")
-            ->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE partitioned(id INT64 PRIMARY KEY, amount INT64) "
+                            "PARTITION BY HASH(amount) PARTITIONS 2;")
+                    ->isSuccess());
     checkpoint();
     ASSERT_TRUE(conn->query("CREATE (:partitioned_p0 {id: 1, amount: 10});")->isSuccess());
     ASSERT_TRUE(conn->query("CREATE (:partitioned_p1 {id: 2, amount: 6});")->isSuccess());
@@ -814,10 +810,9 @@ TEST_F(CheckpointRetryAfterFailureTest, ReadOnlyOpenPreservesOrphanPartitionShad
     if (inMemMode || systemConfig->checkpointThreshold == 0) {
         GTEST_SKIP();
     }
-    ASSERT_TRUE(
-        conn->query("CREATE NODE TABLE partitioned(id INT64 PRIMARY KEY, amount INT64) "
-                    "PARTITION BY HASH(amount) PARTITIONS 2;")
-            ->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE partitioned(id INT64 PRIMARY KEY, amount INT64) "
+                            "PARTITION BY HASH(amount) PARTITIONS 2;")
+                    ->isSuccess());
     checkpoint();
 
     const auto childManagers = main::DatabaseManager::Get(*getClientContext(*conn))
@@ -880,10 +875,9 @@ TEST_F(CheckpointRetryAfterFailureTest, PartitionShadowsSurviveUntilMainWALRetir
     if (inMemMode || systemConfig->checkpointThreshold == 0) {
         GTEST_SKIP();
     }
-    ASSERT_TRUE(
-        conn->query("CREATE NODE TABLE partitioned(id INT64 PRIMARY KEY, amount INT64) "
-                    "PARTITION BY HASH(amount) PARTITIONS 2;")
-            ->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE partitioned(id INT64 PRIMARY KEY, amount INT64) "
+                            "PARTITION BY HASH(amount) PARTITIONS 2;")
+                    ->isSuccess());
     checkpoint();
     ASSERT_TRUE(conn->query("CREATE (:partitioned_p0 {id: 1, amount: 10});")->isSuccess());
     ASSERT_TRUE(conn->query("CREATE (:partitioned_p1 {id: 2, amount: 6});")->isSuccess());
@@ -1488,10 +1482,9 @@ TEST_P(CommittedPartitionMissingBaseTest, RejectsWithoutRecreatingFile) {
         GTEST_SKIP();
     }
     const bool walRotated = GetParam();
-    ASSERT_TRUE(
-        conn->query("CREATE NODE TABLE partitioned(id INT64 PRIMARY KEY, amount INT64) "
-                    "PARTITION BY HASH(amount) PARTITIONS 2;")
-            ->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE partitioned(id INT64 PRIMARY KEY, amount INT64) "
+                            "PARTITION BY HASH(amount) PARTITIONS 2;")
+                    ->isSuccess());
     checkpoint();
     ASSERT_TRUE(conn->query("CREATE (:partitioned_p0 {id: 1, amount: 10});")->isSuccess());
     auto* context = getClientContext(*conn);
@@ -1525,10 +1518,9 @@ TEST_F(CheckpointRetryAfterFailureTest, CommittedPartitionRecoveryRejectsMissing
     if (inMemMode || systemConfig->checkpointThreshold == 0) {
         GTEST_SKIP();
     }
-    ASSERT_TRUE(
-        conn->query("CREATE NODE TABLE partitioned(id INT64 PRIMARY KEY, amount INT64) "
-                    "PARTITION BY HASH(amount) PARTITIONS 2;")
-            ->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE partitioned(id INT64 PRIMARY KEY, amount INT64) "
+                            "PARTITION BY HASH(amount) PARTITIONS 2;")
+                    ->isSuccess());
     checkpoint();
     ASSERT_TRUE(conn->query("CREATE (:partitioned_p0 {id: 1, amount: 10});")->isSuccess());
     failCheckpointWith<FlakyCheckpointerFailsOnApplyingShadow>();
@@ -1549,10 +1541,9 @@ TEST_F(CheckpointRetryAfterFailureTest, CommittedRecoveryReplaysChildShadowBefor
     if (inMemMode || systemConfig->checkpointThreshold == 0) {
         GTEST_SKIP();
     }
-    ASSERT_TRUE(
-        conn->query("CREATE NODE TABLE partitioned(id INT64 PRIMARY KEY, amount INT64) "
-                    "PARTITION BY HASH(amount) PARTITIONS 2;")
-            ->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE partitioned(id INT64 PRIMARY KEY, amount INT64) "
+                            "PARTITION BY HASH(amount) PARTITIONS 2;")
+                    ->isSuccess());
     checkpoint();
     ASSERT_TRUE(conn->query("CREATE (:partitioned_p0 {id: 1, amount: 10});")->isSuccess());
     failCheckpointWith<FlakyCheckpointerFailsOnApplyingShadow>();
@@ -1628,10 +1619,9 @@ TEST_F(CheckpointRetryAfterFailureTest, CommittedRecoverySurvivesRetriesThatAdva
     if (inMemMode || systemConfig->checkpointThreshold == 0) {
         GTEST_SKIP();
     }
-    ASSERT_TRUE(
-        conn->query("CREATE NODE TABLE partitioned(id INT64 PRIMARY KEY, amount INT64) "
-                    "PARTITION BY HASH(amount) PARTITIONS 2;")
-            ->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE partitioned(id INT64 PRIMARY KEY, amount INT64) "
+                            "PARTITION BY HASH(amount) PARTITIONS 2;")
+                    ->isSuccess());
     checkpoint();
     ASSERT_TRUE(conn->query("CREATE (:partitioned_p0 {id: 1, amount: 10});")->isSuccess());
     failCheckpointWith<FlakyCheckpointerFailsOnLoggingCheckpoint>();
@@ -3499,15 +3489,13 @@ TEST_F(FlakyCheckpointerTest, ReplaysCrossGraphRelTransactionIntoEachOwnerCatalo
     ASSERT_TRUE(conn->query("CREATE (:User {id: 2, name: 'R4'});")->isSuccess());
     ASSERT_TRUE(conn->query("BEGIN TRANSACTION;")->isSuccess());
     ASSERT_TRUE(conn->query("USE GRAPH left_graph;")->isSuccess());
-    ASSERT_TRUE(
-        conn->query("MATCH (a:User {name: 'L3'}), (b:User {name: 'L4'}) "
-                    "CREATE (a)-[:Follows]->(b);")
-            ->isSuccess());
+    ASSERT_TRUE(conn->query("MATCH (a:User {name: 'L3'}), (b:User {name: 'L4'}) "
+                            "CREATE (a)-[:Follows]->(b);")
+                    ->isSuccess());
     ASSERT_TRUE(conn->query("USE GRAPH right_graph;")->isSuccess());
-    ASSERT_TRUE(
-        conn->query("MATCH (a:User {name: 'R4'}), (b:User {name: 'R3'}) "
-                    "CREATE (a)-[:Follows]->(b);")
-            ->isSuccess());
+    ASSERT_TRUE(conn->query("MATCH (a:User {name: 'R4'}), (b:User {name: 'R3'}) "
+                            "CREATE (a)-[:Follows]->(b);")
+                    ->isSuccess());
     ASSERT_TRUE(conn->query("COMMIT;")->isSuccess());
 
     conn.reset();
@@ -5992,7 +5980,7 @@ TEST_F(ReviewFixesTest, ReadOnlySnapshotSurvivesCheckpoint) {
     ASSERT_TRUE(conn->query("CREATE (:P {id: 5, v: 0});")->isSuccess());
     ASSERT_TRUE(conn->query("MATCH (p:P) WHERE p.id = 3 SET p.v = 7;")->isSuccess());
     ASSERT_TRUE(conn->query("MATCH (a:P), (b:P) WHERE a.id = 3 AND b.id = 1 CREATE (a)-[:K]->(b);")
-            ->isSuccess());
+                    ->isSuccess());
     ASSERT_TRUE(conn->query("MATCH (p:P) WHERE p.id = 6 DELETE p;")->isSuccess());
     EXPECT_EQ(readNodes(), snapshotNodes) << "Committed writes leaked into the open read snapshot";
 
@@ -6089,11 +6077,10 @@ TEST_F(ReviewFixesTest, ReadOnlySnapshotSurvivesCheckpointRelData) {
     ASSERT_EQ(snapshot[0], "1|2|10");
 
     ASSERT_TRUE(conn->query("MATCH (a:R)-[e:E]->(b:R) WHERE a.id = 1 AND b.id = 2 SET e.w = 30;")
-            ->isSuccess());
-    ASSERT_TRUE(
-        conn->query("MATCH (a:R), (b:R) WHERE a.id = 2 AND b.id = 3 "
-                    "CREATE (a)-[:E {w: 20}]->(b);")
-            ->isSuccess());
+                    ->isSuccess());
+    ASSERT_TRUE(conn->query("MATCH (a:R), (b:R) WHERE a.id = 2 AND b.id = 3 "
+                            "CREATE (a)-[:E {w: 20}]->(b);")
+                    ->isSuccess());
     ASSERT_TRUE(conn->query("MATCH (p:R) WHERE p.id = 1 SET p.v = 5;")->isSuccess());
 
     // Structural presence only (source|dest prefix): property values of post-begin
@@ -6133,14 +6120,12 @@ TEST_F(ReviewFixesTest, ReadOnlySnapshotSurvivesCheckpointCSR) {
         auto r = conn->query(std::format("CREATE (:CSR_R {{id: {}}});", i));
         ASSERT_TRUE(r->isSuccess()) << r->getErrorMessage();
     }
-    ASSERT_TRUE(
-        conn->query("MATCH (a:CSR_R), (b:CSR_R) WHERE a.id = 1 AND b.id = 2 "
-                    "CREATE (a)-[:CSR_E {w: 10}]->(b);")
-            ->isSuccess());
-    ASSERT_TRUE(
-        conn->query("MATCH (a:CSR_R), (b:CSR_R) WHERE a.id = 2 AND b.id = 3 "
-                    "CREATE (a)-[:CSR_E {w: 20}]->(b);")
-            ->isSuccess());
+    ASSERT_TRUE(conn->query("MATCH (a:CSR_R), (b:CSR_R) WHERE a.id = 1 AND b.id = 2 "
+                            "CREATE (a)-[:CSR_E {w: 10}]->(b);")
+                    ->isSuccess());
+    ASSERT_TRUE(conn->query("MATCH (a:CSR_R), (b:CSR_R) WHERE a.id = 2 AND b.id = 3 "
+                            "CREATE (a)-[:CSR_E {w: 20}]->(b);")
+                    ->isSuccess());
     ASSERT_TRUE(conn->query("CHECKPOINT;")->isSuccess());
 
     auto readerConn = std::make_unique<lbug::main::Connection>(database.get());
@@ -6172,18 +6157,15 @@ TEST_F(ReviewFixesTest, ReadOnlySnapshotSurvivesCheckpointCSR) {
     EXPECT_EQ(readRels(), snapshot);
 
     // Committed after the reader began: rel update, rel insert, rel delete.
-    ASSERT_TRUE(
-        conn->query("MATCH (a:CSR_R)-[e:CSR_E]->(b:CSR_R) WHERE a.id = 1 AND b.id = 2 "
-                    "SET e.w = 30;")
-            ->isSuccess());
-    ASSERT_TRUE(
-        conn->query("MATCH (a:CSR_R), (b:CSR_R) WHERE a.id = 1 AND b.id = 3 "
-                    "CREATE (a)-[:CSR_E {w: 40}]->(b);")
-            ->isSuccess());
-    ASSERT_TRUE(
-        conn->query("MATCH (a:CSR_R)-[e:CSR_E]->(b:CSR_R) WHERE a.id = 2 AND b.id = 3 "
-                    "DELETE e;")
-            ->isSuccess());
+    ASSERT_TRUE(conn->query("MATCH (a:CSR_R)-[e:CSR_E]->(b:CSR_R) WHERE a.id = 1 AND b.id = 2 "
+                            "SET e.w = 30;")
+                    ->isSuccess());
+    ASSERT_TRUE(conn->query("MATCH (a:CSR_R), (b:CSR_R) WHERE a.id = 1 AND b.id = 3 "
+                            "CREATE (a)-[:CSR_E {w: 40}]->(b);")
+                    ->isSuccess());
+    ASSERT_TRUE(conn->query("MATCH (a:CSR_R)-[e:CSR_E]->(b:CSR_R) WHERE a.id = 2 AND b.id = 3 "
+                            "DELETE e;")
+                    ->isSuccess());
     EXPECT_EQ(readRels(), snapshot) << "Committed rel writes leaked pre-checkpoint";
 
     const auto ckptStart = std::chrono::steady_clock::now();
@@ -7155,8 +7137,8 @@ TEST_F(ReviewFixesTest, FailedCheckpointRollbackReclaimsNewPages) {
     }
 
     conn->query("CALL auto_checkpoint=false;");
-    ASSERT_TRUE(conn->query("CREATE NODE TABLE t_rollback(id INT64 PRIMARY KEY, val STRING);")
-            ->isSuccess());
+    ASSERT_TRUE(
+        conn->query("CREATE NODE TABLE t_rollback(id INT64 PRIMARY KEY, val STRING);")->isSuccess());
     ASSERT_TRUE(conn->query("CHECKPOINT;")->isSuccess());
 
     auto* context = getClientContext(*conn);
@@ -7189,11 +7171,11 @@ TEST_F(ReviewFixesTest, ExplicitCheckpointLeavesPageManagerCleanAfterSecondaryAr
 
     conn->query("CALL auto_checkpoint=false;");
     ASSERT_TRUE(conn->query("CREATE NODE TABLE art_clean(id INT64 PRIMARY KEY, name STRING);")
-            ->isSuccess());
+                    ->isSuccess());
     ASSERT_TRUE(conn->query("CREATE (:art_clean {id: 1, name: 'alice'});")->isSuccess());
     ASSERT_TRUE(conn->query("CREATE (:art_clean {id: 2, name: 'bob'});")->isSuccess());
     ASSERT_TRUE(conn->query("CREATE ART INDEX art_clean_name_idx FOR (n:art_clean) ON (n.name);")
-            ->isSuccess());
+                    ->isSuccess());
 
     auto checkpoint = conn->query("CHECKPOINT;");
     ASSERT_TRUE(checkpoint->isSuccess()) << checkpoint->getErrorMessage();
@@ -7427,30 +7409,26 @@ TEST_F(ReviewFixesTest, SubgraphCatalogPersistsAfterCheckpointWithPreExistingTab
 
     // ---- Phase 1: create pre-existing tables (like Hyper-Extract does) ----
     ASSERT_TRUE(conn->query("CALL auto_checkpoint=false;")->isSuccess());
-    ASSERT_TRUE(
-        conn->query("CREATE NODE TABLE IF NOT EXISTS Template ("
-                    "name STRING, domain STRING, type STRING, tags STRING, "
-                    "description STRING, language STRING, output STRING, "
-                    "guideline STRING, identifiers STRING, opts STRING, display STRING, "
-                    "PRIMARY KEY (name));")
-            ->isSuccess());
-    ASSERT_TRUE(
-        conn->query("CREATE NODE TABLE IF NOT EXISTS KnowledgeAbstract ("
-                    "id STRING, template_name STRING, lang STRING, type STRING, "
-                    "created_at STRING, updated_at STRING, metadata STRING, "
-                    "PRIMARY KEY (id));")
-            ->isSuccess());
-    ASSERT_TRUE(
-        conn->query("CREATE NODE TABLE IF NOT EXISTS Entity ("
-                    "id STRING, ka_id STRING, entity_type STRING, data STRING, "
-                    "PRIMARY KEY (id));")
-            ->isSuccess());
-    ASSERT_TRUE(
-        conn->query("CREATE REL TABLE IF NOT EXISTS Relates ("
-                    "FROM Entity TO Entity, ka_id STRING, "
-                    "relation_type STRING, data STRING"
-                    ");")
-            ->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE IF NOT EXISTS Template ("
+                            "name STRING, domain STRING, type STRING, tags STRING, "
+                            "description STRING, language STRING, output STRING, "
+                            "guideline STRING, identifiers STRING, opts STRING, display STRING, "
+                            "PRIMARY KEY (name));")
+                    ->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE IF NOT EXISTS KnowledgeAbstract ("
+                            "id STRING, template_name STRING, lang STRING, type STRING, "
+                            "created_at STRING, updated_at STRING, metadata STRING, "
+                            "PRIMARY KEY (id));")
+                    ->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE IF NOT EXISTS Entity ("
+                            "id STRING, ka_id STRING, entity_type STRING, data STRING, "
+                            "PRIMARY KEY (id));")
+                    ->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE REL TABLE IF NOT EXISTS Relates ("
+                            "FROM Entity TO Entity, ka_id STRING, "
+                            "relation_type STRING, data STRING"
+                            ");")
+                    ->isSuccess());
 
     // First checkpoint: persist the schema so the data file has a valid
     // catalogPageRange.  Without this the bug would be masked (the first
@@ -8579,7 +8557,7 @@ TEST_F(ReviewFixesTest, DroppedGraphLivenessIdentityRemovedAtDrop) {
     ASSERT_TRUE(conn->query("DROP GRAPH gone_graph;")->isSuccess());
     auto invoked = false;
     EXPECT_FALSE(main::DatabaseManager::Get(*getClientContext(*conn))
-            ->withGraphCatalogIfAlive(droppedCatalog, [&invoked] { invoked = true; }));
+                     ->withGraphCatalogIfAlive(droppedCatalog, [&invoked] { invoked = true; }));
     EXPECT_FALSE(invoked);
     ASSERT_TRUE(conn->query("COMMIT;")->isSuccess());
 }
@@ -8765,12 +8743,12 @@ TEST_F(FailedCheckpointPKIndexTest, StringLookupsSurviveFailedCheckpoint) {
     };
     for (auto i = 0; i < 100; i++) {
         ASSERT_TRUE(conn->query(std::format("CREATE (:test {{id: {}, v: {}}});", keyOf(i), i))
-                ->isSuccess());
+                        ->isSuccess());
     }
     checkpoint();
     for (auto i = 100; i < 140; i++) {
         ASSERT_TRUE(conn->query(std::format("CREATE (:test {{id: {}, v: {}}});", keyOf(i), i))
-                ->isSuccess());
+                        ->isSuccess());
     }
     failCheckpointOnSerialization();
     checkPointLookups(keyOf, 0, 140, "after failure");
