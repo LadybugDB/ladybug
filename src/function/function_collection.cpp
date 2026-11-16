@@ -219,6 +219,7 @@ FunctionCollection* FunctionCollection::getFunctions() {
 
         // Sequence functions
         SCALAR_FUNCTION(CurrValFunction), SCALAR_FUNCTION(NextValFunction),
+        SCALAR_FUNCTION(SetValFunction),
 
         // Aggregate functions
         AGGREGATE_FUNCTION(CountStarFunction), AGGREGATE_FUNCTION(CountFunction),

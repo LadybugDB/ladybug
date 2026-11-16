@@ -46,7 +46,8 @@ static void scheduleFrontierTask(ExecutionContext* context, const GraphRelInfo& 
     }
 
     // GDS runs inside a task, so this thread holds a scheduler slot and works on the task it
-    // waits for rather than starting a thread to take its place.
+    // waits for rather than starting a thread to take its place. A caller without a slot would not
+    // hang either: it would run a one-thread task in a free slot or leave the task to the workers.
     TaskScheduler::Get(*context->clientContext)->scheduleTaskAndWaitOrError(task, context);
 }
 
@@ -125,6 +126,7 @@ static void runVertexComputeInternal(const TableCatalogEntry* currentEntry,
         currentEntry->getTableID());
     auto sharedState = task->getSharedState();
     sharedState->morselDispatcher.init(maxOffset);
+    // Leave launchNewWorkerThread false: this thread runs the task too, as in scheduleFrontierTask.
     TaskScheduler::Get(*context->clientContext)->scheduleTaskAndWaitOrError(task, context);
 }
 

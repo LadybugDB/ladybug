@@ -33,6 +33,7 @@
 #include "parser/ddl/create_table_info.h"
 #include "parser/ddl/create_type.h"
 #include "parser/ddl/drop.h"
+#include "parser/expression/parsed_expression_visitor.h"
 #include "parser/expression/parsed_function_expression.h"
 #include "parser/expression/parsed_literal_expression.h"
 #include "storage/index/art_index.h"
@@ -95,6 +96,22 @@ std::vector<PropertyDefinition> Binder::bindPropertyDefinitions(
     return definitions;
 }
 
+namespace {
+// A DEFAULT is evaluated for every inserted row, and the default evaluator handles nextval as its
+// only side-effecting function, so setval is refused there.
+class SetValFinder final : public ParsedExpressionVisitor {
+public:
+    bool found = false;
+
+    void visitFunctionExpr(const ParsedExpression* expr) override {
+        const auto& functionName = expr->constCast<ParsedFunctionExpression>().getFunctionName();
+        if (StringUtils::getUpper(functionName) == function::SetValFunction::name) {
+            found = true;
+        }
+    }
+};
+} // namespace
+
 std::unique_ptr<ParsedExpression> Binder::resolvePropertyDefault(ParsedExpression* parsedDefault,
     const LogicalType& type, const std::string& tableName, const std::string& propertyName) {
     if (parsedDefault == nullptr) { // No default provided.
@@ -109,6 +126,11 @@ std::unique_ptr<ParsedExpression> Binder::resolvePropertyDefault(ParsedExpressio
     } else {
         if (type.getLogicalTypeID() == LogicalTypeID::SERIAL) {
             throw BinderException("No DEFAULT value should be set for SERIAL columns");
+        }
+        SetValFinder finder;
+        finder.visit(parsedDefault);
+        if (finder.found) {
+            throw BinderException("setval is not allowed in a DEFAULT expression.");
         }
         return parsedDefault->copy();
     }
