@@ -17,7 +17,7 @@ public:
         common::cardinality_t cardinality = 0)
         : BaseLogicalExtend{type_, std::move(boundNode), std::move(nbrNode), std::move(rel),
               direction, extendFromSource, std::move(child)},
-          scanNbrID{true}, properties{std::move(properties)} {
+          scanNbrID{true}, properties{std::move(properties)}, requireBoundFlatten{false} {
         this->cardinality = cardinality;
     }
 
@@ -34,6 +34,13 @@ public:
     }
     void setScanNbrID(bool scanNbrID_) { scanNbrID = scanNbrID_; }
     bool shouldScanNbrID() const { return scanNbrID; }
+    // Bound-expand (generalized lookup join) sets this so the optimizer keeps the
+    // pre-extend FLATTEN: RemoveFactorizationRewriter strips every FLATTEN and
+    // FactorizationRewriter only re-adds ones its visitors request. Without an
+    // opt-in visitExtend the DISTINCT/AGGREGATE outer stays factorized at runtime
+    // and the correlated CSR extend misreads batches under parallelism.
+    void setRequireBoundFlatten(bool v) { requireBoundFlatten = v; }
+    bool requireBoundFlattenFlag() const { return requireBoundFlatten; }
 
     std::unique_ptr<LogicalOperator> copy() override;
 
@@ -46,7 +53,7 @@ protected:
         common::cardinality_t cardinality = 0)
         : BaseLogicalExtend{operatorType, std::move(boundNode), std::move(nbrNode), std::move(rel),
               direction, extendFromSource, std::move(child)},
-          scanNbrID{true}, properties{std::move(properties)} {
+          scanNbrID{true}, properties{std::move(properties)}, requireBoundFlatten{false} {
         this->cardinality = cardinality;
     }
 
@@ -54,6 +61,7 @@ private:
     bool scanNbrID;
     binder::expression_vector properties;
     std::vector<storage::ColumnPredicateSet> propertyPredicates;
+    bool requireBoundFlatten;
 };
 
 } // namespace planner

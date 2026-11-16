@@ -331,6 +331,12 @@ public:
     // ACCUMULATE + EXPRESSIONS_SCAN (see plan_subquery.cpp). Consumes the whole leg.
     bool tryPlanScalarSeededChain(const binder::QueryGraphCollection& queryGraphCollection,
         const binder::expression_vector& predicates, LogicalPlan& leftPlan);
+    // Bound expand: single-hop regular MATCH with exactly one bound endpoint as a
+    // correlated index-nested-loop over CSR instead of scan + hash join. Shares the
+    // lookup-join guards (small flat trusted outer, same cardinality cap) so the two
+    // INLJ paths do not diverge; see plan_subquery.cpp for conditions.
+    bool tryPlanBoundExpand(const binder::QueryGraphCollection& queryGraphCollection,
+        const binder::expression_vector& predicates, LogicalPlan& leftPlan);
     // Staged distinct pre-aggregation over LEFT-join chains: AGGREGATE(keys=K, all COUNT
     // DISTINCT) over a left-deep LEFT-only chain becomes per-stage aggregates grouping
     // by K plus payloads (see plan_subquery.cpp). Runs at appendAggregate time;
