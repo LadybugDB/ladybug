@@ -310,6 +310,11 @@ bool ConstantExpressionVisitor::visitFunction(const Expression& expr) {
     if (funcExpr.getFunction().name == function::RandFunction::name) {
         return false;
     }
+    // setseed changes state too, but stays read-only: the read/write analyzer would count it as a
+    // write. Folded, it would reseed when the statement is bound, not each time it runs.
+    if (funcExpr.getFunction().name == function::SetSeedFunction::name) {
+        return false;
+    }
     return visitChildren(expr);
 }
 

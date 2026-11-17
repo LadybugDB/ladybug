@@ -266,6 +266,22 @@ TEST_F(ApiTest, MultipleExecutionOfPreparedStatement) {
     ASSERT_EQ(groundTruth, TestHelper::convertResultToString(*result));
 }
 
+TEST_F(ApiTest, RepeatedExecutePreparedSetseedReseeds) {
+    auto seed = conn->prepare("RETURN setseed(0.2)");
+    ASSERT_TRUE(seed->isSuccess()) << seed->getErrorMessage();
+    std::vector<std::string> values;
+    for (auto i = 0; i < 2; ++i) {
+        ASSERT_TRUE(conn->execute(seed.get())->isSuccess());
+        auto result = conn->query("RETURN random()");
+        ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+        values.push_back(TestHelper::convertResultToString(*result)[0]);
+    }
+    ASSERT_EQ(values[0], values[1]);
+    ASSERT_TRUE(conn->query("RETURN setseed(0.2)")->isSuccess());
+    auto unprepared = conn->query("RETURN random()");
+    ASSERT_EQ(values[0], TestHelper::convertResultToString(*unprepared)[0]);
+}
+
 TEST_F(ApiTest, issueTest4) {
     auto preparedStatement = conn->prepare("RETURN CAST($1, 'STRING')");
     auto result = conn->execute(preparedStatement.get(),

@@ -26,6 +26,7 @@
 #include "common/string_utils.h"
 #include "common/system_config.h"
 #include "common/types/types.h"
+#include "function/arithmetic/vector_arithmetic_functions.h"
 #include "function/cast/functions/cast_from_string_functions.h"
 #include "function/sequence/sequence_functions.h"
 #include "function/table/simple_table_function.h"
@@ -107,15 +108,17 @@ std::vector<PropertyDefinition> Binder::bindPropertyDefinitions(
 
 namespace {
 // A DEFAULT is evaluated for every inserted row, and the default evaluator handles nextval as its
-// only side-effecting function, so setval is refused there.
-class SetValFinder final : public ParsedExpressionVisitor {
+// only side-effecting function, so setval and setseed are refused there.
+class StatefulFunctionFinder final : public ParsedExpressionVisitor {
 public:
-    bool found = false;
+    std::string found;
 
     void visitFunctionExpr(const ParsedExpression* expr) override {
         const auto& functionName = expr->constCast<ParsedFunctionExpression>().getFunctionName();
-        if (StringUtils::getUpper(functionName) == function::SetValFunction::name) {
-            found = true;
+        auto upperName = StringUtils::getUpper(functionName);
+        if (upperName == function::SetValFunction::name ||
+            upperName == function::SetSeedFunction::name) {
+            found = StringUtils::getLower(functionName);
         }
     }
 };
@@ -136,10 +139,10 @@ std::unique_ptr<ParsedExpression> Binder::resolvePropertyDefault(ParsedExpressio
         if (type.getLogicalTypeID() == LogicalTypeID::SERIAL) {
             throw BinderException("No DEFAULT value should be set for SERIAL columns");
         }
-        SetValFinder finder;
+        StatefulFunctionFinder finder;
         finder.visit(parsedDefault);
-        if (finder.found) {
-            throw BinderException("setval is not allowed in a DEFAULT expression.");
+        if (!finder.found.empty()) {
+            throw BinderException(finder.found + " is not allowed in a DEFAULT expression.");
         }
         return parsedDefault->copy();
     }
