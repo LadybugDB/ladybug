@@ -134,12 +134,7 @@ void intervalTryAddition(T& target, int64_t input, int64_t multiplier, int64_t f
     } catch (const OverflowException& e) {
         throw OverflowException{"Interval value is out of range"};
     }
-    T additionBase = 0;
-    try {
-        additionBase = intervalTryCastInteger<T>(addition);
-    } catch (const OverflowException& e) {
-        throw OverflowException{"Interval value is out of range"};
-    }
+    T additionBase = intervalTryCastInteger<T>(addition);
     try {
         function::Add::operation(target, additionBase, target);
     } catch (const OverflowException& e) {
@@ -149,11 +144,7 @@ void intervalTryAddition(T& target, int64_t input, int64_t multiplier, int64_t f
         //	Add in (fraction * multiplier) / MICROS_PER_SEC
         //	This is always in range
         addition = (fraction * multiplier) / Interval::MICROS_PER_SEC;
-        try {
-            additionBase = intervalTryCastInteger<T>(addition);
-        } catch (const OverflowException& e) {
-            throw OverflowException{"Interval fraction is out of range"};
-        }
+        additionBase = intervalTryCastInteger<T>(addition);
         try {
             function::Add::operation(target, additionBase, target);
         } catch (const OverflowException& e) {
