@@ -9477,6 +9477,40 @@ TEST_F(FailedCheckpointPKIndexTest, RetryAfterAWriteMergesKeysIntoSlotsOnce) {
     EXPECT_FALSE(conn->query("CREATE (:test {id: 15000, v: -1});")->isSuccess());
 }
 
+// The checkpoint fails in the second table, after the first one is done. The retry also applies
+// the failed attempt's shadow page of the in-place update, which the rollback keeps, so this
+// passes without the epoch restore too; the tests above fail without it.
+TEST_F(FailedCheckpointPKIndexTest, FailureInALaterTableKeepsTheEarlierTablesChanges) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE a(id INT64 PRIMARY KEY, v INT64);")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE b(id INT64 PRIMARY KEY, v INT64);")->isSuccess());
+    ASSERT_TRUE(conn->query("UNWIND range(0, 299) AS i CREATE (:a {id: i, v: i});")->isSuccess());
+    checkpoint();
+    // Updated in place, so the checkpoint of `a` allocates no pages; the new rows of `b` do.
+    ASSERT_TRUE(conn->query("MATCH (x:a) WHERE x.id = 7 SET x.v = 5;")->isSuccess());
+    ASSERT_TRUE(conn->query("UNWIND range(0, 99) AS i CREATE (:b {id: i, v: i});")->isSuccess());
+    auto context = getClientContext(*conn);
+    bool failed = false;
+    FlakyCheckpointer flakyCheckpointer([&failed](main::ClientContext& ctx) {
+        return std::make_unique<FlakyCheckpointerFailsDuringOutOfPlaceRewrite>(ctx, failed);
+    });
+    flakyCheckpointer.setCheckpointer(*context);
+    ASSERT_FALSE(conn->query("CHECKPOINT;")->isSuccess());
+    FlakyCheckpointer::resetCheckpointer(*context);
+    ASSERT_TRUE(failed);
+    checkpoint();
+    createDBAndConn();
+    auto res = conn->query("MATCH (x:a) WHERE x.id = 7 RETURN x.v;");
+    ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+    ASSERT_TRUE(res->hasNext());
+    EXPECT_EQ(res->getNext()->getValue(0)->getValue<int64_t>(), 5);
+    res = conn->query("MATCH (x:b) RETURN COUNT(*);");
+    ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+    EXPECT_EQ(res->getNext()->getValue(0)->getValue<int64_t>(), 100);
+}
+
 // The failed checkpoint adds slot pages to the index, and its rollback must drop their shadow
 // copies with those of the pages that were already there.
 TEST_F(FailedCheckpointPKIndexTest, RollbackDropsShadowsOfAddedSlotPages) {
