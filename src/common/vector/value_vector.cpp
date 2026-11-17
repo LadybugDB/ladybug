@@ -656,6 +656,41 @@ void ListVector::copyListEntryAndBufferMetaData(ValueVector& vector,
     buffer.size = otherBuffer.size;
 }
 
+// Values of these types have the same bytes in a vector and in the row layout, so a list of them is
+// copied with one memcpy. That copies the bytes of NULL elements too; hashing and comparisons check
+// the null bits before reading a value.
+static bool hasFixedRowLayout(PhysicalTypeID type) {
+    switch (type) {
+    case PhysicalTypeID::BOOL:
+    case PhysicalTypeID::INT64:
+    case PhysicalTypeID::INT32:
+    case PhysicalTypeID::INT16:
+    case PhysicalTypeID::INT8:
+    case PhysicalTypeID::UINT64:
+    case PhysicalTypeID::UINT32:
+    case PhysicalTypeID::UINT16:
+    case PhysicalTypeID::UINT8:
+    case PhysicalTypeID::INT128:
+    case PhysicalTypeID::UINT128:
+    case PhysicalTypeID::DOUBLE:
+    case PhysicalTypeID::FLOAT:
+    case PhysicalTypeID::INTERVAL:
+    case PhysicalTypeID::INTERNAL_ID:
+        return true;
+    case PhysicalTypeID::ANY:
+    case PhysicalTypeID::ALP_EXCEPTION_FLOAT:
+    case PhysicalTypeID::ALP_EXCEPTION_DOUBLE:
+    case PhysicalTypeID::STRING:
+    case PhysicalTypeID::JSON:
+    case PhysicalTypeID::LIST:
+    case PhysicalTypeID::ARRAY:
+    case PhysicalTypeID::STRUCT:
+    case PhysicalTypeID::POINTER:
+        return false;
+    }
+    UNREACHABLE_CODE;
+}
+
 void ListVector::copyFromRowData(ValueVector* vector, uint32_t pos, const uint8_t* rowData) {
     DASSERT(validateType(*vector));
     // Row data is packed without alignment padding; copy to an aligned temporary.
@@ -667,6 +702,20 @@ void ListVector::copyFromRowData(ValueVector* vector, uint32_t pos, const uint8_
     vector->setValue<list_entry_t>(pos, dstListEntry);
     auto resultDataVector = getDataVector(vector);
     auto rowLayoutSize = LogicalTypeUtils::getRowLayoutSize(resultDataVector->dataType);
+    if (hasFixedRowLayout(resultDataVector->dataType.getPhysicalType())) {
+        DASSERT(rowLayoutSize == resultDataVector->getNumBytesPerValue());
+        if (srcList.size > 0) {
+            memcpy(resultDataVector->getData() + dstListEntry.offset * rowLayoutSize, srcListValues,
+                srcList.size * rowLayoutSize);
+        }
+        resultDataVector->setNullRange(dstListEntry.offset, srcList.size, false);
+        for (auto i = 0u; i < srcList.size; i++) {
+            if (NullBuffer::isNull(srcNullBytes, i)) {
+                resultDataVector->setNull(dstListEntry.offset + i, true);
+            }
+        }
+        return;
+    }
     for (auto i = 0u; i < srcList.size; i++) {
         auto dstListValuePos = dstListEntry.offset + i;
         if (NullBuffer::isNull(srcNullBytes, i)) {
@@ -693,6 +742,23 @@ void ListVector::copyToRowData(const ValueVector* vector, uint32_t pos, uint8_t*
     dstListEntry.overflowPtr = reinterpret_cast<uint64_t>(dstListOverflow);
     NullBuffer::initNullBytes(dstListOverflow, dstListEntry.size);
     auto dstListValues = dstListOverflow + nullBytesSize;
+    if (hasFixedRowLayout(srcListDataVector->dataType.getPhysicalType())) {
+        DASSERT(dataRowLayoutSize == srcListDataVector->getNumBytesPerValue());
+        if (srcListEntry.size > 0) {
+            memcpy(dstListValues,
+                srcListDataVector->getData() + srcListEntry.offset * dataRowLayoutSize,
+                srcListEntry.size * dataRowLayoutSize);
+        }
+        if (!srcListDataVector->hasNoNullsGuarantee()) {
+            for (auto i = 0u; i < srcListEntry.size; i++) {
+                if (srcListDataVector->isNull(srcListEntry.offset + i)) {
+                    NullBuffer::setNull(dstListOverflow, i);
+                }
+            }
+        }
+        memcpy(rowData, &dstListEntry, sizeof(list_t));
+        return;
+    }
     for (auto i = 0u; i < srcListEntry.size; i++) {
         if (srcListDataVector->isNull(srcListEntry.offset + i)) {
             NullBuffer::setNull(dstListOverflow, i);
