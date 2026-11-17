@@ -121,6 +121,9 @@ static std::string stripIcebugStorageClauses(const std::string& schema) {
 // equivalent RETURN setval('t_id_serial', 5). Only the exact triple EXPORT wrote, for a name that a
 // CREATE TABLE in the same schema derives from a SERIAL column, is rewritten.
 static std::string mapLegacySerialRestore(const std::string& schema) {
+    if (schema.empty()) {
+        return schema;
+    }
     std::vector<std::string> serialNames;
     for (auto& parsedStatement : Parser::parseQuery(schema)) {
         if (parsedStatement->getStatementType() != StatementType::CREATE_TABLE) {
