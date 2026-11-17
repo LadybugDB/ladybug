@@ -332,13 +332,17 @@ TEST_F(OptimizerTest, GroupKeyPredicateThatChangesStateStaysAboveAggregate) {
         auto filter = findFilter(plan->getLastOperator().get());
         EXPECT_NE(filter, nullptr) << predicate;
         return filter != nullptr &&
-               hasOperatorType(filter, planner::LogicalOperatorType::AGGREGATE);
+               hasOperatorType(filter, planner::LogicalOperatorType::AGGREGATE) &&
+               !hasOperatorType(filter->getChild(0).get(), planner::LogicalOperatorType::FILTER);
     };
     ASSERT_TRUE(conn->query("CREATE SEQUENCE keySeq")->isSuccess());
     EXPECT_FALSE(filterAboveAggregate("g = 1"));
     EXPECT_TRUE(filterAboveAggregate("nextval('keySeq') = 1"));
     EXPECT_TRUE(filterAboveAggregate("setval('keySeq', g) = g"));
     EXPECT_TRUE(filterAboveAggregate("setseed(g / 10.0) IS NULL"));
+    EXPECT_TRUE(filterAboveAggregate("currval(CAST(g AS STRING)) = 1"));
+    EXPECT_TRUE(filterAboveAggregate("g = 1 AND nextval('keySeq') = 1"));
+    EXPECT_TRUE(filterAboveAggregate("g = 1 AND random() < 0.5"));
 }
 
 static void collectOperators(planner::LogicalOperator* op, planner::LogicalOperatorType type,
