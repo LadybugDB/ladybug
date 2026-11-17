@@ -1,6 +1,7 @@
 #pragma once
 
 #include <mutex>
+#include <optional>
 #include <shared_mutex>
 #include <vector>
 
@@ -66,6 +67,12 @@ public:
     // In-memory databases never checkpoint, so this is their only version reclamation.
     bool vacuumInMemoryUpdates(common::transaction_t horizon);
     void finalizeCheckpoint(main::ClientContext& context);
+    // Captures the current data-file page count as the boundary of the in-progress checkpoint.
+    // Must be called under the write gate before the checkpoint appends any pages; pages
+    // appended after it belong to the checkpoint alone and can be reclaimed on rollback.
+    void beginCheckpointPageCapture();
+    // Drops the rollback boundary after a successful checkpoint.
+    void clearCheckpointPageCapture();
     void rollbackCheckpoint(const catalog::Catalog& catalog, main::ClientContext* context);
 
     WAL& getWAL() const;
@@ -145,6 +152,10 @@ private:
     std::unordered_map<common::table_id_t, PlannerTableStats> plannerStatsCache;
     std::unordered_map<common::table_id_t, std::string> tableNameCache;
     common::VirtualFileSystem* vfs_; // non-owning, owned by Database
+    // Data-file page count at the start of the in-progress checkpoint, if any. Pages beyond it
+    // were appended by the checkpoint itself and are reclaimed on rollback; pages of committed
+    // but uncheckpointed transactions below it are live and must stay allocated.
+    std::optional<common::page_idx_t> checkpointBeginNumPages;
 };
 
 } // namespace storage

@@ -578,11 +578,24 @@ void StorageManager::finalizeCheckpoint(main::ClientContext& context) {
     }
 }
 
+void StorageManager::beginCheckpointPageCapture() {
+    std::unique_lock lck{mtx};
+    if (dataFH == nullptr) {
+        return;
+    }
+    checkpointBeginNumPages = dataFH->getNumPages();
+}
+
+void StorageManager::clearCheckpointPageCapture() {
+    std::unique_lock lck{mtx};
+    checkpointBeginNumPages.reset();
+}
+
 void StorageManager::rollbackCheckpoint(const Catalog& catalog, main::ClientContext* context) {
     std::unique_lock lck{mtx};
-    const auto* header =
-        context != nullptr ? getOrInitDatabaseHeader(*context) : databaseHeader.get();
-    const common::page_idx_t checkpointNumPages = header != nullptr ? header->dataFileNumPages : 0;
+    // Only pages appended by the checkpoint itself (beyond the boundary captured when it began)
+    // can be reclaimed. The committed-but-uncheckpointed pages below the boundary are still live.
+    const common::page_idx_t checkpointNumPages = checkpointBeginNumPages.value_or(0);
 
     const auto nodeTableEntries = catalog.getNodeTableEntries(&DUMMY_CHECKPOINT_TRANSACTION);
     for (const auto tableEntry : nodeTableEntries) {
@@ -597,11 +610,8 @@ void StorageManager::rollbackCheckpoint(const Catalog& catalog, main::ClientCont
                 PartitionStorageRegistry::Get(context)->tryGet(tableEntry->getTableID());
             if (childSM != nullptr && childSM->containsTable(tableEntry->getTableID())) {
                 childSM->getTable(tableEntry->getTableID())->rollbackCheckpoint();
-                const auto* childHeader = context != nullptr ?
-                                              childSM->getOrInitDatabaseHeader(*context) :
-                                              childSM->databaseHeader.get();
                 const common::page_idx_t childNumPages =
-                    childHeader != nullptr ? childHeader->dataFileNumPages : 0;
+                    childSM->checkpointBeginNumPages.value_or(0);
                 childSM->getDataFH()->getPageManager()->rollbackCheckpoint(childNumPages);
             }
             continue;

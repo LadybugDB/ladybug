@@ -7148,20 +7148,29 @@ TEST_F(ReviewFixesTest, FailedCheckpointRollbackReclaimsNewPages) {
     const auto basePages = dataFH->getNumPages();
     ASSERT_GT(basePages, 0u);
 
-    // Simulate allocation of new pages by an in-progress checkpoint that fails before commit
+    // Simulate allocation of new pages by an in-progress checkpoint that fails before commit:
+    // the boundary is captured when the checkpoint begins, under the write gate
+    storageManager->beginCheckpointPageCapture();
     dataFH->addNewPages(16);
     EXPECT_EQ(dataFH->getNumPages(), basePages + 16);
 
-    // Rollback of the checkpoint should rewind/reclaim tail pages back to basePages
+    // Rollback of the checkpoint should rewind/reclaim the checkpoint's own pages
     storageManager->rollbackCheckpoint(*context->getDatabase()->getCatalog(), context);
     EXPECT_EQ(dataFH->getNumPages(), basePages);
 
     // Retrying a failed checkpoint that allocates pages again should rewind again,
     // avoiding unbounded growth
+    storageManager->beginCheckpointPageCapture();
     dataFH->addNewPages(16);
     EXPECT_EQ(dataFH->getNumPages(), basePages + 16);
     storageManager->rollbackCheckpoint(*context->getDatabase()->getCatalog(), context);
     EXPECT_EQ(dataFH->getNumPages(), basePages);
+
+    // Pages appended without a checkpoint boundary stay allocated: they may belong to
+    // committed but uncheckpointed transactions
+    dataFH->addNewPages(16);
+    storageManager->rollbackCheckpoint(*context->getDatabase()->getCatalog(), context);
+    EXPECT_EQ(dataFH->getNumPages(), basePages + 16);
 }
 
 TEST_F(ReviewFixesTest, ExplicitCheckpointLeavesPageManagerCleanAfterSecondaryArtIndex) {
