@@ -125,6 +125,8 @@ public:
     bool hasUpdates(const transaction::Transaction* transaction, common::row_idx_t startRow,
         common::length_t numRows) const;
 
+    // True while any vector slot exists: shared owners keep emptied slots (see
+    // dropUnretainedNodes), so this does not mean any chain has content.
     bool isSet() const {
         std::shared_lock lock{mtx};
         return !updates.empty();
@@ -178,8 +180,8 @@ public:
     // committed nodes with version >= horizon are kept. When `horizon` is INVALID_TRANSACTION
     // (no active readers) every committed node is folded and dropped, so the chain only
     // retains uncommitted entries. Returns true when any committed data was folded.
-    // Safe under concurrent new writers (they create uncommitted nodes, which are preserved)
-    // and concurrent new readers (they observe the folded base plus the kept chains).
+    // Uncommitted nodes linked under the slot lock are preserved. A writer or reader that has
+    // taken a slot but not yet locked it is not protected: the slot can be emptied and popped.
     // Must NOT run while an older reader (startTS <= folded versions) is still active: the
     // caller must ensure `horizon` is the oldest active startTS (or INVALID when none).
     bool vacuumCommitted(common::transaction_t horizon,
@@ -189,6 +191,9 @@ public:
 private:
     UpdateNode& getUpdateNode(common::idx_t vectorIdx);
     UpdateNode& getOrCreateUpdateNode(common::idx_t vectorIdx);
+    // Chains are found by vector index, so only empty slots at the end can go. The caller
+    // holds `mtx` exclusively.
+    void popTrailingEmptySlots();
 
 private:
     mutable std::shared_mutex mtx;

@@ -631,6 +631,54 @@ TEST_F(MVCCRetentionTest, SharedDropKeepsEverySlot) {
     }
 }
 
+TEST_F(MVCCRetentionTest, VacuumKeepsUncommittedChainAtItsVector) {
+    auto* mm = getMemoryManager(*database);
+    UpdateInfo updateInfo;
+    ValueVector values{LogicalType::INT64()};
+    values.setState(std::make_shared<DataChunkState>(DEFAULT_VECTOR_CAPACITY));
+    setIntValue(values, 100);
+    Transaction committedWrite{*conn->getClientContext(), TransactionType::WRITE,
+        Transaction::START_TRANSACTION_ID, 0};
+    auto& committedNode = updateInfo.update(*mm, &committedWrite, 0, 3, values);
+    updateInfo.commit(0, &committedNode, 5);
+    const auto pendingID = Transaction::START_TRANSACTION_ID + 1;
+    Transaction pendingWrite{*conn->getClientContext(), TransactionType::WRITE, pendingID, 6};
+    updateInfo.update(*mm, &pendingWrite, 1, 3, values);
+
+    // Vector 0 is folded and emptied below vector 1's uncommitted chain.
+    std::vector<std::pair<idx_t, sel_t>> folded;
+    updateInfo.vacuumCommitted(INVALID_TRANSACTION,
+        [&](idx_t vectorIdx, sel_t row, const VectorUpdateInfo*, idx_t) {
+            folded.emplace_back(vectorIdx, row);
+        });
+    EXPECT_EQ(folded, (std::vector<std::pair<idx_t, sel_t>>{{0, 3}}));
+    EXPECT_EQ(updateInfo.getNumVectors(), 2u);
+    const auto versionsAt = [&](idx_t vectorIdx) {
+        std::vector<transaction_t> observed;
+        updateInfo.iterateVectorInfo(&pendingWrite, vectorIdx,
+            [&](const VectorUpdateInfo& info) { observed.push_back(info.version); });
+        return observed;
+    };
+    EXPECT_TRUE(versionsAt(0).empty());
+    EXPECT_EQ(versionsAt(1), std::vector<transaction_t>{pendingID});
+}
+
+TEST_F(MVCCRetentionTest, VacuumOfEveryChainLeavesNoUpdates) {
+    auto* mm = getMemoryManager(*database);
+    UpdateInfo updateInfo;
+    ValueVector values{LogicalType::INT64()};
+    values.setState(std::make_shared<DataChunkState>(DEFAULT_VECTOR_CAPACITY));
+    setIntValue(values, 100);
+    Transaction write{*conn->getClientContext(), TransactionType::WRITE,
+        Transaction::START_TRANSACTION_ID, 0};
+    auto& node = updateInfo.update(*mm, &write, 1, 3, values);
+    updateInfo.commit(1, &node, 12);
+
+    updateInfo.vacuumCommitted(INVALID_TRANSACTION,
+        [](idx_t, sel_t, const VectorUpdateInfo*, idx_t) {});
+    EXPECT_FALSE(updateInfo.isSet());
+}
+
 TEST_F(MVCCRetentionTest, RowsCreatedAndDeletedAfterReaderStayHidden) {
     if (inMemMode) {
         GTEST_SKIP();

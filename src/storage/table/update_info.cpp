@@ -383,11 +383,20 @@ void UpdateInfo::dropUnretainedNodes(const std::vector<VectorRetentionPlan>& pla
         cursor->setPrev(nullptr);
     }
     if (exclusive) {
-        // Chains are found by vector index, so only empty slots at the end can go.
-        // Empty means info == nullptr; UpdateNode::isEmpty() returns the opposite.
-        while (!updates.empty() && (!updates.back() || updates.back()->info == nullptr)) {
-            updates.pop_back();
+        popTrailingEmptySlots();
+    }
+}
+
+void UpdateInfo::popTrailingEmptySlots() {
+    while (!updates.empty()) {
+        if (const auto* node = updates.back().get()) {
+            std::shared_lock chainLock{node->mtx};
+            // Not isEmpty(): it returns the opposite and locks node->mtx itself.
+            if (node->info != nullptr) {
+                return;
+            }
         }
+        updates.pop_back();
     }
 }
 
@@ -419,10 +428,13 @@ bool UpdateInfo::vacuumCommitted(transaction_t horizon,
     bool didWork = false;
     for (auto vectorIdx = 0u; vectorIdx < updates.size(); vectorIdx++) {
         auto& node = updates[vectorIdx];
-        if (!node || !node->info) {
+        if (!node) {
             continue;
         }
         std::unique_lock chainLock{node->mtx};
+        if (!node->info) {
+            continue;
+        }
         // Newest-below per row: first below-horizon committed entry seen newest-first.
         std::bitset<DEFAULT_VECTOR_CAPACITY> seen;
         struct FoldOp {
@@ -473,17 +485,7 @@ bool UpdateInfo::vacuumCommitted(transaction_t horizon,
         }
         relinkChainNewestFirst(*node, survivors);
     }
-    // Prune emptied vector shells when exclusively owned; shared owners keep shells so
-    // in-flight scans never observe structural churn (mirrors dropUnretainedNodes).
-    if (lock.owns_lock()) {
-        // use_count check must happen on the caller side for UpdateInfo itself; here the
-        // UpdateInfo object is exclusively locked, but its shared_ptr may still be shared
-        // via ColumnChunk::shareUpdateInfo. Only erase shells when no other owner can
-        // observe the vector layout. The caller guarantees exclusivity for in-memory vacuum
-        // (no active readers), so erasing is safe. Keep the erase unconditionally: empty
-        // shells carry no chain and no reader depends on their presence.
-        std::erase_if(updates, [](const auto& n) { return !n || n->info == nullptr; });
-    }
+    popTrailingEmptySlots();
     return didWork;
 }
 
