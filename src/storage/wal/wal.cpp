@@ -13,6 +13,7 @@
 #include "storage/storage_utils.h"
 #include "storage/wal/checksum_writer.h"
 #include "storage/wal/local_wal.h"
+#include <format>
 
 using namespace lbug::common;
 
@@ -54,13 +55,7 @@ void WAL::logCommittedWAL(LocalWAL& localWAL, main::ClientContext* context,
         // the block's first record, the offset WALReplayer::dryReplay reads back for it.
         *blockStart = serializer->getWriter()->getSize();
     }
-    try {
-        localWAL.inMemWriter->flush(*serializer->getWriter());
-    } catch (const std::exception& e) {
-        failWriteNoLock(e.what());
-    } catch (...) {
-        failWriteNoLock("unknown exception");
-    }
+    writeOrFailNoLock([&] { localWAL.inMemWriter->flush(*serializer->getWriter()); });
     DASSERT(blockStart == nullptr ||
             serializer->getWriter()->getSize() == *blockStart + localWAL.getSize());
     commitSequence = ++appendedCommitSequence;
@@ -211,34 +206,22 @@ void WAL::logAndFlushCheckpointToFrozen(main::ClientContext* context) {
     auto frozenSerializer = std::make_unique<Serializer>(std::move(writer));
     bufferedWriter.setFileOffset(frozenFileInfo->getFileSize());
 
-    CheckpointRecord walRecord{CHECKPOINT_BUNDLE_FORMAT_VERSION};
-    frozenSerializer->getWriter()->onObjectBegin();
-    WALRecord::serializeWithLength(*frozenSerializer, walRecord);
-    frozenSerializer->getWriter()->onObjectEnd();
+    // The frozen WAL has its own writer, written without holding the lock.
     try {
+        CheckpointRecord walRecord{CHECKPOINT_BUNDLE_FORMAT_VERSION};
+        frozenSerializer->getWriter()->onObjectBegin();
+        WALRecord::serializeWithLength(*frozenSerializer, walRecord);
+        frozenSerializer->getWriter()->onObjectEnd();
         frozenSerializer->getWriter()->flush();
-    } catch (const std::exception& e) {
-        std::unique_lock lck{mtx};
-        failWriteNoLock(e.what());
     } catch (...) {
         std::unique_lock lck{mtx};
-        failWriteNoLock("unknown exception");
+        failNoLock("write");
     }
     try {
         frozenSerializer->getWriter()->sync();
-    } catch (const std::exception& e) {
-        std::unique_lock lck{mtx};
-        poisonNoLock(std::string{"WAL sync failed: "} + e.what());
-        throw RuntimeException(
-            "WAL sync failed; database is in a panic state and refuses further writes until "
-            "restart. Original error: " +
-            std::string{e.what()});
     } catch (...) {
         std::unique_lock lck{mtx};
-        poisonNoLock("WAL sync failed: unknown exception");
-        throw RuntimeException(
-            "WAL sync failed; database is in a panic state and refuses further writes until "
-            "restart. Original error: unknown exception");
+        failNoLock("sync");
     }
 }
 
@@ -320,13 +303,7 @@ void WAL::waitForDurabilityNoLock(uint64_t commitSequence, std::unique_lock<std:
         while (durableCommitSequence < appendedCommitSequence) {
             const auto targetSequence = appendedCommitSequence;
             const auto syncParentDirectory = !activeWALDirectorySynced;
-            try {
-                serializer->getWriter()->flush();
-            } catch (const std::exception& e) {
-                failWriteNoLock(e.what());
-            } catch (...) {
-                failWriteNoLock("unknown exception");
-            }
+            writeOrFailNoLock([&] { serializer->getWriter()->flush(); });
             auto* fileToSync = fileInfo.get();
             lck.unlock();
             try {
@@ -334,19 +311,9 @@ void WAL::waitForDurabilityNoLock(uint64_t commitSequence, std::unique_lock<std:
                 if (syncParentDirectory) {
                     vfs->syncParentDirectory(walPath);
                 }
-            } catch (const std::exception& e) {
-                lck.lock();
-                poisonNoLock(std::string{"WAL sync failed: "} + e.what());
-                throw RuntimeException(
-                    "WAL sync failed; database is in a panic state and refuses further writes "
-                    "until restart. Original error: " +
-                    std::string{e.what()});
             } catch (...) {
                 lck.lock();
-                poisonNoLock("WAL sync failed: unknown exception");
-                throw RuntimeException(
-                    "WAL sync failed; database is in a panic state and refuses further writes "
-                    "until restart. Original error: unknown exception");
+                failNoLock("sync");
             }
             lck.lock();
             if (syncParentDirectory) {
@@ -362,38 +329,30 @@ void WAL::waitForDurabilityNoLock(uint64_t commitSequence, std::unique_lock<std:
 
 // NOLINTNEXTLINE(readability-make-member-function-const): semantically non-const function.
 void WAL::flushAndSyncNoLock() {
-    try {
-        serializer->getWriter()->flush();
-    } catch (const std::exception& e) {
-        failWriteNoLock(e.what());
-    } catch (...) {
-        failWriteNoLock("unknown exception");
-    }
+    writeOrFailNoLock([&] { serializer->getWriter()->flush(); });
     try {
         serializer->getWriter()->sync();
         if (!activeWALDirectorySynced) {
             vfs->syncParentDirectory(walPath);
             activeWALDirectorySynced = true;
         }
-    } catch (const std::exception& e) {
-        poisonNoLock(std::string{"WAL sync failed: "} + e.what());
-        throw RuntimeException(
-            "WAL sync failed; database is in a panic state and refuses further writes until "
-            "restart. Original error: " +
-            std::string{e.what()});
     } catch (...) {
-        poisonNoLock("WAL sync failed: unknown exception");
-        throw RuntimeException(
-            "WAL sync failed; database is in a panic state and refuses further writes until "
-            "restart. Original error: unknown exception");
+        failNoLock("sync");
     }
 }
 
-void WAL::failWriteNoLock(const std::string& error) {
-    poisonNoLock("WAL write failed: " + error);
-    throw RuntimeException("WAL write failed; database is in a panic state and refuses further "
-                           "writes until restart. Original error: " +
-                           error);
+void WAL::failNoLock(std::string_view operation) {
+    std::string error = "unknown exception";
+    try {
+        throw;
+    } catch (const std::exception& e) {
+        error = e.what();
+    } catch (...) { // NOLINT(bugprone-empty-catch): the message stays "unknown exception".
+    }
+    poisonNoLock(std::format("WAL {} failed: {}", operation, error));
+    throw RuntimeException(std::format("WAL {} failed; database is in a panic state and refuses "
+                                       "further writes until restart. Original error: {}",
+        operation, error));
 }
 
 uint64_t WAL::getFileSize() {
@@ -505,6 +464,7 @@ void WAL::initWriter(main::ClientContext* context) {
 
     // Write the databaseID at the start of the WAL if needed
     // This is used to ensure that when replaying the WAL matches the database
+    // The header fits in the new writer's empty buffer, so writing it cannot fail.
     if (fileInfo->getFileSize() == 0) {
         writeHeader(*context);
     }
@@ -520,9 +480,12 @@ void WAL::addNewWALRecordNoLock(const WALRecord& walRecord) {
     DASSERT(walRecord.type != WALRecordType::INVALID_RECORD);
     DASSERT(!inMemory);
     DASSERT(serializer != nullptr);
-    serializer->getWriter()->onObjectBegin();
-    WALRecord::serializeWithLength(*serializer, walRecord);
-    serializer->getWriter()->onObjectEnd();
+    // A record can reach the file before the flush: the writer flushes whenever its buffer fills.
+    writeOrFailNoLock([&] {
+        serializer->getWriter()->onObjectBegin();
+        WALRecord::serializeWithLength(*serializer, walRecord);
+        serializer->getWriter()->onObjectEnd();
+    });
 }
 
 WAL* WAL::Get(const main::ClientContext& context) {

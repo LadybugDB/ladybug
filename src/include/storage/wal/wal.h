@@ -3,6 +3,7 @@
 #include <condition_variable>
 #include <mutex>
 #include <string>
+#include <string_view>
 
 #include "storage/wal/wal_record.h"
 
@@ -85,9 +86,19 @@ private:
     void retireFileNoLock(const std::string& path, const char* walName);
     void throwIfPoisonedNoLock() const;
     void poisonNoLock(const std::string& reason);
-    // A failed write can leave the WAL ending in part of a record, which later appends would
-    // follow, so writes are refused until a restart, whose recovery drops that tail.
-    [[noreturn]] void failWriteNoLock(const std::string& error);
+    // Poisons the WAL and throws; call only from a catch block. A failed write can leave the WAL
+    // ending in part of a record, which later appends would follow, so writes are refused until a
+    // restart, whose recovery drops that tail.
+    [[noreturn]] void failNoLock(std::string_view operation);
+    // Every record append and flush goes through here, so none can fail without poisoning the WAL.
+    template<typename Fn>
+    void writeOrFailNoLock(Fn&& write) {
+        try {
+            write();
+        } catch (...) {
+            failNoLock("write");
+        }
+    }
     void waitForDurabilityNoLock(uint64_t commitSequence, std::unique_lock<std::mutex>& lck);
     void flushAndSyncNoLock();
     void writeHeader(main::ClientContext& context);
