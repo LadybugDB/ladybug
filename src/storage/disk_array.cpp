@@ -249,10 +249,12 @@ void DiskArrayInternal::checkpointOrRollbackInMemoryIfNecessaryNoLock(bool isChe
         return;
     }
     if (!isCheckpoint) {
-        // The checkpoint wrote the pages already on disk to shadow pages. A later checkpoint
-        // would read its changes back from them, so drop them with the rest.
-        for (page_idx_t apIdx = 0; apIdx < getNumAPs(header); apIdx++) {
-            shadowFile->clearShadowPage(fileHandle.getFileIndex(), getAPPageIdxNoLock(apIdx));
+        // The checkpoint wrote its changes to shadow pages, also of the pages it added, which
+        // headerForWriteTrx still counts and pipUpdates still lists. A later checkpoint would read
+        // its changes back from them, so drop them with the rest.
+        for (page_idx_t apIdx = 0; apIdx < getNumAPs(headerForWriteTrx); apIdx++) {
+            shadowFile->clearShadowPage(fileHandle.getFileIndex(),
+                getAPPageIdxNoLock(apIdx, TransactionType::CHECKPOINT));
         }
     }
     if (pipUpdates.updatedLastPIP.has_value()) {

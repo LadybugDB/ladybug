@@ -8990,6 +8990,36 @@ TEST_F(FailedCheckpointPKIndexTest, RetryAfterAWriteMergesKeysIntoSlotsOnce) {
     EXPECT_FALSE(conn->query("CREATE (:test {id: 15000, v: -1});")->isSuccess());
 }
 
+// The failed checkpoint adds slot pages to the index, and its rollback must drop their shadow
+// copies with those of the pages that were already there.
+TEST_F(FailedCheckpointPKIndexTest, RollbackDropsShadowsOfAddedSlotPages) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE test(id INT64 PRIMARY KEY, v INT64);")->isSuccess());
+    ASSERT_TRUE(
+        conn->query("UNWIND range(0, 299) AS i CREATE (:test {id: i, v: i});")->isSuccess());
+    checkpoint();
+    auto* storageManager = getClientContext(*conn)->getDatabase()->getStorageManager();
+    const auto* dataFH = storageManager->getDataFH();
+    const auto numPagesBefore = dataFH->getNumPages();
+    ASSERT_TRUE(
+        conn->query("UNWIND range(300, 30299) AS i CREATE (:test {id: i, v: i});")->isSuccess());
+    failCheckpointOnSerialization();
+    ASSERT_GT(dataFH->getNumPages(), numPagesBefore);
+    auto numShadowedNewPages = 0u;
+    for (auto pageIdx = numPagesBefore; pageIdx < dataFH->getNumPages(); pageIdx++) {
+        if (storageManager->getShadowFile().hasShadowPage(dataFH->getFileIndex(), pageIdx)) {
+            numShadowedNewPages++;
+        }
+    }
+    EXPECT_EQ(numShadowedNewPages, 0u);
+    checkpoint();
+    createDBAndConn();
+    checkCount(30300);
+    checkPointLookups([](int64_t k) { return std::to_string(k); }, 30000, 30300, "after reopen");
+}
+
 // A rel scan that is already in progress keeps the CSR header, persistent group, in-memory
 // groups, and CSR index it started with. A checkpoint may replace those while the scan runs.
 #ifndef __SINGLE_THREADED__
