@@ -1,0 +1,168 @@
+-DATASET CSV empty
+
+--
+
+-CASE FixedSizeListsThroughFactorizedTables
+
+-LOG NoNulls
+-STATEMENT UNWIND [3, 1, 2] AS i WITH i, [i, i + 1, i + 2] AS xs ORDER BY i SKIP 0 RETURN xs
+-CHECK_ORDER
+---- 3
+[1,2,3]
+[2,3,4]
+[3,4,5]
+
+-LOG Int64
+-STATEMENT UNWIND [3, 1, 2] AS i WITH i, [i, NULL, i * 10] AS xs ORDER BY i SKIP 0 RETURN xs
+-CHECK_ORDER
+---- 3
+[1,,10]
+[2,,20]
+[3,,30]
+
+-LOG Int8
+-STATEMENT UNWIND [3, 1, 2] AS i WITH i, [cast(i AS INT8), NULL, cast(i * 10 AS INT8)] AS xs ORDER BY i SKIP 0 RETURN xs
+-CHECK_ORDER
+---- 3
+[1,,10]
+[2,,20]
+[3,,30]
+
+-LOG Int16
+-STATEMENT UNWIND [3, 1, 2] AS i WITH i, [cast(i AS INT16), NULL] AS xs ORDER BY i SKIP 0 RETURN xs
+-CHECK_ORDER
+---- 3
+[1,]
+[2,]
+[3,]
+
+-LOG Int32
+-STATEMENT UNWIND [3, 1, 2] AS i WITH i, [NULL, cast(i AS INT32), cast(i * 10 AS INT32)] AS xs ORDER BY i SKIP 0 RETURN xs
+-CHECK_ORDER
+---- 3
+[,1,10]
+[,2,20]
+[,3,30]
+
+-LOG UInt64
+-STATEMENT UNWIND [3, 1, 2] AS i WITH i, [cast(i AS UINT64), NULL] AS xs ORDER BY i SKIP 0 RETURN xs
+-CHECK_ORDER
+---- 3
+[1,]
+[2,]
+[3,]
+
+-LOG Double
+-STATEMENT UNWIND [3, 1, 2] AS i WITH i, [i * 0.5, NULL, cast(i AS FLOAT)] AS xs ORDER BY i SKIP 0 RETURN xs
+-CHECK_ORDER
+---- 3
+[0.500000,,1.000000]
+[1.000000,,2.000000]
+[1.500000,,3.000000]
+
+-LOG Float
+-STATEMENT UNWIND [3, 1, 2] AS i WITH i, [cast(i * 0.5 AS FLOAT), NULL] AS xs ORDER BY i SKIP 0 RETURN xs
+-CHECK_ORDER
+---- 3
+[0.500000,]
+[1.000000,]
+[1.500000,]
+
+-LOG Bool
+-STATEMENT UNWIND [3, 1, 2] AS i WITH i, [i > 1, NULL, i = 3] AS xs ORDER BY i SKIP 0 RETURN xs
+-CHECK_ORDER
+---- 3
+[False,,False]
+[True,,False]
+[True,,True]
+
+-LOG Date
+-STATEMENT UNWIND [3, 1, 2] AS i WITH i, [date(concat('2020-01-0', cast(i AS STRING))), NULL] AS xs ORDER BY i SKIP 0 RETURN xs
+-CHECK_ORDER
+---- 3
+[2020-01-01,]
+[2020-01-02,]
+[2020-01-03,]
+
+-LOG Timestamp
+-STATEMENT UNWIND [3, 1, 2] AS i WITH i, [timestamp(concat('2020-01-0', cast(i AS STRING), ' 10:00:00')), NULL] AS xs ORDER BY i SKIP 0 RETURN xs
+-CHECK_ORDER
+---- 3
+[2020-01-01 10:00:00,]
+[2020-01-02 10:00:00,]
+[2020-01-03 10:00:00,]
+
+-LOG Interval
+-STATEMENT UNWIND [3, 1, 2] AS i WITH i, [NULL, interval(concat(cast(i AS STRING), ' days'))] AS xs ORDER BY i SKIP 0 RETURN xs
+-CHECK_ORDER
+---- 3
+[,1 day]
+[,2 days]
+[,3 days]
+
+-LOG Int128
+-STATEMENT UNWIND [3, 1, 2] AS i WITH i, [cast(i AS INT128) * 170141183460469231731687303715884105, NULL] AS xs ORDER BY i SKIP 0 RETURN xs
+-CHECK_ORDER
+---- 3
+[170141183460469231731687303715884105,]
+[340282366920938463463374607431768210,]
+[510423550381407695195061911147652315,]
+
+-LOG UUID
+-STATEMENT UNWIND [3, 1, 2] AS i WITH i, [uuid(concat('a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a1', cast(i AS STRING))), NULL] AS xs ORDER BY i SKIP 0 RETURN xs
+-CHECK_ORDER
+---- 3
+[a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11,]
+[a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12,]
+[a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a13,]
+
+-LOG StringFallback
+-STATEMENT UNWIND [3, 1, 2] AS i WITH i, [cast(i AS STRING), NULL, 'x'] AS xs ORDER BY i SKIP 0 RETURN xs
+-CHECK_ORDER
+---- 3
+[1,,x]
+[2,,x]
+[3,,x]
+
+-LOG NestedListFallback
+-STATEMENT UNWIND [3, 1, 2] AS i WITH i, [[i, NULL], NULL, [i * 10]] AS xs ORDER BY i SKIP 0 RETURN xs
+-CHECK_ORDER
+---- 3
+[[1,],,[10]]
+[[2,],,[20]]
+[[3,],,[30]]
+
+-LOG EmptyList
+-STATEMENT UNWIND [3, 1, 2] AS i WITH i, [] AS xs ORDER BY i SKIP 0 RETURN i, size(xs)
+-CHECK_ORDER
+---- 3
+1|0
+2|0
+3|0
+
+-LOG LongListNullMask
+-STATEMENT UNWIND [3, 1, 2] AS i WITH i, list_transform(range(1, 99), x -> CASE WHEN x % 9 = 0 THEN NULL ELSE x * i END) AS xs ORDER BY i SKIP 0 RETURN i, size(xs), size(list_filter(xs, x -> x > 0)), list_sum(xs), coalesce(xs[9], -1), xs[10], coalesce(xs[99], -1)
+-CHECK_ORDER
+---- 3
+1|99|88|4356|-1|10|-1
+2|99|88|8712|-1|20|-1
+3|99|88|13068|-1|30|-1
+
+-LOG AggregateKey
+-STATEMENT UNWIND [[1, NULL], [2, 3], [1, NULL], [NULL, NULL]] AS k RETURN k, count(*) ORDER BY count(*) DESC, k[2]
+-CHECK_ORDER
+---- 3
+[1,]|2
+[2,3]|1
+[,]|1
+
+-LOG AggregateKeyManyRows
+-STATEMENT UNWIND range(1, 3000) AS i WITH [i % 3, CASE WHEN i % 2 = 0 THEN NULL ELSE 7 END] AS k RETURN k, count(*) ORDER BY k[1], k[2]
+-CHECK_ORDER
+---- 6
+[0,7]|500
+[0,]|500
+[1,7]|500
+[1,]|500
+[2,7]|500
+[2,]|500
