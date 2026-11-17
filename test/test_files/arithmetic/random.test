@@ -54,3 +54,19 @@ True
 -STATEMENT WITH gen_random_uuid() AS u RETURN u = u
 ---- 1
 True
+
+-CASE SetseedNotAllowedInDefault
+-STATEMENT CREATE NODE TABLE T(id INT64 PRIMARY KEY, x INT32 DEFAULT setseed(0.2));
+---- error
+Binder exception: setseed is not allowed in a DEFAULT expression.
+-STATEMENT CREATE NODE TABLE T(id INT64 PRIMARY KEY);
+---- ok
+-STATEMENT ALTER TABLE T ADD y INT32 DEFAULT 1 + setseed(0.2);
+---- error
+Binder exception: setseed is not allowed in a DEFAULT expression.
+
+-CASE SetseedRunsPerRow
+-STATEMENT UNWIND [1, 2] AS x RETURN x, setseed(0.2) AS s, random() AS r;
+---- 2
+1||0.910543
+2||0.910543
