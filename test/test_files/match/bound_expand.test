@@ -25,7 +25,7 @@
 0
 
 -CASE BoundExpandLimitOuter
--LOG Literal LIMIT outer is provably small and takes the bound-expand path
+-LOG Literal LIMIT outer signals a user-constrained driving side and takes the bound-expand path
 -STATEMENT MATCH (a:person) WITH a LIMIT 3 MATCH (a)-[:knows]->(b:person) RETURN a.ID, b.ID ORDER BY a.ID, b.ID
 -CHECK_ORDER
 ---- 9
@@ -64,3 +64,14 @@
 -STATEMENT MATCH (a:person)-[:knows]->(b:person) WITH DISTINCT b MATCH (b)-[:studyAt]->(o:organisation) RETURN count(*)
 ---- 1
 3
+
+-CASE BoundExpandCostComparison
+-LOG Trusted PK-seeded outer: the worst-case fan-out beats the eliminated scan
+-STATEMENT MATCH (a:person {ID: 0})-[:knows]->(f:person) WITH f MATCH (f)-[:studyAt]->(o:organisation) RETURN count(*)
+---- 1
+1
+
+-LOG Same leg shape, full 8-row outer: the worst-case fan-out loses, hash join instead
+-STATEMENT MATCH (a:person) WITH a MATCH (a)-[:knows]->(b:person) RETURN count(*)
+---- 1
+14
