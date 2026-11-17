@@ -2,6 +2,7 @@
 
 #include <cctype>
 #include <sstream>
+#include <unordered_set>
 
 #include "catalog/catalog.h"
 #include "catalog/catalog_entry/constraint_catalog_entry.h"
@@ -104,7 +105,32 @@ std::string getSchemaCypher(ClientContext* clientContext, const std::string& exp
         ss << withIcebugStorage(entry->toCypher(relTableToCypherInfo), exportDir) << std::endl;
     }
     RelGroupToCypherInfo relGroupToCypherInfo{clientContext};
+    // A SERIAL sequence is recreated by the CREATE TABLE above, so it is restored with setval
+    // instead of being dropped and created again. A sequence that was never used is left at its
+    // initial state.
+    std::unordered_set<std::string> serialNames;
+    auto addSerialNames = [&](const TableCatalogEntry& entry) {
+        for (auto& definition : entry.getProperties()) {
+            if (definition.getType().getLogicalTypeID() == LogicalTypeID::SERIAL) {
+                serialNames.insert(
+                    SequenceCatalogEntry::getSerialName(entry.getName(), definition.getName()));
+            }
+        }
+    };
+    for (const auto& entry : catalog->getNodeTableEntries(transaction, false /* useInternal */)) {
+        addSerialNames(*entry);
+    }
+    for (const auto& entry : catalog->getRelGroupEntries(transaction, false /* useInternal */)) {
+        addSerialNames(*entry);
+    }
     for (const auto sequenceEntry : catalog->getSequenceEntries(transaction)) {
+        if (serialNames.contains(sequenceEntry->getName())) {
+            auto setval = sequenceEntry->toSetvalCypher();
+            if (!setval.empty()) {
+                ss << setval << std::endl;
+            }
+            continue;
+        }
         ss << sequenceEntry->toCypher(relGroupToCypherInfo) << std::endl;
     }
     for (auto macroName : catalog->getMacroNames(transaction)) {
