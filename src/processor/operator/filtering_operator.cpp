@@ -17,6 +17,10 @@ SelVectorOverWriter::SelVectorOverWriter() {
 void SelVectorOverWriter::restoreSelVector(DataChunkState& dataChunkState) const {
     if (prevSelVector != nullptr) {
         dataChunkState.setSelVector(prevSelVector);
+        // An operator above may have left the chunk flat, but several rows cannot be flat.
+        if (prevSelVector->getSelSize() > 1) {
+            dataChunkState.setToUnflat();
+        }
     }
 }
 

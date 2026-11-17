@@ -311,6 +311,13 @@ bool TryCastStringToTimestamp::tryCast<timestamp_sec_t>(const char* input, uint6
     timestamp_t& result);
 
 template<>
+void TryCastStringToTimestamp::cast<timestamp_ns_t>(const char* input, uint64_t len,
+    timestamp_t& result, LogicalTypeID typeID);
+// NB: no cast<timestamp_ms_t>/cast<timestamp_sec_t> specializations: getEpochMilliSeconds
+// and getEpochSeconds only divide and cannot throw, so the generic cast<T> (via tryCast<T>)
+// behaves identically. Only timestamp_ns_t needs a strict-cast specialization.
+
+template<>
 bool inline TryCastStringToTimestamp::tryCast<timestamp_tz_t>(const char* input, uint64_t len,
     timestamp_t& result) {
     return Timestamp::tryConvertTimestamp(input, len, result);

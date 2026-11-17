@@ -100,7 +100,10 @@ jobs:
 
     env:
       CIBW_PLATFORM: ${{ matrix.os }}
-      CIBW_BUILD: "cp310-* cp311-* cp312-* cp313-* cp314-*"
+      # Windows ARM64: nuget.org does not yet publish pythonarm64 3.15.x, so
+      # cibuildwheel cannot provision a cp315-win_arm64 interpreter. Build
+      # cp311-cp314 there; every other platform builds cp311-cp315.
+      CIBW_BUILD: ${{ matrix.os == 'windows' && matrix.platform == 'arm64' && 'cp311-* cp312-* cp313-* cp314-*' || 'cp311-* cp312-* cp313-* cp314-* cp315-*' }}
       LBUG_PYTHON_PRECOMPILED_DIR: ${{ github.workspace }}/precompiled-liblbug
       LBUG_PYTHON_CIBW_SOURCE_DIR: ${{ github.workspace }}/scripts/pip-package/cibw-source/sdist
 
@@ -276,6 +279,17 @@ jobs:
       - name: Install ccache (macOS)
         if: matrix.os == 'macos'
         run: brew install ccache
+
+      - name: Install OpenSSL 3 (macOS)
+        if: matrix.os == 'macos'
+        run: |
+          # Pin to OpenSSL 3: Homebrew now also ships openssl@4, which CMake
+          # would otherwise prefer. The build and all macOS packaging scripts
+          # assume OpenSSL 3 (libssl.3/libcrypto.3), enforced by the version
+          # guard in CMakeLists.txt. OPENSSL_ROOT_DIR is honored by CMake's
+          # FindOpenSSL and propagated to `make` via the environment.
+          brew list openssl@3 >/dev/null 2>&1 || brew install openssl@3
+          echo "OPENSSL_ROOT_DIR=$(brew --prefix openssl@3)" >> "$GITHUB_ENV"
 
       - name: Cache ccache directory (Linux/macOS)
         if: matrix.os != 'windows'

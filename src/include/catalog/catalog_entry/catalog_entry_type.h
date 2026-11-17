@@ -26,6 +26,8 @@ enum class CatalogEntryType : uint8_t {
     TYPE_ENTRY = 41,
     // Index entries
     INDEX_ENTRY = 42,
+    // Constraint entries (UNIQUE today; KEY / NOT NULL / CHECK reserved for later)
+    CONSTRAINT_ENTRY = 43,
     // Graph entries
     GRAPH_ENTRY = 50,
     // Dummy entry

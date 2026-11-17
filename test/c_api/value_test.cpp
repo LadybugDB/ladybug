@@ -2688,6 +2688,62 @@ TEST_F(CApiValueTest, GetStringFromDate) {
     lbug_destroy_string(str);
 }
 
+TEST_F(CApiValueTest, TimestampNsOverflowFromTm) {
+    struct tm tm {};
+    tm.tm_year = 2263 - 1900;
+    tm.tm_mon = 0;
+    tm.tm_mday = 1;
+    tm.tm_hour = 0;
+    tm.tm_min = 0;
+    tm.tm_sec = 0;
+    lbug_timestamp_ns_t timestamp_ns;
+    ASSERT_EQ(lbug_timestamp_ns_from_tm(tm, &timestamp_ns), LbugError);
+
+    tm.tm_year = 9999 - 1900;
+    ASSERT_EQ(lbug_timestamp_ns_from_tm(tm, &timestamp_ns), LbugError);
+
+    tm.tm_year = 2262 - 1900;
+    ASSERT_EQ(lbug_timestamp_ns_from_tm(tm, &timestamp_ns), LbugSuccess);
+}
+
+TEST_F(CApiValueTest, TimestampFromTmEpochMinusOneSecond) {
+    struct tm tm {};
+    tm.tm_year = 69;
+    tm.tm_mon = 11;
+    tm.tm_mday = 31;
+    tm.tm_hour = 23;
+    tm.tm_min = 59;
+    tm.tm_sec = 59;
+    lbug_timestamp_t timestamp;
+    ASSERT_EQ(lbug_timestamp_from_tm(tm, &timestamp), LbugSuccess);
+    ASSERT_EQ(timestamp.value, -1000000);
+}
+
+TEST_F(CApiValueTest, DateFromTmPre1970FloorDivision) {
+    struct tm tm {};
+    tm.tm_year = 69;
+    tm.tm_mon = 11;
+    tm.tm_mday = 31;
+    tm.tm_hour = 12;
+    tm.tm_min = 0;
+    tm.tm_sec = 0;
+    lbug_date_t date;
+    ASSERT_EQ(lbug_date_from_tm(tm, &date), LbugSuccess);
+    ASSERT_EQ(date.days, -1);
+}
+
+TEST_F(CApiValueTest, TimestampNsToTmNegativeValueFloorDivision) {
+    lbug_timestamp_ns_t timestamp_ns = lbug_timestamp_ns_t{-1};
+    struct tm tm {};
+    ASSERT_EQ(lbug_timestamp_ns_to_tm(timestamp_ns, &tm), LbugSuccess);
+    ASSERT_EQ(tm.tm_year, 69);
+    ASSERT_EQ(tm.tm_mon, 11);
+    ASSERT_EQ(tm.tm_mday, 31);
+    ASSERT_EQ(tm.tm_hour, 23);
+    ASSERT_EQ(tm.tm_min, 59);
+    ASSERT_EQ(tm.tm_sec, 59);
+}
+
 TEST_F(CApiValueTest, GetDifftimeFromInterval) {
     lbug_interval_t interval = lbug_interval_t{36, 2, 46920000000};
     double difftime;

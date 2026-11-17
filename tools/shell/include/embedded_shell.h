@@ -15,6 +15,16 @@ struct ShellConfig {
     uint32_t maxPrintWidth = 0;
     std::unique_ptr<Printer> printer = std::make_unique<BoxPrinter>();
     bool stats = true;
+    // Agent mode (compact Markdown, JSON errors, capped results). See agent_mode.h.
+    bool agentMode = false;
+    // Name of the agent-identifying env var ("" if forced via flag/env).
+    std::string agentEnv;
+    // True when agent mode turned on by automatic detection (env + pipe).
+    bool agentAutoDetected = false;
+    // True when --agent/--no-agent was passed (suppresses the failure hint).
+    bool agentFlagGiven = false;
+    // True when stdout is a terminal.
+    bool stdoutIsTTY = false;
 };
 
 /**
@@ -85,6 +95,33 @@ private:
     std::unique_ptr<Printer> printer;
     bool stats;
     uint64_t catalogVersion;
+    // Agent mode state.
+    bool agentMode;
+    std::string agentEnv;
+    bool agentAutoDetected;
+    bool agentFlagGiven;
+    bool stdoutIsTTY;
+    bool modeExplicitlySet = false;
+    // "auto" (follow agent mode), "compact" or "box".
+    std::string explainFormat = "auto";
+    int64_t agentMaxRows = 1000;
+    int64_t agentMaxBytes = 10000;
+    int64_t agentMaxCellWidth = 500;
+    bool hadError = false;
+
+    void printAgentExecutionResult(QueryResult& queryResult) const;
+
+    void printCompactExplain(QueryResult& queryResult) const;
+
+    void printAgentStatus() const;
+
+    void printAgentHelp() const;
+
+    void printAgentTables();
+
+    void setAgentCap(const std::string& name, const std::string& value);
+
+    void setExplainFormat(const std::string& format);
 };
 
 } // namespace main

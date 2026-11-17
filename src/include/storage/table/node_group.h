@@ -219,6 +219,9 @@ public:
     // pinned checkpoint. Used to force a reclaiming checkpoint after the readers drain,
     // even when the table epoch is unchanged.
     bool hasRetainedHorizon() const;
+    // Folds committed update chains below `horizon` into in-memory bases (see
+    // ColumnChunk::vacuumInMemoryUpdates). Returns true when any chain data was reclaimed.
+    virtual bool vacuumInMemoryUpdates(common::transaction_t horizon);
 
     template<class TARGET>
     TARGET& cast() {
@@ -233,6 +236,9 @@ public:
         common::row_idx_t rowIdxInGroup) const;
     bool isVisibleNoLock(const transaction::Transaction* transaction,
         common::row_idx_t rowIdxInGroup) const;
+    // Rows from the start of the group that isVisible accepts, counted in whole vectors. A vector
+    // without version info costs one check; one with deletions is read row by row.
+    common::row_idx_t getNumLeadingVisibleRows(const transaction::Transaction* transaction) const;
     bool isDeleted(const transaction::Transaction* transaction,
         common::offset_t offsetInGroup) const;
     bool isInserted(const transaction::Transaction* transaction,

@@ -767,3 +767,11 @@ Conversion exception: Could not convert epoch seconds to TIMESTAMP
 -STATEMENT return epoch_ms(to_epoch_ms(timestamp('2010-03-09 13:02:11')));
 ---- 1
 2010-03-09 13:02:11
+
+-LOG EpochMsOverflow
+-STATEMENT return epoch_ms(9223372036854775807)
+---- error
+Overflow exception: Value 9223372036854775807 * 1000 is not within INT64 range.
+-STATEMENT return epoch_ms(-9223372036854775808)
+---- error
+Overflow exception: Value -9223372036854775808 * 1000 is not within INT64 range.

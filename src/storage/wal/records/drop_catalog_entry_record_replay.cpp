@@ -29,6 +29,9 @@ void WALReplayer::replayDropCatalogEntryRecord(const WALRecord& walRecord) const
     case CatalogEntryType::SEQUENCE_ENTRY: {
         catalog->dropSequence(transaction, entryID);
     } break;
+    case CatalogEntryType::CONSTRAINT_ENTRY: {
+        catalog->dropConstraintByOID(transaction, entryID);
+    } break;
     case CatalogEntryType::INDEX_ENTRY: {
         // Mirror the live DROP path, which removes the storage-side holder in
         // addition to the catalog entry. Without this, a crash-interrupted DROP

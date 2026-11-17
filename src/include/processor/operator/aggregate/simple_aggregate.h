@@ -37,17 +37,16 @@ public:
 
     // Re-arm this shared state for another execution of the same cached physical plan: the
     // object is aliased across clones of that plan (copy() passes the shared_ptr through),
-    // so per-execution state must be reset before each execution. Distinct partitions are
-    // consumed by finalizePartitions during the previous execution and are rebuilt here.
-    void resetForReuse(storage::MemoryManager* memoryManager,
-        const std::vector<AggregateInfo>& aggInfos);
+    // so per-execution state must be reset before each execution, including the distinct
+    // partitions' queues and states.
+    void resetForReuse();
 
     function::AggregateState* getAggregateState(uint64_t idx) {
         return globalAggregateStates[idx].get();
     }
 
-    // Merges data from the queues into the distinct hash tables
-    // Can be run concurrently (but only after all data has been written into the queues)
+    // Folds each partition's distinct values into its aggregate state. Can run concurrently, once
+    // all values have been appended.
     void finalizePartitions(storage::MemoryManager* memoryManager,
         const std::vector<AggregateInfo>& aggInfos);
 
@@ -56,7 +55,6 @@ public:
 protected:
     struct Partition {
         struct DistinctData {
-            std::unique_ptr<AggregateHashTable> hashTable;
             std::unique_ptr<HashTableQueue> queue;
             std::unique_ptr<function::AggregateState> state;
         };
@@ -127,12 +125,16 @@ private:
     void computeAggregate(function::AggregateFunction* function, AggregateInput* input,
         function::AggregateState* state, common::InMemOverflowBuffer& overflowBuffer);
 
+    std::unique_ptr<PartitioningAggregateHashTable> createDistinctHashTable(size_t funcIdx,
+        storage::MemoryManager& memoryManager);
+
     SimpleAggregateSharedState& getSharedState() {
         return common::dynamic_cast_checked<SimpleAggregateSharedState&>(*sharedState.get());
     }
 
 private:
     std::vector<std::unique_ptr<function::AggregateState>> localAggregateStates;
+    // Per distinct function, created on this thread's first input tuple.
     std::vector<std::unique_ptr<PartitioningAggregateHashTable>> distinctHashTables;
 };
 
@@ -159,7 +161,7 @@ public:
     void finalizeInternal(ExecutionContext* context) override;
 
     void prepareForReuse(storage::MemoryManager* memoryManager) override {
-        sharedState->resetForReuse(memoryManager, aggInfos);
+        sharedState->resetForReuse();
         PhysicalOperator::prepareForReuse(memoryManager);
     }
 

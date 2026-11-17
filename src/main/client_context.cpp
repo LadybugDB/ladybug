@@ -9,6 +9,7 @@
 #include "common/exception/connection.h"
 #include "common/exception/runtime.h"
 #include "common/file_system/virtual_file_system.h"
+#include "common/path_utils.h"
 #include "common/random_engine.h"
 #include "common/string_utils.h"
 #include "common/task_system/progress_bar.h"
@@ -72,7 +73,8 @@ ActiveQuery::ActiveQuery() : interrupted{false} {}
 void ActiveQuery::reset() {
     interrupted = false;
     queryID.reset();
-    timer = Timer();
+    // The timer keeps its start time until startTimer() restarts it: a thread waiting on a task
+    // reads it, and a zeroed start would look like a long-expired deadline.
 }
 
 ClientContext::ClientContext(Database* database) : localDatabase{database} {
@@ -250,7 +252,7 @@ void ClientContext::addDBDirToFileSearchPath(const std::string& dbPath) {
     if (dirPath.empty()) {
         dirPath = expandedPath[slashPos] == '\\' ? "\\" : "/";
     } else {
-        dirPath = std::filesystem::absolute(dirPath).lexically_normal().string();
+        dirPath = PathUtils::absoluteLexicallyNormalUTF8(dirPath);
     }
     // Prepend to fileSearchPath if not already present
     auto& fileSearchPath = clientConfig.fileSearchPath;

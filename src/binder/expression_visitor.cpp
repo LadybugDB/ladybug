@@ -9,7 +9,6 @@
 #include "binder/expression/subquery_expression.h"
 #include "common/exception/not_implemented.h"
 #include "function/arithmetic/vector_arithmetic_functions.h"
-#include "function/sequence/sequence_functions.h"
 #include "function/uuid/vector_uuid_functions.h"
 
 using namespace lbug::common;
@@ -301,7 +300,8 @@ bool ConstantExpressionVisitor::isConstant(const Expression& expr) {
 
 bool ConstantExpressionVisitor::visitFunction(const Expression& expr) {
     auto& funcExpr = expr.constCast<ScalarFunctionExpression>();
-    if (funcExpr.getFunction().name == function::NextValFunction::name) {
+    // nextval and setval change state, so they must run, not fold.
+    if (!funcExpr.getFunction().isReadOnly) {
         return false;
     }
     if (funcExpr.getFunction().name == function::GenRandomUUIDFunction::name) {

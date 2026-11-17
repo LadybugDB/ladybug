@@ -256,6 +256,9 @@ void IceDiskRelTable::loadIndptrData(Transaction* transaction) const {
 }
 
 bool IceDiskRelTable::scanInternal(Transaction* transaction, TableScanState& scanState) {
+    if (scanState.source == TableScanSource::NONE) {
+        return false;
+    }
     auto& iceDiskScanState = scanState.cast<ColumnarRelTableScanState>();
 
     if (layout == IceDiskRelTableLayout::FLAT) {
@@ -395,6 +398,7 @@ bool IceDiskRelTable::scanCSR(Transaction* transaction,
         return true;
     } else {
         // No data found
+        iceDiskScanState.source = TableScanSource::NONE;
         iceDiskScanState.outState->getSelVectorUnsafe().setToFiltered(0);
         return false;
     }
@@ -505,6 +509,7 @@ bool IceDiskRelTable::scanFlat(Transaction* transaction,
         return true;
     }
 
+    iceDiskScanState.source = TableScanSource::NONE;
     iceDiskScanState.outState->getSelVectorUnsafe().setToFiltered(0);
     return false;
 }

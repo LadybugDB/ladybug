@@ -1,5 +1,8 @@
 #include "catalog/catalog_entry/sequence_catalog_entry.h"
 
+#include <limits>
+#include <optional>
+
 #include "binder/ddl/bound_create_sequence_info.h"
 #include "common/exception/catalog.h"
 #include "common/exception/overflow.h"
@@ -29,6 +32,13 @@ int64_t SequenceCatalogEntry::currVal() {
             "\" is not yet defined. To define the sequence, call nextval first.");
     }
     return sequenceData.currVal;
+}
+
+// usageCount is only compared with 0, so it saturates instead of wrapping back to "unused".
+static uint64_t addUsage(uint64_t usageCount, uint64_t count) {
+    return count > std::numeric_limits<uint64_t>::max() - usageCount ?
+               std::numeric_limits<uint64_t>::max() :
+               usageCount + count;
 }
 
 void SequenceCatalogEntry::nextValNoLock() {
@@ -65,7 +75,39 @@ void SequenceCatalogEntry::nextValNoLock() {
         }
     }
     sequenceData.currVal = next;
-    sequenceData.usageCount++;
+    sequenceData.usageCount = addUsage(sequenceData.usageCount, 1);
+}
+
+// Moves the sequence `count` nextval calls ahead in O(1), so that replaying a large setval doesn't
+// take `count` steps. Returns false, changing nothing, when the result would leave the bounds; the
+// caller then steps with nextValNoLock, which wraps a CYCLE sequence or reports the bound error.
+// Within the bounds no step on the way wraps, so a CYCLE sequence advances the same way.
+bool SequenceCatalogEntry::tryAdvanceNoLock(uint64_t count) {
+    if (count == 0) {
+        return false;
+    }
+    const auto steps = sequenceData.usageCount > 0 ? count : count - 1;
+    const auto from = sequenceData.usageCount > 0 ? sequenceData.currVal : sequenceData.startValue;
+    if (from < sequenceData.minValue || from > sequenceData.maxValue) {
+        return false;
+    }
+    // Unsigned arithmetic is exact here: `from` and both bounds are int64 values.
+    const auto step = sequenceData.increment > 0 ?
+                          static_cast<uint64_t>(sequenceData.increment) :
+                          uint64_t{0} - static_cast<uint64_t>(sequenceData.increment);
+    const auto room =
+        sequenceData.increment > 0 ?
+            static_cast<uint64_t>(sequenceData.maxValue) - static_cast<uint64_t>(from) :
+            static_cast<uint64_t>(from) - static_cast<uint64_t>(sequenceData.minValue);
+    if (steps > room / step) {
+        return false;
+    }
+    const auto delta = steps * step;
+    sequenceData.currVal =
+        static_cast<int64_t>(sequenceData.increment > 0 ? static_cast<uint64_t>(from) + delta :
+                                                          static_cast<uint64_t>(from) - delta);
+    sequenceData.usageCount = addUsage(sequenceData.usageCount, count);
+    return true;
 }
 
 // referenced from DuckDB
@@ -75,8 +117,10 @@ void SequenceCatalogEntry::nextKVal(transaction::Transaction* transaction, const
     {
         std::lock_guard lck(mtx);
         rollbackData = SequenceRollbackData{sequenceData.usageCount, sequenceData.currVal};
-        for (auto i = 0ul; i < count; i++) {
-            nextValNoLock();
+        if (!tryAdvanceNoLock(count)) {
+            for (auto i = 0ul; i < count; i++) {
+                nextValNoLock();
+            }
         }
     }
     transaction->pushSequenceChange(this, count, rollbackData);
@@ -95,6 +139,57 @@ void SequenceCatalogEntry::nextKVal(transaction::Transaction* transaction, const
         }
     }
     transaction->pushSequenceChange(this, count, rollbackData);
+}
+
+int64_t SequenceCatalogEntry::setVal(transaction::Transaction* transaction, int64_t value) {
+    // Logged as nextval calls: a fresh sequence's first use (which returns its start value) as
+    // one change, then the steps from there as another, so neither count can exceed uint64.
+    std::optional<SequenceRollbackData> firstUse;
+    SequenceRollbackData rollbackData{};
+    uint64_t steps = 0;
+    {
+        std::lock_guard lck(mtx);
+        if (value < sequenceData.minValue || value > sequenceData.maxValue) {
+            throw CatalogException(
+                std::format("setval: value {} is out of bounds for sequence \"{}\" ({}..{})", value,
+                    name, sequenceData.minValue, sequenceData.maxValue));
+        }
+        const auto usedBefore = sequenceData.usageCount > 0;
+        const auto from = usedBefore ? sequenceData.currVal : sequenceData.startValue;
+        const auto forward = sequenceData.increment > 0 ? value >= from : value <= from;
+        // Unsigned differences are exact here: both values lie within the int64 bounds.
+        const auto distance = sequenceData.increment > 0 ?
+                                  static_cast<uint64_t>(value) - static_cast<uint64_t>(from) :
+                                  static_cast<uint64_t>(from) - static_cast<uint64_t>(value);
+        const auto step = sequenceData.increment > 0 ?
+                              static_cast<uint64_t>(sequenceData.increment) :
+                              uint64_t{0} - static_cast<uint64_t>(sequenceData.increment);
+        if (!forward || distance % step != 0) {
+            throw CatalogException(std::format(
+                "setval: sequence \"{}\" can only move forward to a value it would produce; {} "
+                "is not reachable from {} by increment {}",
+                name, value, from, sequenceData.increment));
+        }
+        steps = distance / step;
+        if (!usedBefore) {
+            firstUse = SequenceRollbackData{sequenceData.usageCount, sequenceData.currVal};
+            sequenceData.usageCount = 1;
+        }
+        if (steps > 0) {
+            rollbackData = SequenceRollbackData{sequenceData.usageCount, sequenceData.currVal};
+            // Equivalent to `steps` calls of nextValNoLock: the target is in bounds and ahead of
+            // the current value, so none of them wraps or overflows.
+            sequenceData.currVal = value;
+            sequenceData.usageCount = addUsage(sequenceData.usageCount, steps);
+        }
+    }
+    if (firstUse.has_value()) {
+        transaction->pushSequenceChange(this, 1, *firstUse);
+    }
+    if (steps > 0) {
+        transaction->pushSequenceChange(this, static_cast<int64_t>(steps), rollbackData);
+    }
+    return value;
 }
 
 void SequenceCatalogEntry::rollbackVal(const uint64_t& usageCount, const int64_t& currVal) {

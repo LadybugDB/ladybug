@@ -18,6 +18,7 @@
 #include "planner/join_order/cost_model.h"
 #include "planner/operator/logical_filter.h"
 #include "planner/operator/logical_intersect.h"
+#include "planner/operator/logical_path_property_probe.h"
 #include "planner/operator/logical_plan_util.h"
 #include "planner/operator/scan/logical_count_rel_table.h"
 #include "planner/operator/scan/logical_dummy_scan.h"
@@ -685,6 +686,73 @@ TEST_F(OptimizerTest, LookupJoinCountsFlatOuterRows) {
     EXPECT_EQ(lookup->getCardinality(), 10u * 20);
 }
 
+static planner::RecursiveJoinType getPathTracking(const planner::LogicalOperator* op) {
+    if (op->getOperatorType() == planner::LogicalOperatorType::PATH_PROPERTY_PROBE) {
+        return op->constCast<planner::LogicalPathPropertyProbe>().getJoinType();
+    }
+    for (auto i = 0u; i < op->getNumChildren(); ++i) {
+        if (op->getChild(i)->getOperatorType() != planner::LogicalOperatorType::EMPTY_RESULT) {
+            return getPathTracking(op->getChild(i).get());
+        }
+    }
+    throw std::runtime_error("no path property probe in the plan");
+}
+
+// In the query part that matches the path, LENGTH(p) reads the recursive rel's length, so the
+// search returns lengths without tracking paths. After WITH p the rel is out of scope, and the
+// length comes from the path value.
+TEST_F(OptimizerTest, PathLengthSkipsPathsWhereRelIsBound) {
+    auto plan = getRoot("MATCH p = (a:person)-[:knows* SHORTEST 1..3]-(b:person) WHERE a.ID = 0 "
+                        "RETURN b.ID, length(p);");
+    EXPECT_EQ(getPathTracking(plan->getLastOperator().get()),
+        planner::RecursiveJoinType::TRACK_NONE);
+    plan = getRoot("MATCH p = (a:person)-[:knows* SHORTEST 1..3]-(b:person) WHERE a.ID = 0 "
+                   "WITH p RETURN length(p);");
+    EXPECT_EQ(getPathTracking(plan->getLastOperator().get()),
+        planner::RecursiveJoinType::TRACK_PATH);
+}
+
+static const planner::LogicalOperator* findLookupJoin(const planner::LogicalOperator* op) {
+    if (op->getOperatorType() == planner::LogicalOperatorType::QUERY_PRIMARY_KEY_LOOKUP) {
+        return op;
+    }
+    for (auto i = 0u; i < op->getNumChildren(); ++i) {
+        if (auto* lookup = findLookupJoin(op->getChild(i).get())) {
+            return lookup;
+        }
+    }
+    return nullptr;
+}
+
+// IC7's shape: one lkc_src node reaches 100 lkc_mid nodes, each with 20 edges to lkc_target. The
+// lookup on t probes once per mid and target, 2,000 flat rows, over the cap; the last hop alone
+// gives 20, and a scan of lkc_target reads 5,000 rows.
+TEST_F(OptimizerTest, LookupJoinCountsEarlierHopFanOut) {
+    if (common::DEFAULT_EXTEND_DIRECTION != common::ExtendDirection::BOTH) {
+        GTEST_SKIP();
+    }
+    constexpr auto cap = common::PlannerKnobs::LOOKUP_JOIN_MAX_OUTER_CARDINALITY;
+    static_assert(20 <= cap && 100 * 20 > cap && 100 * 20 < 5000);
+    for (auto query : {"CREATE NODE TABLE lkc_src(id INT64, PRIMARY KEY(id));",
+             "CREATE NODE TABLE lkc_mid(id INT64, PRIMARY KEY(id));",
+             "CREATE NODE TABLE lkc_target(id INT64, name STRING, PRIMARY KEY(id));",
+             "CREATE REL TABLE lkc_to_mid(FROM lkc_src TO lkc_mid);",
+             "CREATE REL TABLE lkc_to_target(FROM lkc_mid TO lkc_target);",
+             "CREATE (:lkc_src {id: 0});", "UNWIND range(0, 99) AS i CREATE (:lkc_mid {id: i});",
+             "UNWIND range(0, 4999) AS i CREATE (:lkc_target {id: i, name: CAST(i AS STRING)});",
+             "MATCH (s:lkc_src), (m:lkc_mid) CREATE (s)-[:lkc_to_mid]->(m);",
+             "MATCH (m:lkc_mid), (t:lkc_target) WHERE t.id < 2000 AND t.id % 100 = m.id "
+             "CREATE (m)-[:lkc_to_target]->(t);"}) {
+        auto result = conn->query(query);
+        ASSERT_TRUE(result->isSuccess()) << query << ": " << result->getErrorMessage();
+    }
+    auto plan = getRoot("MATCH (s:lkc_src {id: 0})-[:lkc_to_mid]->(m:lkc_mid)-[:lkc_to_target]->"
+                        "(t:lkc_target) RETURN t.name;");
+    EXPECT_EQ(findLookupJoin(plan->getLastOperator().get()), nullptr);
+    EXPECT_TRUE(
+        hasOperatorType(plan->getLastOperator().get(), planner::LogicalOperatorType::HASH_JOIN));
+}
+
 TEST_F(OptimizerTest, PlanUndirectedInnerJoin) {
     if (common::DEFAULT_EXTEND_DIRECTION != common::ExtendDirection::BOTH) {
         GTEST_SKIP();
@@ -790,6 +858,16 @@ TEST_F(OptimizerTest, CountRelTableOptimizer) {
     auto plan7 = getRoot(q7);
     ASSERT_FALSE(hasOperatorType(plan7->getLastOperator().get(),
         planner::LogicalOperatorType::COUNT_REL_TABLE));
+
+    // length() of a path from a plain MATCH is a constant, so the filter folds away.
+    auto qLength = "MATCH p = (a:opt_user)-[e:opt_follows]->(b:opt_user) WHERE length(p) = 1 "
+                   "RETURN COUNT(*);";
+    auto planLength = getRoot(qLength);
+    ASSERT_TRUE(hasOperatorType(planLength->getLastOperator().get(),
+        planner::LogicalOperatorType::COUNT_REL_TABLE));
+    auto resultLength = conn->query(qLength);
+    ASSERT_TRUE(resultLength->isSuccess());
+    ASSERT_EQ(resultLength->getNext()->getValue(0)->getValue<int64_t>(), 2);
 
     // SUM(1) uses COUNT_REL_TABLE directly while preserving SUM's INT128 result type.
     auto qSumOne = "MATCH (a:opt_user)-[e:opt_follows]->(b:opt_user) RETURN SUM(1) AS total;";
@@ -1143,6 +1221,30 @@ TEST_F(OptimizerTest, CountRelTableOptimizer) {
     auto tupleGapTopK = resultGapTopK->getNext();
     ASSERT_EQ(tupleGapTopK->getValue(0)->getValue<int64_t>(), 1001);
     ASSERT_EQ(tupleGapTopK->getValue(1)->getValue<int64_t>(), 2);
+}
+
+TEST_F(OptimizerTest, CountExtendChainWithParameterIndexScan) {
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE ix_user(ID INT64, name STRING, PRIMARY KEY(ID));")
+                    ->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE REL TABLE ix_follows(FROM ix_user TO ix_user);")->isSuccess());
+    ASSERT_TRUE(conn->query("UNWIND range(1, 10) AS i "
+                            "CREATE (:ix_user {ID: i, name: 'n' + cast(i AS STRING)});")
+                    ->isSuccess());
+    ASSERT_TRUE(conn->query("MATCH (a:ix_user), (b:ix_user) WHERE b.ID = a.ID + 1 "
+                            "CREATE (a)-[:ix_follows]->(b);")
+                    ->isSuccess());
+    ASSERT_TRUE(
+        conn->query("CREATE ART INDEX ix_user_name FOR (u:ix_user) ON (u.name);")->isSuccess());
+    auto unrestricted = "MATCH (u:ix_user)-[:ix_follows]->()-[:ix_follows]->() RETURN count(*);";
+    ASSERT_TRUE(hasOperatorType(getRoot(unrestricted)->getLastOperator().get(),
+        planner::LogicalOperatorType::COUNT_EXTEND_CHAIN));
+    // Unlike a literal key, a parameter key adds no zone-map predicate to the index scan.
+    auto prepared = conn->prepare("MATCH (u:ix_user)-[:ix_follows]->()-[:ix_follows]->() "
+                                  "WHERE u.name = $name RETURN count(*);");
+    auto result =
+        conn->execute(prepared.get(), std::make_pair(std::string("name"), std::string("n1")));
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 1);
 }
 
 TEST_F(StatsOptimizerTest, FilterPushDownOrdersMostSelectivePredicateFirst) {
@@ -2076,6 +2178,249 @@ TEST_F(OptimizerTest, UnwindDedupOnlyWhereMergeDropsTheRows) {
                           "WITH r.id AS id, r.v AS v MERGE (a:DedupA {id: id}) RETURN v"));
     EXPECT_TRUE(hasDedup("UNWIND [{s: 1, d: 2}, {s: 1, d: 2}] AS r WITH r.s AS s, r.d AS d "
                          "MATCH (a:DedupA {id: s}), (b:DedupA {id: d}) MERGE (a)-[:DedupR]->(b)"));
+}
+
+// The two fork arms (p->x->z and p->y->w) have different cardinalities, but without
+// ANALYZE stats the cost model ties. Join enumeration iterates over unordered_set /
+// unordered_map (getRelNbrPositions, getNbrSubgraphs, DPLevel maps), whose order varies
+// with the STL (libstdc++ vs libc++ vs MSVC). All valid single-chain interleavings
+// (x before z, y before w) are therefore observed across platforms, e.g. Linux gives
+// E(z)E(w)E(x)E(y), macOS E(z)E(w)E(y)E(x), Windows E(z)E(x)E(w)E(y). Assert the
+// shape (one linear extend chain, no HJ/CP/Intersect) and the arm dependencies
+// instead of one exact string.
+static void expectSingleForkExtendChain(const std::string& encodedPlan, bool expectFilter) {
+    EXPECT_TRUE(encodedPlan.find("HJ(") == std::string::npos) << encodedPlan;
+    EXPECT_TRUE(encodedPlan.find("CP()") == std::string::npos) << encodedPlan;
+    EXPECT_TRUE(encodedPlan.find("I(") == std::string::npos) << encodedPlan;
+    auto countOccurrences = [](const std::string& haystack, const std::string& needle) {
+        size_t count = 0;
+        for (size_t pos = haystack.find(needle); pos != std::string::npos;
+             pos = haystack.find(needle, pos + 1)) {
+            ++count;
+        }
+        return count;
+    };
+    EXPECT_EQ(countOccurrences(encodedPlan, "E("), 4u) << encodedPlan;
+    EXPECT_TRUE(encodedPlan.find("IndexScan(p)") != std::string::npos) << encodedPlan;
+    if (expectFilter) {
+        EXPECT_EQ(countOccurrences(encodedPlan, "Filter()"), 1u) << encodedPlan;
+    } else {
+        EXPECT_EQ(countOccurrences(encodedPlan, "Filter()"), 0u) << encodedPlan;
+    }
+    // In the top-down encoding, an outer extend appears earlier, so x->z becomes
+    // pos(E(z)) < pos(E(x)) and y->w becomes pos(E(w)) < pos(E(y)).
+    const auto posX = encodedPlan.find("E(x)");
+    const auto posY = encodedPlan.find("E(y)");
+    const auto posZ = encodedPlan.find("E(z)");
+    const auto posW = encodedPlan.find("E(w)");
+    EXPECT_TRUE(posX != std::string::npos && posY != std::string::npos &&
+                posZ != std::string::npos && posW != std::string::npos)
+        << encodedPlan;
+    if (posX != std::string::npos && posZ != std::string::npos) {
+        EXPECT_LT(posZ, posX) << encodedPlan;
+    }
+    if (posY != std::string::npos && posW != std::string::npos) {
+        EXPECT_LT(posW, posY) << encodedPlan;
+    }
+}
+
+// match/fork_extend.test covers restoring a bound batch only while the fork keeps plans like these:
+// the last extend reads a chunk produced further down than its child.
+TEST_F(OptimizerTest, ForkArmsPlannedAsOneExtendChain) {
+    for (const auto* statement : {
+             "CREATE NODE TABLE P(id INT64 PRIMARY KEY);",
+             "CREATE NODE TABLE X(id INT64 PRIMARY KEY);",
+             "CREATE NODE TABLE Y(id INT64 PRIMARY KEY);",
+             "CREATE NODE TABLE Z(id INT64 PRIMARY KEY);",
+             "CREATE NODE TABLE W(id INT64 PRIMARY KEY);",
+             "CREATE REL TABLE p_x(FROM P TO X, w INT64);",
+             "CREATE REL TABLE p_y(FROM P TO Y, w INT64);",
+             "CREATE REL TABLE x_z(FROM X TO Z);",
+             "CREATE REL TABLE y_w(FROM Y TO W);",
+             "CREATE (:P {id: 1});",
+             "UNWIND range(1, 4) AS i CREATE (:X {id: i}), (:Z {id: i});",
+             "UNWIND range(1, 6) AS i CREATE (:Y {id: i}), (:W {id: i});",
+             "MATCH (p:P), (x:X) CREATE (p)-[:p_x {w: x.id}]->(x);",
+             "MATCH (p:P), (y:Y) CREATE (p)-[:p_y {w: y.id}]->(y);",
+             "MATCH (x:X), (z:Z) WHERE x.id = z.id CREATE (x)-[:x_z]->(z);",
+             "MATCH (y:Y), (w:W) WHERE y.id = w.id CREATE (y)-[:y_w]->(w);",
+         }) {
+        ASSERT_TRUE(conn->query(statement)->isSuccess()) << statement;
+    }
+    auto query = "MATCH (p:P {id: 1})-[:p_x]->(x:X)-[:x_z]->(z:Z), (p)-[:p_y]->(y:Y)-[:y_w]->(w:W) "
+                 "RETURN count(*);";
+    expectSingleForkExtendChain(getEncodedPlan(query), false);
+
+    auto prepared = conn->prepare(query);
+    ASSERT_TRUE(prepared->isSuccess()) << prepared->getErrorMessage();
+    for (auto i = 0; i < 2; ++i) {
+        auto result = conn->execute(prepared.get());
+        ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+        ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 24);
+    }
+
+    auto crossArmQuery = "MATCH (p:P {id: 1})-[r1:p_x]->(x:X)-[:x_z]->(z:Z), "
+                         "(p)-[r2:p_y]->(y:Y)-[:y_w]->(w:W) "
+                         "WHERE r1.w + r2.w >= 9 RETURN count(*);";
+    expectSingleForkExtendChain(getEncodedPlan(crossArmQuery), true);
+    auto preparedCrossArm = conn->prepare(crossArmQuery);
+    ASSERT_TRUE(preparedCrossArm->isSuccess()) << preparedCrossArm->getErrorMessage();
+    for (auto i = 0; i < 2; ++i) {
+        auto result = conn->execute(preparedCrossArm.get());
+        ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+        ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 3);
+    }
+
+    for (const auto* statement : {
+             "UNWIND range(5, 3000) AS i CREATE (:X {id: i});",
+             "MATCH (x:X {id: 4}), (z:Z) WHERE z.id <= 2 CREATE (x)-[:x_z]->(z);",
+         }) {
+        ASSERT_TRUE(conn->query(statement)->isSuccess()) << statement;
+    }
+    expectSingleForkExtendChain(getEncodedPlan("MATCH (p:P {id: 1})-[r:p_x]->(x:X)-[:x_z]->(z:Z), "
+                                               "(p)-[:p_y]->(y:Y)-[:y_w]->(w:W) "
+                                               "WHERE r.w % 2 = 0 RETURN count(*);"),
+        true);
+}
+
+// match/fork_extend.test's *AfterMultiTableExtendRefill cases need the first extend's chunk
+// refilled below the second extend. Ten P rows fail the filter, one of them with 200 edges: a plan
+// that scans m first pays for those edges and the chain, which filters p first, does not. With
+// one P row failing, the two plans tie.
+TEST_F(OptimizerTest, MultiTableExtendOverMultiTableExtend) {
+    for (const auto* statement : {
+             "CREATE NODE TABLE P(id INT64 PRIMARY KEY);",
+             "CREATE NODE TABLE X(id INT64 PRIMARY KEY);",
+             "CREATE NODE TABLE Y(id INT64 PRIMARY KEY);",
+             "CREATE NODE TABLE Z(id INT64 PRIMARY KEY);",
+             "CREATE NODE TABLE W(id INT64 PRIMARY KEY);",
+             "CREATE REL TABLE p_x(FROM P TO X, w INT64);",
+             "CREATE REL TABLE p_y(FROM P TO Y, w INT64);",
+             "CREATE REL TABLE x_z(FROM X TO Z);",
+             "CREATE REL TABLE y_w(FROM Y TO W);",
+             "CREATE REL TABLE a(FROM P TO X, w INT32);",
+             "CREATE REL TABLE b(FROM P TO Y, w INT64);",
+             "UNWIND range(-9, 2) AS i CREATE (:P {id: i});",
+             "UNWIND range(1, 4) AS i CREATE (:X {id: i}), (:Z {id: i});",
+             "UNWIND range(1, 200) AS i CREATE (:Y {id: i});",
+             "MATCH (p:P {id: 0}), (y:Y) CREATE (p)-[:p_y {w: 1}]->(y), (p)-[:b {w: 1}]->(y);",
+             "MATCH (p:P {id: 1}), (x:X {id: 1}) CREATE (p)-[:p_x {w: 2}]->(x), (p)-[:a {w: "
+             "2}]->(x);",
+             "MATCH (p:P {id: 2}), (x:X {id: 2}) CREATE (p)-[:p_x {w: 1}]->(x), (p)-[:a {w: "
+             "1}]->(x);",
+             "MATCH (p:P {id: 2}), (x:X {id: 3}) CREATE (p)-[:p_x {w: 2}]->(x), (p)-[:a {w: "
+             "2}]->(x);",
+             "MATCH (p:P {id: 2}), (x:X {id: 4}) CREATE (p)-[:p_x {w: 3}]->(x), (p)-[:a {w: "
+             "3}]->(x);",
+             "CREATE REL TABLE grp(FROM X TO Z, FROM Y TO W);",
+             "MATCH (x:X), (z:Z) WHERE x.id = z.id CREATE (x)-[:grp]->(z);",
+         }) {
+        ASSERT_TRUE(conn->query(statement)->isSuccess()) << statement;
+    }
+    ASSERT_STREQ(getEncodedPlan("MATCH (p:P)-[r:p_x|:p_y]->(m)-[:grp]->(t) "
+                                "WHERE p.id > 0 AND r.w % 2 = 0 RETURN count(*);")
+                     .c_str(),
+        "E(t)Filter()E(m)Filter()S(p)");
+    ASSERT_STREQ(
+        getEncodedPlan("MATCH (p:P)-[r:a|:b]->(m)-[:grp]->(t) WHERE p.id > 0 RETURN r.w, t.id;")
+            .c_str(),
+        "HJ(t._ID){S(t)}{E(t)E(m)Filter()S(p)}");
+}
+
+static planner::LogicalOperator* findOperator(planner::LogicalOperator* op,
+    planner::LogicalOperatorType type) {
+    std::vector<planner::LogicalOperator*> operators;
+    collectOperators(op, type, operators);
+    return operators.empty() ? nullptr : operators[0];
+}
+
+static bool hasRowReducer(planner::LogicalOperator* op) {
+    return findOperator(op, planner::LogicalOperatorType::AGGREGATE) != nullptr ||
+           findOperator(op, planner::LogicalOperatorType::DISTINCT) != nullptr ||
+           findOperator(op, planner::LogicalOperatorType::LIMIT) != nullptr;
+}
+
+TEST_F(OptimizerTest, LatePropertiesSkipAggregate) {
+    auto plan =
+        getRoot("MATCH (a:person)-[:knows]->(b:person) MATCH (b)-[:studyAt]->(o:organisation) "
+                "WITH b, count(*) AS c RETURN b.fName, c");
+    auto* root = plan->getLastOperator().get();
+    auto* aggregate = findOperator(root, planner::LogicalOperatorType::AGGREGATE);
+    ASSERT_NE(aggregate, nullptr);
+    // b's scan has no properties left, so its join with the extend is removed.
+    EXPECT_FALSE(scansNodeProperty(aggregate, "b", "fName"));
+    EXPECT_FALSE(hasOperatorType(aggregate, planner::LogicalOperatorType::HASH_JOIN));
+    auto* join = findOperator(root, planner::LogicalOperatorType::HASH_JOIN);
+    ASSERT_NE(join, nullptr);
+    EXPECT_TRUE(scansNodeProperty(join->getChild(0).get(), "b", "fName"));
+    EXPECT_TRUE(hasRowReducer(join->getChild(1).get()));
+    // The fetched rows' node IDs mask the scan. This does not pin the forced SIP direction: the
+    // optimizer stores BUILD_TO_PROBE once it applies the mask, and tinysnb's build side is masked
+    // without the force too.
+    EXPECT_TRUE(
+        hasOperatorType(join->getChild(1).get(), planner::LogicalOperatorType::SEMI_MASKER));
+}
+
+// The rewrite picks a lookup for b, then label pruning leaves b without a table (studyAt ends at
+// organisation); the query has no rows and is planned with a join.
+TEST_F(OptimizerTest, LatePropertiesOfPrunedNodeUseJoin) {
+    auto plan = getRoot("MATCH (a:person)-[:studyAt]->(b:person) WITH b LIMIT 5 RETURN b.fName");
+    EXPECT_FALSE(hasOperatorType(plan->getLastOperator().get(),
+        planner::LogicalOperatorType::QUERY_PRIMARY_KEY_LOOKUP));
+}
+
+static std::vector<std::string> getFirstColumn(main::QueryResult& result) {
+    std::vector<std::string> values;
+    while (result.hasNext()) {
+        values.push_back(result.getNext()->getValue(0)->toString());
+    }
+    return values;
+}
+
+// A prepared late fetch sees nodes created between two executions, through both the lookup and the
+// join.
+TEST_F(OptimizerTest, LatePropertiesAcrossInsert) {
+    auto lookup =
+        conn->prepare("MATCH (a:person) WITH a ORDER BY a.ID DESC LIMIT 1 RETURN a.fName");
+    auto join = conn->prepare("MATCH (a:person) UNWIND [1] AS x WITH a, count(*) AS c "
+                              "RETURN a.fName ORDER BY a.fName DESC LIMIT 1");
+    ASSERT_TRUE(lookup->isSuccess() && join->isSuccess());
+    EXPECT_EQ(getFirstColumn(*conn->execute(lookup.get())),
+        std::vector<std::string>{"Hubert Blaine Wolfeschlegelsteinhausenbergerdorff"});
+    EXPECT_EQ(getFirstColumn(*conn->execute(join.get())),
+        std::vector<std::string>{"Hubert Blaine Wolfeschlegelsteinhausenbergerdorff"});
+    ASSERT_TRUE(conn->query("CREATE (:person {ID: 100, fName: 'Zed'})")->isSuccess());
+    EXPECT_EQ(getFirstColumn(*conn->execute(lookup.get())), std::vector<std::string>{"Zed"});
+    EXPECT_EQ(getFirstColumn(*conn->execute(join.get())), std::vector<std::string>{"Zed"});
+}
+
+// A prepared late fetch is replanned after a column before the fetched one is dropped and the
+// table is checkpointed, which renumbers its columns.
+TEST_F(OptimizerTest, LatePropertiesAcrossDropColumnAndCheckpoint) {
+    auto lookup = conn->prepare("MATCH (a:person) WITH a ORDER BY a.ID LIMIT 1 RETURN a.eyeSight");
+    auto join = conn->prepare("MATCH (a:person) UNWIND [1] AS x WITH a, count(*) AS c "
+                              "RETURN a.eyeSight ORDER BY a.eyeSight LIMIT 1");
+    ASSERT_TRUE(lookup->isSuccess() && join->isSuccess());
+    EXPECT_EQ(getFirstColumn(*conn->execute(lookup.get())), std::vector<std::string>{"5.000000"});
+    EXPECT_EQ(getFirstColumn(*conn->execute(join.get())), std::vector<std::string>{"4.500000"});
+    ASSERT_TRUE(conn->query("ALTER TABLE person DROP gender")->isSuccess());
+    ASSERT_TRUE(conn->query("CHECKPOINT")->isSuccess());
+    EXPECT_EQ(getFirstColumn(*conn->execute(lookup.get())), std::vector<std::string>{"5.000000"});
+    EXPECT_EQ(getFirstColumn(*conn->execute(join.get())), std::vector<std::string>{"4.500000"});
+}
+
+TEST_F(OptimizerTest, LatePropertiesAfterTopKUseLookup) {
+    for (auto limit : {3, 1024}) {
+        auto plan = getRoot(std::format(
+            "MATCH (a:person) WITH a ORDER BY a.ID DESC LIMIT {} RETURN a.fName", limit));
+        auto* lookup = findOperator(plan->getLastOperator().get(),
+            planner::LogicalOperatorType::QUERY_PRIMARY_KEY_LOOKUP);
+        ASSERT_NE(lookup, nullptr) << limit;
+        EXPECT_TRUE(scansNodeProperty(lookup, "a", "fName"));
+        EXPECT_TRUE(
+            hasOperatorType(lookup->getChild(0).get(), planner::LogicalOperatorType::ORDER_BY));
+        EXPECT_FALSE(scansNodeProperty(lookup->getChild(0).get(), "a", "fName"));
+    }
 }
 
 } // namespace testing

@@ -7,13 +7,17 @@
 #include <thread>
 
 #include "common/exception/checkpoint.h"
+#include "common/exception/connection.h"
 #include "common/exception/transaction_manager.h"
 #include "common/task_system/progress_bar.h"
 #include "main/attached_database.h"
 #include "main/client_context.h"
 #include "main/database.h"
+#include "main/database_manager.h"
 #include "main/db_config.h"
 #include "storage/checkpointer.h"
+#include "storage/partition_storage_registry.h"
+#include "storage/storage_manager.h"
 #include "storage/wal/local_wal.h"
 #include "storage/wal/wal.h"
 #include <format>
@@ -24,6 +28,9 @@ using namespace lbug::storage;
 namespace lbug {
 namespace transaction {
 namespace {
+
+constexpr auto MAX_AUTO_CHECKPOINT_DEFERRAL = std::chrono::seconds(30);
+constexpr uint64_t MIN_AUTO_CHECKPOINT_WAL_HEADROOM = 1ULL << 20;
 
 class QueryProgressScope {
 public:
@@ -199,7 +206,7 @@ void TransactionManager::endForcedCheckpoint() {
 void TransactionManager::commitAndCheckpoint(main::ClientContext& clientContext,
     Transaction* transaction) {
     bool shouldForceCheckpoint = false;
-    bool shouldAutoCheckpoint = false;
+    std::optional<uint64_t> autoCheckpointThreshold;
     bool markedAsCommitting = false;
     uint64_t walCommitSequence = 0;
     uint64_t walBlockStart = 0;
@@ -239,7 +246,9 @@ void TransactionManager::commitAndCheckpoint(main::ClientContext& clientContext,
                     cvForPublishingCommit.notify_all();
                 }
                 shouldForceCheckpoint = transaction->shouldForceCheckpoint();
-                shouldAutoCheckpoint = Checkpointer::canAutoCheckpoint(clientContext, *transaction);
+                if (Checkpointer::canAutoCheckpoint(clientContext, *transaction)) {
+                    autoCheckpointThreshold = clientContext.getDBConfig()->checkpointThreshold;
+                }
                 clearTransactionNoLock(transaction->getID());
                 activeWriteTransactionCount.fetch_sub(1, std::memory_order_release);
                 committingWriteTransactionCount.fetch_sub(1, std::memory_order_release);
@@ -300,13 +309,27 @@ void TransactionManager::commitAndCheckpoint(main::ClientContext& clientContext,
                 "succeeds; run CHECKPOINT rather than the statement again: {}",
                 e.what())};
         }
-    } else if (shouldAutoCheckpoint) {
+    } else if (autoCheckpointThreshold) {
         try {
-            tryCheckpoint(clientContext);
+            tryCheckpoint(clientContext, *autoCheckpointThreshold);
         } catch (const std::exception& e) {
             // The commit is in the WAL whatever the checkpoint did, so failing the statement would
             // only invite a retry that applies it twice. A rolled-back checkpoint is retried by a
             // later write commit; a poisoned WAL fails the next write instead.
+            warnAutoCheckpointFailed(wal, e);
+        }
+    }
+    if (clientContext.isInMemory()) {
+        // In-memory databases never checkpoint, so version chains would grow without
+        // bound (see #1566). Fold superseded versions into the bases now that the
+        // committing transaction is gone; live readers (if any) keep their horizon.
+        // Best-effort: a vacuum failure must not fail the already-committed statement.
+        try {
+            std::unique_lock checkpointLck{mtxForCheckpoint, std::try_to_lock};
+            if (checkpointLck.owns_lock()) {
+                vacuumInMemoryUpdates(clientContext);
+            }
+        } catch (const std::exception& e) {
             warnAutoCheckpointFailed(wal, e);
         }
     }
@@ -340,9 +363,46 @@ void TransactionManager::rollback(main::ClientContext& clientContext, transactio
     }
 }
 
+void TransactionManager::vacuumInMemoryUpdates(main::ClientContext& clientContext) {
+    // Oldest active startTS, or INVALID_TRANSACTION when no transaction is open. Only
+    // committed versions below it may be folded; newer versions stay for live readers.
+    const auto horizon = snapshotHorizon();
+    // Main storage manager plus any graph and partition-child managers (mirrors
+    // Checkpointer::collectCheckpointTargets plus per-partition files).
+    std::vector<StorageManager*> managers;
+    managers.push_back(clientContext.getDatabase()->getStorageManager());
+    if (auto* dbManager = main::DatabaseManager::Get(clientContext)) {
+        for (auto* graphCatalog : dbManager->getGraphs()) {
+            if (auto* sm = graphCatalog->getStorageManager()) {
+                if (sm != managers.front()) {
+                    managers.push_back(sm);
+                }
+            }
+        }
+        for (auto* sm : dbManager->getPartitionStorageRegistry()->getAllManagers()) {
+            managers.push_back(sm);
+        }
+    }
+    for (auto* sm : managers) {
+        sm->vacuumInMemoryUpdates(horizon);
+    }
+}
+
 void TransactionManager::checkpoint(main::ClientContext& clientContext) {
     if (clientContext.isInMemory()) {
+        // In-memory databases have no WAL/shadow files to checkpoint, but explicit
+        // CHECKPOINT should still reclaim superseded MVCC versions.
+        // Note: this precedes the read-only guard below on purpose, so an in-memory
+        // read-only checkpoint stays a silent no-op (there are no files to protect).
+        std::unique_lock checkpointLck{mtxForCheckpoint};
+        vacuumInMemoryUpdates(clientContext);
         return;
+    }
+    // ClientContext::validateTransaction already refuses CHECKPOINT when no write query may
+    // execute; refuse here too, so no other caller can write the data, WAL or shadow files.
+    // canExecuteWriteQuery() also covers attached remote DBs, keeping both gates identical.
+    if (!clientContext.canExecuteWriteQuery()) {
+        throw ConnectionException("Cannot execute write operations in a read-only database!");
     }
     // Use the dedicated checkpoint mutex so active writers can still commit/rollback
     // during the drain phase.
@@ -407,8 +467,9 @@ UniqLock TransactionManager::stopNewTransactionsAndWaitUntilAllTransactionsLeave
     return startTransactionLock;
 }
 
-UniqLock TransactionManager::stopNewWriteTransactionsAndWaitUntilAllWriteTransactionsLeave() {
-    UniqLock startTransactionLock{mtxForStartingNewTransactions};
+std::unique_lock<std::mutex>
+TransactionManager::stopNewWriteTransactionsAndWaitUntilAllWriteTransactionsLeave() {
+    std::unique_lock startTransactionLock{mtxForStartingNewTransactions};
     uint64_t numTimesWaited = 0;
     while (true) {
         if (!hasActiveWriteTransactionNoLock()) {
@@ -495,27 +556,74 @@ std::unique_ptr<Checkpointer> TransactionManager::initCheckpointer(
     return std::make_unique<Checkpointer>(clientContext);
 }
 
-void TransactionManager::tryCheckpoint(main::ClientContext& clientContext) {
+void TransactionManager::tryCheckpoint(main::ClientContext& clientContext,
+    uint64_t checkpointThreshold) {
     if (clientContext.isInMemory()) {
+        std::unique_lock checkpointLck{mtxForCheckpoint, std::try_to_lock};
+        if (!checkpointLck.owns_lock()) {
+            return;
+        }
+        vacuumInMemoryUpdates(clientContext);
         return;
     }
     std::unique_lock checkpointLck{mtxForCheckpoint, std::try_to_lock};
     if (!checkpointLck.owns_lock()) {
         return;
     }
+    // Keep the gate closed after checking writers so none can enter before checkpoint runs.
+    std::unique_lock writeGate{mtxForStartingNewTransactions, std::try_to_lock};
+    if (writeGate.owns_lock() && !hasActiveWriteTransactionNoLock()) {
+        checkpointNoLock(clientContext, std::move(writeGate));
+        return;
+    }
+    // A fallback takes the gate again through the normal writer drain.
+    writeGate = {};
+    const auto now = std::chrono::steady_clock::now();
+    const auto deferredFor = autoCheckpointSkips == 0 ?
+                                 std::chrono::steady_clock::duration::zero() :
+                                 now - firstAutoCheckpointSkip;
+    const auto walBytes = wal.getFileSize();
+    const auto baseBytes = std::max(checkpointThreshold, walBytesAtLastDrainAttempt);
+    const auto headroom = std::max(checkpointThreshold, MIN_AUTO_CHECKPOINT_WAL_HEADROOM);
+    // Subtract only in ascending order: doubling a large configured threshold can overflow.
+    const bool walBudgetUsed = walBytes > baseBytes && walBytes - baseBytes >= headroom;
+    if (!walBudgetUsed && deferredFor < MAX_AUTO_CHECKPOINT_DEFERRAL) {
+        if (++autoCheckpointSkips == 1) {
+            firstAutoCheckpointSkip = now;
+            std::clog << std::format("Automatic checkpoint deferred for writers (WAL {} bytes).",
+                             walBytes)
+                      << std::endl;
+        }
+        return;
+    }
+    std::clog << std::format("Automatic checkpoint waiting for writers "
+                             "(skipped {}, elapsed {} ms, WAL {} bytes).",
+                     autoCheckpointSkips,
+                     std::chrono::duration_cast<std::chrono::milliseconds>(deferredFor).count(),
+                     walBytes)
+              << std::endl;
+    walBytesAtLastDrainAttempt = walBytes;
+    autoCheckpointSkips = 0;
     checkpointNoLock(clientContext);
 }
 
-void TransactionManager::checkpointNoLock(main::ClientContext& clientContext) {
+// NB: no read-only guard here by design — checkpoint() above is the sole checked entry
+// point. All current paths here (checkpoint(), tryCheckpoint()) are unreachable on a
+// read-only database: auto-checkpoints require a preceding write commit, and recovery
+// refuses read-only opens with pending checkpoint state before replay. A future internal
+// caller must route through checkpoint() or replicate its guard.
+void TransactionManager::checkpointNoLock(main::ClientContext& clientContext,
+    std::unique_lock<std::mutex> writeGate) {
     QueryProgressScope progress{clientContext, 0.01};
     // We only need to wait for active write transactions to leave the system before
     // checkpointing. Read transactions can continue because they use MVCC snapshot isolation.
     // Column chunk metadata of in-place checkpointed data is published before the shadow pages
     // are applied, so column reads resolve such in-flight pages through the shadow file (see
     // ColumnReadWriter::readFromPage); applying shadow pages uses per-page locking.
-    UniqLock writeGate;
     try {
-        writeGate = stopNewWriteTransactionsAndWaitUntilAllWriteTransactionsLeave();
+        if (!writeGate.owns_lock()) {
+            writeGate = stopNewWriteTransactionsAndWaitUntilAllWriteTransactionsLeave();
+        }
     } catch (std::exception& e) {
         throw CheckpointException{e};
     }
@@ -587,7 +695,7 @@ void TransactionManager::checkpointNoLock(main::ClientContext& clientContext) {
         throw CheckpointException{e};
     }
     bool canResetPageManagerToCurrent = true;
-    if (!writeGate.isLocked()) {
+    if (!writeGate.owns_lock()) {
         try {
             writeGate = stopNewWriteTransactionsAndWaitUntilAllWriteTransactionsLeave();
         } catch (std::exception&) {
@@ -595,6 +703,15 @@ void TransactionManager::checkpointNoLock(main::ClientContext& clientContext) {
         }
     }
     checkpointer->postCheckpointCleanup(canResetPageManagerToCurrent);
+    if (autoCheckpointSkips != 0) {
+        std::clog << std::format("Checkpoint completed (automatic checkpoint deferrals = {}).",
+                         autoCheckpointSkips)
+                  << std::endl;
+    }
+    autoCheckpointSkips = 0;
+    // A reader may pin the WAL even after a successful checkpoint. Only further growth counts
+    // towards the next drain.
+    walBytesAtLastDrainAttempt = wal.mayHaveCheckpointRecord() ? wal.getFileSize() : 0;
     progress.update(1.0);
     writeGate = {};
 }

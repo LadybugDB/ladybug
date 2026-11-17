@@ -423,7 +423,6 @@ void VectorVersionInfo::rollbackInsertions(row_idx_t startRowInVector, row_idx_t
     }
     if (!insertedVersions) {
         insertionStatus = InsertionStatus::NO_INSERTED;
-        deletionStatus = DeletionStatus::NO_DELETED;
     }
 }
 
@@ -781,6 +780,23 @@ row_idx_t VersionInfo::getNumVisibleRows(const transaction::Transaction* transac
     return numVisible;
 }
 
+row_idx_t VersionInfo::getNumLeadingVisibleRows(const transaction::Transaction* transaction,
+    row_idx_t numRows) const {
+    row_idx_t numVisible = 0;
+    for (idx_t vectorIdx = 0; numVisible < numRows; ++vectorIdx) {
+        const auto numRowsInVector =
+            std::min<row_idx_t>(DEFAULT_VECTOR_CAPACITY, numRows - numVisible);
+        const auto vectorVersion = getVectorVersionInfo(vectorIdx);
+        if (vectorVersion != nullptr &&
+            vectorVersion->getNumVisibleRows(transaction->getStartTS(), transaction->getID(), 0,
+                numRowsInVector) != numRowsInVector) {
+            break;
+        }
+        numVisible += numRowsInVector;
+    }
+    return numVisible;
+}
+
 row_idx_t VersionInfo::getNumInsertedRows(const transaction::Transaction* transaction,
     row_idx_t startRow, length_t numRows) const {
     if (numRows == 0) {
@@ -945,6 +961,12 @@ void VersionInfo::rollbackInsert(row_idx_t startRow, row_idx_t numRows) {
             vectorIdx == endVectorIdx ? endRowIdxInVector : DEFAULT_VECTOR_CAPACITY - 1;
         auto& vectorVersionInfo = getOrCreateVersionInfo(vectorIdx);
         vectorVersionInfo.rollbackInsertions(startRowIdx, endRowIdx - startRowIdx + 1);
+        // Other writers can own later rows, so aborted slots may survive physically.
+        // Real commit timestamps start above zero. A delete at zero hides these slots from
+        // every snapshot and survives checkpoint even after insertion versions are discarded.
+        for (auto row = startRowIdx; row <= endRowIdx; ++row) {
+            vectorVersionInfo.stampDeleteCommitTS(row, 0);
+        }
     }
 }
 

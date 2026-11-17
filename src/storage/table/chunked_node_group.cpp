@@ -3,6 +3,7 @@
 #include <exception>
 
 #include "common/assert.h"
+#include "common/exception/runtime.h"
 #include "common/types/types.h"
 #include "storage/buffer_manager/buffer_manager.h"
 #include "storage/buffer_manager/memory_manager.h"
@@ -15,6 +16,7 @@
 #include "storage/table/column_chunk_data.h"
 #include "storage/table/column_chunk_scanner.h"
 #include "storage/table/node_table.h"
+#include <format>
 
 using namespace lbug::common;
 using namespace lbug::transaction;
@@ -147,8 +149,29 @@ void ChunkedNodeGroup::resetVersionAndUpdateInfo() {
     }
 }
 
+bool ChunkedNodeGroup::vacuumInMemoryUpdates(transaction_t horizon) {
+    // ON_DISK chunks decline inside ColumnChunk::vacuumInMemoryUpdates (their bases need
+    // the page-rewrite path); in-memory chunks fold committed chains into their bases.
+    bool didWork = false;
+    std::shared_lock lck{chunksMtx};
+    for (const auto& chunk : chunks) {
+        if (chunk->vacuumInMemoryUpdates(horizon)) {
+            didWork = true;
+        }
+    }
+    return didWork;
+}
+
 void ChunkedNodeGroup::truncate(const offset_t numRows_) {
     DASSERT(numRows >= numRows_);
+    if (versionInfo) {
+        // The collection proved this is the rolling-back writer's suffix. Clear only its
+        // always-deleted stamps so a later insert can reuse these slots.
+        for (auto row = numRows_; row < numRows; ++row) {
+            DASSERT(versionInfo->getDeleteCommitTS(row) == 0);
+            versionInfo->stampDeleteCommitTS(row, INVALID_TRANSACTION);
+        }
+    }
     for (const auto& chunk : chunks) {
         chunk->truncate(numRows_);
     }
@@ -467,10 +490,33 @@ void ChunkedNodeGroup::scanCommitted(const Transaction* transaction, TableScanSt
     if (residencyState != SCAN_RESIDENCY_STATE) {
         return;
     }
+    const auto groupRows = getNumRows();
     for (auto i = 0u; i < scanState.columnIDs.size(); i++) {
         const auto columnID = scanState.columnIDs[i];
+        auto& outputChunk = output.getColumnChunk(i);
+        const auto numValues = chunks[columnID]->getNumValues();
+        if (numValues > groupRows) {
+            throw RuntimeException(std::format("Cannot checkpoint column {}: the chunk has {} "
+                                               "values for {} rows.",
+                columnID, numValues, groupRows));
+        }
         chunks[columnID]->scanCommitted<SCAN_RESIDENCY_STATE>(transaction,
-            scanState.nodeGroupScanState->chunkStates[i], output.getColumnChunk(i));
+            scanState.nodeGroupScanState->chunkStates[i], outputChunk);
+        // Inserts after DROP do not populate the dropped slot. A pinned checkpoint still
+        // retains that column, so preserve row positions with NULLs for those inserts.
+        auto numMissingRows = groupRows - numValues;
+        if (numMissingRows > 0) {
+            ValueVector nulls(outputChunk.getDataType().copy(), &outputChunk.getMemoryManager(),
+                std::make_shared<DataChunkState>());
+            nulls.setAllNull();
+            while (numMissingRows > 0) {
+                const auto numToAppend =
+                    std::min<uint64_t>(numMissingRows, DEFAULT_VECTOR_CAPACITY);
+                nulls.state->getSelVectorUnsafe().setToUnfiltered(numToAppend);
+                outputChunk.append(&nulls, nulls.state->getSelVector());
+                numMissingRows -= numToAppend;
+            }
+        }
     }
 }
 
@@ -588,6 +634,14 @@ row_idx_t ChunkedNodeGroup::getNumVisibleRows(const Transaction* transaction) co
     return numRows;
 }
 
+row_idx_t ChunkedNodeGroup::getNumLeadingVisibleRows(const Transaction* transaction) const {
+    const row_idx_t numRowsNow = numRows;
+    if (versionInfo) {
+        return versionInfo->getNumLeadingVisibleRows(transaction, numRowsNow);
+    }
+    return numRowsNow;
+}
+
 std::unique_ptr<ColumnChunk> InMemChunkedNodeGroup::flushInternal(ColumnChunkData& chunk,
     PageAllocator& pageAllocator) {
     // Finalize is necessary prior to splitting for strings and lists so that pruned values
@@ -668,17 +722,13 @@ void ChunkedNodeGroup::commitInsert(row_idx_t startRow, row_idx_t numRowsToCommi
 }
 
 void ChunkedNodeGroup::rollbackInsert(row_idx_t startRow, row_idx_t numRows_, transaction_t) {
-    if (startRow == 0) {
-        truncate(0);
-        versionInfo.reset();
-        return;
-    }
     if (startRow >= numRows) {
         // Nothing to rollback.
         return;
     }
-    versionInfo->rollbackInsert(startRow, numRows_);
-    numRows = startRow;
+    if (versionInfo) {
+        versionInfo->rollbackInsert(startRow, std::min(numRows_, numRows - startRow));
+    }
 }
 
 // NOLINTNEXTLINE(readability-make-member-function-const): Semantically non-const.

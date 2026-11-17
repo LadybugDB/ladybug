@@ -1,0 +1,59 @@
+-DATASET CSV empty
+
+--
+
+-CASE Issue1545LengthAfterWith
+# Reproduction for github issue #1545: length() of a variable-length path failed
+# with `Cannot evaluate expression with type PROPERTY.` once the path had passed
+# through a WITH that did not also carry the relationship, because length(p) was
+# rewritten to the hidden `_LENGTH` properties of the rel variables.
+
+-STATEMENT CREATE NODE TABLE Person(id INT64 PRIMARY KEY);
+---- ok
+-STATEMENT CREATE REL TABLE Knows(FROM Person TO Person);
+---- ok
+-STATEMENT CREATE (:Person {id: 1}), (:Person {id: 2});
+---- ok
+-STATEMENT MATCH (a:Person {id: 1}), (b:Person {id: 2}) CREATE (a)-[:Knows]->(b);
+---- ok
+-STATEMENT MATCH p = (a:Person {id: 1})-[:Knows*1..2]-(b:Person) RETURN length(p) ORDER BY length(p);
+---- 2
+1
+2
+-STATEMENT MATCH p = (a:Person {id: 1})-[:Knows*1..2]-(b:Person) WITH p RETURN length(p) ORDER BY length(p);
+---- 2
+1
+2
+-STATEMENT MATCH p = (a:Person {id: 1})-[:Knows*1..2]-(b:Person) WITH * RETURN length(p) ORDER BY length(p);
+---- 2
+1
+2
+-STATEMENT MATCH p = (a:Person {id: 1})-[:Knows*1..2]-(b:Person) WITH p AS q RETURN length(q) ORDER BY length(q);
+---- 2
+1
+2
+-STATEMENT MATCH p = (a:Person {id: 1})-[:Knows*1..2]-(b:Person) WITH p WHERE length(p) > 1 RETURN length(p);
+---- 1
+2
+-STATEMENT MATCH p = (a:Person {id: 1})-[:Knows*1..2]-(b:Person) WITH p ORDER BY size(rels(p)) LIMIT 5 RETURN length(p) ORDER BY length(p);
+---- 2
+1
+2
+-STATEMENT MATCH p = (a:Person {id: 1})-[:Knows]->(b:Person) WITH p RETURN length(p) ORDER BY length(p);
+---- 1
+1
+-STATEMENT MATCH (a:Person {id: 1})-[e:Knows*1..2]-(b:Person) WITH e RETURN length(e) ORDER BY length(e);
+---- 2
+1
+2
+-STATEMENT MATCH p = (a:Person {id: 1})-[:Knows*1..2]-(b:Person) WITH collect(p) AS paths UNWIND paths AS p RETURN length(p) ORDER BY length(p);
+---- 2
+1
+2
+-STATEMENT MATCH p = (a:Person {id: 1})-[e:Knows* SHORTEST 1..2]-(b:Person) WITH p RETURN length(p) ORDER BY length(p);
+---- 1
+1
+-STATEMENT MATCH p = (a:Person {id: 1})-[:Knows]->()-[:Knows*1..2]-(b:Person) WITH p RETURN length(p) ORDER BY length(p);
+---- 2
+2
+3

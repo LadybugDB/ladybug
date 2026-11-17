@@ -265,6 +265,7 @@ public:
 
     void checkpoint(MemoryManager& memoryManager, NodeGroupCheckpointState& state) override;
     void reclaimStorage(PageAllocator& pageAllocator, const common::UniqLock& lock) const override;
+    bool vacuumInMemoryUpdates(common::transaction_t horizon) override;
 
     bool isEmpty() const override { return !persistentChunkGroup && NodeGroup::isEmpty(); }
     bool hasRows() const override {

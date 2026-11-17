@@ -1,6 +1,7 @@
 #include "optimizer/factorization_rewriter.h"
 
 #include "binder/expression_visitor.h"
+#include "planner/operator/extend/logical_extend.h"
 #include "planner/operator/factorization/flatten_resolver.h"
 #include "planner/operator/logical_accumulate.h"
 #include "planner/operator/logical_aggregate.h"
@@ -113,6 +114,19 @@ void FactorizationRewriter::visitDistinct(planner::LogicalOperator* op) {
     auto& distinct = op->cast<LogicalDistinct>();
     auto groupsPosToFlatten = distinct.getGroupsPosToFlatten();
     distinct.setChild(0, appendFlattens(distinct.getChild(0), groupsPosToFlatten));
+}
+
+void FactorizationRewriter::visitExtend(planner::LogicalOperator* op) {
+    auto& extend = op->cast<LogicalExtend>();
+    if (!extend.requireBoundFlattenFlag()) {
+        return;
+    }
+    // Bound-expand keeps an explicit FLATTEN on the bound side: without it the
+    // DISTINCT/AGGREGATE outer stays factorized at runtime and the correlated CSR
+    // extend misreads batches under parallelism.
+    auto groupsPosToFlatten = FlattenAll::getGroupsPosToFlatten(
+        extend.getBoundNode()->getInternalID(), *op->getChild(0)->getSchema());
+    extend.setChild(0, appendFlattens(extend.getChild(0), groupsPosToFlatten));
 }
 
 void FactorizationRewriter::visitQueryPrimaryKeyLookup(planner::LogicalOperator* op) {

@@ -23,6 +23,7 @@ struct BoundDeleteInfo;
 struct BoundJoinHintNode;
 class NormalizedSingleQuery;
 class NormalizedQueryPart;
+struct LatePropertyFetch;
 class BoundReadingClause;
 class BoundUpdatingClause;
 class BoundProjectionBody;
@@ -121,6 +122,8 @@ public:
     // Plan simple statement.
     LogicalPlan planCreateTable(const binder::BoundStatement& statement);
     LogicalPlan planCreateIndex(const binder::BoundStatement& statement);
+    LogicalPlan planCreateConstraint(const binder::BoundStatement& statement);
+    LogicalPlan planDropConstraint(const binder::BoundStatement& statement);
     LogicalPlan planCreateType(const binder::BoundStatement& statement);
     LogicalPlan planCreateSequence(const binder::BoundStatement& statement);
     LogicalPlan planCreateMacro(const binder::BoundStatement& statement);
@@ -155,6 +158,7 @@ public:
     LogicalPlan planQuery(const binder::BoundStatement& boundStatement);
     LogicalPlan planSingleQuery(const binder::NormalizedSingleQuery& singleQuery);
     void planQueryPart(const binder::NormalizedQueryPart& queryPart, LogicalPlan& prevPlan);
+    void planLatePropertyFetch(const binder::LatePropertyFetch& fetch, LogicalPlan& plan);
 
     // Plan read.
     void planReadingClause(const binder::BoundReadingClause& readingClause, LogicalPlan& plan);
@@ -328,6 +332,12 @@ public:
     // `node.Prop = <outer scalar>` (node PK) as a PK-seeded chain decorrelated via
     // ACCUMULATE + EXPRESSIONS_SCAN (see plan_subquery.cpp). Consumes the whole leg.
     bool tryPlanScalarSeededChain(const binder::QueryGraphCollection& queryGraphCollection,
+        const binder::expression_vector& predicates, LogicalPlan& leftPlan);
+    // Bound expand: single-hop regular MATCH with exactly one bound endpoint as a
+    // correlated index-nested-loop over CSR instead of scan + hash join. Shares the
+    // lookup-join guards (small flat trusted outer, same cardinality cap) so the two
+    // INLJ paths do not diverge; see plan_subquery.cpp for conditions.
+    bool tryPlanBoundExpand(const binder::QueryGraphCollection& queryGraphCollection,
         const binder::expression_vector& predicates, LogicalPlan& leftPlan);
     // Staged distinct pre-aggregation over LEFT-join chains: AGGREGATE(keys=K, all COUNT
     // DISTINCT) over a left-deep LEFT-only chain becomes per-stage aggregates grouping

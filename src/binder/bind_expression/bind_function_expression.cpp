@@ -9,8 +9,6 @@
 #include "binder/expression_binder.h"
 #include "binder/expression_visitor.h"
 #include "catalog/catalog.h"
-#include "catalog/catalog_entry/node_table_catalog_entry.h"
-#include "common/enums/storage_format.h"
 #include "common/exception/binder.h"
 #include "function/aggregate/count.h"
 #include "function/arithmetic/vector_arithmetic_functions.h"
@@ -196,33 +194,12 @@ static std::shared_ptr<Expression> rewritePrimaryKeyToInternalID(const Expressio
         return nullptr;
     }
     auto* entry = node.getEntry(0);
-    const auto tableID = entry->getTableID();
-    if (entry->getType() != CatalogEntryType::NODE_TABLE_ENTRY ||
-        tableID != property.getSingleTableID()) {
+    if (entry->getTableID() != property.getSingleTableID()) {
         return nullptr;
     }
-    // Storage is found by table ID, and IDs repeat across attached databases, so only an entry
-    // of the active catalog backed by the active storage manager can be checked. Attached tables
-    // and partition children keep the property.
-    auto transaction = transaction::Transaction::Get(*context);
-    auto catalog = Catalog::Get(*context);
-    if (!catalog->containsTable(transaction, tableID) ||
-        catalog->getTableCatalogEntry(transaction, tableID) != entry) {
-        return nullptr;
-    }
-    // Icebug-disk and Arrow tables carry a default hash index that does not enforce the key of
-    // their files.
-    auto* nodeEntry = entry->ptrCast<NodeTableCatalogEntry>();
-    if (nodeEntry->getScanFunction().has_value() || nodeEntry->getReferencedEntry() != nullptr ||
-        !nodeEntry->getForeignDatabaseName().empty() || !nodeEntry->getStorage().empty() ||
-        nodeEntry->getStorageFormat() != StorageFormat::NONE) {
-        return nullptr;
-    }
-    auto* storageManager = storage::StorageManager::Get(*context);
-    if (!storageManager->containsTable(tableID)) {
-        return nullptr;
-    }
-    auto* table = dynamic_cast<storage::NodeTable*>(storageManager->getTable(tableID));
+    // Attached tables and partition children keep the property, and so do Icebug-disk and Arrow
+    // tables, whose default hash index does not enforce the key of their files.
+    auto* table = storage::StorageManager::tryGetNativeNodeTable(*context, *entry);
     if (table == nullptr || table->tryGetPrimaryKeyIndex() == nullptr) {
         return nullptr;
     }

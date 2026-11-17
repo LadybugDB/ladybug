@@ -253,6 +253,9 @@ public:
     common::row_idx_t getNumDeletions(const transaction::Transaction* transaction,
         common::row_idx_t startRow, common::length_t numRowsToCheck) const;
     common::row_idx_t getNumVisibleRows(const transaction::Transaction* transaction) const;
+    // See VersionInfo::getNumLeadingVisibleRows. The caller holds the node group's chunked-group
+    // lock.
+    common::row_idx_t getNumLeadingVisibleRows(const transaction::Transaction* transaction) const;
     bool hasVersionInfo() const { return versionInfo != nullptr; }
 
     static std::unique_ptr<ChunkedNodeGroup> flushEmpty(MemoryManager& mm,
@@ -268,6 +271,9 @@ public:
     void rollbackDelete(common::row_idx_t startRow, common::row_idx_t numRows_,
         common::transaction_t commitTS);
     virtual void reclaimStorage(PageAllocator& pageAllocator) const;
+    // Folds committed update chains below `horizon` into the in-memory bases and drops
+    // the folded nodes. Returns true when any chain data was reclaimed.
+    bool vacuumInMemoryUpdates(common::transaction_t horizon);
 
     uint64_t getEstimatedMemoryUsage() const;
 

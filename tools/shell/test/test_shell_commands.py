@@ -19,6 +19,13 @@ def test_help(temp_db) -> None:
             "    :render_errors [on|off]     toggle error highlighting on or off",
             "    :render_completion [on|off]     toggle completion highlighting on or off",
             "    :schema     print database schema",
+            "    :maxrows [N]     set agent-mode row cap (0/-1 = unlimited)",
+            "    :maxbytes [N]     set agent-mode byte cap (0/-1 = unlimited)",
+            "    :maxcellwidth [N]     set agent-mode max cell width",
+            "    :tables     list tables with row counts and columns",
+            "    :show     show agent status",
+            "    :explain [compact|box|auto]     set EXPLAIN format",
+            "    :help agent     agent mode help",
             "",
             "    Note: you can change and see several system configurations, such as num-threads, ",
             "          timeout, and progress_bar using Cypher CALL statements.",
@@ -659,15 +666,15 @@ def test_bad_command(temp_db) -> None:
     test = (
         ShellTest()
         .add_argument(temp_db)
-        .statement(":maxrows")
+        .statement(":maxrowz")
         .statement(":quiy")
         .statement("clearr;")
     )
     result = test.run()
     result.check_stdout(
-        'Error: Unknown command: ":maxrows". Enter ":help" for help',
+        'Error: Unknown command: ":maxrowz". Enter ":help" for help',
     )
-    result.check_stdout('Did you mean: ":max_rows"?')
+    result.check_stdout('Did you mean: ":maxrows"?')
     result.check_stdout('Error: Unknown command: ":quiy". Enter ":help" for help')
     result.check_stdout('Did you mean: ":quit"?')
     result.check_stdout(

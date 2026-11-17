@@ -13,6 +13,7 @@
 #include <mutex>
 #include <optional>
 #include <thread>
+#include <tuple>
 #include <unordered_set>
 #include <vector>
 
@@ -39,6 +40,7 @@
 #include "storage/checkpointer.h"
 #include "storage/database_header.h"
 #include "storage/index/index.h"
+#include "storage/optimistic_allocator.h"
 #include "storage/page_allocator.h"
 #include "storage/page_manager.h"
 #include "storage/shadow_file.h"
@@ -112,6 +114,16 @@ public:
             }
         }
         return false;
+    }
+
+    static std::unique_lock<std::mutex> lockWriteGate(main::ClientContext& context) {
+        return std::unique_lock{TransactionManager::Get(context)->mtxForStartingNewTransactions};
+    }
+
+    static void ageAutoCheckpointDeferral(main::ClientContext& context) {
+        auto* manager = TransactionManager::Get(context);
+        std::lock_guard lock{manager->mtxForCheckpoint};
+        manager->firstAutoCheckpointSkip -= std::chrono::minutes(1);
     }
 
     // Holds the mutex that every begin, commit and rollback takes for 100 ms on a new thread, and
@@ -618,6 +630,28 @@ TEST_F(CheckpointRetryAfterFailureTest, FailedRetryKeepsDurableCheckpointRecord)
     checkNodes(100);
 }
 
+TEST_F(CheckpointRetryAfterFailureTest, FailedCheckpointRollsBackOverClosedPartitionShadows) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    // The first checkpoint leaves each partition's shadow file closed; a checkpoint that fails
+    // before reopening them must still roll back over them (#1396).
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE partitioned(id INT64 PRIMARY KEY, amount INT64) "
+                            "PARTITION BY HASH(amount) PARTITIONS 2;")
+                    ->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:partitioned_p0 {id: 1, amount: 10});")->isSuccess());
+    checkpoint();
+    insertNodes(0, 100);
+    failCheckpoint();
+    checkpoint();
+    checkNodes(100);
+    createDBAndConn();
+    checkNodes(100);
+    auto result = conn->query("MATCH (n:partitioned) RETURN COUNT(n);");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 1);
+}
+
 TEST_F(CheckpointRetryAfterFailureTest, MainMarkerRecoversLegacyPartitionShadows) {
     if (inMemMode || systemConfig->checkpointThreshold == 0) {
         GTEST_SKIP();
@@ -972,7 +1006,81 @@ TEST_F(PostCommitCheckpointFailureTest, NextCommitRetriesFailedAutoCheckpoint) {
     checkNodes(2);
 }
 
-TEST_F(PostCommitCheckpointFailureTest, AutoCheckpointBlockedByOpenWriterDoesNotFailCommit) {
+TEST_F(PostCommitCheckpointFailureTest, AutoCheckpointSkipsOpenWriter) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+    conn.reset();
+    createDB(2000000 /* checkpoint wait timeout in microseconds */);
+    conn = std::make_unique<main::Connection>(database.get());
+    checkpointAfterEveryCommit();
+    ASSERT_TRUE(conn->query("CALL enable_multi_writes=true;")->isSuccess());
+    auto context = getClientContext(*conn);
+    countCheckpoints<FlakyCheckpointerFailsOnCheckpointStorage>();
+    failCheckpoints = false;
+    {
+        main::Connection other{database.get()};
+        ASSERT_TRUE(other.query("BEGIN TRANSACTION;")->isSuccess());
+        ASSERT_TRUE(other.query("CREATE (a:test {id: 3, name: 'name_3'});")->isSuccess());
+        ::testing::internal::CaptureStderr();
+        const auto start = std::chrono::steady_clock::now();
+        for (auto i = 0; i < 3; ++i) {
+            insertNodes(i, i + 1);
+        }
+        const auto waited = std::chrono::steady_clock::now() - start;
+        const auto log = ::testing::internal::GetCapturedStderr();
+        EXPECT_LT(waited, std::chrono::seconds(1));
+        const auto first = log.find("Automatic checkpoint deferred for writers");
+        ASSERT_NE(first, std::string::npos) << log;
+        EXPECT_EQ(log.find("Automatic checkpoint deferred for writers", first + 1),
+            std::string::npos)
+            << log;
+        EXPECT_EQ(log.find("Warning:"), std::string::npos) << log;
+        EXPECT_EQ(numCheckpoints, 0u);
+        EXPECT_GT(WAL::Get(*context)->getFileSize(), 0u);
+        ::testing::internal::CaptureStderr();
+        auto res = other.query("COMMIT;");
+        const auto completion = ::testing::internal::GetCapturedStderr();
+        ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+        EXPECT_NE(completion.find("automatic checkpoint deferrals = 3"), std::string::npos)
+            << completion;
+        EXPECT_EQ(numCheckpoints, 1u);
+        EXPECT_EQ(WAL::Get(*context)->getFileSize(), 0u);
+    }
+    createDBAndConn();
+    checkNodes(4);
+}
+
+TEST_F(PostCommitCheckpointFailureTest, AutoCheckpointDrainsWritersAfterDeferralExpires) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CALL enable_multi_writes=true")->isSuccess());
+    auto context = getClientContext(*conn);
+    countCheckpoints<FlakyCheckpointerFailsOnCheckpointStorage>();
+    failCheckpoints = false;
+    {
+        main::Connection other{database.get()};
+        ASSERT_TRUE(other.query("BEGIN TRANSACTION")->isSuccess());
+        ASSERT_TRUE(other.query("CREATE (:test {id: 2})")->isSuccess());
+        insertNodes(0, 1);
+        FlakyCheckpointer::ageAutoCheckpointDeferral(*context);
+        std::unique_ptr<main::QueryResult> result;
+        std::thread committing([&] { result = conn->query("CREATE (:test {id: 1})"); });
+        const bool gateClosed = FlakyCheckpointer::waitForWriteGateClosed(*context);
+        auto otherResult = other.query("COMMIT");
+        committing.join();
+        ASSERT_TRUE(gateClosed);
+        ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+        ASSERT_TRUE(otherResult->isSuccess()) << otherResult->getErrorMessage();
+        EXPECT_EQ(numCheckpoints, 1u);
+        EXPECT_EQ(WAL::Get(*context)->getFileSize(), 0u);
+    }
+    createDBAndConn();
+    checkNodes(3);
+}
+
+TEST_F(PostCommitCheckpointFailureTest, AutoCheckpointRetriesAtWALGrowthLimit) {
     if (inMemMode) {
         GTEST_SKIP();
     }
@@ -980,23 +1088,125 @@ TEST_F(PostCommitCheckpointFailureTest, AutoCheckpointBlockedByOpenWriterDoesNot
     createDB(10000 /* checkpoint wait timeout in microseconds */);
     conn = std::make_unique<main::Connection>(database.get());
     checkpointAfterEveryCommit();
-    ASSERT_TRUE(conn->query("CALL enable_multi_writes=true;")->isSuccess());
-    auto context = getClientContext(*conn);
-    main::Connection other{database.get()};
-    ASSERT_TRUE(other.query("BEGIN TRANSACTION;")->isSuccess());
-    ASSERT_TRUE(other.query("CREATE (a:test {id: 1, name: 'name_1'});")->isSuccess());
-    // This commit's checkpoint times out waiting for the other connection's write transaction.
-    insertNodes(0, 1);
-    EXPECT_GT(WAL::Get(*context)->getFileSize(), 0u);
-    auto res = other.query("COMMIT;");
-    ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
-    EXPECT_EQ(WAL::Get(*context)->getFileSize(), 0u);
+    ASSERT_TRUE(conn->query("CALL enable_multi_writes=true")->isSuccess());
+    {
+        main::Connection other{database.get()};
+        ASSERT_TRUE(other.query("BEGIN TRANSACTION")->isSuccess());
+        ASSERT_TRUE(other.query("CREATE (:test {id: 9})")->isSuccess());
+        insertNodes(0, 1);
+        ::testing::internal::CaptureStderr();
+        auto result = conn->query("CREATE (:test {id: 1, name: repeat('x', 1100000)})");
+        const auto log = ::testing::internal::GetCapturedStderr();
+        ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+        EXPECT_NE(log.find("Automatic checkpoint waiting for writers"), std::string::npos) << log;
+        EXPECT_NE(log.find("Timeout waiting for active write transactions"), std::string::npos)
+            << log;
+        EXPECT_GE(WAL::Get(*getClientContext(*conn))->getFileSize(), 1100000u);
+        // The already oversized WAL must not make the next small commit wait again.
+        ::testing::internal::CaptureStderr();
+        insertNodes(2, 3);
+        const auto nextLog = ::testing::internal::GetCapturedStderr();
+        EXPECT_NE(nextLog.find("Automatic checkpoint deferred for writers"), std::string::npos)
+            << nextLog;
+        EXPECT_EQ(nextLog.find("waiting for writers"), std::string::npos) << nextLog;
+        ASSERT_TRUE(other.query("ROLLBACK")->isSuccess());
+    }
+    createDBAndConn();
+    checkNodes(3);
+    auto result = conn->query("MATCH (n:test {id: 1}) RETURN n.name");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    EXPECT_EQ(result->getNext()->getValue(0)->getValue<std::string>(), std::string(1100000, 'x'));
+}
+
+TEST_F(PostCommitCheckpointFailureTest, PinnedWALDoesNotRepeatDrainForSameBytes) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CALL enable_multi_writes=true")->isSuccess());
+    auto wal = WAL::Get(*getClientContext(*conn));
+    {
+        main::Connection reader{database.get()};
+        main::Connection writer{database.get()};
+        ASSERT_TRUE(reader.query("BEGIN TRANSACTION READ ONLY")->isSuccess());
+        auto result = conn->query("CREATE (:test {id: 0, name: repeat('x', 1100000)})");
+        ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+        ASSERT_GE(wal->getFileSize(), 1100000u);
+        ASSERT_TRUE(writer.query("BEGIN TRANSACTION")->isSuccess());
+        ::testing::internal::CaptureStderr();
+        insertNodes(1, 2);
+        const auto log = ::testing::internal::GetCapturedStderr();
+        EXPECT_NE(log.find("Automatic checkpoint deferred for writers"), std::string::npos) << log;
+        EXPECT_EQ(log.find("waiting for writers"), std::string::npos) << log;
+        ASSERT_TRUE(reader.query("COMMIT")->isSuccess());
+        ASSERT_TRUE(writer.query("COMMIT")->isSuccess());
+        EXPECT_EQ(wal->getFileSize(), 0u);
+    }
+    createDBAndConn();
     checkNodes(2);
 }
 
-// A COPY is durable only once its checkpoint runs, so it must not commit while another write
-// transaction could keep that checkpoint from running.
-TEST_F(PostCommitCheckpointFailureTest, WriterWaitingBehindAutoCheckpointLetsOthersThrough) {
+TEST_F(PostCommitCheckpointFailureTest, AutoCheckpointSkipsBusyWriteGate) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+    auto context = getClientContext(*conn);
+    countCheckpoints<FlakyCheckpointerFailsOnCheckpointStorage>();
+    failCheckpoints = false;
+    ASSERT_TRUE(conn->query("BEGIN TRANSACTION;")->isSuccess());
+    insertNodes(0, 1);
+    auto gate = FlakyCheckpointer::lockWriteGate(*context);
+    std::unique_ptr<main::QueryResult> res;
+    std::promise<void> committed;
+    auto finished = committed.get_future();
+    std::thread committing([&]() {
+        res = conn->query("COMMIT;");
+        committed.set_value();
+    });
+    const auto status = finished.wait_for(std::chrono::seconds(1));
+    gate.unlock();
+    committing.join();
+    ASSERT_EQ(status, std::future_status::ready);
+    ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+    EXPECT_EQ(numCheckpoints, 0u);
+    EXPECT_GT(WAL::Get(*context)->getFileSize(), 0u);
+    res.reset();
+    createDBAndConn();
+    checkNodes(1);
+    context = getClientContext(*conn);
+    checkpointAfterEveryCommit();
+    countCheckpoints<FlakyCheckpointerFailsOnCheckpointStorage>();
+    insertNodes(1, 2);
+    EXPECT_EQ(numCheckpoints, 1u);
+    EXPECT_EQ(WAL::Get(*context)->getFileSize(), 0u);
+    createDBAndConn();
+    checkNodes(2);
+}
+
+TEST_F(PostCommitCheckpointFailureTest, AutoCheckpointRunsBesideOpenReader) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+    countCheckpoints<FlakyCheckpointerFailsOnCheckpointStorage>();
+    failCheckpoints = false;
+    {
+        main::Connection reader{database.get()};
+        ASSERT_TRUE(reader.query("BEGIN TRANSACTION READ ONLY;")->isSuccess());
+        insertNodes(0, 1);
+        EXPECT_EQ(numCheckpoints, 1u);
+        auto res = reader.query("MATCH (a:test) RETURN COUNT(a);");
+        ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+        EXPECT_EQ(res->getNext()->getValue(0)->getValue<int64_t>(), 0);
+        ASSERT_TRUE(reader.query("COMMIT;")->isSuccess());
+    }
+    insertNodes(1, 2);
+    EXPECT_EQ(numCheckpoints, 2u);
+    EXPECT_EQ(WAL::Get(*getClientContext(*conn))->getFileSize(), 0u);
+    createDBAndConn();
+    checkNodes(2);
+}
+
+// A writer waiting at an explicit checkpoint's gate must let readers and active writers finish.
+TEST_F(PostCommitCheckpointFailureTest, WriterWaitingBehindExplicitCheckpointLetsOthersThrough) {
     if (inMemMode) {
         GTEST_SKIP();
     }
@@ -1008,10 +1218,11 @@ TEST_F(PostCommitCheckpointFailureTest, WriterWaitingBehindAutoCheckpointLetsOth
     main::Connection openWriter{database.get()};
     main::Connection waitingWriter{database.get()};
     main::Connection reader{database.get()};
+    insertNodes(0, 1);
     ASSERT_TRUE(openWriter.query("BEGIN TRANSACTION;")->isSuccess());
     ASSERT_TRUE(openWriter.query("CREATE (a:test {id: 1, name: 'name_1'});")->isSuccess());
-    // This commit's checkpoint closes the write gate and waits for openWriter to leave.
-    std::thread committing([this]() { insertNodes(0, 1); });
+    std::unique_ptr<main::QueryResult> checkpointRes;
+    std::thread checkpointing([&]() { checkpointRes = conn->query("CHECKPOINT;"); });
     const bool gateClosed = FlakyCheckpointer::waitForWriteGateClosed(*getClientContext(*conn));
     std::unique_ptr<main::QueryResult> waitingRes;
     std::promise<void> waitingStarted;
@@ -1025,9 +1236,10 @@ TEST_F(PostCommitCheckpointFailureTest, WriterWaitingBehindAutoCheckpointLetsOth
     auto readRes = reader.query("MATCH (a:test) RETURN COUNT(a);");
     auto commitRes = openWriter.query("COMMIT;");
     const auto waited = std::chrono::steady_clock::now() - start;
-    committing.join();
+    checkpointing.join();
     waiting.join();
     ASSERT_TRUE(gateClosed);
+    ASSERT_TRUE(checkpointRes->isSuccess()) << checkpointRes->getErrorMessage();
     ASSERT_TRUE(readRes->isSuccess()) << readRes->getErrorMessage();
     ASSERT_TRUE(commitRes->isSuccess()) << commitRes->getErrorMessage();
     ASSERT_TRUE(waitingRes->isSuccess()) << waitingRes->getErrorMessage();
@@ -1194,6 +1406,99 @@ TEST_F(PostCommitCheckpointFailureTest, ConcurrentCopiesDoNotWaitForEachOther) {
     ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
     EXPECT_EQ(res->getNext()->getValue(0)->getValue<int64_t>(), 0);
 }
+
+class ConcurrentCopyRollbackTest
+    : public PostCommitCheckpointFailureTest,
+      public ::testing::WithParamInterface<std::tuple<bool, unsigned, bool, bool>> {};
+
+TEST_P(ConcurrentCopyRollbackTest, PreservesOtherCopy) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+    const auto [rel, rollbackMode, existingRows, largeCopy] = GetParam();
+    const auto rejectedCommit = rollbackMode == 1;
+    ASSERT_TRUE(conn->query("CALL enable_multi_writes=true")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE N(id INT64 PRIMARY KEY)")->isSuccess());
+    if (rel) {
+        ASSERT_TRUE(conn->query("CREATE (:N {id: 0}), (:N {id: 1})")->isSuccess());
+        ASSERT_TRUE(conn->query("CREATE REL TABLE K(FROM N TO N, value INT64)")->isSuccess());
+    }
+    const auto copy = [rel](int64_t first, int64_t last) {
+        return rel ? std::format("COPY K FROM (UNWIND range({}, {}) AS i "
+                                 "RETURN 0 AS FROM, 1 AS TO, i AS value)",
+                         first, last) :
+                     std::format("COPY N FROM (UNWIND range({}, {}) AS i RETURN i)", first, last);
+    };
+    if (existingRows) {
+        ASSERT_TRUE(conn->query(copy(-5, -1))->isSuccess());
+    }
+    if (rollbackMode == 2) {
+        ASSERT_TRUE(conn->query("CALL auto_checkpoint=false")->isSuccess());
+    }
+    const auto checkRows = [&](bool reusedKeys) {
+        auto result = conn->query(rel ? "MATCH ()-[r:K]->() RETURN r.value ORDER BY r.value" :
+                                        "MATCH (n:N) RETURN n.id ORDER BY n.id");
+        ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+        ASSERT_EQ(result->getNumTuples(), 100 + (existingRows ? 5 : 0) + (reusedKeys ? 3 : 0));
+        if (existingRows) {
+            for (auto id = -5; id < 0; ++id) {
+                EXPECT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), id);
+            }
+        }
+        for (auto id = 1; id <= 100; ++id) {
+            EXPECT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), id);
+        }
+        if (reusedKeys) {
+            for (auto id = 1000; id <= 1002; ++id) {
+                EXPECT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), id);
+            }
+        }
+    };
+    {
+        main::Connection other{database.get()};
+        ASSERT_TRUE(other.query("BEGIN TRANSACTION")->isSuccess());
+        const auto numRows = largeCopy ? StorageConfig::NODE_GROUP_SIZE + 1 : 100;
+        auto result = other.query(copy(1000, 999 + numRows));
+        ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+        std::unique_ptr<main::QueryResult> committedCopy;
+        std::thread writer([&]() { committedCopy = conn->query(copy(1, 100)); });
+        bool pending = true;
+        if (rollbackMode == 2) {
+            writer.join();
+        } else {
+            pending = FlakyCheckpointer::waitForForcedCheckpointPending(*getClientContext(*conn));
+        }
+        result = other.query(rejectedCommit ? "COMMIT" : "ROLLBACK");
+        if (writer.joinable()) {
+            writer.join();
+        }
+        ASSERT_TRUE(pending);
+        ASSERT_TRUE(committedCopy->isSuccess()) << committedCopy->getErrorMessage();
+        if (rejectedCommit) {
+            ASSERT_FALSE(result->isSuccess());
+            EXPECT_NE(result->getErrorMessage().find("The transaction was rolled back"),
+                std::string::npos);
+        } else {
+            ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+        }
+        checkRows(false);
+    }
+    if (rollbackMode == 2) {
+        ASSERT_TRUE(conn->query("CHECKPOINT")->isSuccess());
+    }
+    // The successful COPY must survive reopening without another checkpoint on close.
+    createDBAndConn();
+    checkRows(false);
+    // Rolled-back primary keys and CSR row ranges must remain usable by later COPYs.
+    ASSERT_TRUE(conn->query(copy(1000, 1002))->isSuccess());
+    checkRows(true);
+    createDBAndConn();
+    checkRows(true);
+}
+
+INSTANTIATE_TEST_SUITE_P(NodeAndRel, ConcurrentCopyRollbackTest,
+    ::testing::Combine(::testing::Bool(), ::testing::Values(0u, 1u, 2u), ::testing::Bool(),
+        ::testing::Bool()));
 
 TEST_F(PostCommitCheckpointFailureTest, AutoCheckpointThatPoisonsWALFailsNextWrite) {
     if (inMemMode) {
@@ -6888,6 +7193,31 @@ TEST_F(ReviewFixesTest, HashIndexBasicRecoveryAfterCheckpoint) {
         EXPECT_EQ(r->getNext()->getValue(0)->getValue<std::string>(), "v" + std::to_string(i));
         EXPECT_FALSE(r->hasNext());
     }
+}
+
+TEST_F(ReviewFixesTest, OptimisticRollbackFreesOnlyUnretainedPages) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+    auto* file = getStorageManager(*database)->getDataFH();
+    // A fresh page manager gives two adjacent allocations independent of the DB's free list.
+    PageManager pages{file};
+    OptimisticAllocator allocator{pages};
+    const auto start = allocator.allocatePageRange(8).startPageIdx;
+    ASSERT_EQ(allocator.allocatePageRange(4).startPageIdx, start + 8);
+    allocator.retainPageRange({start + 2, 2}); // splits the first allocation
+    allocator.retainPageRange({start + 6, 4}); // spans both allocations
+    allocator.retainPageRange({start + 2, 2}); // already retained
+    allocator.retainPageRange({start, 0});
+    allocator.rollback();
+    std::vector<std::pair<page_idx_t, page_idx_t>> freed;
+    for (const auto& range : pages.getFreeEntries(0, pages.getNumFreeEntries())) {
+        freed.emplace_back(range.startPageIdx, range.numPages);
+    }
+    std::sort(freed.begin(), freed.end());
+    const std::vector<std::pair<page_idx_t, page_idx_t>> expected{{start, 2}, {start + 4, 2},
+        {start + 10, 2}};
+    EXPECT_EQ(freed, expected);
 }
 
 // Fix #5 – reclaimTailPagesIfNeeded must not introduce overlap with existing FSM entries

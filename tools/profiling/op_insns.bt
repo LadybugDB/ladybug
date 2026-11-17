@@ -1,0 +1,54 @@
+/* Per-operator instruction sampling for ladybug.
+ *
+ * Attributes hardware-retired instructions to the innermost executing
+ * operator, mirroring PROFILE's exclusive ExecutionTime.
+ *
+ * Usage:
+ *   sudo bpftrace tools/profiling/op_insns.bt ./build/release/tools/shell/lbug
+ *
+ * The binary path comes from $1. Ctrl-C prints @insns: keys are
+ * (op_type, op_id) tuples; decode op_type with tools/profiling/attribute.py
+ * or the snippet in tools/profiling/README.md.
+ *
+ * Tune the sample period (default 1M): higher = less overhead but noisier.
+ * Short queries may need e.g. hardware:instructions:100000.
+ */
+
+usdt:$1:lbug:query_start
+{
+  @in_query++;
+}
+
+usdt:$1:lbug:query_end
+{
+  @in_query--;
+}
+
+usdt:$1:lbug:operator_start
+{
+  @depth[tid]++;
+  @frame[tid, @depth[tid]] = (arg0, arg1);
+}
+
+usdt:$1:lbug:operator_end
+{
+  delete(@frame, (tid, @depth[tid]));
+  @depth[tid]--;
+}
+
+hardware:instructions:1000000
+{
+  if (@in_query > 0) {
+    $d = @depth[tid];
+    if ($d > 0) {
+      @insns[@frame[tid, $d]] = sum(1000000);
+    }
+  }
+}
+
+END
+{
+  clear(@frame);
+  clear(@depth);
+  clear(@in_query);
+}

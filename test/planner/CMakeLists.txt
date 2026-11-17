@@ -1,1 +1,2 @@
-add_lbug_test(planner_tests cardinality_test.cpp optional_match_strategy_test.cpp)
+add_lbug_test(planner_tests cardinality_test.cpp optional_match_strategy_test.cpp
+        bound_expand_test.cpp)

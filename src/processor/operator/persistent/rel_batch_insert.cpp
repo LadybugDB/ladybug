@@ -15,6 +15,7 @@
 #include "storage/table/column_chunk_data.h"
 #include "storage/table/csr_chunked_node_group.h"
 #include "storage/table/rel_table.h"
+#include "storage/unique_constraint_checker.h"
 #include "transaction/transaction_context.h"
 #include <format>
 
@@ -74,6 +75,7 @@ void RelBatchInsert::initGlobalStateInternal(ExecutionContext* context) {
     const auto& relGroupEntry = catalogEntry->constCast<RelGroupCatalogEntry>();
     // Init info
     info->compressionEnabled = StorageManager::Get(*clientContext)->compressionEnabled();
+    info->clearColumns();
     auto dataColumnIdx = 0u;
     // Handle internal id column
     info->columnTypes.push_back(LogicalType::INTERNAL_ID());
@@ -136,6 +138,11 @@ static void appendNewChunkedGroup(MemoryManager& mm, transaction::Transaction* t
     const std::vector<column_id_t>& columnIDs, InMemChunkedCSRNodeGroup& chunkedGroup,
     RelTable& relTable, CSRNodeGroup& nodeGroup, RelDataDirection direction,
     PageAllocator& pageAllocator) {
+    // Empty COPY partitions must not publish insert-version/undo records or create
+    // persistent/in-memory groups. There are no tuples for commit or rollback to visit.
+    if (chunkedGroup.getNumRows() == 0) {
+        return;
+    }
     const bool isNewNodeGroup = nodeGroup.isEmpty();
     const auto* clientContext = transaction->getClientContext();
     const bool inManualTransaction =
@@ -280,6 +287,18 @@ void RelBatchInsert::finalizeInternal(ExecutionContext* context) {
                 MemoryManager::Get(*context->clientContext));
             warningContext->defaultPopulateAllWarnings(context->queryID);
         }
+    }
+    // UNIQUE constraints are validated once at the end of the load (rather than per
+    // row): a violation aborts the transaction and discards the whole COPY. Group
+    // validation covers all (src, dst) pair tables, so cross-pair duplicates are caught.
+    // finalizeInternal runs once per stored direction (BWD first, then FWD), but only
+    // the FWD pass can see this COPY's rows: the BWD pass runs before any of them exist.
+    // Every constrained table has forward storage (enforced at bind time), so validating
+    // in the FWD branch alone halves the cost for default storage without missing
+    // duplicates.
+    if (relInfo->direction == RelDataDirection::FWD) {
+        storage::UniqueConstraintChecker::validateTableConstraints(context->clientContext,
+            sharedState->table->ptrCast<storage::RelTable>());
     }
     sharedState->numRows.store(0);
     sharedState->table->cast<RelTable>().setHasChanges();

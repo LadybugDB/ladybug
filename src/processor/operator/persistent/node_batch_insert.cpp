@@ -33,6 +33,7 @@
 #include "storage/table/chunked_node_group.h"
 #include "storage/table/node_table.h"
 #include "storage/table/string_chunk_data.h"
+#include "storage/unique_constraint_checker.h"
 #include "transaction/transaction.h"
 #include <format>
 
@@ -480,6 +481,7 @@ void NodeBatchInsert::initGlobalStateInternal(ExecutionContext* context) {
     auto pkColumnID = nodeTableEntry->getColumnID(pkDefinition.getName());
     // Init info
     info->compressionEnabled = StorageManager::Get(*clientContext)->compressionEnabled();
+    info->clearColumns();
     auto dataColumnIdx = 0u;
     for (auto& property : nodeTableEntry->getProperties()) {
         info->columnTypes.push_back(property.getType().copy());
@@ -490,8 +492,24 @@ void NodeBatchInsert::initGlobalStateInternal(ExecutionContext* context) {
         info->columnTypes.push_back(type.copy());
         info->warningDataColumns.push_back(dataColumnIdx++);
     }
-    // Init shared state
+    // Init shared state. A cached plan template and its clones share it, so it still holds the
+    // targets, counters and result table of an earlier execution. The result table is replaced,
+    // not cleared, since the earlier execution's query result may still read it.
     auto nodeSharedState = sharedState->ptrCast<NodeBatchInsertSharedState>();
+    nodeSharedState->fTable =
+        FactorizedTableUtils::getNodeCopyResultFTable(MemoryManager::Get(*clientContext));
+    nodeSharedState->numRows.store(0);
+    {
+        std::lock_guard lck{nodeSharedState->erroredRowMutex};
+        *nodeSharedState->numErroredRows = 0;
+    }
+    nodeSharedState->duplicatePKSkipResult = std::make_shared<DuplicatePKSkipResult>();
+    nodeSharedState->targets.clear();
+    nodeSharedState->partitionRefs.clear();
+    nodeSharedState->partitionHandles.clear();
+    nodeSharedState->partitionKeyColumnIdx = INVALID_COLUMN_ID;
+    nodeSharedState->partitionConstraint = nullptr;
+    nodeSharedState->listRouter.reset();
     nodeSharedState->pkColumnID = pkColumnID;
     nodeSharedState->pkType = pkDefinition.getType().copy();
     nodeSharedState->skipDuplicatePK = info->ptrCast<NodeBatchInsertInfo>()->skipDuplicatePK;
@@ -1067,6 +1085,14 @@ void NodeBatchInsert::finalize(ExecutionContext* context) {
         }
         for (auto& index : sharedTarget.table->getIndexes()) {
             index.finalize(clientContext);
+        }
+    }
+    // UNIQUE constraints are validated once at the end of the load (rather than per row):
+    // a violation aborts the transaction and discards the whole COPY.
+    for (auto& sharedTarget : nodeSharedState->targets) {
+        if (sharedTarget.table != nullptr) {
+            storage::UniqueConstraintChecker::validateTableConstraints(clientContext,
+                sharedTarget.table);
         }
     }
     // we want to flush all index errors before children call finalize

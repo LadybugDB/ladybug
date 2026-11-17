@@ -37,6 +37,15 @@ struct BatchInsertInfo {
 
     virtual std::unique_ptr<BatchInsertInfo> copy() const = 0;
 
+    // initGlobalStateInternal fills the column lists for each execution, and a pooled plan still
+    // holds the lists of its previous execution.
+    void clearColumns() {
+        columnTypes.clear();
+        insertColumnIDs.clear();
+        outputDataColumns.clear();
+        warningDataColumns.clear();
+    }
+
     template<class TARGET>
     TARGET* ptrCast() {
         return common::dynamic_cast_checked<TARGET*>(this);

@@ -253,9 +253,16 @@ IndexLookup::IndexLookup(std::vector<IndexLookupInfo> infos,
     std::vector<DataPos> warningDataVectorPos, std::unique_ptr<PhysicalOperator> child, idx_t id,
     std::unique_ptr<OPPrintInfo> printInfo)
     : PhysicalOperator{type_, std::move(child), id, std::move(printInfo)}, infos{std::move(infos)},
-      warningDataVectorPos{std::move(warningDataVectorPos)} {
+      warningDataVectorPos{std::move(warningDataVectorPos)} {}
+
+// Runs once per execution on the plan's operator, before the worker copies are made, so all
+// workers share one cache. Each execution gets a new cache, so a pooled plan never reuses a map
+// built from an earlier state of the node table; finalizeInternal drops the last reference when
+// the pipeline ends.
+void IndexLookup::initGlobalStateInternal(ExecutionContext* /*context*/) {
     std::unordered_map<NodeTable*, std::shared_ptr<NoIndexLookupCache>> noIndexLookupCaches;
-    for (auto& info : this->infos) {
+    for (auto& info : infos) {
+        info.noIndexLookupCache = nullptr;
         if (!info.nodeTable->tryGetPrimaryKeyIndex()) {
             auto& cache = noIndexLookupCaches[info.nodeTable];
             if (!cache) {
@@ -264,6 +271,12 @@ IndexLookup::IndexLookup(std::vector<IndexLookupInfo> infos,
             }
             info.noIndexLookupCache = cache;
         }
+    }
+}
+
+void IndexLookup::finalizeInternal(ExecutionContext* /*context*/) {
+    for (auto& info : infos) {
+        info.noIndexLookupCache.reset();
     }
 }
 

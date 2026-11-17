@@ -42,6 +42,19 @@ checkpoint was rolled back, the changes are lost on restart unless a later `CHEC
 if it made the database refuse writes, they survive the restart only if the checkpoint's record
 reached storage.
 
+When an automatic checkpoint is due and another writer is active or entering, the committing
+thread normally returns immediately. On a subsequent eligible commit, it closes the write gate
+and waits for active writers if the first deferral was at least 30 seconds ago. WAL growth can
+trigger the same wait sooner, including on the first eligible commit. The initial size limit is
+`checkpoint_threshold` plus the larger of `checkpoint_threshold` and 1 MiB, or 32 MiB with
+the default settings. After a timeout or a checkpoint that retains the WAL for a reader, the next
+size-triggered wait allows another `max(checkpoint_threshold, 1 MiB)` bytes of growth.
+
+The first deferral is logged to standard error. A fallback logs the number of deferrals, elapsed
+time and active WAL size. If the writers drain sooner, the next successful checkpoint logs how
+many times it was deferred. A drain timeout leaves the commit durable and allows later commits
+to retry.
+
 ## Pinned checkpoints
 
 A checkpoint taken while a read-only transaction is open keeps the WAL that transaction may still

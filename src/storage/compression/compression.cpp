@@ -74,9 +74,22 @@ auto getTypedMinMax(std::span<const T> data, const NullMask* nullMask, uint64_t 
             }
             fallbackToFirstIfAllNaN(min, max, first);
         } else {
-            auto [minRaw, maxRaw] = std::minmax_element(data.begin(), data.end());
-            min = StorageValue(*minRaw);
-            max = StorageValue(*maxRaw);
+            // NOTE(gh-1447): do not use std::minmax_element here. MSVC's vectorized
+            // implementation returns wrong results for some uint8_t/int8_t inputs, which
+            // then selects CONSTANT compression and silently drops data at checkpoint.
+            // A plain loop never depends on the STL's vectorized path.
+            auto minVal = data[0];
+            auto maxVal = data[0];
+            for (size_t i = 1; i < data.size(); ++i) {
+                if (data[i] < minVal) {
+                    minVal = data[i];
+                }
+                if (data[i] > maxVal) {
+                    maxVal = data[i];
+                }
+            }
+            min = StorageValue(minVal);
+            max = StorageValue(maxVal);
         }
     } else {
         if constexpr (std::floating_point<T>) {

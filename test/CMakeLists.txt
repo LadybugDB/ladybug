@@ -16,4 +16,8 @@ add_subdirectory(runner)
 add_subdirectory(storage)
 add_subdirectory(test_helper)
 add_subdirectory(test_runner)
+# Runs wal_dump through the POSIX shell.
+if(BUILD_TESTS AND NOT WIN32 AND NOT BUILD_WASM)
+    add_subdirectory(tools)
+endif()
 add_subdirectory(transaction)

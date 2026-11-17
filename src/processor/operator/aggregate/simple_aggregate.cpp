@@ -55,20 +55,12 @@ SimpleAggregateSharedState::SimpleAggregateSharedState(main::ClientContext* cont
         globalAggregateStates.push_back(aggregateFunction.createInitialNullAggregateState());
         partitioningData.emplace_back(this, funcIdx);
         if (aggregateFunction.isDistinct) {
-            const auto& distinctKeyType = aggInfos[funcIdx].distinctAggKeyType;
             auto schema = AggregateHashTableUtils::getTableSchemaForKeys(std::vector<LogicalType>{},
                 aggInfos[funcIdx].distinctAggKeyType);
             for (auto& partition : globalPartitions) {
-                std::vector<LogicalType> keyTypes(1);
-                keyTypes[0] = distinctKeyType.copy();
-                auto hashTable = std::make_unique<AggregateHashTable>(*mm, std::move(keyTypes),
-                    std::vector<LogicalType>{} /*payloadTypes*/, std::vector<AggregateFunction>{},
-                    std::vector<LogicalType>{}, 0, schema.copy());
-                auto queue = std::make_unique<HashTableQueue>(mm,
-                    AggregateHashTableUtils::getTableSchemaForKeys(std::vector<LogicalType>{},
-                        aggInfos[funcIdx].distinctAggKeyType));
-                partition.distinctTables.emplace_back(Partition::DistinctData{std::move(hashTable),
-                    std::move(queue), aggregateFunction.createInitialNullAggregateState()});
+                partition.distinctTables.emplace_back(
+                    Partition::DistinctData{std::make_unique<HashTableQueue>(mm, schema.copy()),
+                        aggregateFunction.createInitialNullAggregateState()});
             }
         } else {
             for (auto& partition : globalPartitions) {
@@ -111,8 +103,7 @@ void SimpleAggregateSharedState::finalizeAggregateStates() {
     }
 }
 
-void SimpleAggregateSharedState::resetForReuse(storage::MemoryManager* memoryManager,
-    const std::vector<AggregateInfo>& aggInfos) {
+void SimpleAggregateSharedState::resetForReuse() {
     // A cached physical plan aliases this state across executions of the operator tree, so the
     // scan cursor and the accumulated aggregate states must be re-armed before each execution.
     std::unique_lock lck{mtx};
@@ -127,29 +118,18 @@ void SimpleAggregateSharedState::resetForReuse(storage::MemoryManager* memoryMan
     if (!hasDistinct) {
         return;
     }
-    // Distinct partitions are consumed (tables and queues reset) by finalizePartitions during
-    // the previous execution; rebuild them so the next execution starts from an empty slate.
-    // Mirrors the partition construction in the constructor.
+    // finalizePartitions folded the previous execution's distinct values into the partition
+    // states; start them again from the initial state, and drop tuples left by an execution that
+    // stopped before finalizing.
     for (auto& partition : globalPartitions) {
         for (size_t funcIdx = 0; funcIdx < aggregateFunctions.size(); funcIdx++) {
             auto& aggregateFunction = aggregateFunctions[funcIdx];
             if (!aggregateFunction.isDistinct) {
                 continue;
             }
-            const auto& distinctKeyType = aggInfos[funcIdx].distinctAggKeyType;
-            std::vector<LogicalType> keyTypes(1);
-            keyTypes[0] = distinctKeyType.copy();
-            auto schema = AggregateHashTableUtils::getTableSchemaForKeys(std::vector<LogicalType>{},
-                distinctKeyType);
-            auto hashTable =
-                std::make_unique<AggregateHashTable>(*memoryManager, std::move(keyTypes),
-                    std::vector<LogicalType>{} /*payloadTypes*/, std::vector<AggregateFunction>{},
-                    std::vector<LogicalType>{} /*payloadTypes*/, 0, schema.copy());
-            auto queue = std::make_unique<HashTableQueue>(memoryManager,
-                AggregateHashTableUtils::getTableSchemaForKeys(std::vector<LogicalType>{},
-                    distinctKeyType));
-            partition.distinctTables[funcIdx] = Partition::DistinctData{std::move(hashTable),
-                std::move(queue), aggregateFunction.createInitialNullAggregateState()};
+            auto& distinctData = partition.distinctTables[funcIdx];
+            distinctData.queue->clear();
+            distinctData.state = aggregateFunction.createInitialNullAggregateState();
         }
         partition.finalized = false;
     }
@@ -209,15 +189,23 @@ void SimpleAggregateSharedState::finalizePartitions(storage::MemoryManager* memo
             if (!aggregateFunctions[i].isDistinct) {
                 continue;
             }
-            auto& [hashTable, queue, state] = partition.distinctTables[i];
-            if (queue) {
-                DASSERT(hashTable);
-                queue->mergeInto(*hashTable);
+            auto& [queue, state] = partition.distinctTables[i];
+            // A partition whose queue received no values keeps its initial state.
+            if (queue->empty()) {
+                continue;
             }
+            std::vector<LogicalType> keyTypes;
+            keyTypes.push_back(aggInfos[i].distinctAggKeyType.copy());
+            AggregateHashTable hashTable(*memoryManager, std::move(keyTypes),
+                std::vector<LogicalType>{} /*payloadTypes*/, std::vector<AggregateFunction>{},
+                std::vector<LogicalType>{}, 0,
+                AggregateHashTableUtils::getTableSchemaForKeys(std::vector<LogicalType>{},
+                    aggInfos[i].distinctAggKeyType));
+            queue->mergeInto(hashTable);
 
             ValueVector aggregateVector(aggInfos[i].distinctAggKeyType.copy(), memoryManager,
                 std::make_shared<DataChunkState>());
-            const auto& ft = hashTable->getFactorizedTable();
+            const auto* ft = hashTable.getFactorizedTable();
             ft_tuple_idx_t startTupleIdx = 0;
             ft_tuple_idx_t numTuplesToScan =
                 std::min(DEFAULT_VECTOR_CAPACITY, ft->getNumTuples() - startTupleIdx);
@@ -231,8 +219,6 @@ void SimpleAggregateSharedState::finalizePartitions(storage::MemoryManager* memo
                 numTuplesToScan =
                     std::min(DEFAULT_VECTOR_CAPACITY, ft->getNumTuples() - startTupleIdx);
             }
-            hashTable.reset();
-            queue.reset();
         }
     });
     {
@@ -245,34 +231,34 @@ void SimpleAggregate::initLocalStateInternal(ResultSet* resultSet, ExecutionCont
     localAggregateStates.clear();
     distinctHashTables.clear();
     BaseAggregate::initLocalStateInternal(resultSet, context);
-    for (auto i = 0u; i < aggregateFunctions.size(); ++i) {
-        auto& func = aggregateFunctions[i];
+    for (auto& func : aggregateFunctions) {
         localAggregateStates.push_back(func.createInitialNullAggregateState());
-        std::unique_ptr<PartitioningAggregateHashTable> distinctHT;
-        if (func.isDistinct) {
-            auto mm = storage::MemoryManager::Get(*context->clientContext);
-            std::vector<LogicalType> keyTypes;
-            keyTypes.push_back(aggInfos[i].distinctAggKeyType.copy());
-            distinctHT = std::make_unique<PartitioningAggregateHashTable>(
-                &getSharedState().partitioningData[i], *mm, std::move(keyTypes),
-                std::vector<LogicalType>{} /* empty payload*/,
-                std::vector<function::AggregateFunction>{},
-                std::vector<LogicalType>{} /*empty distinct keys*/,
-                AggregateHashTableUtils::getTableSchemaForKeys(std::vector<LogicalType>{},
-                    aggInfos[i].distinctAggKeyType));
-        } else {
-            distinctHT = nullptr;
-        }
-        distinctHashTables.push_back(std::move(distinctHT));
-    };
+        distinctHashTables.emplace_back();
+    }
+}
+
+std::unique_ptr<PartitioningAggregateHashTable> SimpleAggregate::createDistinctHashTable(
+    size_t funcIdx, storage::MemoryManager& memoryManager) {
+    std::vector<LogicalType> keyTypes;
+    keyTypes.push_back(aggInfos[funcIdx].distinctAggKeyType.copy());
+    return std::make_unique<PartitioningAggregateHashTable>(
+        &getSharedState().partitioningData[funcIdx], memoryManager, std::move(keyTypes),
+        std::vector<LogicalType>{} /* empty payload*/, std::vector<function::AggregateFunction>{},
+        std::vector<LogicalType>{} /*empty distinct keys*/,
+        AggregateHashTableUtils::getTableSchemaForKeys(std::vector<LogicalType>{},
+            aggInfos[funcIdx].distinctAggKeyType));
 }
 
 void SimpleAggregate::executeInternal(ExecutionContext* context) {
-    InMemOverflowBuffer localOverflowBuffer(storage::MemoryManager::Get(*context->clientContext));
+    auto* memoryManager = storage::MemoryManager::Get(*context->clientContext);
+    InMemOverflowBuffer localOverflowBuffer(memoryManager);
     while (children[0]->getNextTuple(context)) {
         for (auto i = 0u; i < aggregateFunctions.size(); i++) {
             auto aggregateFunction = &aggregateFunctions[i];
             if (aggregateFunction->isFunctionDistinct()) {
+                if (!distinctHashTables[i]) {
+                    distinctHashTables[i] = createDistinctHashTable(i, *memoryManager);
+                }
                 // Just add distinct value to the hash table. We'll calculate the aggregate state
                 // once it's been merged into the shared state
                 distinctHashTables[i]->appendDistinct(std::vector<ValueVector*>{},

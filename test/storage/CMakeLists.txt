@@ -1,6 +1,6 @@
 add_lbug_test(node_insertion_deletion_test node_insertion_deletion_test.cpp)
 add_lbug_test(compression_test compression_test.cpp compress_chunk_test.cpp
-    float_nan_constant_test.cpp)
+    float_nan_constant_test.cpp integer_constant_guard_test.cpp)
 add_lbug_test(alp_exception_chunk_test alp_exception_chunk_test.cpp)
 add_lbug_test(column_chunk_metadata_test column_chunk_metadata_test.cpp)
 add_lbug_test(local_hash_index_test local_hash_index_test.cpp)
@@ -9,8 +9,9 @@ add_lbug_test(disk_array_collection_test disk_array_collection_test.cpp)
 add_lbug_test(buffer_manager_test buffer_manager_test.cpp)
 add_lbug_test(mvcc_retention_test mvcc_retention_test.cpp)
 add_lbug_test(version_info_scan_test version_info_scan_test.cpp)
-add_lbug_test(rel_tests rel_scan_test.cpp rel_delete_test.cpp rel_degree_test.cpp
-    table_columns_concurrency_test.cpp)
+add_lbug_test(node_visibility_cache_test node_visibility_cache_test.cpp)
+add_lbug_test(rel_tests rel_scan_test.cpp rel_scan_state_test.cpp rel_delete_test.cpp
+    rel_degree_test.cpp table_columns_concurrency_test.cpp)
 add_lbug_test(node_update_test node_update_test.cpp)
 add_lbug_test(detach_delete_test detach_delete_test.cpp)
 add_lbug_test(storage_utils_test storage_utils_test.cpp)

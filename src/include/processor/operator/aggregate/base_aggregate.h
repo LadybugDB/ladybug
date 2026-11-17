@@ -54,21 +54,26 @@ protected:
 
     void finalizeAggregateHashTable(const AggregateHashTable& localHashTable);
 
+    // There is one partition per configured thread, and most of them receive no tuples when there
+    // are few groups, so a queue allocates its first block on the first appendTuple. mergeInto()
+    // and clear() leave the queue empty, and it can take tuples again. appendTuple may run on
+    // several threads at once; mergeInto, clear and empty only once all appends have finished.
     class HashTableQueue {
     public:
-        HashTableQueue(storage::MemoryManager* memoryManager, FactorizedTableSchema tableSchema);
+        HashTableQueue(storage::MemoryManager* memoryManager, FactorizedTableSchema tableSchema)
+            : memoryManager{memoryManager}, tableSchema{std::move(tableSchema)},
+              headBlock{nullptr} {}
 
         std::unique_ptr<HashTableQueue> copy() const {
-            // Only valid on a live queue: mergeInto() consumes the queue (nulling headBlock).
-            DASSERT(headBlock.load() != nullptr);
-            return std::make_unique<HashTableQueue>(headBlock.load()->table.getMemoryManager(),
-                headBlock.load()->table.getTableSchema()->copy());
+            return std::make_unique<HashTableQueue>(memoryManager, tableSchema.copy());
         }
-        ~HashTableQueue();
+        ~HashTableQueue() { clear(); }
 
         void appendTuple(std::span<uint8_t> tuple);
 
         void mergeInto(AggregateHashTable& hashTable);
+
+        void clear();
 
         bool empty() const {
             auto headBlock = this->headBlock.load();
@@ -95,13 +100,17 @@ protected:
             std::atomic<uint64_t> numTuplesWritten;
             FactorizedTable table;
         };
+        storage::MemoryManager* memoryManager;
+        FactorizedTableSchema tableSchema;
         common::MPSCQueue<TupleBlock*> queuedTuples;
         // When queueing tuples, they are always added to the headBlock until the headBlock is full
         // (numTuplesReserved >= factorizedTable.getNumTuplesPerBlock()), then pushed into the
         // queuedTuples (at which point, the numTuplesReserved may not be equal to the
-        // numTuplesWritten)
+        // numTuplesWritten). nullptr until the first tuple and after mergeInto() or clear().
         std::atomic<TupleBlock*> headBlock;
-        uint64_t numTuplesPerBlock;
+        // Serializes installing the first block, so that threads flushing into an empty queue at
+        // the same time don't each allocate one.
+        std::mutex firstBlockMtx;
     };
 
 protected:

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <chrono>
 #include <string>
 
@@ -14,7 +15,7 @@ class Timer {
 public:
     void start() {
         finished = false;
-        startTime = std::chrono::high_resolution_clock::now();
+        startTime.store(std::chrono::high_resolution_clock::now(), std::memory_order_release);
     }
 
     void stop() {
@@ -24,7 +25,7 @@ public:
 
     double getDuration() const {
         if (finished) {
-            auto duration = stopTime - startTime;
+            auto duration = stopTime - startTime.load(std::memory_order_acquire);
             return (double)std::chrono::duration_cast<std::chrono::microseconds>(duration).count();
         }
         throw Exception("Timer is still running.");
@@ -32,7 +33,7 @@ public:
 
     uint64_t getElapsedTimeInMS() const {
         auto now = std::chrono::high_resolution_clock::now();
-        auto duration = now - startTime;
+        auto duration = now - startTime.load(std::memory_order_acquire);
         auto count = std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
         DASSERT(count >= 0);
         return count;
@@ -40,13 +41,20 @@ public:
 
     double getElapsedTimeMS() const {
         auto now = std::chrono::high_resolution_clock::now();
-        auto duration = now - startTime;
+        auto duration = now - startTime.load(std::memory_order_acquire);
         return std::chrono::duration_cast<std::chrono::microseconds>(duration).count() / 1000.0;
     }
 
 private:
-    std::chrono::time_point<std::chrono::high_resolution_clock> startTime;
-    std::chrono::time_point<std::chrono::high_resolution_clock> stopTime;
+    using TimePoint = std::chrono::time_point<std::chrono::high_resolution_clock>;
+    static_assert(sizeof(std::atomic<TimePoint>) == sizeof(TimePoint) &&
+                      alignof(std::atomic<TimePoint>) == alignof(TimePoint),
+        "Timer is a member of ActiveQuery, whose layout is part of the extension ABI");
+
+    // Atomic because a thread waiting on a query's task reads the query's timer while the thread
+    // running the query restarts it for each statement (IMPORT DATABASE runs several).
+    std::atomic<TimePoint> startTime;
+    TimePoint stopTime;
     bool finished = false;
 };
 

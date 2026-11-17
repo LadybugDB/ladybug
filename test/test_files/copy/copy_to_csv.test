@@ -162,3 +162,18 @@ Runtime exception: Exporting query result to the 'CS' file is currently not supp
 -STATEMENT COPY (RETURN 5) to "${DATABASE_PATH}/copy_to_with_filter.json"
 ---- error
 Runtime exception: Exporting query result to the 'json' file is currently not supported.
+
+-CASE CopyTimestampNsOverflowIgnoreErrors
+-STATEMENT CREATE NODE TABLE tsNsOverflow(id INT64, ts TIMESTAMP_NS, PRIMARY KEY(id));
+---- ok
+-STATEMENT COPY (UNWIND [1, 2, 3] AS id WITH id, ['2020-01-02 03:04:05', '9999-01-01 00:00:00', '2021-06-01 12:00:00'][id] AS ts RETURN id, ts) TO "${DATABASE_PATH}/ts_ns_overflow.csv" (HEADER=false)
+---- ok
+-STATEMENT COPY tsNsOverflow FROM "${DATABASE_PATH}/ts_ns_overflow.csv" (HEADER=false, IGNORE_ERRORS=true)
+---- ok
+-STATEMENT CALL show_warnings() RETURN message, line_number, skipped_line_or_record
+---- 1
+Conversion exception: Error occurred during parsing TIMESTAMP_NS. Given: "9999-01-01 00:00:00". Expected format: (YYYY-MM-DD hh:mm:ss[.zzzzzz][+-TT[:tt]])|2|2,9999-01-01 00:00:00
+-STATEMENT MATCH (t:tsNsOverflow) RETURN t.id, t.ts ORDER BY t.id
+---- 2
+1|2020-01-02 03:04:05
+3|2021-06-01 12:00:00

@@ -28,3 +28,22 @@ False
 ---- 2
 big|1
 small|2
+
+-CASE AggregateInRuledOutBranchAggregatesProjection
+-STATEMENT UNWIND [1, 2, 3] AS x RETURN CASE WHEN true THEN 0 ELSE count(*) END AS v;
+---- 1
+0
+-STATEMENT UNWIND [1, 2, 3] AS x RETURN false AND count(*) > 0 AS v;
+---- 1
+False
+-STATEMENT UNWIND [1, 2, 3] AS x RETURN true OR count(*) > 0 AS v;
+---- 1
+True
+-STATEMENT UNWIND [1, 2, 3] AS x WITH CASE WHEN true THEN 0 ELSE count(*) END AS v RETURN v;
+---- 1
+0
+-STATEMENT UNWIND [1, 1, 2] AS x RETURN x, CASE WHEN true THEN x ELSE count(*) END AS v ORDER BY x;
+-CHECK_ORDER
+---- 2
+1|1
+2|2

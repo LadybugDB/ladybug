@@ -2,6 +2,7 @@
 
 #include <unordered_set>
 
+#include "binder/expression/node_expression.h"
 #include "binder/expression/rel_expression.h"
 #include "planner/operator/logical_hash_join.h"
 #include "planner/operator/logical_unwind.h"
@@ -66,6 +67,12 @@ static binder::expression_vector getDedupKeyExpressions(const LogicalMerge& merg
     std::unordered_set<std::string> keyNames;
     for (auto& key : merge.getKeys()) {
         if (!appendKeyIfInScope(result, keyNames, op, key)) {
+            return {};
+        }
+    }
+    for (auto& info : merge.getInsertNodeInfos()) {
+        auto node = info.pattern->constPtrCast<binder::NodeExpression>();
+        if (!appendKeyIfInScope(result, keyNames, op, node->getInternalID())) {
             return {};
         }
     }

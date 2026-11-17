@@ -93,6 +93,7 @@ bool ValueVector::setNullFromBits(const uint64_t* srcNullEntries, uint64_t srcOf
 
 template<typename T>
 void ValueVector::setValue(uint32_t pos, T val) {
+    DASSERT(sizeof(T) == numBytesPerValue);
     ((T*)valueBuffer.get())[pos] = val;
 }
 

@@ -21,6 +21,7 @@ void BinderScope::replaceExpression(const std::string& oldName, const std::strin
 void BinderScope::clear() {
     expressions.clear();
     nameToExprIdx.clear();
+    recursiveRels.clear();
 }
 
 } // namespace binder

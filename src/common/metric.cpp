@@ -6,7 +6,6 @@ namespace common {
 TimeMetric::TimeMetric(bool enable) : Metric(enable) {
     accumulatedTime = 0;
     isStarted = false;
-    timer = Timer();
 }
 
 void TimeMetric::start() {

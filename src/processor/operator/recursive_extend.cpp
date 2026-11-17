@@ -227,8 +227,9 @@ static bool tryExecuteFunctionalChainFastPath(ExecutionContext* context,
             }
         }
     } else {
+        storage::NodeVisibilityCache visibility{*nodeTable, transaction};
         for (offset_t offset = 0; offset < maxOffset; ++offset) {
-            if (!nodeTable->isVisible(transaction, offset)) {
+            if (!visibility.isVisible(offset)) {
                 continue;
             }
             if (visitSource(offset)) {
@@ -260,8 +261,9 @@ void RecursiveExtend::executeInternal(ExecutionContext* context) {
                                  ->getTable(tableID)
                                  ->ptrCast<storage::NodeTable>();
             auto maxOffset = graph->getMaxOffset(transaction, tableID);
+            storage::NodeVisibilityCache visibility{*nodeTable, transaction};
             for (auto offset = 0u; offset < maxOffset; ++offset) {
-                totalNumNodes += nodeTable->isVisible(transaction, offset);
+                totalNumNodes += visibility.isVisible(offset);
             }
         }
     }
@@ -288,9 +290,14 @@ void RecursiveExtend::executeInternal(ExecutionContext* context) {
             auto computeState = function->getComputeState(context, bindData, sharedState.get());
             auto sourceNodeID = nodeID_t{offset, tableID};
             computeState->initSource(sourceNodeID);
-            GDSUtils::runRecursiveJoinEdgeCompute(context, *computeState, graph,
-                bindData.extendDirection, bindData.upperBound, sharedState->getOutputNodeMaskMap(),
-                propertyNames);
+            auto outputMask = sharedState->getOutputNodeMaskMap();
+            // The single-pair searches take no lower bound and assume it is 1.
+            if (bindData.lowerBound != 1 ||
+                !computeState->edgeCompute->runSinglePairSearch(context, graph,
+                    bindData.extendDirection, bindData.upperBound, sourceNodeID, outputMask)) {
+                GDSUtils::runRecursiveJoinEdgeCompute(context, *computeState, graph,
+                    bindData.extendDirection, bindData.upperBound, outputMask, propertyNames);
+            }
             auto writer = function->getOutputWriter(context, bindData, *computeState, sourceNodeID,
                 sharedState.get());
             auto vertexCompute = std::make_unique<RJVertexCompute>(
@@ -314,8 +321,9 @@ void RecursiveExtend::executeInternal(ExecutionContext* context) {
             auto nodeTable = storage::StorageManager::Get(*clientContext)
                                  ->getTable(tableID)
                                  ->ptrCast<storage::NodeTable>();
+            storage::NodeVisibilityCache visibility{*nodeTable, transaction};
             for (auto offset = 0u; offset < maxOffset; ++offset) {
-                if (!nodeTable->isVisible(transaction, offset)) {
+                if (!visibility.isVisible(offset)) {
                     continue;
                 }
                 calcFunc(offset);

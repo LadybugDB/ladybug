@@ -1,0 +1,384 @@
+-DATASET CSV empty
+--
+
+-CASE CreateDropShowConstraint
+-STATEMENT CREATE NODE TABLE User(id INT64, name STRING, PRIMARY KEY(id))
+---- ok
+-STATEMENT CREATE NODE TABLE Product(id INT64, name STRING, PRIMARY KEY(id))
+---- ok
+-STATEMENT CREATE REL TABLE REVIEWED(FROM User TO Product, userId INT64, productId INT64)
+---- ok
+-STATEMENT CREATE (u:User {id: 1, name: 'a'})
+---- ok
+-STATEMENT CREATE (u:User {id: 2, name: 'b'})
+---- ok
+-STATEMENT CREATE (p:Product {id: 10, name: 'x'})
+---- ok
+-STATEMENT MATCH (u:User {id: 1}), (p:Product {id: 10}) CREATE (u)-[r:REVIEWED {userId: 1, productId: 100}]->(p)
+---- ok
+-STATEMENT CREATE CONSTRAINT review_unique FOR ()-[r:REVIEWED]-() REQUIRE (r.userId, r.productId) IS UNIQUE
+---- 1
+Constraint review_unique has been created.
+-STATEMENT CALL show_constraints() RETURN name, table_name, table_type, property_names
+---- 1
+review_unique|REVIEWED|REL|[userId,productId]
+-STATEMENT SHOW CONSTRAINTS
+---- 1
+review_unique|REVIEWED|REL|[userId,productId]|CREATE CONSTRAINT `review_unique` FOR ()-[r:`REVIEWED`]-() REQUIRE (r.`userId`, r.`productId`) IS UNIQUE;
+-STATEMENT DROP CONSTRAINT review_unique
+---- 1
+Constraint review_unique has been dropped.
+-STATEMENT CALL show_constraints() RETURN count(*)
+---- 1
+0
+
+-CASE CreateConstraintDuplicateInsert
+-STATEMENT CREATE NODE TABLE User(id INT64, name STRING, PRIMARY KEY(id))
+---- ok
+-STATEMENT CREATE NODE TABLE Product(id INT64, name STRING, PRIMARY KEY(id))
+---- ok
+-STATEMENT CREATE REL TABLE REVIEWED(FROM User TO Product, userId INT64, productId INT64)
+---- ok
+-STATEMENT CREATE (u:User {id: 1, name: 'a'})
+---- ok
+-STATEMENT CREATE (u:User {id: 2, name: 'b'})
+---- ok
+-STATEMENT CREATE (p:Product {id: 10, name: 'x'})
+---- ok
+-STATEMENT MATCH (u:User {id: 1}), (p:Product {id: 10}) CREATE (u)-[r:REVIEWED {userId: 1, productId: 100}]->(p)
+---- ok
+-STATEMENT CREATE CONSTRAINT review_unique FOR ()-[r:REVIEWED]-() REQUIRE (r.userId, r.productId) IS UNIQUE
+---- 1
+Constraint review_unique has been created.
+-STATEMENT MATCH (u:User {id: 1}), (p:Product {id: 10}) CREATE (u)-[r:REVIEWED {userId: 1, productId: 100}]->(p)
+---- error
+Runtime exception: Unique constraint review_unique violated: duplicate key.
+-STATEMENT MATCH (u:User {id: 1}), (p:Product {id: 10}) CREATE (u)-[r:REVIEWED {userId: 2, productId: 100}]->(p)
+---- ok
+-STATEMENT MATCH (u:User {id: 2}), (p:Product {id: 10}) CREATE (u)-[r:REVIEWED {userId: NULL, productId: 100}]->(p)
+---- ok
+-STATEMENT MATCH (u:User {id: 2}), (p:Product {id: 10}) CREATE (u)-[r:REVIEWED {userId: NULL, productId: 100}]->(p)
+---- ok
+-STATEMENT MATCH (u:User)-[r:REVIEWED]->(p:Product) RETURN count(*)
+---- 1
+4
+
+-CASE CreateConstraintExistingDuplicates
+-STATEMENT CREATE NODE TABLE User(id INT64, name STRING, PRIMARY KEY(id))
+---- ok
+-STATEMENT CREATE NODE TABLE Product(id INT64, name STRING, PRIMARY KEY(id))
+---- ok
+-STATEMENT CREATE REL TABLE REVIEWED(FROM User TO Product, userId INT64, productId INT64)
+---- ok
+-STATEMENT CREATE (u:User {id: 1, name: 'a'})
+---- ok
+-STATEMENT CREATE (u:User {id: 2, name: 'b'})
+---- ok
+-STATEMENT CREATE (p:Product {id: 10, name: 'x'})
+---- ok
+-STATEMENT MATCH (u:User {id: 1}), (p:Product {id: 10}) CREATE (u)-[r:REVIEWED {userId: 1, productId: 100}]->(p)
+---- ok
+-STATEMENT MATCH (u:User {id: 2}), (p:Product {id: 10}) CREATE (u)-[r:REVIEWED {userId: 1, productId: 100}]->(p)
+---- ok
+-STATEMENT CREATE CONSTRAINT review_dup FOR ()-[r:REVIEWED]-() REQUIRE (r.userId, r.productId) IS UNIQUE
+---- error
+Runtime exception: Unique constraint review_dup violated: duplicate key.
+
+-CASE DropConstraintVariants
+-STATEMENT CREATE NODE TABLE User(id INT64, name STRING, PRIMARY KEY(id))
+---- ok
+-STATEMENT CREATE CONSTRAINT user_name_unique FOR (u:User) REQUIRE u.name IS UNIQUE
+---- 1
+Constraint user_name_unique has been created.
+-STATEMENT DROP CONSTRAINT review_missing
+---- error
+Binder exception: Constraint review_missing does not exist.
+-STATEMENT DROP CONSTRAINT review_missing IF EXISTS
+---- 1
+Constraint review_missing does not exist.
+-STATEMENT DROP CONSTRAINT user_name_unique
+---- 1
+Constraint user_name_unique has been dropped.
+-STATEMENT CALL show_constraints() RETURN count(*)
+---- 1
+0
+
+-CASE NodeUniqueConstraint
+-STATEMENT CREATE NODE TABLE User(id INT64, name STRING, PRIMARY KEY(id))
+---- ok
+-STATEMENT CREATE (u:User {id: 1, name: 'a'})
+---- ok
+-STATEMENT CREATE (u:User {id: 2, name: 'b'})
+---- ok
+-STATEMENT CREATE CONSTRAINT user_name_unique FOR (u:User) REQUIRE u.name IS UNIQUE
+---- 1
+Constraint user_name_unique has been created.
+-STATEMENT CREATE (u:User {id: 3, name: 'b'})
+---- error
+Runtime exception: Unique constraint user_name_unique violated: duplicate key.
+-STATEMENT MATCH (u:User {id: 1}) SET u.name = 'c'
+---- error
+Binder exception: Cannot set property name in table User because it is used in unique constraint user_name_unique. Try delete and then insert with the new value.
+-STATEMENT DROP CONSTRAINT user_name_unique
+---- 1
+Constraint user_name_unique has been dropped.
+-STATEMENT MATCH (u:User {id: 1}) SET u.name = 'c'
+---- ok
+
+-CASE CreateConstraintIfNotExists
+-STATEMENT CREATE NODE TABLE User(id INT64, PRIMARY KEY(id))
+---- ok
+-STATEMENT CREATE NODE TABLE Product(id INT64, PRIMARY KEY(id))
+---- ok
+-STATEMENT CREATE (u:User {id: 1})
+---- ok
+-STATEMENT CREATE (p:Product {id: 10})
+---- ok
+-STATEMENT CREATE REL TABLE RATED(FROM User TO Product, score INT64)
+---- ok
+-STATEMENT MATCH (u:User {id: 1}), (p:Product {id: 10}) CREATE (u)-[r:RATED {score: 5}]->(p)
+---- ok
+-STATEMENT CREATE CONSTRAINT rated_unique FOR ()-[r:RATED]->() REQUIRE (r.score) IS UNIQUE
+---- 1
+Constraint rated_unique has been created.
+-STATEMENT CREATE CONSTRAINT rated_unique IF NOT EXISTS FOR ()-[r:RATED]->() REQUIRE (r.score) IS UNIQUE
+---- 1
+Constraint rated_unique already exists.
+-STATEMENT DROP CONSTRAINT rated_unique
+---- 1
+Constraint rated_unique has been dropped.
+
+-CASE EndpointConstraints
+-STATEMENT CREATE NODE TABLE User(id INT64, PRIMARY KEY(id))
+---- ok
+-STATEMENT CREATE NODE TABLE Product(id INT64, PRIMARY KEY(id))
+---- ok
+-STATEMENT CREATE REL TABLE REVIEWED(FROM User TO Product, userId INT64)
+---- ok
+-STATEMENT CREATE (u:User {id: 1})
+---- ok
+-STATEMENT CREATE (u:User {id: 2})
+---- ok
+-STATEMENT CREATE (p:Product {id: 10})
+---- ok
+-STATEMENT CREATE (p:Product {id: 11})
+---- ok
+-STATEMENT MATCH (u:User {id: 1}), (p:Product {id: 10}) CREATE (u)-[r:REVIEWED {userId: 9}]->(p)
+---- ok
+-STATEMENT MATCH (u:User {id: 2}), (p:Product {id: 11}) CREATE (u)-[r:REVIEWED {userId: 9}]->(p)
+---- ok
+-STATEMENT CREATE CONSTRAINT ep_unique FOR ()-[r:REVIEWED]-() REQUIRE (r.src, r.userId, r.dst) IS UNIQUE
+---- 1
+Constraint ep_unique has been created.
+-STATEMENT CALL show_constraints() RETURN name, table_name, table_type, property_names
+---- 1
+ep_unique|REVIEWED|REL|[src,userId,dst]
+-STATEMENT MATCH (u:User {id: 1}), (p:Product {id: 10}) CREATE (u)-[r:REVIEWED {userId: 9}]->(p)
+---- error
+Runtime exception: Unique constraint ep_unique violated: duplicate key.
+-STATEMENT MATCH (u:User {id: 1}), (p:Product {id: 11}) CREATE (u)-[r:REVIEWED {userId: 9}]->(p)
+---- ok
+-STATEMENT DROP CONSTRAINT ep_unique
+---- 1
+Constraint ep_unique has been dropped.
+
+-CASE EndpointPropertyShadowing
+-STATEMENT CREATE NODE TABLE User(id INT64, PRIMARY KEY(id))
+---- ok
+-STATEMENT CREATE NODE TABLE Product(id INT64, PRIMARY KEY(id))
+---- ok
+-STATEMENT CREATE REL TABLE R(FROM User TO Product, src STRING, k INT64)
+---- ok
+-STATEMENT CREATE (u:User {id: 1})
+---- ok
+-STATEMENT CREATE (p:Product {id: 10})
+---- ok
+-STATEMENT MATCH (u:User), (p:Product) CREATE (u)-[r:R {src: 'x', k: 1}]->(p)
+---- ok
+-STATEMENT CREATE CONSTRAINT prop_src FOR ()-[r:R]-() REQUIRE (r.src) IS UNIQUE
+---- 1
+Constraint prop_src has been created.
+-STATEMENT MATCH (u:User), (p:Product) CREATE (u)-[r:R {src: 'x', k: 2}]->(p)
+---- error
+Runtime exception: Unique constraint prop_src violated: duplicate key.
+-STATEMENT DROP CONSTRAINT prop_src
+---- 1
+Constraint prop_src has been dropped.
+
+-CASE ConstraintAfterDelete
+-STATEMENT CREATE NODE TABLE User(id INT64, name STRING, PRIMARY KEY(id))
+---- ok
+-STATEMENT CREATE NODE TABLE Product(id INT64, PRIMARY KEY(id))
+---- ok
+-STATEMENT CREATE REL TABLE R(FROM User TO Product, k INT64)
+---- ok
+-STATEMENT CREATE (:User {id: 1, name: 'a'})
+---- ok
+-STATEMENT CREATE (:User {id: 2, name: 'b'})
+---- ok
+-STATEMENT CREATE (:User {id: 3, name: 'c'})
+---- ok
+-STATEMENT CREATE CONSTRAINT un FOR (u:User) REQUIRE u.name IS UNIQUE
+---- 1
+Constraint un has been created.
+-STATEMENT MATCH (u:User {id: 2}) DELETE u
+---- ok
+-STATEMENT CREATE (:User {id: 4, name: 'b'})
+---- ok
+-STATEMENT MATCH (u:User) RETURN count(*)
+---- 1
+3
+-STATEMENT CREATE (:Product {id: 10})
+---- ok
+-STATEMENT MATCH (u:User {id: 1}), (p:Product) CREATE (u)-[:R {k: 1}]->(p)
+---- ok
+-STATEMENT MATCH (u:User {id: 3}), (p:Product) CREATE (u)-[:R {k: 2}]->(p)
+---- ok
+-STATEMENT CREATE CONSTRAINT rk FOR ()-[r:R]-() REQUIRE r.k IS UNIQUE
+---- 1
+Constraint rk has been created.
+-STATEMENT MATCH ()-[r:R {k: 1}]->() DELETE r
+---- ok
+-STATEMENT MATCH (u:User {id: 4}), (p:Product) CREATE (u)-[:R {k: 1}]->(p)
+---- ok
+-STATEMENT MATCH (u:User {id: 4}), (p:Product) CREATE (u)-[:R {k: 2}]->(p)
+---- error
+Runtime exception: Unique constraint rk violated: duplicate key.
+-STATEMENT MATCH ()-[r:R]->() RETURN count(*)
+---- 1
+2
+
+-CASE ConstraintDropColumnGap
+-STATEMENT CREATE NODE TABLE T(id INT64, a STRING, x INT64, PRIMARY KEY(id))
+---- ok
+-STATEMENT CREATE CONSTRAINT cx FOR (t:T) REQUIRE t.x IS UNIQUE
+---- 1
+Constraint cx has been created.
+-STATEMENT CREATE (:T {id: 1, a: 'p', x: 5})
+---- ok
+-STATEMENT ALTER TABLE T DROP a
+---- ok
+-STATEMENT CREATE (:T {id: 2, x: 6})
+---- ok
+-STATEMENT CREATE (:T {id: 3, x: 6})
+---- error
+Runtime exception: Unique constraint cx violated: duplicate key.
+-STATEMENT ALTER TABLE T ADD y INT64
+---- ok
+-STATEMENT CREATE (:T {id: 4, x: 7, y: 9})
+---- ok
+-STATEMENT CREATE (:T {id: 5, x: 7, y: 10})
+---- error
+Runtime exception: Unique constraint cx violated: duplicate key.
+-STATEMENT MATCH (t:T) RETURN count(*)
+---- 1
+3
+
+-CASE ConstraintExactTypes
+-STATEMENT CREATE NODE TABLE N(id INT64, d DOUBLE, PRIMARY KEY(id))
+---- ok
+-STATEMENT CREATE (n:N {id: 1, d: 0.1})
+---- ok
+-STATEMENT CREATE (n:N {id: 2, d: 0.1000001})
+---- ok
+-STATEMENT CREATE CONSTRAINT nd FOR (n:N) REQUIRE n.d IS UNIQUE
+---- 1
+Constraint nd has been created.
+-STATEMENT CREATE NODE TABLE F(id INT64, f FLOAT, PRIMARY KEY(id))
+---- ok
+-STATEMENT CREATE (n:F {id: 1, f: 1.0})
+---- ok
+-STATEMENT CREATE (n:F {id: 2, f: 1.0000001})
+---- ok
+-STATEMENT CREATE CONSTRAINT nf FOR (n:F) REQUIRE n.f IS UNIQUE
+---- 1
+Constraint nf has been created.
+-STATEMENT CREATE NODE TABLE L(id INT64, xs STRING[], PRIMARY KEY(id))
+---- ok
+-STATEMENT CREATE (n:L {id: 1, xs: ['a,b']})
+---- ok
+-STATEMENT CREATE (n:L {id: 2, xs: ['a', 'b']})
+---- ok
+-STATEMENT CREATE CONSTRAINT lx FOR (n:L) REQUIRE n.xs IS UNIQUE
+---- 1
+Constraint lx has been created.
+-STATEMENT CREATE NODE TABLE S(id INT64, st STRUCT(a STRING, b STRING), PRIMARY KEY(id))
+---- ok
+-STATEMENT CREATE (n:S {id: 1, st: {a: 'x', b: 'y, b: z'}})
+---- ok
+-STATEMENT CREATE (n:S {id: 2, st: {a: 'x, b: y', b: 'z'}})
+---- ok
+-STATEMENT CREATE CONSTRAINT st FOR (n:S) REQUIRE n.st IS UNIQUE
+---- 1
+Constraint st has been created.
+
+-CASE ConstraintRecovery
+-STATEMENT CREATE NODE TABLE User(id INT64, name STRING, PRIMARY KEY(id))
+---- ok
+-STATEMENT CREATE NODE TABLE Product(id INT64, name STRING, PRIMARY KEY(id))
+---- ok
+-STATEMENT CREATE REL TABLE REVIEWED(FROM User TO Product, userId INT64, productId INT64)
+---- ok
+-STATEMENT CREATE (u:User {id: 1, name: 'a'})
+---- ok
+-STATEMENT CREATE (p:Product {id: 10, name: 'x'})
+---- ok
+-STATEMENT MATCH (u:User {id: 1}), (p:Product {id: 10}) CREATE (u)-[r:REVIEWED {userId: 1, productId: 100}]->(p)
+---- ok
+-STATEMENT CREATE CONSTRAINT review_unique FOR ()-[r:REVIEWED]-() REQUIRE (r.userId, r.productId) IS UNIQUE
+---- 1
+Constraint review_unique has been created.
+-RELOADDB
+-STATEMENT CALL show_constraints() RETURN name, table_name, table_type, property_names
+---- 1
+review_unique|REVIEWED|REL|[userId,productId]
+-STATEMENT MATCH (u:User {id: 1}), (p:Product {id: 10}) CREATE (u)-[r:REVIEWED {userId: 1, productId: 100}]->(p)
+---- error
+Runtime exception: Unique constraint review_unique violated: duplicate key.
+
+-CASE EndpointNameReservation
+-STATEMENT CREATE NODE TABLE User(id INT64, PRIMARY KEY(id))
+---- ok
+-STATEMENT CREATE NODE TABLE Product(id INT64, PRIMARY KEY(id))
+---- ok
+-STATEMENT CREATE REL TABLE R(FROM User TO Product, k INT64)
+---- ok
+-STATEMENT CREATE CONSTRAINT pair FOR ()-[r:R]-() REQUIRE (r.src, r.dst) IS UNIQUE
+---- 1
+Constraint pair has been created.
+-STATEMENT ALTER TABLE R ADD src STRING
+---- error
+Binder exception: Cannot add or rename a property to src in table R because it conflicts with the src endpoint of unique constraint pair. Drop the constraint first or choose a different name.
+-STATEMENT ALTER TABLE R RENAME k TO dst
+---- error
+Binder exception: Cannot add or rename a property to dst in table R because it conflicts with the dst endpoint of unique constraint pair. Drop the constraint first or choose a different name.
+-STATEMENT ALTER TABLE R ADD other STRING
+---- ok
+-STATEMENT ALTER TABLE R RENAME k TO k2
+---- ok
+-STATEMENT DROP CONSTRAINT pair
+---- 1
+Constraint pair has been dropped.
+-STATEMENT ALTER TABLE R ADD src STRING
+---- ok
+-STATEMENT CALL show_constraints() RETURN count(*)
+---- 1
+0
+
+-CASE ConstraintQuotedNames
+-STATEMENT CREATE NODE TABLE `My Table`(id INT64, `my col` STRING, PRIMARY KEY(id))
+---- ok
+-STATEMENT CREATE (`My Table` {id: 1, `my col`: 'a'})
+---- ok
+-STATEMENT CREATE CONSTRAINT `my cons` FOR (u:`My Table`) REQUIRE u.`my col` IS UNIQUE
+---- 1
+Constraint my cons has been created.
+-STATEMENT SHOW CONSTRAINTS
+---- 1
+my cons|My Table|NODE|[my col]|CREATE CONSTRAINT `my cons` FOR (n:`My Table`) REQUIRE (n.`my col`) IS UNIQUE;
+-STATEMENT CREATE (`My Table` {id: 2, `my col`: 'a'})
+---- error
+Runtime exception: Unique constraint my cons violated: duplicate key.
+-STATEMENT DROP CONSTRAINT `my cons`
+---- 1
+Constraint my cons has been dropped.

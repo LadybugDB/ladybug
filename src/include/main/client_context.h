@@ -139,6 +139,11 @@ public:
     }
 
     bool isInMemory() const;
+    // Whether a write query may execute in this context: false on a read-only database
+    // or while a remote lbug database is attached. Same gate as validateTransaction(),
+    // exposed so entry points that bypass it (e.g. TransactionManager::checkpoint)
+    // stay definitionally identical instead of re-checking getDBConfig()->readOnly.
+    bool canExecuteWriteQuery() const;
 
     void addDBDirToFileSearchPath(const std::string& dbPath);
 
@@ -237,8 +242,6 @@ private:
     bool isCachedPlanAllowedFor(const PreparedStatement& preparedStatement) const;
     std::unique_ptr<QueryResult> queryNoLock(std::string_view query,
         std::optional<uint64_t> queryID = std::nullopt, QueryConfig config = {});
-
-    bool canExecuteWriteQuery() const;
 
     std::unique_ptr<QueryResult> handleFailedExecution(std::optional<uint64_t> queryID,
         const std::exception& e) const;

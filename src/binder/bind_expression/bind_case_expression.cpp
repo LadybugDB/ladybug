@@ -67,13 +67,8 @@ std::shared_ptr<Expression> ExpressionBinder::bindCaseExpression(
             auto boundWhen = bindExpression(*caseAlternative->whenExpression);
             boundWhen = implicitCastIfNecessary(boundWhen, boundCase->dataType);
             // rewrite "CASE a.age WHEN 1" as "CASE WHEN a.age = 1"
-            if (ExpressionUtil::isNullLiteral(*boundWhen)) {
-                boundWhen = bindNullOperatorExpression(ExpressionType::IS_NULL,
-                    expression_vector{boundWhen});
-            } else {
-                boundWhen = bindComparisonExpression(ExpressionType::EQUALS,
-                    expression_vector{boundCase, boundWhen});
-            }
+            boundWhen = bindComparisonExpression(ExpressionType::EQUALS,
+                expression_vector{boundCase, boundWhen});
             auto boundThen = bindExpression(*caseAlternative->thenExpression);
             boundThen = implicitCastIfNecessary(boundThen, resultType);
             boundCaseExpression->addCaseAlternative(boundWhen, boundThen);

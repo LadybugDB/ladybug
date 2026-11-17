@@ -148,10 +148,16 @@ struct LBUG_API TableDeleteState {
 struct TableAddColumnState final {
     const binder::PropertyDefinition& propertyDefinition;
     evaluator::ExpressionEvaluator& defaultEvaluator;
+    // The catalog's column ID for the property. After a rolled-back ADD this is not the position
+    // of the storage column being appended.
+    // Currently consumed only by LocalNodeTable's uncommitted-stats merge; storage placement
+    // still appends positionally (see #1221), and all REL-table consumers ignore this field.
+    common::column_id_t columnID;
 
     TableAddColumnState(const binder::PropertyDefinition& propertyDefinition,
-        evaluator::ExpressionEvaluator& defaultEvaluator)
-        : propertyDefinition{propertyDefinition}, defaultEvaluator{defaultEvaluator} {}
+        evaluator::ExpressionEvaluator& defaultEvaluator, common::column_id_t columnID)
+        : propertyDefinition{propertyDefinition}, defaultEvaluator{defaultEvaluator},
+          columnID{columnID} {}
     ~TableAddColumnState() = default;
 };
 
@@ -197,6 +203,9 @@ public:
     // in-memory state that must not become visible if the checkpoint still fails.
     virtual void finalizeCheckpoint(main::ClientContext&) {};
     virtual void reclaimStorage(PageAllocator& pageAllocator) const = 0;
+    // Folds committed update chains below `horizon` into in-memory bases. Used by
+    // in-memory databases, which never checkpoint, to bound MVCC version memory.
+    virtual bool vacuumInMemoryUpdates(common::transaction_t) { return false; }
 
     virtual common::row_idx_t getNumTotalRows(const transaction::Transaction* transaction) = 0;
 

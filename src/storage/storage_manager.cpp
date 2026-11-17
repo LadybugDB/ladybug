@@ -132,6 +132,32 @@ bool StorageManager::containsTable(table_id_t tableID) const {
     return tables.contains(tableID);
 }
 
+NodeTable* StorageManager::tryGetNativeNodeTable(const main::ClientContext& context,
+    const catalog::TableCatalogEntry& entry) {
+    if (entry.getType() != catalog::CatalogEntryType::NODE_TABLE_ENTRY) {
+        return nullptr;
+    }
+    const auto tableID = entry.getTableID();
+    auto transaction = transaction::Transaction::Get(context);
+    auto catalog = catalog::Catalog::Get(context);
+    if (!catalog->containsTable(transaction, tableID) ||
+        catalog->getTableCatalogEntry(transaction, tableID) != &entry) {
+        return nullptr;
+    }
+    auto& nodeEntry = entry.constCast<catalog::NodeTableCatalogEntry>();
+    if (nodeEntry.isPartitioned() || nodeEntry.isPartitionChild() ||
+        nodeEntry.getScanFunction().has_value() || nodeEntry.getReferencedEntry() != nullptr ||
+        !nodeEntry.getForeignDatabaseName().empty() || !nodeEntry.getStorage().empty() ||
+        nodeEntry.getStorageFormat() != StorageFormat::NONE) {
+        return nullptr;
+    }
+    auto storageManager = Get(context);
+    if (!storageManager->containsTable(tableID)) {
+        return nullptr;
+    }
+    return dynamic_cast<NodeTable*>(storageManager->getTable(tableID));
+}
+
 std::optional<PlannerTableStats> StorageManager::getCachedPlannerTableStats(
     table_id_t tableID) const {
     std::shared_lock lck{plannerStatsMtx};
@@ -554,6 +580,17 @@ std::unordered_map<table_id_t, uint64_t> StorageManager::captureChangeEpochs() c
         epochs[id] = table->getChangeEpoch();
     }
     return epochs;
+}
+
+bool StorageManager::vacuumInMemoryUpdates(transaction_t horizon) {
+    std::shared_lock lck{mtx};
+    bool didWork = false;
+    for (const auto& [id, table] : tables) {
+        if (table->vacuumInMemoryUpdates(horizon)) {
+            didWork = true;
+        }
+    }
+    return didWork;
 }
 
 void StorageManager::finalizeCheckpoint(main::ClientContext& context) {

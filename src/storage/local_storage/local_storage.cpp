@@ -182,6 +182,25 @@ PageAllocator* LocalStorage::addOptimisticAllocator(StorageManager* sm) {
     return allocator;
 }
 
+void LocalStorage::retainOptimisticAllocations(StorageManager* sm, const NodeGroup& nodeGroup) {
+    auto* effectiveSM = sm != nullptr ? sm : StorageManager::Get(clientContext);
+    const auto it = allocatorsByStorageManager.find(effectiveSM);
+    if (it == allocatorsByStorageManager.end()) {
+        // In-memory databases and transactions that allocated no pages in this file have
+        // nothing in the optimistic rollback list.
+        return;
+    }
+    // Reuse the column hierarchy's page traversal without freeing the retained pages.
+    struct PageRetainer final : PageAllocator {
+        explicit PageRetainer(OptimisticAllocator& allocator)
+            : PageAllocator{allocator.getDataFH()}, allocator{allocator} {}
+        PageRange allocatePageRange(common::page_idx_t) override { UNREACHABLE_CODE; }
+        void freePageRange(PageRange block) override { allocator.retainPageRange(block); }
+        OptimisticAllocator& allocator;
+    } retainer{*it->second};
+    nodeGroup.reclaimStorage(retainer);
+}
+
 void LocalStorage::commit() {
     auto transaction = transaction::Transaction::Get(clientContext);
     for (auto& [key, localTable] : tables) {

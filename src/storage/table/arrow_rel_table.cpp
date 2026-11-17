@@ -266,6 +266,9 @@ static void readSingleArrowValue(const ArrowSchema* schema, const ArrowArray* ar
 }
 
 bool ArrowRelTable::scanInternal(transaction::Transaction* transaction, TableScanState& scanState) {
+    if (scanState.source == TableScanSource::NONE) {
+        return false;
+    }
     if (layout == ArrowRelTableLayout::CSR) {
         return scanCSR(scanState);
     }

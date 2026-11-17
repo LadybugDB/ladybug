@@ -598,6 +598,34 @@ TEST_F(CopyTest, NodeCopyWithoutDefaultHashIndexSpillsStringPKDetectsCrossChunkD
     ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 0);
 }
 
+// A prepared COPY re-executes from a cached plan template. The no-index lookup map must be built
+// for each execution: one kept from the first run would still map 'k5' to the deleted node.
+TEST_F(CopyTest, RelCopyWithoutDefaultHashIndexReexecutedAfterKeyMoved) {
+    createDBAndConn();
+    for (auto query : {"CALL enable_default_hash_index=false",
+             "CREATE NODE TABLE N(id STRING, PRIMARY KEY(id))", "CREATE REL TABLE E(FROM N TO N)",
+             "COPY N FROM (UNWIND range(0, 9) AS i RETURN 'k' + CAST(i AS STRING))"}) {
+        auto result = conn->query(query);
+        ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    }
+    auto copyRels = conn->prepare("COPY E FROM (MATCH (n:N) RETURN n.id, 'k5')");
+    ASSERT_TRUE(copyRels->isSuccess()) << copyRels->getErrorMessage();
+    auto result = conn->execute(copyRels.get());
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+
+    result = conn->query("MATCH (n:N {id: 'k5'}) DETACH DELETE n");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    result = conn->query("CREATE (:N {id: 'k5'})");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    result = conn->execute(copyRels.get());
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+
+    result = conn->query("MATCH (a:N)-[:E]->(b:N {id: 'k5'}) RETURN COUNT(*)");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_TRUE(result->hasNext());
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 10);
+}
+
 TEST_F(CopyTest, NodeCopyBMExceptionRecoverySameConnection) {
     if (inMemMode) {
         GTEST_SKIP();
@@ -1114,5 +1142,177 @@ TEST_F(CopyTest, RelCopyBuildsWorkerStateOnFirstPartition) {
     ASSERT_EQ(tuple->getValue(0)->getValue<int64_t>(), 2);
     ASSERT_EQ(tuple->getValue(1)->getValue<int64_t>(), 2020);
 }
+
+static void checkCountAndSum(main::Connection& conn, const std::string& query, int64_t count,
+    int64_t sum, int run) {
+    auto result = conn.query(query);
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_TRUE(result->hasNext());
+    auto tuple = result->getNext();
+    EXPECT_EQ(tuple->getValue(0)->getValue<int64_t>(), count) << "run " << run;
+    EXPECT_EQ(tuple->getValue(1)->getValue<int64_t>(), sum) << "run " << run;
+}
+
+static void checkSingleCopyMessage(main::QueryResult& result, const std::string& message, int run) {
+    ASSERT_TRUE(result.isSuccess()) << "run " << run << ": " << result.getErrorMessage();
+    ASSERT_EQ(result.getNumTuples(), 1u) << "run " << run;
+    EXPECT_EQ(result.getNext()->getValue(0)->getValue<std::string>(), message) << "run " << run;
+}
+
+static bool cachedPlanExists(main::Connection& conn, const main::PreparedStatement& statement) {
+    const auto& manager = conn.getClientContext()->getCachedPreparedStatementManager();
+    return manager.containsStatement(statement.getName()) &&
+           manager.getCachedStatement(statement.getName())->physicalPlanCache != nullptr;
+}
+
+static void usePlanPool(main::Connection& conn) {
+    for (auto query :
+        {"CALL enable_cached_prepared_statement='both'", "CALL physical_plan_pool_per_thread=5"}) {
+        auto result = conn.query(query);
+        ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    }
+}
+
+static void replaceSourceRows(main::Connection& conn, int64_t first, int64_t count) {
+    auto result = conn.query("MATCH (s:S) DELETE s");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    result = conn.query(
+        std::format("UNWIND range({}, {}) AS x CREATE (:S {{x: x}})", first, first + count - 1));
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+}
+
+// The first execution maps a plan, the second clones the cached plan template and the third reuses
+// the second's pooled plan.
+TEST_F(CopyTest, PreparedRelCopyReexecutedFromPooledPlan) {
+    createDBAndConn();
+    usePlanPool(*conn);
+    for (auto query : {"CREATE NODE TABLE N(id STRING, PRIMARY KEY(id))",
+             "CREATE REL TABLE E(FROM N TO N, p INT64)",
+             "COPY N FROM (UNWIND range(0, 9) AS i RETURN 'k' + CAST(i AS STRING))"}) {
+        auto result = conn->query(query);
+        ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    }
+    auto copyRels = conn->prepare("COPY E FROM (MATCH (n:N) RETURN n.id, 'k5', 7)");
+    ASSERT_TRUE(copyRels->isSuccess()) << copyRels->getErrorMessage();
+    for (auto run = 0; run < 3; ++run) {
+        auto result = conn->execute(copyRels.get());
+        ASSERT_TRUE(result->isSuccess()) << "run " << run << ": " << result->getErrorMessage();
+        ASSERT_TRUE(cachedPlanExists(*conn, *copyRels));
+        checkCountAndSum(*conn, "MATCH ()-[e:E]->() RETURN count(*), CAST(sum(e.p) AS INT64)",
+            10 * (run + 1), 70 * (run + 1), run);
+    }
+}
+
+TEST_F(CopyTest, PreparedNodeCopyReexecuted) {
+    createDBAndConn();
+    usePlanPool(*conn);
+    for (auto query : {"CREATE NODE TABLE M(id INT64, v INT64, PRIMARY KEY(id))",
+             "CREATE NODE TABLE S(x INT64, PRIMARY KEY(x))"}) {
+        auto result = conn->query(query);
+        ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    }
+    auto copyNodes = conn->prepare("COPY M FROM (MATCH (s:S) RETURN s.x, s.x * 10)");
+    ASSERT_TRUE(copyNodes->isSuccess()) << copyNodes->getErrorMessage();
+    // Run r copies keys r(r+1)/2 .. r(r+1)/2 + r, so each result row has its own count.
+    std::unique_ptr<main::QueryResult> firstResult;
+    for (auto run = 0; run < 3; ++run) {
+        replaceSourceRows(*conn, run * (run + 1) / 2, run + 1);
+        auto result = conn->execute(copyNodes.get());
+        checkSingleCopyMessage(*result,
+            std::format("{} tuples have been copied to the M table.", run + 1), run);
+        ASSERT_TRUE(cachedPlanExists(*conn, *copyNodes));
+        if (run == 0) {
+            firstResult = std::move(result);
+        }
+    }
+    // The later executions, from a cloned and a pooled plan, leave the first result unchanged.
+    firstResult->resetIterator();
+    checkSingleCopyMessage(*firstResult, "1 tuples have been copied to the M table.", 0);
+    checkCountAndSum(*conn, "MATCH (m:M) RETURN count(*), CAST(sum(m.v) AS INT64)", 6, 150, 2);
+    // A duplicate key fails the re-executed COPY like a fresh one, and the next execution works.
+    replaceSourceRows(*conn, 0, 1);
+    auto result = conn->execute(copyNodes.get());
+    ASSERT_FALSE(result->isSuccess());
+    EXPECT_NE(result->getErrorMessage().find("duplicated primary key"), std::string::npos);
+    replaceSourceRows(*conn, 9, 1);
+    result = conn->execute(copyNodes.get());
+    checkSingleCopyMessage(*result, "1 tuples have been copied to the M table.", 4);
+    checkCountAndSum(*conn, "MATCH (m:M) RETURN count(*), CAST(sum(m.v) AS INT64)", 7, 240, 4);
+}
+
+TEST_F(CopyTest, PreparedNodeCopyIgnoringErrorsReexecuted) {
+    createDBAndConn();
+    usePlanPool(*conn);
+    for (auto query : {"CREATE NODE TABLE M(id INT64, v INT64, PRIMARY KEY(id))",
+             "CREATE NODE TABLE S(x INT64, PRIMARY KEY(x))"}) {
+        auto result = conn->query(query);
+        ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    }
+    auto copyNodes =
+        conn->prepare("COPY M FROM (MATCH (s:S) RETURN s.x, s.x * 10) (IGNORE_ERRORS=true)");
+    ASSERT_TRUE(copyNodes->isSuccess()) << copyNodes->getErrorMessage();
+    for (auto run = 0; run < 3; ++run) {
+        // Key 0 is copied by the first execution and is a skipped duplicate in the later ones.
+        replaceSourceRows(*conn, run + 1, 1);
+        auto result = conn->query("CREATE (:S {x: 0})");
+        ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+        result = conn->execute(copyNodes.get());
+        ASSERT_TRUE(result->isSuccess()) << "run " << run << ": " << result->getErrorMessage();
+        ASSERT_TRUE(cachedPlanExists(*conn, *copyNodes));
+        ASSERT_EQ(result->getNumTuples(), 1u) << "run " << run;
+        const auto expected =
+            std::format("{} tuples have been copied to the M table.", run == 0 ? 2 : 1);
+        EXPECT_TRUE(result->getNext()->getValue(0)->getValue<std::string>().starts_with(expected))
+            << "run " << run;
+        checkCountAndSum(*conn, "MATCH (m:M) RETURN count(*), CAST(sum(m.v) AS INT64)", run + 2,
+            10 * (run + 1) * (run + 2) / 2, run);
+    }
+}
+
+TEST_F(CopyTest, PreparedNodeCopySkippingDuplicatesReexecuted) {
+    createDBAndConn();
+    usePlanPool(*conn);
+    auto result = conn->query("CREATE NODE TABLE M(id INT64, PRIMARY KEY(id))");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    const auto filePath = writeCSV("skip_duplicates_reexecuted.csv", {"1", "2", "3"});
+    auto copyNodes =
+        conn->prepare(std::format("COPY M FROM '{}' (SKIP_DUPLICATE_PK=true)", filePath));
+    ASSERT_TRUE(copyNodes->isSuccess()) << copyNodes->getErrorMessage();
+    for (auto run = 0; run < 3; ++run) {
+        result = conn->execute(copyNodes.get());
+        ASSERT_TRUE(result->isSuccess()) << "run " << run << ": " << result->getErrorMessage();
+        ASSERT_TRUE(cachedPlanExists(*conn, *copyNodes));
+        ASSERT_EQ(result->getNumTuples(), 1u) << "run " << run;
+        auto tuple = result->getNext();
+        EXPECT_EQ(tuple->getValue(0)->getValue<std::string>(),
+            std::format("{} tuples have been copied to the M table.", run == 0 ? 3 : 0))
+            << "run " << run;
+        EXPECT_EQ(tuple->getValue(1)->getValue<int64_t>(), run == 0 ? 0 : 3) << "run " << run;
+        checkCountAndSum(*conn, "MATCH (m:M) RETURN count(*), CAST(sum(m.id) AS INT64)", 3, 6, run);
+    }
+}
+
+TEST_F(CopyTest, PreparedNodeCopyIntoPartitionedTableReexecuted) {
+    createDBAndConn();
+    usePlanPool(*conn);
+    for (auto query : {"CREATE NODE TABLE P(id INT64 PRIMARY KEY, k STRING) PARTITION BY HASH (k) "
+                       "PARTITIONS 2",
+             "CREATE NODE TABLE S(x INT64, PRIMARY KEY(x))"}) {
+        auto result = conn->query(query);
+        ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    }
+    auto copyNodes =
+        conn->prepare("COPY P FROM (MATCH (s:S) RETURN s.x, 'k' + CAST(s.x AS STRING))");
+    ASSERT_TRUE(copyNodes->isSuccess()) << copyNodes->getErrorMessage();
+    for (auto run = 0; run < 3; ++run) {
+        replaceSourceRows(*conn, run, 1);
+        auto result = conn->execute(copyNodes.get());
+        checkSingleCopyMessage(*result, "1 tuples have been copied to the P table.", run);
+        ASSERT_TRUE(cachedPlanExists(*conn, *copyNodes));
+        checkCountAndSum(*conn, "MATCH (p:P) RETURN count(*), CAST(sum(p.id) AS INT64)", run + 1,
+            run * (run + 1) / 2, run);
+    }
+}
+
 } // namespace testing
 } // namespace lbug

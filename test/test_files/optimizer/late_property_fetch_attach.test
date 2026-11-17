@@ -1,0 +1,28 @@
+-DATASET CSV empty
+-ATTACH_DATASET attach_db
+--
+
+-CASE LatePropertiesOfAttachedNodes
+-SKIP_FSM_LEAK_CHECK
+-LOG The main database's own Person table gets the attached Person table's ID; nodes of the attached table keep their properties
+-STATEMENT CREATE NODE TABLE Person(name STRING, PRIMARY KEY(name));
+---- ok
+-STATEMENT CREATE (:Person {name: 'x'}), (:Person {name: 'y'}), (:Person {name: 'z'});
+---- ok
+-STATEMENT ATTACH '${DATABASE_PATH}/attach_target.lbdb' AS db1 (DBTYPE lbug);
+---- ok
+-STATEMENT MATCH (a:db1.Person)-[:db1.Knows]->(b:db1.Person) WITH b, count(*) AS c LIMIT 5 RETURN b.name, c ORDER BY b.name
+---- 2
+b|1
+c|1
+-STATEMENT MATCH (a:db1.Person)-[:db1.Knows]->(b:db1.Person) UNWIND [1] AS x WITH b, count(*) AS c RETURN b.name, c ORDER BY b.name
+---- 2
+b|1
+c|1
+-STATEMENT USE db1
+---- ok
+-STATEMENT MATCH (a:Person)-[:Knows]->(b:Person) WITH b ORDER BY b.name LIMIT 5 RETURN b.name
+-CHECK_ORDER
+---- 2
+b
+c

@@ -24,6 +24,10 @@ public:
     const binder::PropertyDefinition& getDefinition(const std::string& name) const;
     const binder::PropertyDefinition& getDefinition(common::idx_t idx) const;
     common::column_id_t getMaxColumnID() const;
+    common::column_id_t getNextColumnID() const {
+        std::shared_lock lck{*columnIDsMtx};
+        return nextColumnID;
+    }
     common::column_id_t getColumnID(const std::string& name) const;
     common::column_id_t getColumnID(common::property_id_t propertyID) const;
     common::property_id_t getPropertyID(const std::string& name) const;

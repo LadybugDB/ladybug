@@ -1,6 +1,7 @@
 #include "function/cast/functions/cast_string_non_nested_functions.h"
 
 #include "common/constants.h"
+#include "common/exception/overflow.h"
 #include "common/types/date_t.h"
 #include "common/types/interval_t.h"
 #include "common/types/timestamp_t.h"
@@ -68,7 +69,11 @@ bool TryCastStringToTimestamp::tryCast<timestamp_ns_t>(const char* input, uint64
     if (!Timestamp::tryConvertTimestamp(input, len, result)) {
         return false;
     }
-    result = Timestamp::getEpochNanoSeconds(result);
+    try {
+        result = Timestamp::getEpochNanoSeconds(result);
+    } catch (const OverflowException&) {
+        return false;
+    }
     return true;
 }
 
@@ -90,6 +95,25 @@ bool TryCastStringToTimestamp::tryCast<timestamp_sec_t>(const char* input, uint6
     }
     result = Timestamp::getEpochSeconds(result);
     return true;
+}
+
+template<>
+void TryCastStringToTimestamp::cast<timestamp_ns_t>(const char* input, uint64_t len,
+    timestamp_t& result, LogicalTypeID typeID) {
+    if (!Timestamp::tryConvertTimestamp(input, len, result)) {
+        throw ConversionException(Timestamp::getTimestampConversionExceptionMsg(input, len,
+            LogicalTypeUtils::toString(typeID)));
+    }
+    try {
+        result = Timestamp::getEpochNanoSeconds(result);
+    } catch (const OverflowException&) {
+        // Report range failures as conversion errors (naming the value and TIMESTAMP_NS) so
+        // that COPY ... (IGNORE_ERRORS=true) skips the row with a warning instead of aborting
+        // the whole file, matching e.g. CAST('300' AS INT8). The CSV reader only skips rows on
+        // ConversionException. tryCast<timestamp_ns_t> already returns failure here.
+        throw ConversionException(Timestamp::getTimestampConversionExceptionMsg(input, len,
+            LogicalTypeUtils::toString(typeID)));
+    }
 }
 
 static bool isDate(std::string_view str) {

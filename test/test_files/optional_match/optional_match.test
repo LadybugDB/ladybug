@@ -179,3 +179,97 @@ Hubert Blaine Wolfeschlegelsteinhausenbergerdorff|
 8|1
 9|
 10|
+
+-LOG OptionalShortestPathIsNull
+-STATEMENT MATCH (a:person), (b:person) WHERE a.ID = 0 AND b.ID IN [3, 7] OPTIONAL MATCH p = (a)-[r:knows* SHORTEST 1..5]-(b) RETURN b.ID, p IS NULL, r IS NULL, length(p), CASE WHEN p IS NULL THEN -1 ELSE length(p) END
+---- 2
+3|False|False|1|1
+7|True|True||-1
+
+-LOG OptionalVarLengthPathIsNull
+-STATEMENT MATCH (a:person), (b:person) WHERE a.ID = 7 AND b.ID IN [0, 8] OPTIONAL MATCH p = (a)-[r:knows*1..2]->(b) RETURN b.ID, p IS NULL, r IS NULL, length(p)
+---- 2
+0|True|True|
+8|False|False|1
+
+-LOG OptionalSingleHopPathIsNull
+-STATEMENT MATCH (a:person), (b:person) WHERE a.ID = 7 AND b.ID IN [0, 8] OPTIONAL MATCH p = (a)-[:knows]->(b) RETURN b.ID, p IS NULL, length(p), CASE WHEN p IS NULL THEN -1 ELSE length(p) END, properties(nodes(p), 'ID'), size(rels(p))
+---- 2
+0|True||-1||
+8|False|1|1|[7,8]|1
+
+-LOG OptionalPathUnboundEndIsNull
+-STATEMENT MATCH (a:person) WHERE a.ID IN [7, 10] OPTIONAL MATCH p = (a)-[:knows]->(b:person) RETURN a.ID, b.ID, p IS NULL, length(p)
+---- 3
+10||True|
+7|8|False|1
+7|9|False|1
+
+-LOG OptionalMixedPathIsNull
+-STATEMENT MATCH (a:person) WHERE a.ID IN [7, 10] OPTIONAL MATCH p = (a)-[:knows]->(:person)-[:knows*1..2]->(:person) RETURN a.ID, p IS NULL, length(p)
+---- 2
+10|True|
+7|True|
+
+-LOG OptionalPathFilteredByIsNull
+-STATEMENT MATCH (a:person) OPTIONAL MATCH p = (a)-[:knows]->(:person) WITH a, p WHERE p IS NULL RETURN a.ID
+---- 3
+10
+8
+9
+
+-LOG OptionalPathLengthInItsWhere
+-STATEMENT MATCH (a:person) WHERE a.ID IN [7, 10] OPTIONAL MATCH p = (a)-[:knows]->(b:person) WHERE length(p) = 1 RETURN a.ID, b.ID, length(p)
+---- 3
+10||
+7|8|1
+7|9|1
+
+-LOG OptionalPathAliasedByWith
+-STATEMENT MATCH (a:person) WHERE a.ID IN [7, 10] OPTIONAL MATCH p = (a)-[:knows]->(:person) WITH a, p AS q RETURN a.ID, q IS NULL, length(q)
+---- 3
+10|True|
+7|False|1
+7|False|1
+
+-LOG OptionalZeroLengthPath
+-STATEMENT MATCH (a:person), (b:person) WHERE a.ID = 7 AND b.ID IN [0, 7] OPTIONAL MATCH p = (a)-[:knows*0..1]->(b) RETURN b.ID, p IS NULL, length(p)
+---- 2
+0|True|
+7|False|0
+
+-LOG OptionalTwoPaths
+-STATEMENT MATCH (a:person) WHERE a.ID IN [7, 10] OPTIONAL MATCH p = (a)-[:knows]->(b:person), q = (a)-[:knows]->(c:person) WHERE b.ID < c.ID RETURN a.ID, p IS NULL, q IS NULL, length(p) + length(q)
+---- 2
+10|True|True|
+7|False|False|2
+
+-LOG OptionalPathLengthDropsMatch
+-STATEMENT MATCH (a:person) WHERE a.ID = 7 OPTIONAL MATCH p = (a)-[:knows]->(b:person) WHERE length(p) = 2 RETURN a.ID, b.ID, p IS NULL
+---- 1
+7||True
+
+-LOG OptionalPathLengthInLaterElement
+-STATEMENT MATCH (a:person) WHERE a.ID IN [7, 10] OPTIONAL MATCH p = (a)-[:knows]->(b:person), (c:person {ID: length(p) + 7}) RETURN a.ID, b.ID, c.ID, p IS NULL
+---- 3
+10|||True
+7|8|8|False
+7|9|8|False
+
+-LOG OptionalPathNameShadowsNode
+-STATEMENT MATCH (a:person) WHERE a.ID = 7 OPTIONAL MATCH a = (b:person)-[:knows]->(c:person) RETURN a.ID, count(*)
+---- 1
+7|14
+
+-LOG OptionalPathTrailIsNull
+-STATEMENT MATCH (a:person) WHERE a.ID IN [7, 10] OPTIONAL MATCH p = (a)-[r:knows*1..2]->(b:person) RETURN a.ID, b.ID, is_trail(p), is_acyclic(p), is_trail(r), is_acyclic(r)
+---- 3
+10|||||
+7|8|True|True|True|True
+7|9|True|True|True|True
+
+-LOG OptionalPathTrailFilter
+-STATEMENT MATCH (a:person) WHERE a.ID IN [7, 10] OPTIONAL MATCH p = (a)-[:knows]->(b:person) WITH a, b, p WHERE is_trail(p) RETURN a.ID, b.ID
+---- 2
+7|8
+7|9

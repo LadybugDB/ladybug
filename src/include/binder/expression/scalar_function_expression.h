@@ -18,6 +18,7 @@ public:
 
     const function::ScalarFunction& getFunction() const { return *function; }
     function::FunctionBindData* getBindData() const { return bindData.get(); }
+    bool isCast() const;
 
     std::string toStringInternal() const override;
 

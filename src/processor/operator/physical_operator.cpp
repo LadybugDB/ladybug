@@ -3,6 +3,7 @@
 #include "common/exception/interrupt.h"
 #include "common/exception/runtime.h"
 #include "common/task_system/progress_bar.h"
+#include "common/usdt.h"
 #include "main/client_context.h"
 #include "processor/execution_context.h"
 
@@ -37,6 +38,8 @@ std::string PhysicalOperatorUtils::operatorTypeToString(PhysicalOperatorType ope
         return "COUNT_REL_TABLE";
     case PhysicalOperatorType::CREATE_MACRO:
         return "CREATE_MACRO";
+    case PhysicalOperatorType::CREATE_CONSTRAINT:
+        return "CREATE_CONSTRAINT";
     case PhysicalOperatorType::CREATE_INDEX:
         return "CREATE_INDEX";
     case PhysicalOperatorType::CREATE_SEQUENCE:
@@ -53,6 +56,8 @@ std::string PhysicalOperatorUtils::operatorTypeToString(PhysicalOperatorType ope
         return "DELETE";
     case PhysicalOperatorType::DROP:
         return "DROP";
+    case PhysicalOperatorType::DROP_CONSTRAINT:
+        return "DROP_CONSTRAINT";
     case PhysicalOperatorType::DUMMY_SINK:
         return "DUMMY_SINK";
     case PhysicalOperatorType::DUMMY_SIMPLE_SINK:
@@ -228,11 +233,16 @@ bool PhysicalOperator::getNextTuple(ExecutionContext* context) {
         }
     }
 #endif
+    // USDT operator_start/operator_end bracket the same region PROFILE times via
+    // OperatorMetrics::executionTime. Args are a cast and member loads only (see
+    // common/usdt.h), so a disabled probe costs just the NOP sled here.
+    LBUG_USDT_OPERATOR_START(static_cast<int>(operatorType), id, context->queryID);
     metrics->executionTime.start();
     auto result = getNextTuplesInternal(context);
     ProgressBar::Get(*context->clientContext)
         ->updateProgress(context->queryID, getProgress(context));
     metrics->executionTime.stop();
+    LBUG_USDT_OPERATOR_END(static_cast<int>(operatorType), id, context->queryID);
     return result;
 }
 
