@@ -9,10 +9,12 @@
 #include "binder/expression/literal_expression.h"
 #include "binder/expression/property_expression.h"
 #include "binder/expression/scalar_function_expression.h"
+#include "binder/expression_visitor.h"
 #include "catalog/catalog.h"
 #include "catalog/catalog_entry/index_catalog_entry.h"
 #include "catalog/catalog_entry/table_catalog_entry.h"
 #include "common/string_utils.h"
+#include "function/arithmetic/vector_arithmetic_functions.h"
 #include "main/attached_database.h"
 #include "main/client_context.h"
 #include "main/database_manager.h"
@@ -21,6 +23,7 @@
 #include "planner/operator/logical_empty_result.h"
 #include "planner/operator/logical_filter.h"
 #include "planner/operator/logical_hash_join.h"
+#include "planner/operator/logical_projection.h"
 #include "planner/operator/logical_table_function_call.h"
 #include "planner/operator/scan/logical_scan_node_table.h"
 #include "storage/index/art_index.h"
@@ -97,6 +100,59 @@ std::shared_ptr<LogicalOperator> FilterPushDownOptimizer::visitFilterReplace(
     return visitOperator(filter.getChild(0));
 }
 
+// A computed key runs once per row of its input, while a filter over two flat inputs runs once per
+// pair. That rules out functions that change state: nextval and setval, and setseed, which is not
+// marked so because the read/write analyzer would then count it as a write (a constant setseed is
+// folded at bind). random() and gen_random_uuid() read no column, so no input can evaluate them.
+static bool changesState(const Expression& expression) {
+    if (expression.expressionType == ExpressionType::FUNCTION) {
+        auto& function = expression.constCast<ScalarFunctionExpression>().getFunction();
+        if (!function.isReadOnly || function.name == function::SetSeedFunction::name) {
+            return true;
+        }
+    }
+    for (auto& child : ExpressionChildrenCollector::collectChildren(expression)) {
+        if (changesState(*child)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// A join key is a column of its own input, or an expression that only its own input can evaluate
+// and that does not change state. A computed key must not be nested: the hash table compares NODE
+// and REL values by internal ID, while `=` compares all their fields.
+static bool isJoinKeyOf(const std::shared_ptr<Expression>& key, const Schema& own,
+    const Schema& other) {
+    if (own.isExpressionInScope(*key)) {
+        return true;
+    }
+    return !LogicalTypeUtils::isNested(key->dataType) && own.evaluable(*key) &&
+           !other.evaluable(*key) && !changesState(*key);
+}
+
+// Computes the keys that are not columns of the child yet, keeping the child's columns.
+static std::shared_ptr<LogicalOperator> projectMissingKeys(
+    const std::shared_ptr<LogicalOperator>& child, const expression_vector& keys) {
+    auto schema = child->getSchema();
+    auto expressions = schema->getExpressionsInScope();
+    auto numColumns = expressions.size();
+    std::unordered_set<std::string> projectedKeys;
+    for (auto& key : keys) {
+        if (!schema->isExpressionInScope(*key) &&
+            projectedKeys.insert(key->getUniqueName()).second) {
+            expressions.push_back(key);
+        }
+    }
+    if (expressions.size() == numColumns) {
+        return child;
+    }
+    auto projection = std::make_shared<LogicalProjection>(std::move(expressions), child);
+    projection->computeFlatSchema();
+    projection->setCardinality(child->getCardinality());
+    return projection;
+}
+
 std::shared_ptr<LogicalOperator> FilterPushDownOptimizer::visitCrossProductReplace(
     const std::shared_ptr<LogicalOperator>& op) {
     auto remainingPSet = PredicateSet();
@@ -127,40 +183,83 @@ std::shared_ptr<LogicalOperator> FilterPushDownOptimizer::visitCrossProductRepla
     auto buildSchema = op->getChild(1)->getSchema();
     expression_vector predicates;
     std::vector<join_condition_t> joinConditions;
+    std::vector<join_condition_t> computedJoinConditions;
+    expression_vector computedJoinPredicates;
     for (auto& predicate : remainingPSet.equalityPredicates) {
         auto left = predicate->getChild(0);
         auto right = predicate->getChild(1);
-        // TODO(Xiyang): this can only rewrite left = right, we should also be able to do
-        // expr(left), expr(right)
         if (probeSchema->isExpressionInScope(*left) && buildSchema->isExpressionInScope(*right)) {
             joinConditions.emplace_back(left, right);
         } else if (probeSchema->isExpressionInScope(*right) &&
                    buildSchema->isExpressionInScope(*left)) {
             joinConditions.emplace_back(right, left);
+        } else if (isJoinKeyOf(left, *probeSchema, *buildSchema) &&
+                   isJoinKeyOf(right, *buildSchema, *probeSchema)) {
+            computedJoinConditions.emplace_back(left, right);
+            computedJoinPredicates.push_back(predicate);
+        } else if (isJoinKeyOf(right, *probeSchema, *buildSchema) &&
+                   isJoinKeyOf(left, *buildSchema, *probeSchema)) {
+            computedJoinConditions.emplace_back(right, left);
+            computedJoinPredicates.push_back(predicate);
         } else {
             // Collect predicates that cannot be rewritten as join conditions.
             predicates.push_back(predicate);
         }
     }
+    // Computed keys only replace a cross product. Added to a join that has column keys, they can
+    // force a factorized build side to be flattened.
+    auto computedKeys = joinConditions.empty();
+    if (computedKeys) {
+        joinConditions = std::move(computedJoinConditions);
+    } else {
+        predicates.insert(predicates.end(), computedJoinPredicates.begin(),
+            computedJoinPredicates.end());
+    }
     if (joinConditions.empty()) { // Nothing to push down. Terminate.
         return finishPushDown(op);
     }
+    auto probeChild = op->getChild(0);
+    auto buildChild = op->getChild(1);
+    expression_vector columns;
+    if (computedKeys) {
+        columns = probeSchema->getExpressionsInScope();
+        auto buildColumns = buildSchema->getExpressionsInScope();
+        columns.insert(columns.end(), buildColumns.begin(), buildColumns.end());
+        expression_vector probeKeys, buildKeys;
+        for (auto& [probeKey, buildKey] : joinConditions) {
+            probeKeys.push_back(probeKey);
+            buildKeys.push_back(buildKey);
+        }
+        // Keys are evaluated for every row of their input, so a key that fails to evaluate, e.g. a
+        // failed cast, fails the query even when the other input is empty.
+        probeChild = projectMissingKeys(probeChild, probeKeys);
+        buildChild = projectMissingKeys(buildChild, buildKeys);
+    }
     auto hashJoin = std::make_shared<LogicalHashJoin>(joinConditions, JoinType::INNER,
-        nullptr /* mark */, op->getChild(0), op->getChild(1), 0 /* cardinality */);
+        nullptr /* mark */, std::move(probeChild), std::move(buildChild), 0 /* cardinality */);
     // For non-id based joins, we disable side way information passing.
     hashJoin->getSIPInfoUnsafe().position = SemiMaskPosition::PROHIBIT;
     hashJoin->computeFlatSchema();
     if (cardinalityEstimator != nullptr) {
         hashJoin->setCardinality(cardinalityEstimator->estimateHashJoin(joinConditions,
-            *op->getChild(0), *op->getChild(1)));
+            *hashJoin->getChild(0), *hashJoin->getChild(1)));
     }
     // Apply remaining predicates.
     predicates.insert(predicates.end(), remainingPSet.nonEqualityPredicates.begin(),
         remainingPSet.nonEqualityPredicates.end());
-    if (predicates.empty()) {
-        return hashJoin;
+    std::shared_ptr<LogicalOperator> root = hashJoin;
+    if (!predicates.empty()) {
+        root = appendFiltersStatsAware(std::move(predicates), hashJoin);
     }
-    return appendFiltersStatsAware(std::move(predicates), hashJoin);
+    if (!computedKeys) {
+        return root;
+    }
+    // A computed key must not become a column above the join: an operator there that evaluates
+    // the same expression, e.g. after an optional join that nulls the key, would read it instead.
+    auto projection = std::make_shared<LogicalProjection>(std::move(columns), root);
+    projection->computeFlatSchema();
+    projection->setCardinality(root->getCardinality());
+    return projection;
 }
 
 static ColumnPredicateSet getPredicateSet(const Expression& column,
