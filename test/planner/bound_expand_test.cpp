@@ -1,3 +1,4 @@
+#include <filesystem>
 #include <string>
 #include <vector>
 
@@ -65,9 +66,34 @@ TEST_F(BoundExpandTest, DistinctLimitKeepsFlatten) {
 }
 
 TEST_F(BoundExpandTest, GroupByWithoutLimitFallsBack) {
-    // No literal LIMIT and no ANALYZE stats on tinysnb: the credibility check fails
-    // closed, so the GROUP BY outer stays on the hash-join path.
+    // The outer's AGGREGATE is not on the credibility allowlist, so the trust check
+    // fails closed before the cost comparison is even reached: the GROUP BY outer
+    // stays on the hash-join path.
     auto plan = getRoot("MATCH (a:person)-[:knows]->(x:person) WITH a, count(*) AS c "
+                        "MATCH (a)-[:knows]->(b:person) RETURN count(*)");
+    EXPECT_FALSE(hasBoundFlattenExtend(plan->getLastOperator().get()));
+}
+
+TEST_F(BoundExpandTest, CostComparisonFiresOnSmallTrustedOuter) {
+    // No LIMIT and a trusted outer (PK seed plus one extend, depth 1): the cost
+    // comparison decides. ANALYZE provides the CSR degree stats the worst-case
+    // fan-out needs; without them the leg check fails closed. Three probes times
+    // the studyAt fan-out stays far below the eliminated organisation scan, so
+    // bound expand fires. (A bare `MATCH (a:person {ID: 0}) WITH a` would merge
+    // with the leg before planning and never reach this path.)
+    ASSERT_TRUE(conn->query("ANALYZE;")->isSuccess());
+    auto plan = getRoot("MATCH (a:person {ID: 0})-[:knows]->(f:person) WITH f "
+                        "MATCH (f)-[:studyAt]->(o:organisation) RETURN count(*)");
+    EXPECT_TRUE(hasBoundFlattenExtend(plan->getLastOperator().get()));
+}
+
+TEST_F(BoundExpandTest, CostComparisonDeclinesOnLargeOuter) {
+    // Same shape as above but an 8-row outer: the worst-case fan-out (8 probes
+    // times the knows rate alone already exceeds the 8-row person scan) loses the
+    // cost comparison, so the outer falls back to the hash-join path. Trust passes
+    // here (plain scan outer), isolating the cost decision from the trust check.
+    ASSERT_TRUE(conn->query("ANALYZE;")->isSuccess());
+    auto plan = getRoot("MATCH (a:person) WITH a "
                         "MATCH (a)-[:knows]->(b:person) RETURN count(*)");
     EXPECT_FALSE(hasBoundFlattenExtend(plan->getLastOperator().get()));
 }
@@ -123,6 +149,60 @@ TEST_F(BoundExpandTest, ParameterPredicateStillPushes) {
         }
     }
     EXPECT_TRUE(pushed);
+}
+
+// The e2e runner and the default test DBs run at 2 threads, where the pre-fix plans
+// returned correct results by luck: on the unfixed head the DISTINCT+LIMIT query
+// returned 12 instead of 14 only at 8 and 16 threads. Re-run the repros repeatedly
+// at 1, 8 and 16 threads on a dedicated 16-thread DB so CI catches the old bug.
+class BoundExpandMultithreadTest : public ::testing::Test {
+protected:
+    void SetUp() override {
+        auto config = std::make_unique<main::SystemConfig>();
+        config->maxNumThreads = 16;
+        dbPath = TestHelper::getTempDBPathStr("BoundExpandMT");
+        database = std::make_unique<main::Database>(dbPath, *config);
+        conn = std::make_unique<main::Connection>(database.get());
+        const auto datasetDir = TestHelper::appendLbugRootPath("dataset/tinysnb/");
+        TestHelper::executeScript(datasetDir + TestHelper::SCHEMA_FILE_NAME, *conn);
+        TestHelper::executeScript(datasetDir + TestHelper::COPY_FILE_NAME, *conn);
+    }
+
+    void TearDown() override {
+        conn.reset();
+        database.reset();
+        std::error_code ec;
+        std::filesystem::remove_all(std::filesystem::path(dbPath).parent_path(), ec);
+    }
+
+    std::string dbPath;
+    std::unique_ptr<main::Database> database;
+    std::unique_ptr<main::Connection> conn;
+};
+
+TEST_F(BoundExpandMultithreadTest, FactorizedOuterReadsBackCorrectCounts) {
+    const std::vector<std::pair<std::string, std::string>> cases = {
+        {"MATCH (a:person)-[:knows]->(x:person) WITH DISTINCT a LIMIT 1000 "
+         "MATCH (a)-[:knows]->(b:person) RETURN count(*)",
+            "14"},
+        {"MATCH (a:person)-[:knows]->(x:person) WITH a, count(*) AS c "
+         "MATCH (a)-[:knows]->(b:person) WITH a, c, count(*) AS n WHERE c <> n "
+         "RETURN count(*)",
+            "0"},
+    };
+    for (const uint64_t threads : {1u, 8u, 16u}) {
+        conn->setMaxNumThreadForExec(threads);
+        for (auto run = 0; run < 10; ++run) {
+            for (const auto& [query, expected] : cases) {
+                auto result = conn->query(query);
+                ASSERT_TRUE(result->isSuccess())
+                    << threads << " threads, run " << run << ": " << result->getErrorMessage();
+                EXPECT_EQ(std::vector<std::string>{expected},
+                    TestHelper::convertResultToString(*result))
+                    << threads << " threads, run " << run;
+            }
+        }
+    }
 }
 
 } // namespace testing

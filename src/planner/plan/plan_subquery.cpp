@@ -2145,9 +2145,15 @@ static bool boundExpandPredicateOnlyOnTarget(const std::shared_ptr<binder::Expre
     return varNames.contains(target.getUniqueName());
 }
 
-// A literal LIMIT within the lookup cap makes the outer provably small without any
-// trust or cost analysis; this is also where bound expand pays most
-// (WITH c LIMIT 1000 MATCH (c)-[...] goes from seconds to milliseconds).
+// A literal LIMIT within the lookup cap anywhere in the outer signals a
+// user-constrained driving side, where the per-tuple INLJ shape has proven
+// worthwhile (WITH c LIMIT 1000 MATCH (c)-[...] goes from seconds to milliseconds;
+// IC9 with LIMIT 1 ahead of the 2-hop expansion goes 160ms to 84ms). The LIMIT may
+// sit below a fan-out — e.g. ahead of knows*1..2 whose post-DISTINCT outer is still
+// 3k rows — so it does not prove the outer small; the pre/post-flatten cardinality
+// caps still guard the estimate. It only skips the trust and cost analyses, which a
+// LIMIT-constrained outer typically fails (RECURSIVE_EXTEND and DISTINCT are not on
+// the allowlist) despite winning in practice.
 static bool boundExpandOuterHasLimitWithinCap(const planner::LogicalOperator* op) {
     if (op->getOperatorType() == planner::LogicalOperatorType::LIMIT) {
         const auto& limit = op->constCast<planner::LogicalLimit>();
@@ -2221,7 +2227,9 @@ static bool boundExpandOuterOrderReaches(const planner::LogicalOperator* op) {
 //   before and after flattening, since an unflat outer understates the probe count;
 //   credibility analysis and extend-depth cap as in tryPlanLookupJoin);
 // - cost comparison of the worst-case fan-out against the eliminated scan, skipped
-//   only for a provably-small literal LIMIT outer where the win is largest;
+//   only when the outer carries a literal LIMIT within the cap (a user-constrained
+//   driving side where the INLJ win is largest, even though a deep LIMIT does not
+//   prove the outer small);
 // - flatten before extend kept through the optimizer by the LogicalExtend opt-in flag
 //   (a DISTINCT/AGGREGATE outer is factorized; extending directly from factorized
 //   batches under-parallelizes and misreads batches);
@@ -2293,8 +2301,9 @@ bool Planner::tryPlanBoundExpand(const QueryGraphCollection& queryGraphCollectio
     // Credibility + cost: the outer estimate alone is unreliable on skewed multi-hop
     // shapes (see plan_join_order.cpp:920), so require a trusted outer and a
     // worst-case fan-out that still beats the eliminated scan. A literal LIMIT within
-    // the cap is provably small and skips both checks; it is also where bound expand
-    // pays most.
+    // the cap anywhere in the outer skips both checks as a user-constrained-driving-side
+    // heuristic (see boundExpandOuterHasLimitWithinCap); the pre/post-flatten caps above
+    // still guard the estimate.
     if (!boundExpandOuterHasLimitWithinCap(workingPlan.getLastOperator().get())) {
         BoundExpandOuterAnalysis analysis;
         analyzeBoundExpandOuterPlan(workingPlan.getLastOperator().get(), cardinalityEstimator, 0,
