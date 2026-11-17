@@ -9,6 +9,7 @@
 #include "common/exception/connection.h"
 #include "common/exception/runtime.h"
 #include "common/file_system/virtual_file_system.h"
+#include "common/path_utils.h"
 #include "common/random_engine.h"
 #include "common/string_utils.h"
 #include "common/task_system/progress_bar.h"
@@ -72,7 +73,8 @@ ActiveQuery::ActiveQuery() : interrupted{false} {}
 void ActiveQuery::reset() {
     interrupted = false;
     queryID.reset();
-    timer = Timer();
+    // The timer keeps its start time until startTimer() restarts it: a thread waiting on a task
+    // reads it, and a zeroed start would look like a long-expired deadline.
 }
 
 ClientContext::ClientContext(Database* database) : localDatabase{database} {
@@ -250,7 +252,7 @@ void ClientContext::addDBDirToFileSearchPath(const std::string& dbPath) {
     if (dirPath.empty()) {
         dirPath = expandedPath[slashPos] == '\\' ? "\\" : "/";
     } else {
-        dirPath = std::filesystem::absolute(dirPath).lexically_normal().string();
+        dirPath = PathUtils::absoluteLexicallyNormalUTF8(dirPath);
     }
     // Prepend to fileSearchPath if not already present
     auto& fileSearchPath = clientConfig.fileSearchPath;
@@ -412,8 +414,11 @@ std::unique_ptr<QueryResult> ClientContext::executeWithParams(PreparedStatement*
     }
     // LCOV_EXCL_STOP
     auto cachedStatement = cachedPreparedStatementManager->getCachedStatement(name);
+    auto* activeTransaction = transactionContext->getActiveTransaction();
     const bool planStale =
-        cachedStatement->planVersion != localDatabase->getCatalog()->getPlanVersion();
+        cachedStatement->planVersion != localDatabase->getCatalog()->getPlanVersion() ||
+        cachedStatement->hasUncommittedCatalogChanges ||
+        (activeTransaction != nullptr && activeTransaction->hasCatalogChanges());
     // Statements with parameters baked into a plan (e.g. parameter-valued SKIP/LIMIT
     // frozen to uint64_t) must rebind/replan on every execution instead of reusing any
     // cached plan (https://github.com/LadybugDB/ladybug/issues/985).
@@ -442,6 +447,8 @@ std::unique_ptr<QueryResult> ClientContext::executeWithParams(PreparedStatement*
         cachedStatement->boundParameters = std::move(newCachedStatement->boundParameters);
         cachedStatement->hasBakedParameters = newCachedStatement->hasBakedParameters;
         cachedStatement->planVersion = newCachedStatement->planVersion;
+        cachedStatement->hasUncommittedCatalogChanges =
+            newCachedStatement->hasUncommittedCatalogChanges;
         cachedStatement->physicalPlanCache.reset();
         cachedStatement->sinkResultSetDescriptors.clear();
         // The pool holds operator trees cloned from the previous template (bound for the
@@ -613,6 +620,9 @@ ClientContext::PrepareResult ClientContext::prepareNoLock(
                 cachedStatement->boundParameters = expressionBinder->getBoundParameters();
                 cachedStatement->hasBakedParameters =
                     hasBakedParameters(cachedStatement->boundParameters);
+                auto* activeTransaction = transactionContext->getActiveTransaction();
+                cachedStatement->hasUncommittedCatalogChanges =
+                    activeTransaction != nullptr && activeTransaction->hasCatalogChanges();
             },
             preparedStatement->isReadOnly(),
             preparedStatement->getStatementType() == StatementType::TRANSACTION,
@@ -808,7 +818,8 @@ std::unique_ptr<QueryResult> ClientContext::executeNoLock(PreparedStatement* pre
                 // (https://github.com/LadybugDB/ladybug/issues/985).
                 const bool cachedPlanAllowed = cachePhysicalPlan &&
                                                isCachedPlanAllowedFor(*preparedStatement) &&
-                                               !cachedStatement->hasBakedParameters;
+                                               !cachedStatement->hasBakedParameters &&
+                                               !cachedStatement->hasUncommittedCatalogChanges;
                 if (cachedPlanAllowed && cachedStatement->physicalPlanCache) {
                     // Fast path: reuse a pooled plan when available, else clone the cached
                     // operator tree template. Avoids the PlanMapper::mapOperator recursion

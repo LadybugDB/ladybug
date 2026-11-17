@@ -1,0 +1,53 @@
+-DATASET CSV empty
+
+--
+
+-CASE DropTableAfterItsSerialSequenceWasDropped
+-LOG DROP TABLE still works, and the name can be reused, when the SERIAL sequence is already gone
+-STATEMENT CREATE NODE TABLE A(id SERIAL PRIMARY KEY, v INT64);
+---- ok
+-STATEMENT CREATE REL TABLE R(FROM A TO A, s SERIAL);
+---- ok
+-STATEMENT DROP SEQUENCE A_id_serial;
+---- ok
+-STATEMENT DROP SEQUENCE R_s_serial;
+---- ok
+-STATEMENT DROP TABLE R;
+---- ok
+-STATEMENT DROP TABLE A;
+---- ok
+-STATEMENT CREATE NODE TABLE A(id SERIAL PRIMARY KEY, v INT64);
+---- ok
+-STATEMENT CREATE (:A {v: 1});
+---- ok
+-STATEMENT MATCH (a:A) RETURN a.id, a.v;
+---- 1
+0|1
+
+-CASE DropTableAfterLostSerialSequenceSurvivesRecovery
+-SKIP_IN_MEM
+-LOG A plain sequence under the SERIAL name (as IMPORT DATABASE, or recreating it by hand, leaves) is
+-LOG dropped by its own WAL record; replaying the DROP TABLE after it must not stop the database opening
+-STATEMENT CREATE NODE TABLE A(id SERIAL PRIMARY KEY, v INT64);
+---- ok
+-STATEMENT CREATE (:A {v: 1});
+---- ok
+-STATEMENT DROP SEQUENCE A_id_serial;
+---- ok
+-STATEMENT CREATE SEQUENCE A_id_serial START 1;
+---- ok
+-STATEMENT CHECKPOINT;
+---- ok
+-STATEMENT CALL auto_checkpoint=false;
+---- ok
+-STATEMENT CALL force_checkpoint_on_close=false;
+---- ok
+-STATEMENT DROP TABLE A;
+---- ok
+-RELOADDB
+-STATEMENT CALL show_tables() RETURN count(*);
+---- 1
+0
+-STATEMENT CALL show_sequences() RETURN count(*);
+---- 1
+0

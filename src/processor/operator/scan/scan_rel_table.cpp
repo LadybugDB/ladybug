@@ -9,6 +9,7 @@
 #include "storage/local_storage/local_rel_table.h"
 #include "storage/table/arrow_node_table.h"
 #include "storage/table/arrow_rel_table.h"
+#include "storage/table/external_table_hooks.h"
 #include "storage/table/foreign_rel_table.h"
 #include "storage/table/ice_disk_node_table.h"
 #include "storage/table/ice_disk_rel_table.h"
@@ -23,6 +24,14 @@ namespace processor {
 static std::unique_ptr<TableScanState> createSourceNodeTableScanState(NodeTable* table,
     ValueVector* nodeIDVector, const std::vector<ValueVector*>& outVectors,
     MemoryManager* memoryManager) {
+    // Extension-backed columnar node tables create their state through registered hooks,
+    // mirroring createNodeTableScanState.
+    if (auto hooks = storage::ColumnarTableHookRegistry::getTableHooks(table->getStorageManager(),
+            table->getTableID())) {
+        DASSERT(hooks->createNodeScanState);
+        return hooks->createNodeScanState(table, nodeIDVector, outVectors, nodeIDVector->state,
+            memoryManager);
+    }
     if (dynamic_cast<IceDiskNodeTable*>(table) != nullptr) {
         return std::make_unique<IceDiskNodeTableScanState>(*memoryManager, nodeIDVector, outVectors,
             nodeIDVector->state);
@@ -96,17 +105,29 @@ common::sel_t ScanRelTable::applyNbrNodeMask() {
     return applyNbrMaskFilter(scanState->outState->getSelVectorUnsafe(), outVectors[0]);
 }
 
+common::sel_t ScanRelTable::getFilteredOutputSize() {
+    scanState->outState->setToUnflat();
+    return applyNbrNodeMask();
+}
+
 void ScanRelTable::initLocalStateInternal(ResultSet* resultSet, ExecutionContext* context) {
     ScanTable::initLocalStateInternal(resultSet, context);
     refreshNbrMaskCache();
     auto clientContext = context->clientContext;
     auto boundNodeIDVector = resultSet->getValueVector(opInfo.nodeIDPos).get();
     auto nbrNodeIDVector = outVectors[0];
-    // Check if this is an external rel table and create the corresponding scan state.
+    // Extension-backed columnar rel tables create their state through registered hooks.
+    auto tableHooks = storage::ColumnarTableHookRegistry::getTableHooks(
+        tableInfo.table->getStorageManager(), tableInfo.table->getTableID());
     auto* arrowTable = dynamic_cast<storage::ArrowRelTable*>(tableInfo.table);
     auto* iceDiskTable = dynamic_cast<storage::IceDiskRelTable*>(tableInfo.table);
     auto* foreignTable = dynamic_cast<storage::ForeignRelTable*>(tableInfo.table);
-    if (arrowTable) {
+    if (tableHooks) {
+        DASSERT(tableHooks->createRelScanState);
+        scanState = tableHooks->createRelScanState(tableInfo.table->ptrCast<storage::RelTable>(),
+            boundNodeIDVector, outVectors, nbrNodeIDVector->state,
+            storage::MemoryManager::Get(*clientContext));
+    } else if (arrowTable) {
         scanState =
             std::make_unique<storage::ArrowRelTableScanState>(*MemoryManager::Get(*clientContext),
                 boundNodeIDVector, outVectors, nbrNodeIDVector->state);
@@ -124,21 +145,6 @@ void ScanRelTable::initLocalStateInternal(ResultSet* resultSet, ExecutionContext
     }
     scanState->packedMultiParentScan = multiParentPackedScanEnabled;
     tableInfo.initScanState(*scanState, outVectors, clientContext);
-    // The native RelTable::initScanState reads from the bound-node
-    // nodeIDVector to pick a node group, so it must run after a child tuple
-    // is in flight (the existing call sites in fetchNextBoundNodeBatch and
-    // after pulling a child tuple handle that). External rel table backends
-    // (ForeignRelTable, ArrowRelTable, IceDiskRelTable, ...) only use
-    // initScanState to set up scan-function / shared / local state and
-    // source/nodeGroupIdx — they don't need a bound node — but the first
-    // scan() in this operator fires before any of those re-init call sites,
-    // so we'd dereference uninitialized state and crash. Detect "external"
-    // by checking the dynamic type isn't the native RelTable — this scales
-    // to any future external backend without enumerating each one here.
-    if (typeid(*tableInfo.table) != typeid(RelTable)) {
-        auto transaction = transaction::Transaction::Get(*clientContext);
-        tableInfo.table->initScanState(transaction, *scanState);
-    }
     if (sourceNodeScanMode) {
         sourceNodeOutVectors.clear();
         for (auto& pos : sourceNodeScanInfo.outVectorsPos) {
@@ -270,10 +276,11 @@ bool ScanRelTable::getNextTuplesInternal(ExecutionContext* context) {
     const auto transaction = transaction::Transaction::Get(*context->clientContext);
     if (sourceMode) {
         while (true) {
-            while (tableInfo.table->scan(transaction, *scanState)) {
+            while (scanState->source != TableScanSource::NONE &&
+                   tableInfo.table->scan(transaction, *scanState)) {
                 const auto outputSize = scanState->outState->getSelVector().getSelSize();
                 if (outputSize > 0) {
-                    const auto filteredSize = applyNbrNodeMask();
+                    const auto filteredSize = getFilteredOutputSize();
                     if (filteredSize == 0) {
                         continue;
                     }
@@ -290,10 +297,11 @@ bool ScanRelTable::getNextTuplesInternal(ExecutionContext* context) {
         }
     }
     while (true) {
-        while (tableInfo.table->scan(transaction, *scanState)) {
+        while (scanState->source != TableScanSource::NONE &&
+               tableInfo.table->scan(transaction, *scanState)) {
             const auto outputSize = scanState->outState->getSelVector().getSelSize();
             if (outputSize > 0) {
-                const auto filteredSize = applyNbrNodeMask();
+                const auto filteredSize = getFilteredOutputSize();
                 if (filteredSize == 0) {
                     continue;
                 }
@@ -303,6 +311,7 @@ bool ScanRelTable::getNextTuplesInternal(ExecutionContext* context) {
                 return true;
             }
         }
+        scanState->restoreBoundNodeBatch();
         if (!children[0]->getNextTuple(context)) {
             scanState->releaseScanPin();
             return false;

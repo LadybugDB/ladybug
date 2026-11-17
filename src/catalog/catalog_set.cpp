@@ -171,6 +171,10 @@ CatalogEntry* CatalogSet::dropEntryNoLock(const Transaction* transaction, const 
     // LCOV_EXCL_START
     validateExistNoLock(transaction, name);
     // LCOV_EXCL_STOP
+    if (checkWWConflict(transaction, entries.at(name).get())) {
+        throw CatalogException(
+            std::format("Write-write conflict on dropping catalog entry with name {}.", name));
+    }
     auto tombstone = createDummyEntryNoLock(name, oid);
     tombstone->setTimestamp(transaction->getID());
     const auto tombstonePtr = tombstone.get();
@@ -193,6 +197,14 @@ void CatalogSet::alterTableEntry(Transaction* transaction, const binder::BoundAl
         // LCOV_EXCL_START
         validateExistNoLock(transaction, alterInfo.tableName);
         // LCOV_EXCL_STOP
+        // Concurrent ALTERs fork from the same visible version and would silently drop
+        // each other's columns without this check (see #1471). Match createEntryNoLock
+        // and copyTableEntryForWrite: first writer wins, concurrent writers abort.
+        if (checkWWConflict(transaction, entries.at(alterInfo.tableName).get())) {
+            throw CatalogException(
+                std::format("Write-write conflict on altering catalog entry with name {}.",
+                    alterInfo.tableName));
+        }
         auto entry = getEntryNoLock(transaction, alterInfo.tableName);
         DASSERT(entry->getType() == CatalogEntryType::NODE_TABLE_ENTRY ||
                 entry->getType() == CatalogEntryType::REL_GROUP_ENTRY);
@@ -238,6 +250,32 @@ void CatalogSet::alterTableEntry(Transaction* transaction, const binder::BoundAl
     }
 }
 
+TableCatalogEntry* CatalogSet::copyTableEntryForWrite(Transaction* transaction,
+    const std::string& name) {
+    TableCatalogEntry* oldEntry;
+    TableCatalogEntry* newEntry;
+    {
+        std::unique_lock lck{mtx};
+        oldEntry = getEntryNoLock(transaction, name)->ptrCast<TableCatalogEntry>();
+        if (checkWWConflict(transaction, entries.at(name).get())) {
+            throw CatalogException(
+                std::format("Write-write conflict on updating partitioned table {}.", name));
+        }
+        if (oldEntry->getTimestamp() == transaction->getID()) {
+            return oldEntry;
+        }
+        auto copy = oldEntry->copy();
+        copy->setTimestamp(transaction->getID());
+        newEntry = copy.get();
+        emplaceNoLock(std::move(copy));
+    }
+    if (transaction->shouldAppendToUndoBuffer()) {
+        transaction->pushCreateDropCatalogEntry(*this, *oldEntry, isInternal(),
+            true /* skipLoggingToWAL */);
+    }
+    return newEntry;
+}
+
 CatalogEntrySet CatalogSet::getEntries(const Transaction* transaction) {
     CatalogEntrySet result;
     std::shared_lock lck{mtx};
@@ -265,6 +303,24 @@ CatalogEntry* CatalogSet::getEntryOfOID(const Transaction* transaction, oid_t oi
         return currentEntry;
     }
     return nullptr;
+}
+
+void CatalogSet::readHeadEntryOfOID(oid_t oid,
+    const std::function<void(const CatalogEntry*)>& read) const {
+    std::shared_lock lck{mtx};
+    // A rename leaves a deleted head under the old name with the same OID, so a live head
+    // under the new name wins whatever the map's iteration order.
+    const CatalogEntry* head = nullptr;
+    for (auto& [_, entry] : entries) {
+        if (entry->getOID() != oid) {
+            continue;
+        }
+        head = entry.get();
+        if (!entry->isDeleted()) {
+            break;
+        }
+    }
+    read(head);
 }
 
 void CatalogSet::serialize(Serializer serializer) const {

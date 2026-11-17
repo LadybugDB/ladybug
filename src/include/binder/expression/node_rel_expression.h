@@ -108,6 +108,9 @@ public:
         auto it = dbNames.find(entry);
         return it != dbNames.end() ? it->second : "";
     }
+    // Database recorded for the entry that owns tableID. Empty when that entry has no
+    // database recorded, or when entries from different databases share the ID.
+    std::string getDbName(common::table_id_t tableID) const;
 
     // Original labels from the node/rel pattern (for ANY graphs)
     void setOriginalLabels(std::vector<std::string> labels) { originalLabels = std::move(labels); }

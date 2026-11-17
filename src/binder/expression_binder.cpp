@@ -1,10 +1,13 @@
 #include "binder/expression_binder.h"
 
+#include <algorithm>
+
 #include "binder/binder.h"
 #include "binder/expression/case_expression.h"
 #include "binder/expression/expression_util.h"
 #include "binder/expression/literal_expression.h"
 #include "binder/expression/parameter_expression.h"
+#include "binder/expression/rel_expression.h"
 #include "binder/expression/scalar_function_expression.h"
 #include "binder/expression_visitor.h"
 #include "common/exception/binder.h"
@@ -12,6 +15,7 @@
 #include "expression_evaluator/expression_evaluator_utils.h"
 #include "function/arithmetic/vector_arithmetic_functions.h"
 #include "function/cast/vector_cast_functions.h"
+#include "function/utility/vector_utility_functions.h"
 #include "parser/expression/parsed_expression_visitor.h"
 #include "parser/expression/parsed_parameter_expression.h"
 #include <format>
@@ -204,8 +208,13 @@ std::shared_ptr<Expression> ExpressionBinder::simplifyExpression(
         return simplifyBooleanExpression(expression);
     case ExpressionType::CASE_ELSE:
         return simplifyCaseExpression(expression);
-    case ExpressionType::FUNCTION:
+    case ExpressionType::FUNCTION: {
+        const auto& name = expression->constCast<ScalarFunctionExpression>().getFunction().name;
+        if (name == CoalesceFunction::name || name == IfNullFunction::name) {
+            return simplifyCoalesceExpression(expression);
+        }
         return simplifyArithmeticExpression(expression);
+    }
     default:
         return expression;
     }
@@ -280,6 +289,14 @@ std::shared_ptr<Expression> ExpressionBinder::simplifyArithmeticExpression(
     return survivor;
 }
 
+static bool containsAggregate(const Expression& expression) {
+    if (expression.expressionType == ExpressionType::AGGREGATE_FUNCTION) {
+        return true;
+    }
+    return std::ranges::any_of(ExpressionChildrenCollector::collectChildren(expression),
+        [](const auto& child) { return containsAggregate(*child); });
+}
+
 std::shared_ptr<Expression> ExpressionBinder::simplifyBooleanExpression(
     const std::shared_ptr<Expression>& expression) {
     auto expressionType = expression->expressionType;
@@ -302,32 +319,33 @@ std::shared_ptr<Expression> ExpressionBinder::simplifyBooleanExpression(
     DASSERT(expressionType == ExpressionType::AND || expressionType == ExpressionType::OR);
     auto left = simplifyExpression(expression->getChild(0));
     auto right = simplifyExpression(expression->getChild(1));
+    std::shared_ptr<Expression> result = expression;
     if (expressionType == ExpressionType::AND) {
         if (isBoolLiteral(*left, false)) {
-            return left;
-        }
-        if (isBoolLiteral(*right, false)) {
-            return right;
-        }
-        if (isBoolLiteral(*left, true)) {
-            return right;
-        }
-        if (isBoolLiteral(*right, true)) {
-            return left;
+            result = left;
+        } else if (isBoolLiteral(*right, false)) {
+            result = right;
+        } else if (isBoolLiteral(*left, true)) {
+            result = right;
+        } else if (isBoolLiteral(*right, true)) {
+            result = left;
         }
     } else {
         if (isBoolLiteral(*left, true)) {
-            return left;
+            result = left;
+        } else if (isBoolLiteral(*right, true)) {
+            result = right;
+        } else if (isBoolLiteral(*left, false)) {
+            result = right;
+        } else if (isBoolLiteral(*right, false)) {
+            result = left;
         }
-        if (isBoolLiteral(*right, true)) {
-            return right;
+    }
+    if (result != expression) {
+        if (containsAggregate(*expression) && !containsAggregate(*result)) {
+            return expression;
         }
-        if (isBoolLiteral(*left, false)) {
-            return right;
-        }
-        if (isBoolLiteral(*right, false)) {
-            return left;
-        }
+        return result;
     }
     if (left != expression->getChild(0) || right != expression->getChild(1)) {
         return bindBooleanExpression(expressionType, expression_vector{left, right});
@@ -342,6 +360,7 @@ std::shared_ptr<Expression> ExpressionBinder::simplifyCaseExpression(
     auto simplifiedCaseExpression = std::make_shared<CaseExpression>(expression->dataType.copy(),
         elseExpression, expression->getUniqueName());
     bool changed = elseExpression != caseExpression.getElseExpression();
+    std::shared_ptr<Expression> result;
     for (auto i = 0u; i < caseExpression.getNumCaseAlternatives(); ++i) {
         auto alternative = caseExpression.getCaseAlternative(i);
         auto whenExpression = simplifyExpression(alternative->whenExpression);
@@ -353,7 +372,8 @@ std::shared_ptr<Expression> ExpressionBinder::simplifyCaseExpression(
         }
         if (isBoolLiteral(*whenExpression, true)) {
             if (simplifiedCaseExpression->getNumCaseAlternatives() == 0) {
-                return thenExpression;
+                result = thenExpression;
+                break;
             }
             // Later alternatives are unreachable. Report a change only when some are dropped, so
             // simplifying an already simplified CASE returns the same object.
@@ -367,10 +387,46 @@ std::shared_ptr<Expression> ExpressionBinder::simplifyCaseExpression(
                   thenExpression != alternative->thenExpression;
         simplifiedCaseExpression->addCaseAlternative(whenExpression, thenExpression);
     }
-    if (simplifiedCaseExpression->getNumCaseAlternatives() == 0) {
-        return elseExpression;
+    if (!result) {
+        if (simplifiedCaseExpression->getNumCaseAlternatives() == 0) {
+            result = elseExpression;
+        } else {
+            result = changed ? simplifiedCaseExpression : expression;
+        }
     }
-    return changed ? simplifiedCaseExpression : expression;
+    if (containsAggregate(*expression) && !containsAggregate(*result)) {
+        return expression;
+    }
+    return result;
+}
+
+std::shared_ptr<Expression> ExpressionBinder::simplifyCoalesceExpression(
+    const std::shared_ptr<Expression>& expression) {
+    // Arguments after a non-NULL literal are never returned, so they are dropped and not evaluated.
+    for (auto i = 0u; i + 1 < expression->getNumChildren(); ++i) {
+        const auto child = expression->getChild(i);
+        if (child->expressionType != ExpressionType::LITERAL ||
+            ExpressionUtil::isNullLiteral(*child)) {
+            continue;
+        }
+        // Dropping an aggregate could stop the projection from aggregating its rows.
+        for (auto j = i + 1; j < expression->getNumChildren(); ++j) {
+            if (containsAggregate(*expression->getChild(j))) {
+                return expression;
+            }
+        }
+        auto children = expression->getChildren();
+        children.resize(i + 1);
+        auto result = bindScalarFunctionExpression(children, CoalesceFunction::name);
+        // Keep the original call if the shorter one would get another result type.
+        if (result->dataType != expression->dataType) {
+            return expression;
+        }
+        // Keep the column name the call gives an unaliased projection item.
+        result->setAlias(expression->hasAlias() ? expression->getAlias() : expression->toString());
+        return result;
+    }
+    return expression;
 }
 
 std::shared_ptr<Expression> ExpressionBinder::foldExpression(
@@ -458,6 +514,10 @@ std::string ExpressionBinder::getUniqueName(const std::string& name) const {
 void ExpressionBinder::addParameter(const std::string& name, std::shared_ptr<Value> value) {
     DASSERT(!knownParameters.contains(name));
     knownParameters[name] = value;
+}
+
+bool ExpressionBinder::isRecursiveRelBound(const RelExpression& rel) const {
+    return binder->scope.hasRecursiveRel(rel.getUniqueName());
 }
 
 } // namespace binder

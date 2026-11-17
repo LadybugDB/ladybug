@@ -108,6 +108,7 @@ public:
     TableStats getStats() const { return nodeGroups->getStats(); }
 
     void reclaimStorage(PageAllocator& pageAllocator) const;
+    bool vacuumInMemoryUpdates(common::transaction_t horizon);
     void checkpoint(const std::vector<common::column_id_t>& columnIDs, PageAllocator& pageAllocator,
         const transaction::Transaction* snapshotTxn = nullptr,
         common::transaction_t retentionHorizon = common::INVALID_TRANSACTION,
@@ -123,7 +124,9 @@ public:
         return nodeGroups->getNodeGroupNoLock(nodeGroupIdx);
     }
 
-    void rollbackGroupCollectionInsert(common::row_idx_t numRows_, bool isPersistent);
+    void rollbackGroupCollectionInsert(main::ClientContext* context,
+        common::node_group_idx_t nodeGroupIdx, common::row_idx_t startRow,
+        common::row_idx_t numRows, bool isPersistent);
 
     common::RelDataDirection getDirection() const { return direction; }
 

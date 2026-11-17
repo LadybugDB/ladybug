@@ -192,6 +192,12 @@ struct ShowIndexesFunction final {
     static function_set getFunctionSet();
 };
 
+struct ShowConstraintsFunction final {
+    static constexpr const char* name = "SHOW_CONSTRAINTS";
+
+    static function_set getFunctionSet();
+};
+
 struct ShowProjectedGraphsFunction final {
     static constexpr const char* name = "SHOW_PROJECTED_GRAPHS";
 

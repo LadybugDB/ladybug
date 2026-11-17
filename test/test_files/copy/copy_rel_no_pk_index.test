@@ -1,0 +1,29 @@
+-DATASET CSV empty
+-BUFFER_POOL_SIZE 268435456
+
+--
+
+# The edge file has 20 row groups, so several workers share one lookup map.
+-CASE NoPKIndexRelCopyManyThreads
+-STATEMENT CALL enable_default_hash_index=false;
+---- ok
+-STATEMENT CALL threads=4;
+---- ok
+-STATEMENT CREATE NODE TABLE account(ID INT64, PRIMARY KEY(ID));
+---- ok
+-STATEMENT CREATE REL TABLE follows(FROM account TO account);
+---- ok
+-STATEMENT COPY account FROM "${LBUG_ROOT_DIRECTORY}/dataset/snap/twitter/parquet/twitter-nodes.parquet";
+---- ok
+-STATEMENT COPY follows FROM "${LBUG_ROOT_DIRECTORY}/dataset/snap/twitter/parquet/twitter-edges.parquet";
+---- ok
+-STATEMENT MATCH (a:account)-[e:follows]->(b:account) HINT a JOIN (e JOIN b) RETURN COUNT(*);
+---- 1
+2420766
+-STATEMENT MATCH (a:account)-[e:follows]->(b:account) HINT b JOIN (e JOIN a) RETURN COUNT(*);
+---- 1
+2420766
+-STATEMENT MATCH (a:account)-[:follows]->(b:account) WHERE a.ID = 214328887 AND b.ID = 34428380 RETURN COUNT(*);
+---- 1
+13
+

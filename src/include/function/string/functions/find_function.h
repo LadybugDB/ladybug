@@ -12,8 +12,11 @@ struct Find {
     static inline void operation(common::string_t& left, common::string_t& right, int64_t& result) {
         if (right.len == 0) {
             result = 1;
-        } else if (right.len > left.len) {
+            return;
+        }
+        if (right.len > left.len) {
             result = 0;
+            return;
         }
         result = Find::find(left.getData(), left.len, right.getData(), right.len) + 1;
     }

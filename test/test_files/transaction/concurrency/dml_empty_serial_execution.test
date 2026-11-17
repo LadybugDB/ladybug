@@ -20,7 +20,7 @@
  ]
 
 -CASE WWConflictNodeCopyUpdate
--STATEMENT CALL debug_enable_multi_writes=true;
+-STATEMENT CALL enable_multi_writes=true;
 ---- ok
 -INSERT_STATEMENT_BLOCK COPY_TINYSNB_PERSON
 -CREATE_CONNECTION conn2
@@ -35,7 +35,7 @@
 Runtime exception: Write-write conflict of updating the same row.
 
 -CASE NodeUpdateOverlappedRows
--STATEMENT CALL debug_enable_multi_writes=true;
+-STATEMENT CALL enable_multi_writes=true;
 ---- ok
 -CREATE_CONNECTION conn2
 -STATEMENT CREATE NODE TABLE test(id INT64, val INT64, PRIMARY KEY(id));
@@ -65,7 +65,7 @@ Runtime exception: Write-write conflict of updating the same row.
 21
 
 -CASE NodeUpdatesRollback
--STATEMENT CALL debug_enable_multi_writes=true;
+-STATEMENT CALL enable_multi_writes=true;
 ---- ok
 -STATEMENT CALL auto_checkpoint=false;
 ---- ok
@@ -95,7 +95,7 @@ Runtime exception: Write-write conflict of updating the same row.
 0
 
 -CASE NodeUpdatesMixedCommitAndRollback
--STATEMENT CALL debug_enable_multi_writes=true;
+-STATEMENT CALL enable_multi_writes=true;
 ---- ok
 -STATEMENT CALL auto_checkpoint=false;
 ---- ok
@@ -146,7 +146,7 @@ Runtime exception: Write-write conflict of updating the same row.
 100
 
 -CASE WWConflictNodeCopyDelete
--STATEMENT CALL debug_enable_multi_writes=true;
+-STATEMENT CALL enable_multi_writes=true;
 ---- ok
 -INSERT_STATEMENT_BLOCK COPY_TINYSNB_PERSON
 -CREATE_CONNECTION conn2
@@ -161,7 +161,7 @@ Runtime exception: Write-write conflict of updating the same row.
 Runtime exception: Write-write conflict: deleting a row that is already deleted by another transaction.
 
 -CASE WWConflictRelCopyUpdate
--STATEMENT CALL debug_enable_multi_writes=true;
+-STATEMENT CALL enable_multi_writes=true;
 ---- ok
 -INSERT_STATEMENT_BLOCK COPY_TINYSNB_PERSON
 -INSERT_STATEMENT_BLOCK COPY_TINYSNB_KNOWS
@@ -177,7 +177,7 @@ Runtime exception: Write-write conflict: deleting a row that is already deleted 
 Runtime exception: Write-write conflict of updating the same row.
 
 -CASE WWConflictRelCopyDelete
--STATEMENT CALL debug_enable_multi_writes=true;
+-STATEMENT CALL enable_multi_writes=true;
 ---- ok
 -INSERT_STATEMENT_BLOCK COPY_TINYSNB_PERSON
 -INSERT_STATEMENT_BLOCK COPY_TINYSNB_KNOWS
@@ -193,7 +193,7 @@ Runtime exception: Write-write conflict of updating the same row.
 Runtime exception: Write-write conflict: deleting a row that is already deleted by another transaction.
 
 -CASE WWConflictNodeInsertUpdate
--STATEMENT CALL debug_enable_multi_writes=true;
+-STATEMENT CALL enable_multi_writes=true;
 ---- ok
 -CREATE_DATASET_SCHEMA tinysnb
 -INSERT_DATASET_BY_ROW tinysnb
@@ -209,7 +209,7 @@ Runtime exception: Write-write conflict: deleting a row that is already deleted 
 Runtime exception: Write-write conflict of updating the same row.
 
 -CASE WWConflictNodeInsertDelete
--STATEMENT CALL debug_enable_multi_writes=true;
+-STATEMENT CALL enable_multi_writes=true;
 ---- ok
 -CREATE_DATASET_SCHEMA tinysnb
 -INSERT_DATASET_BY_ROW tinysnb
@@ -225,7 +225,7 @@ Runtime exception: Write-write conflict of updating the same row.
 Runtime exception: Write-write conflict: deleting a row that is already deleted by another transaction.
 
 -CASE WWConflictRelInsertUpdate
--STATEMENT CALL debug_enable_multi_writes=true;
+-STATEMENT CALL enable_multi_writes=true;
 ---- ok
 -CREATE_DATASET_SCHEMA tinysnb
 -INSERT_DATASET_BY_ROW tinysnb
@@ -241,7 +241,7 @@ Runtime exception: Write-write conflict: deleting a row that is already deleted 
 Runtime exception: Write-write conflict of updating the same row.
 
 -CASE WWConflictRelInsertDelete
--STATEMENT CALL debug_enable_multi_writes=true;
+-STATEMENT CALL enable_multi_writes=true;
 ---- ok
 -CREATE_DATASET_SCHEMA tinysnb
 -INSERT_DATASET_BY_ROW tinysnb
@@ -257,7 +257,7 @@ Runtime exception: Write-write conflict of updating the same row.
 Runtime exception: Write-write conflict: deleting a row that is already deleted by another transaction.
 
 -CASE MultiTransactionNodeInsert
--STATEMENT CALL debug_enable_multi_writes=true;
+-STATEMENT CALL enable_multi_writes=true;
 ---- ok
 -STATEMENT CALL auto_checkpoint=false;
 ---- ok
@@ -311,7 +311,7 @@ Runtime exception: Write-write conflict: deleting a row that is already deleted 
 10
 
 -CASE MultiTransactionRelInsert
--STATEMENT CALL debug_enable_multi_writes=true;
+-STATEMENT CALL enable_multi_writes=true;
 ---- ok
 -STATEMENT CALL auto_checkpoint=false;
 ---- ok
@@ -386,7 +386,7 @@ Runtime exception: Write-write conflict: deleting a row that is already deleted 
 
 -CASE MultiTransactionNodeCopy
 -SKIP
--STATEMENT CALL debug_enable_multi_writes=true;
+-STATEMENT CALL enable_multi_writes=true;
 ---- ok
 -STATEMENT create node table person (ID INt64, fName StRING, gender INT64, isStudent BoOLEAN, isWorker BOOLEAN, age INT64, eyeSight DOUBLE, birthdate DATE, registerTime TIMESTAMP, lastJobDuration interval, workedHours INT64[], usedNames STRING[], courseScoresPerTerm INT64[][], grades INT64[4], height float, u UUID, PRIMARY KEY (ID));
 ---- ok
@@ -435,7 +435,7 @@ Runtime exception: Write-write conflict: deleting a row that is already deleted 
 
 -CASE MultiTransactionRelCopy
 -SKIP
--STATEMENT CALL debug_enable_multi_writes=true;
+-STATEMENT CALL enable_multi_writes=true;
 ---- ok
 -INSERT_STATEMENT_BLOCK COPY_TINYSNB_PERSON
 -STATEMENT create rel table knows (FROM person TO person, date DATE, meetTime TIMESTAMP, validInterval INTERVAL, comments STRING[], summary STRUCT(locations STRING[], transfer STRUCT(day DATE, amount INT64[])), notes UNION(firstmet DATE, type INT16, comment STRING), someMap MAP(STRING, STRING), MANY_MAnY);
@@ -502,7 +502,7 @@ Runtime exception: Write-write conflict: deleting a row that is already deleted 
 
 -CASE MixedMultiTransactionRelCopyInsert
 -SKIP
--STATEMENT CALL debug_enable_multi_writes=true;
+-STATEMENT CALL enable_multi_writes=true;
 ---- ok
 -INSERT_STATEMENT_BLOCK COPY_TINYSNB_PERSON
 -STATEMENT create rel table knows (FROM person TO person, date DATE, meetTime TIMESTAMP, validInterval INTERVAL, comments STRING[], summary STRUCT(locations STRING[], transfer STRUCT(day DATE, amount INT64[])), notes UNION(firstmet DATE, type INT16, comment STRING), someMap MAP(STRING, STRING), MANY_MAnY);

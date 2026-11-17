@@ -35,6 +35,7 @@ protected:
 
     void testStrayWALFile(const std::function<void()>& setupNewDBFunc);
     void setupChecksumMismatchTest(std::function<void(std::ofstream&)> corruptFunc);
+    void expectChecksumSettingError();
 };
 
 class FailingSyncFileSystem final : public FileSystem, public DirectorySyncFileSystem {
@@ -280,6 +281,52 @@ TEST_F(WalTest, OrdinaryCommitSyncsRegisteredNamespace) {
     EXPECT_EQ(failingFSPtr->getParentDirectorySyncCount(), 1);
     EXPECT_TRUE(failingFSPtr->wasParentDirectorySynced(
         lbug::storage::StorageUtils::getWALFilePath("failing-sync://db")));
+}
+
+// The ABORT record of a transaction that failed after its COMMIT record became durable must be
+// synced too; when that fails, the WAL refuses writes instead.
+TEST_F(WalTest, AbortSyncFailurePoisonsWAL) {
+    VirtualFileSystem vfs;
+    auto failingFS = std::make_unique<FailingSyncFileSystem>(false /* failSync */);
+    auto* failingFSPtr = failingFS.get();
+    vfs.registerFileSystem(std::move(failingFS));
+
+    lbug::storage::WAL wal("failing-sync://db", false /* readOnly */, false /* enableChecksums */,
+        &vfs);
+    lbug::storage::LocalWAL localWAL(*lbug::storage::MemoryManager::Get(*conn->getClientContext()),
+        false /* enableChecksums */);
+    localWAL.logLoadExtension("" /* main */, "dummy");
+    localWAL.logCommit();
+    uint64_t walCommitSequence = 0;
+    uint64_t blockStart = 0;
+    ASSERT_NO_THROW(
+        wal.logCommittedWAL(localWAL, conn->getClientContext(), walCommitSequence, &blockStart));
+    EXPECT_GT(blockStart, 0);
+
+    failingFSPtr->setFailSync(true);
+    EXPECT_THROW(wal.logAbort(blockStart), RuntimeException);
+    EXPECT_THROW(wal.throwIfPoisoned(), RuntimeException);
+}
+
+// Recovery matches an ABORT record only within the file of its COMMIT, so one whose COMMIT is not
+// in the open WAL file is refused, and the failed commit's caller poisons the WAL.
+TEST_F(WalTest, AbortOutsideTheOpenWALFileIsRefused) {
+    VirtualFileSystem vfs;
+    vfs.registerFileSystem(std::make_unique<FailingSyncFileSystem>(false /* failSync */));
+    lbug::storage::WAL wal("failing-sync://db", false /* readOnly */, false /* enableChecksums */,
+        &vfs);
+    EXPECT_THROW(wal.logAbort(0), RuntimeException);
+
+    lbug::storage::LocalWAL localWAL(*lbug::storage::MemoryManager::Get(*conn->getClientContext()),
+        false /* enableChecksums */);
+    localWAL.logLoadExtension("" /* main */, "dummy");
+    localWAL.logCommit();
+    uint64_t walCommitSequence = 0;
+    uint64_t blockStart = 0;
+    ASSERT_NO_THROW(
+        wal.logCommittedWAL(localWAL, conn->getClientContext(), walCommitSequence, &blockStart));
+    EXPECT_THROW(wal.logAbort(blockStart + localWAL.getSize()), RuntimeException);
+    EXPECT_NO_THROW(wal.logAbort(blockStart));
 }
 
 TEST_F(WalTest, FailureAfterCheckpointRenamePoisonsWAL) {
@@ -864,6 +911,26 @@ TEST_F(WalTest, WALChecksumConfigMismatch) {
         lbug::common::RuntimeException);
 }
 
+static std::vector<uint8_t> readFileBytes(const std::string& path) {
+    std::ifstream stream{path, std::ios::binary};
+    return {std::istreambuf_iterator<char>{stream}, std::istreambuf_iterator<char>{}};
+}
+
+void WalTest::expectChecksumSettingError() {
+    EXPECT_THROW(
+        {
+            try {
+                createDBAndConn();
+            } catch (std::exception& e) {
+                EXPECT_THAT(e.what(),
+                    testing::HasSubstr(
+                        "Please open your database using the correct enableChecksums config."));
+                throw;
+            }
+        },
+        lbug::common::RuntimeException);
+}
+
 TEST_F(WalTest, WALChecksumConfigMismatchNoThrow) {
     if (inMemMode || systemConfig->checkpointThreshold == 0) {
         GTEST_SKIP();
@@ -872,13 +939,111 @@ TEST_F(WalTest, WALChecksumConfigMismatchNoThrow) {
     ASSERT_TRUE(conn->query("call auto_checkpoint=false")->isSuccess());
     ASSERT_TRUE(conn->query("create node table test1(id int64 primary key)")->isSuccess());
     ASSERT_TRUE(conn->query("create node table test2(id int64 primary key)")->isSuccess());
+    database.reset();
+    const auto walFilePath = lbug::storage::StorageUtils::getWALFilePath(databasePath);
+    const auto walBytes = readFileBytes(walFilePath);
+    ASSERT_FALSE(walBytes.empty());
     systemConfig->enableChecksums = !systemConfig->enableChecksums;
     systemConfig->throwOnWalReplayFailure = false;
-    // We have throwOnWalReplayFailure=false so we essentially skip the replay
+    systemConfig->readOnly = true;
+    expectChecksumSettingError();
+    systemConfig->readOnly = false;
+    expectChecksumSettingError();
+    EXPECT_EQ(readFileBytes(walFilePath), walBytes);
+    systemConfig->enableChecksums = !systemConfig->enableChecksums;
+    createDBAndConn();
+    auto res = conn->query("CALL show_tables() WHERE name STARTS WITH 'test' RETURN *;");
+    ASSERT_TRUE(res->isSuccess());
+    ASSERT_EQ(res->getNumTuples(), 2);
+}
+
+// A header too short to hold the checksum flag holds no commits, so non-strict recovery still
+// drops the WAL whatever the configured flag.
+TEST_F(WalTest, TornWALHeaderNoThrow) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("call force_checkpoint_on_close=false")->isSuccess());
+    ASSERT_TRUE(conn->query("call auto_checkpoint=false")->isSuccess());
+    ASSERT_TRUE(conn->query("create node table test1(id int64 primary key)")->isSuccess());
+    database.reset();
+    const auto walFilePath = lbug::storage::StorageUtils::getWALFilePath(databasePath);
+    // Shorter than the 16-byte database ID that starts the header.
+    std::filesystem::resize_file(walFilePath, 10);
+    systemConfig->enableChecksums = !systemConfig->enableChecksums;
     createDBAndConn();
     auto res = conn->query("CALL show_tables() WHERE name STARTS WITH 'test' RETURN *;");
     ASSERT_TRUE(res->isSuccess());
     ASSERT_EQ(res->getNumTuples(), 0);
+}
+
+// A power loss before the WAL's first write reaches disk can leave the file zero-filled. Its
+// header was never written, so recovery treats the WAL as torn instead of reporting a checksum
+// setting the database never had.
+TEST_F(WalTest, ZeroFilledWALIsTorn) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("call force_checkpoint_on_close=false")->isSuccess());
+    ASSERT_TRUE(conn->query("call auto_checkpoint=false")->isSuccess());
+    ASSERT_TRUE(conn->query("create node table test1(id int64 primary key)")->isSuccess());
+    database.reset();
+    const auto walFilePath = lbug::storage::StorageUtils::getWALFilePath(databasePath);
+    {
+        const std::vector<char> zeros(std::filesystem::file_size(walFilePath), 0);
+        std::ofstream wal{walFilePath, std::ios::binary | std::ios::in | std::ios::out};
+        wal.write(zeros.data(), static_cast<std::streamsize>(zeros.size()));
+    }
+    // A zeroed header reads as checksums off, so only this setting reaches the mismatch check.
+    systemConfig->enableChecksums = true;
+    systemConfig->throwOnWalReplayFailure = true;
+    EXPECT_THROW(
+        {
+            try {
+                createDBAndConn();
+            } catch (std::exception& e) {
+                EXPECT_THAT(e.what(), testing::HasSubstr("Checksum verification failed"));
+                throw;
+            }
+        },
+        lbug::common::Exception);
+    systemConfig->throwOnWalReplayFailure = false;
+    createDBAndConn();
+    auto res = conn->query("CALL show_tables() WHERE name STARTS WITH 'test' RETURN *;");
+    ASSERT_TRUE(res->isSuccess());
+    ASSERT_EQ(res->getNumTuples(), 0);
+}
+
+// A written header whose checksum flag byte is damaged still refuses the open and keeps the WAL;
+// the error says the WAL may be corrupted rather than only blaming the setting.
+TEST_F(WalTest, CorruptedWALChecksumFlagKeepsWAL) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0 || !systemConfig->enableChecksums) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("call force_checkpoint_on_close=false")->isSuccess());
+    ASSERT_TRUE(conn->query("call auto_checkpoint=false")->isSuccess());
+    ASSERT_TRUE(conn->query("create node table test1(id int64 primary key)")->isSuccess());
+    database.reset();
+    const auto walFilePath = lbug::storage::StorageUtils::getWALFilePath(databasePath);
+    {
+        // The flag follows the 16-byte database ID.
+        std::fstream wal{walFilePath, std::ios::binary | std::ios::in | std::ios::out};
+        wal.seekp(16);
+        wal.put('\0');
+    }
+    const auto walBytes = readFileBytes(walFilePath);
+    systemConfig->throwOnWalReplayFailure = false;
+    EXPECT_THROW(
+        {
+            try {
+                createDBAndConn();
+            } catch (std::exception& e) {
+                EXPECT_THAT(e.what(), testing::HasSubstr("the WAL file is corrupted"));
+                throw;
+            }
+        },
+        lbug::common::RuntimeException);
+    EXPECT_EQ(readFileBytes(walFilePath), walBytes);
 }
 
 // Simulation of a corrupted WAL tail by truncating the WAL file. Note that in this case, there
@@ -960,6 +1125,45 @@ TEST_F(WalTest, CorruptedWALTailTruncated2) {
     auto res = conn->query("CALL show_tables() WHERE name STARTS WITH 'test' RETURN *;");
     ASSERT_TRUE(res->isSuccess());
     ASSERT_EQ(res->getNumTuples(), 3);
+}
+
+// A torn WAL tail inside a multi-page string record (ENOSPC/power loss mid-commit) must not
+// crash the replayer: BufferedFileReader reads cross a page boundary with a short final page.
+// Non-strict recovery drops the torn transaction; strict recovery throws a catchable error.
+TEST_F(WalTest, TornWALTailInsideLargeStringRecord) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CALL force_checkpoint_on_close=false")->isSuccess());
+    ASSERT_TRUE(conn->query("CALL auto_checkpoint=false")->isSuccess());
+    ASSERT_TRUE(
+        conn->query("CREATE NODE TABLE Blob(id INT64 PRIMARY KEY, s STRING);")->isSuccess());
+    // Enough string data to span several 4KiB WAL pages, so the torn record's reads cross a
+    // page boundary into a short final page.
+    {
+        // Destroy the result before tearing down the DB below.
+        auto insertRes = conn->query("UNWIND range(0, 7) AS i CREATE (:Blob {id: i, s: "
+                                     "repeat(CAST(i AS STRING) + '-', 1500)});");
+        ASSERT_TRUE(insertRes->isSuccess()) << insertRes->getErrorMessage();
+    }
+    auto walFilePath = lbug::storage::StorageUtils::getWALFilePath(databasePath);
+    ASSERT_TRUE(std::filesystem::exists(walFilePath));
+    const auto walSize = std::filesystem::file_size(walFilePath);
+    ASSERT_GT(walSize, 8192);
+    conn.reset();
+    database.reset();
+    // Cut into the last transaction's records so the WAL ends mid-string.
+    std::filesystem::resize_file(walFilePath, walSize - 200);
+    // Strict recovery throws instead of crashing the process.
+    systemConfig->throwOnWalReplayFailure = true;
+    EXPECT_THROW(createDBAndConn(), lbug::common::Exception);
+    // Non-strict recovery drops the torn transaction instead of crashing.
+    systemConfig->throwOnWalReplayFailure = false;
+    createDBAndConn();
+    auto res = conn->query("MATCH (b:Blob) RETURN count(*);");
+    ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+    ASSERT_TRUE(res->hasNext());
+    EXPECT_EQ(res->getNext()->getValue(0)->getValue<int64_t>(), 0);
 }
 
 TEST_F(WalTest, WALFileLeftoverFromPreviousDBNewReadOnlyDB) {
@@ -1361,6 +1565,25 @@ TEST_F(FrozenWALRecoveryTest, FrozenWALWithoutCheckpointRecordSurvivesSecondReco
 
     createDBAndConn();
     EXPECT_EQ(countTestNodes(), 150);
+}
+
+// A frozen WAL written with the other checksum setting is kept as well, also with
+// throwOnWalReplayFailure false (the fixture's setting). The WAL is written with the setting
+// flipped, the other direction from WALChecksumConfigMismatchNoThrow.
+TEST_F(FrozenWALRecoveryTest, FrozenWALWithOtherChecksumSettingIsKept) {
+    systemConfig->enableChecksums = !systemConfig->enableChecksums;
+    createDBAndConn();
+    insertRange(0, 100);
+    closeDB();
+    std::filesystem::rename(walFilePath, frozenWALFilePath);
+    const auto walBytes = readFileBytes(frozenWALFilePath);
+    ASSERT_FALSE(walBytes.empty());
+    systemConfig->enableChecksums = !systemConfig->enableChecksums;
+    expectChecksumSettingError();
+    EXPECT_EQ(readFileBytes(frozenWALFilePath), walBytes);
+    systemConfig->enableChecksums = !systemConfig->enableChecksums;
+    createDBAndConn();
+    EXPECT_EQ(countTestNodes(), 100);
 }
 
 // Same as above, but writes committed after the interrupted checkpoint are in an active WAL next

@@ -128,3 +128,16 @@ Chrome|right
 -STATEMENT MATCH (n:N) WHERE CAST(n.i32 AS INT64) <> 40 RETURN n.id;
 ---- 1
 1
+
+-CASE FunctionNamedCastPrefixNotTreatedAsCast
+-STATEMENT CREATE NODE TABLE M(id INT64 PRIMARY KEY, val INT32);
+---- ok
+-STATEMENT CREATE (:M {id: 1, val: 10});
+---- ok
+-STATEMENT CREATE (:M {id: 2, val: 20});
+---- ok
+-STATEMENT CREATE MACRO CAST_PLUS_TEN(x) AS x + 10;
+---- ok
+-STATEMENT MATCH (m:M) WHERE CAST_PLUS_TEN(m.val) > 25 RETURN m.id;
+---- 1
+2

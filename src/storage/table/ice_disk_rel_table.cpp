@@ -24,47 +24,6 @@ using namespace lbug::transaction;
 namespace lbug {
 namespace storage {
 
-void IceDiskRelTableScanState::setToTable(const Transaction* transaction, Table* table_,
-    std::vector<column_id_t> columnIDs_, std::vector<ColumnPredicateSet> columnPredicateSets_,
-    RelDataDirection direction_) {
-    // Call base class implementation but skip local table setup
-    TableScanState::setToTable(transaction, table_, std::move(columnIDs_),
-        std::move(columnPredicateSets_));
-    columns.resize(columnIDs.size());
-    direction = direction_;
-    for (size_t i = 0; i < columnIDs.size(); ++i) {
-        auto columnID = columnIDs[i];
-        if (columnID == INVALID_COLUMN_ID || columnID == ROW_IDX_COLUMN_ID) {
-            columns[i] = nullptr;
-        } else {
-            columns[i] = table->cast<RelTable>().getColumn(columnID, direction);
-        }
-    }
-    csrOffsetColumn = table->cast<RelTable>().getCSROffsetColumn(direction);
-    csrLengthColumn = table->cast<RelTable>().getCSRLengthColumn(direction);
-    nodeGroupIdx = INVALID_NODE_GROUP_IDX;
-    // IceDiskRelTable does not support local storage, so we skip the local table initialization
-}
-
-void IceDiskRelTableScanState::reloadCachedBatchData(Transaction* transaction) {
-    auto context = transaction->getClientContext();
-
-    // Create DataChunk matching the indices parquet file schema
-    auto numIndicesColumns = indicesReader->getNumColumns();
-    cachedBatchData = std::make_unique<DataChunk>(numIndicesColumns);
-
-    // Insert value vectors for all columns in the parquet file
-    auto memoryManager = MemoryManager::Get(*context);
-    for (uint32_t colIdx = 0; colIdx < numIndicesColumns; ++colIdx) {
-        const auto& columnTypeRef = indicesReader->getColumnType(colIdx);
-        auto columnType = columnTypeRef.copy();
-        auto vector = std::make_shared<ValueVector>(std::move(columnType), memoryManager);
-        cachedBatchData->insert(colIdx, vector);
-    }
-
-    indicesReader->scan(*parquetScanState, *cachedBatchData);
-}
-
 IceDiskRelTable::IceDiskRelTable(RelGroupCatalogEntry* relGroupEntry, table_id_t fromTableID,
     table_id_t toTableID, const StorageManager* storageManager, MemoryManager* memoryManager,
     main::ClientContext* context)
@@ -117,7 +76,10 @@ void IceDiskRelTable::initScanState(Transaction* transaction, TableScanState& sc
     // Initialize ParquetReaders for this scan state (per-thread)
     auto context = transaction->getClientContext();
     auto vfs = VirtualFileSystem::GetUnsafe(*context);
-    auto& iceDiskScanState = static_cast<IceDiskRelTableScanState&>(relScanState);
+    // The shared state is always columnar here: single-rel scans create the matching columnar
+    // state, and multi-rel scans only share one backend's state when that backend covers the
+    // columnar tables in the scan (see ColumnarTableHooks::supportsMixedColumnarScan).
+    auto& iceDiskScanState = scanState.cast<ColumnarRelTableScanState>();
 
     // The scan state is shared across all rel tables in a multi-rel scan, so the readers
     // must follow the current table: re-open them whenever the scan switches to a table
@@ -294,7 +256,10 @@ void IceDiskRelTable::loadIndptrData(Transaction* transaction) const {
 }
 
 bool IceDiskRelTable::scanInternal(Transaction* transaction, TableScanState& scanState) {
-    auto& iceDiskScanState = static_cast<IceDiskRelTableScanState&>(scanState);
+    if (scanState.source == TableScanSource::NONE) {
+        return false;
+    }
+    auto& iceDiskScanState = scanState.cast<ColumnarRelTableScanState>();
 
     if (layout == IceDiskRelTableLayout::FLAT) {
         return scanFlat(transaction, iceDiskScanState);
@@ -303,7 +268,7 @@ bool IceDiskRelTable::scanInternal(Transaction* transaction, TableScanState& sca
 }
 
 bool IceDiskRelTable::scanCSR(Transaction* transaction,
-    IceDiskRelTableScanState& iceDiskScanState) {
+    ColumnarRelTableScanState& iceDiskScanState) {
     iceDiskScanState.resetOutVectors();
 
     if (iceDiskScanState.boundNodeOffsets.empty()) {
@@ -433,13 +398,14 @@ bool IceDiskRelTable::scanCSR(Transaction* transaction,
         return true;
     } else {
         // No data found
+        iceDiskScanState.source = TableScanSource::NONE;
         iceDiskScanState.outState->getSelVectorUnsafe().setToFiltered(0);
         return false;
     }
 }
 
 bool IceDiskRelTable::scanFlat(Transaction* transaction,
-    IceDiskRelTableScanState& iceDiskScanState) {
+    ColumnarRelTableScanState& iceDiskScanState) {
     iceDiskScanState.resetOutVectors();
 
     if (iceDiskScanState.boundNodeOffsets.empty()) {
@@ -543,6 +509,7 @@ bool IceDiskRelTable::scanFlat(Transaction* transaction,
         return true;
     }
 
+    iceDiskScanState.source = TableScanSource::NONE;
     iceDiskScanState.outState->getSelVectorUnsafe().setToFiltered(0);
     return false;
 }

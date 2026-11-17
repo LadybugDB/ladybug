@@ -9,10 +9,10 @@ protocol such as ADBC).
 
 > Status: **v1 (foundational).** DDL, catalog, storage, persistence, drop-cascade and query
 > (read over all partitions) are implemented. Write-routing (COPY / CREATE / MERGE into the
-> parent) is implemented for HASH partitioning. **`PARTITION BY RANGE` is refused at DDL time**:
+> parent) is implemented for HASH and LIST partitioning. New native partitioned tables support
+> pruning for equality predicates on their partition key. **`PARTITION BY RANGE` is refused at DDL time**:
 > real range partitioning must derive partition bounds from the actual value distribution, which
-> is not implemented yet — refusing beats silently falling back to hash routing. Predicate-based
-> partition pruning is still future work.
+> is not implemented yet.
 >
 > Invariant-protection implemented in response to design review: partitions cannot be dropped or
 > altered individually, `DROP GRAPH` refuses node-table subgraphs, dropping a partitioned table is
@@ -233,8 +233,9 @@ Because each partition is a real node table, you can also address a specific par
   partitioned parent are routed into the partition matching each row's partition-key value. HASH
   partitions use the same value hashing as the built-in `HASH()` function. Primary-key uniqueness
   is enforced per partition, not across the parent.
-* **No partition pruning on predicates.** A `WHERE` on the partition key is not yet used to skip
-  partitions; all partitions are scanned and unioned.
+* **Equality partition pruning.** A directly referenced partition key equated to a constant of
+  the same type selects its HASH bucket or LIST child. Other predicates retain the existing scan
+  behavior. See the compatibility and scope notes below.
 * **`ALTER` is limited to `RENAME`.** Renaming the parent renames its `<parent>_p<i>` partitions
   along with it. Other alter operations (add/drop/rename property, sorted-by) are refused on the
   parent, and partitions cannot be altered directly at all, until alter propagation lands.
@@ -279,13 +280,53 @@ Route pattern-based rel creation/merge by the source row's actual partition at r
 `NodeInsertExecutor::resolveTargetTable`): carry the candidate per-pair rel tables in the insert
 info and select by the resolved source node's table ID.
 
-### 3. Partition pruning
+### 3. Equality partition pruning
 
-Push a predicate on the partition column into the scan: for HASH only equality
-(`region = 'east'`) can prune to a single partition; for RANGE relational comparisons
-(`ts < '2024-01-01'`) prune to the relevant range(s). This reuses the optimizer's existing
-filter-push-down / scan selection (`scan->setNumPartitionsToScan`, etc.) once the partition bounds
-are materialized.
+Filter push-down restricts the scan's physical table IDs before choosing an index. HASH uses
+the same vector hash and modulus as write routing; LIST uses the persisted encoded-key map.
+Filters and zone maps still apply inside the selected partition. If the partition key is also
+the primary key, the remaining single-table scan can become a primary-key index lookup.
+
+```cypher
+CREATE NODE TABLE PrunedOrders(id INT64 PRIMARY KEY)
+PARTITION BY HASH(id) PARTITIONS 4;
+UNWIND range(1, 8) AS i CREATE (:PrunedOrders {id: i});
+EXPLAIN MATCH (o:PrunedOrders) WHERE o.id = 2 RETURN o.id;
+-- PRIMARY_KEY_SCAN_NODE_TABLE, Tables: PrunedOrders_p2
+```
+
+Both `key = constant` and `constant = key` are supported, including eligible bound parameters.
+Parameter-dependent routes are replanned when executing a prepared statement. A LIST equality
+with no matching key produces an empty result. Conjunctions can narrow the scan further;
+unrelated labels in a multi-label scan remain candidates.
+
+UUID keys support both HASH and LIST routing and equality pruning. LIST encodes the parsed
+128-bit UUID value, so equivalent uppercase and lowercase UUID literals reuse the same partition.
+Use a UUID-typed literal (for example, `UUID('a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11')`) or a
+UUID-typed parameter for the equality predicate; the existing pruning eligibility rules still apply.
+
+Prepared plans are also rebound after catalog changes within an explicit transaction and after
+leaving a transaction whose catalog changes they observed. A cached empty result must not hide
+a newly created LIST partition or retain a partition that was rolled back.
+
+The initial scope is native partition children in the active catalog, with a direct key property
+and a literal or bound parameter of exactly the key's type. Expressions that have already folded
+to such a literal also qualify. Comparisons that cast the key, OR/IN/range predicates, foreign
+or remotely routed scans, and unsupported key encodings retain their existing behavior. RANGE
+partitioning itself remains unimplemented.
+
+Correct pruning requires every row to satisfy its child's routing rule. Direct `CREATE`, `MERGE`
+inserts and `COPY` into a child therefore reject a mismatching key; write to the parent for
+automatic routing. The initial unkeyed LIST child cannot receive direct inserts. Existing-key
+LIST COPY routing uses the child's actual ordinal, including the initial seed child.
+
+Storage version **51** persists a `partitionPruningSafe` flag on the parent. New partitioned
+tables set it because their writes are checked. Parents loaded from older versions default to
+false: earlier versions allowed arbitrary direct-child writes and could misroute repeated LIST
+COPY operations. Such parents keep scanning all children, including after checkpoint upgrades
+the file format or WAL replay recreates the catalog. Checkpoint alone does not validate old rows
+or enable pruning. To obtain pruning for historical data, create a new partitioned table and
+copy the rows through its parent, then verify the copied data before replacing the old table.
 
 ### 4. RANGE partitioning: dynamic, distribution-aware splits
 

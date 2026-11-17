@@ -9,6 +9,18 @@
 namespace lbug {
 namespace binder {
 
+class NodeExpression;
+
+// Properties of a node that the previous WITH does not carry. The planner reads them by the
+// node's internal ID at the start of the query part.
+struct LatePropertyFetch {
+    std::shared_ptr<NodeExpression> node;
+    expression_vector properties;
+    // The previous WITH keeps at most PlannerKnobs::LOOKUP_JOIN_MAX_OUTER_CARDINALITY rows. The
+    // planner then looks the properties up, unless label pruning left the node without a table.
+    bool useLookup = false;
+};
+
 class NormalizedQueryPart {
     friend class NormalizedQueryPartMatchRewriter;
 
@@ -53,11 +65,26 @@ public:
         projectionBodyPredicate = predicate;
     }
 
+    void setLatePropertyFetches(std::vector<LatePropertyFetch> fetches) {
+        latePropertyFetches = std::move(fetches);
+    }
+    const std::vector<LatePropertyFetch>& getLatePropertyFetches() const {
+        return latePropertyFetches;
+    }
+    expression_set getLateProperties() const {
+        expression_set result;
+        for (auto& fetch : latePropertyFetches) {
+            result.insert(fetch.properties.begin(), fetch.properties.end());
+        }
+        return result;
+    }
+
 private:
     std::vector<std::unique_ptr<BoundReadingClause>> readingClauses;
     std::vector<std::unique_ptr<BoundUpdatingClause>> updatingClauses;
     std::optional<BoundProjectionBody> projectionBody;
     std::shared_ptr<Expression> projectionBodyPredicate;
+    std::vector<LatePropertyFetch> latePropertyFetches;
 };
 
 } // namespace binder

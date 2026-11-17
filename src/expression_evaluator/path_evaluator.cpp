@@ -1,5 +1,7 @@
 #include "expression_evaluator/path_evaluator.h"
 
+#include <algorithm>
+
 #include "binder/expression/path_expression.h"
 #include "binder/expression/rel_expression.h"
 #include "common/string_utils.h"
@@ -84,9 +86,24 @@ void PathExpressionEvaluator::evaluate() {
     for (auto& child : children) {
         child->evaluate();
     }
+    auto mayHaveNulls = std::ranges::any_of(inputVectorsPerChild,
+        [](const auto& vectors) { return !vectors->input->hasNoNullsGuarantee(); });
+    if (!mayHaveNulls) {
+        setAllNonNull();
+    }
     auto& selVector = resultVector->state->getSelVector();
     for (auto i = 0u; i < selVector.getSelSize(); ++i) {
         auto pos = selVector[i];
+        if (mayHaveNulls) {
+            auto isNull = hasNullInput(pos);
+            setNull(pos, isNull);
+            if (isNull) {
+                // A reader that skips the null bit sees an empty path, not another row's lists.
+                resultNodesVector->setValue(pos, list_entry_t{0, 0});
+                resultRelsVector->setValue(pos, list_entry_t{0, 0});
+                continue;
+            }
+        }
         auto numRels = copyRels(pos);
         copyNodes(pos, numRels == 0);
     }
@@ -97,6 +114,29 @@ static inline uint32_t getCurrentPos(ValueVector* vector, uint32_t pos) {
         return vector->state->getSelVector()[0];
     }
     return pos;
+}
+
+// A path with a null node or rel, as on rows where an OPTIONAL MATCH found nothing, is null.
+bool PathExpressionEvaluator::hasNullInput(sel_t resultPos) const {
+    for (auto& vectors : inputVectorsPerChild) {
+        if (vectors->input->isNull(getCurrentPos(vectors->input, resultPos))) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// nodes() and rels() read the field vectors directly, so they carry the null too.
+void PathExpressionEvaluator::setNull(sel_t resultPos, bool isNull) {
+    resultVector->setNull(resultPos, isNull);
+    resultNodesVector->setNull(resultPos, isNull);
+    resultRelsVector->setNull(resultPos, isNull);
+}
+
+void PathExpressionEvaluator::setAllNonNull() {
+    resultVector->setAllNonNull();
+    resultNodesVector->setAllNonNull();
+    resultRelsVector->setAllNonNull();
 }
 
 void PathExpressionEvaluator::copyNodes(sel_t resultPos, bool isEmptyRels) {

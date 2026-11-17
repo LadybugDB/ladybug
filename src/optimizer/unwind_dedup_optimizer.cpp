@@ -2,6 +2,7 @@
 
 #include <unordered_set>
 
+#include "binder/expression/node_expression.h"
 #include "binder/expression/rel_expression.h"
 #include "planner/operator/logical_hash_join.h"
 #include "planner/operator/logical_unwind.h"
@@ -69,6 +70,12 @@ static binder::expression_vector getDedupKeyExpressions(const LogicalMerge& merg
             return {};
         }
     }
+    for (auto& info : merge.getInsertNodeInfos()) {
+        auto node = info.pattern->constPtrCast<binder::NodeExpression>();
+        if (!appendKeyIfInScope(result, keyNames, op, node->getInternalID())) {
+            return {};
+        }
+    }
     for (auto& info : merge.getInsertRelInfos()) {
         auto rel = info.pattern->constPtrCast<binder::RelExpression>();
         if (!appendKeyIfInScope(result, keyNames, op, rel->getSrcNode()->getInternalID())) {
@@ -99,6 +106,12 @@ std::shared_ptr<LogicalOperator> UnwindDedupOptimizer::visitMergeReplace(
         !merge->getOnMatchSetNodeInfos().empty() || !merge->getOnMatchSetRelInfos().empty() ||
         !merge->getOnCreateSetNodeInfos().empty() || !merge->getOnCreateSetRelInfos().empty();
     if (hasOnMatchOrOnCreate) {
+        return op;
+    }
+    // A repeated key with other values in its row must reach MERGE, which keeps that row (see
+    // LogicalMerge::computeSuppressDuplicateCreatedOutput); a dedup on the keys would drop it.
+    // Later passes only remove expressions from MERGE's input, so the flag never turns off.
+    if (merge->getInsertRelInfos().empty() && !merge->suppressesDuplicateCreatedOutput()) {
         return op;
     }
 

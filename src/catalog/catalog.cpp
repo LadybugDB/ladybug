@@ -3,6 +3,7 @@
 #include "binder/ddl/bound_alter_info.h"
 #include "binder/ddl/bound_create_sequence_info.h"
 #include "binder/ddl/bound_create_table_info.h"
+#include "catalog/catalog_entry/constraint_catalog_entry.h"
 #include "catalog/catalog_entry/function_catalog_entry.h"
 #include "catalog/catalog_entry/index_catalog_entry.h"
 #include "catalog/catalog_entry/node_table_catalog_entry.h"
@@ -20,6 +21,7 @@
 #include "function/function_collection.h"
 #include "main/client_context.h"
 #include "main/database_manager.h"
+#include "storage/storage_version_info.h"
 #include "transaction/transaction.h"
 #include <format>
 
@@ -97,6 +99,7 @@ void Catalog::initCatalogSets() {
     functions = std::make_unique<CatalogSet>(this);
     types = std::make_unique<CatalogSet>(this);
     indexes = std::make_unique<CatalogSet>(this);
+    constraints = std::make_unique<CatalogSet>(this);
     macros = std::make_unique<CatalogSet>(this);
     internalTables = std::make_unique<CatalogSet>(this, true /* isInternal */);
     internalSequences = std::make_unique<CatalogSet>(this, true /* isInternal */);
@@ -141,6 +144,20 @@ TableCatalogEntry* Catalog::getTableCatalogEntry(const Transaction* transaction,
     return result->ptrCast<TableCatalogEntry>();
 }
 
+void Catalog::readLatestTableEntry(table_id_t tableID,
+    const std::function<void(const CatalogEntry*)>& read) const {
+    bool found = false;
+    tables->readHeadEntryOfOID(tableID, [&](const CatalogEntry* entry) {
+        if (entry != nullptr) {
+            found = true;
+            read(entry);
+        }
+    });
+    if (!found) {
+        internalTables->readHeadEntryOfOID(tableID, read);
+    }
+}
+
 TableCatalogEntry* Catalog::getTableCatalogEntry(const Transaction* transaction,
     const std::string& tableName, bool useInternal) const {
     CatalogEntry* result = nullptr;
@@ -155,6 +172,14 @@ TableCatalogEntry* Catalog::getTableCatalogEntry(const Transaction* transaction,
     }
     // LCOV_EXCL_STOP
     return result->ptrCast<TableCatalogEntry>();
+}
+
+NodeTableCatalogEntry* Catalog::getPartitionParentForWrite(Transaction* transaction,
+    table_id_t tableID) {
+    auto* entry = getTableCatalogEntry(transaction, tableID)->ptrCast<NodeTableCatalogEntry>();
+    DASSERT(entry->isPartitioned());
+    return tables->copyTableEntryForWrite(transaction, entry->getName())
+        ->ptrCast<NodeTableCatalogEntry>();
 }
 
 template<TableCatalogEntryType T>
@@ -206,6 +231,7 @@ std::vector<TableCatalogEntry*> Catalog::getTableEntries(const Transaction* tran
 
 void Catalog::dropTableEntryAndIndex(Transaction* transaction, const std::string& name) {
     auto tableID = getTableCatalogEntry(transaction, name)->getTableID();
+    dropAllConstraints(transaction, tableID);
     dropAllIndexes(transaction, tableID);
     dropTableEntry(transaction, tableID);
 }
@@ -225,6 +251,7 @@ void Catalog::dropTableEntry(Transaction* transaction, const TableCatalogEntry* 
                 continue;
             }
             auto* child = getTableCatalogEntry(transaction, childID);
+            dropAllConstraints(transaction, childID);
             dropAllIndexes(transaction, childID);
             dropSerialSequence(transaction, child);
             notifyPartitionDropped(nodeEntry->getTableID(),
@@ -258,6 +285,23 @@ void Catalog::alterTableEntry(Transaction* transaction, const BoundAlterInfo& in
                              tables->getEntry(transaction, info.tableName)->getType() ==
                                  CatalogEntryType::NODE_TABLE_ENTRY;
     tables->alterTableEntry(transaction, info);
+    if (info.alterType == AlterType::RENAME) {
+        // Keep the cached table names on UNIQUE constraints in sync with the rename.
+        // The cache is display-only (SHOW CONSTRAINTS re-resolves live via tableID),
+        // so an in-place update is sufficient.
+        const auto& renameInfo = info.extraInfo->constPtrCast<BoundExtraRenameTableInfo>();
+        if (tables->containsEntry(transaction, renameInfo->newName)) {
+            auto* renamedEntry = tables->getEntry(transaction, renameInfo->newName);
+            if (renamedEntry->getType() == CatalogEntryType::NODE_TABLE_ENTRY ||
+                renamedEntry->getType() == CatalogEntryType::REL_GROUP_ENTRY) {
+                const auto renamedTableID =
+                    renamedEntry->ptrCast<TableCatalogEntry>()->getTableID();
+                for (auto* constraint : getConstraintEntries(transaction, renamedTableID)) {
+                    constraint->setTableName(renameInfo->newName);
+                }
+            }
+        }
+    }
     if (isNodeTable && info.alterType == AlterType::RENAME) {
         // Keep the subgraph name in sync with the table name.
         const auto& renameInfo = info.extraInfo->constPtrCast<BoundExtraRenameTableInfo>();
@@ -301,11 +345,11 @@ CatalogEntry* Catalog::createRelGroupEntry(Transaction* transaction,
         relTableInfos.emplace_back(relTableInfo.nodePair, tables->getNextOID(),
             relTableInfo.srcMultiplicity, relTableInfo.dstMultiplicity);
     }
-    auto relGroupEntry =
-        std::make_unique<RelGroupCatalogEntry>(info.tableName, extraInfo->srcMultiplicity,
-            extraInfo->dstMultiplicity, extraInfo->storageDirection, std::move(relTableInfos),
-            extraInfo->storage, extraInfo->storageFormat, extraInfo->scanFunction,
-            std::move(extraInfo->scanBindData), extraInfo->foreignDatabaseName);
+    auto relGroupEntry = std::make_unique<RelGroupCatalogEntry>(info.tableName,
+        extraInfo->srcMultiplicity, extraInfo->dstMultiplicity, extraInfo->storageDirection,
+        std::move(relTableInfos), extraInfo->storage, extraInfo->storageFormat,
+        extraInfo->scanFunction, std::move(extraInfo->scanBindData), extraInfo->foreignDatabaseName,
+        extraInfo->storageFormatName);
     for (auto& definition : extraInfo->propertyDefinitions) {
         relGroupEntry->addProperty(definition);
     }
@@ -482,6 +526,66 @@ bool Catalog::containsUnloadedIndex(const Transaction* transaction, common::tabl
         }
     }
     return false;
+}
+
+bool Catalog::containsConstraint(const Transaction* transaction, const std::string& name) const {
+    return constraints->containsEntry(transaction, name);
+}
+
+ConstraintCatalogEntry* Catalog::getConstraint(const Transaction* transaction,
+    const std::string& name) const {
+    return constraints->getEntry(transaction, name)->ptrCast<ConstraintCatalogEntry>();
+}
+
+std::vector<ConstraintCatalogEntry*> Catalog::getConstraintEntries(
+    const Transaction* transaction) const {
+    std::vector<ConstraintCatalogEntry*> result;
+    for (auto& [_, entry] : constraints->getEntries(transaction)) {
+        result.push_back(entry->ptrCast<ConstraintCatalogEntry>());
+    }
+    return result;
+}
+
+std::vector<ConstraintCatalogEntry*> Catalog::getConstraintEntries(const Transaction* transaction,
+    table_id_t tableID) const {
+    std::vector<ConstraintCatalogEntry*> result;
+    for (auto& [_, entry] : constraints->getEntries(transaction)) {
+        auto constraintEntry = entry->ptrCast<ConstraintCatalogEntry>();
+        if (constraintEntry->getTableID() == tableID) {
+            result.push_back(constraintEntry);
+        }
+    }
+    return result;
+}
+
+oid_t Catalog::createConstraint(Transaction* transaction,
+    std::unique_ptr<CatalogEntry> constraintCatalogEntry, bool skipLoggingToWAL) {
+    DASSERT(constraintCatalogEntry->getType() == CatalogEntryType::CONSTRAINT_ENTRY);
+    return constraints->createEntry(transaction, std::move(constraintCatalogEntry),
+        skipLoggingToWAL);
+}
+
+void Catalog::dropAllConstraints(Transaction* transaction, table_id_t tableID) {
+    for (auto catalogEntry : constraints->getEntries(transaction)) {
+        auto& constraintEntry = catalogEntry.second->constCast<ConstraintCatalogEntry>();
+        if (constraintEntry.getTableID() == tableID) {
+            constraints->dropEntry(transaction, catalogEntry.first, catalogEntry.second->getOID());
+        }
+    }
+}
+
+void Catalog::dropConstraint(Transaction* transaction, const std::string& name) {
+    const auto entry = constraints->getEntry(transaction, name);
+    constraints->dropEntry(transaction, name, entry->getOID());
+}
+
+void Catalog::dropConstraintByOID(Transaction* transaction, oid_t constraintOID) {
+    const auto entry = constraints->getEntryOfOID(transaction, constraintOID);
+    if (entry == nullptr) {
+        throw CatalogException{
+            std::format("Constraint with OID {} does not exist.", constraintOID)};
+    }
+    constraints->dropEntry(transaction, entry->getName(), constraintOID);
 }
 
 void Catalog::dropAllIndexes(Transaction* transaction, table_id_t tableID) {
@@ -685,7 +789,7 @@ CatalogEntry* Catalog::createNodeTableEntry(Transaction* transaction,
     const BoundCreateTableInfo& info) {
     const auto extraInfo = info.extraInfo->constPtrCast<BoundExtraCreateNodeTableInfo>();
     auto entry = std::make_unique<NodeTableCatalogEntry>(info.tableName, extraInfo->primaryKeyName,
-        extraInfo->storage, extraInfo->storageFormat);
+        extraInfo->storage, extraInfo->storageFormat, extraInfo->storageFormatName);
     for (auto& definition : extraInfo->propertyDefinitions) {
         entry->addProperty(definition);
     }
@@ -702,6 +806,7 @@ CatalogEntry* Catalog::createNodeTableEntry(Transaction* transaction,
         const auto& partitionInfo = *extraInfo->partitionInfo;
         entry->setPartitionInfo(partitionInfo.method, partitionInfo.columnName,
             entry->getPropertyID(partitionInfo.columnName), partitionInfo.numPartitions);
+        entry->setPartitionPruningSafe(partitionInfo.partitionPruningSafe);
     }
     entry->setHasParent(info.hasParent);
     createSerialSequence(transaction, entry.get(), info.isInternal);
@@ -729,8 +834,9 @@ CatalogEntry* Catalog::createNodeTableEntry(Transaction* transaction,
                 partitionInfo.numPartitions;
         for (auto i = 0u; i < numInitialPartitions; i++) {
             auto childName = std::format("{}_p{}", info.tableName, i);
-            auto child = std::make_unique<NodeTableCatalogEntry>(childName,
-                extraInfo->primaryKeyName, extraInfo->storage, extraInfo->storageFormat);
+            auto child =
+                std::make_unique<NodeTableCatalogEntry>(childName, extraInfo->primaryKeyName,
+                    extraInfo->storage, extraInfo->storageFormat, extraInfo->storageFormatName);
             for (auto& definition : extraInfo->propertyDefinitions) {
                 child->addProperty(definition.copy());
             }
@@ -772,6 +878,12 @@ void Catalog::dropSerialSequence(Transaction* transaction, const TableCatalogEnt
             continue;
         }
         auto seqName = SequenceCatalogEntry::getSerialName(entry->getName(), definition.getName());
+        // The sequence can already be gone: DROP SEQUENCE removed it, or WAL replay applied that
+        // drop before this DROP TABLE. Dropping the table must still succeed.
+        if (!sequences->containsEntry(transaction, seqName) &&
+            !internalSequences->containsEntry(transaction, seqName)) {
+            continue;
+        }
         dropSequence(transaction, seqName);
     }
 }
@@ -811,6 +923,7 @@ void Catalog::serialize(Serializer& ser) const {
     functions->serialize(ser);
     types->serialize(ser);
     indexes->serialize(ser);
+    constraints->serialize(ser);
     macros->serialize(ser);
     internalTables->serialize(ser);
     internalSequences->serialize(ser);
@@ -826,6 +939,7 @@ void Catalog::serializeSnapshot(Serializer& ser, common::transaction_t snapshotT
     functions->serializeSnapshot(ser, &snapshotTxn);
     types->serializeSnapshot(ser, &snapshotTxn);
     indexes->serializeSnapshot(ser, &snapshotTxn);
+    constraints->serializeSnapshot(ser, &snapshotTxn);
     macros->serializeSnapshot(ser, &snapshotTxn);
     internalTables->serializeSnapshot(ser, &snapshotTxn);
     internalSequences->serializeSnapshot(ser, &snapshotTxn);
@@ -840,6 +954,13 @@ void Catalog::deserialize(Deserializer& deSer) {
     registerBuiltInFunctions();
     types = CatalogSet::deserialize(this, deSer);
     indexes = CatalogSet::deserialize(this, deSer);
+    // UNIQUE constraints were added in storage version 52. Older files have no constraint
+    // entries, so the sets from macros on would otherwise land one slot off.
+    if (deSer.getStorageVersion() >= storage::StorageVersionInfo::STORAGE_VERSION_52) {
+        constraints = CatalogSet::deserialize(this, deSer);
+    } else {
+        constraints = std::make_unique<CatalogSet>(this);
+    }
     macros = CatalogSet::deserialize(this, deSer);
     internalTables = CatalogSet::deserialize(this, deSer);
     internalSequences = CatalogSet::deserialize(this, deSer);

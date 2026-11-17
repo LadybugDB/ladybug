@@ -2,6 +2,7 @@
 
 #include "parser/expression/parsed_expression.h"
 #include "parser/parsed_statement_visitor.h"
+#include "parser/transaction_statement.h"
 
 namespace lbug {
 namespace parser {
@@ -18,6 +19,8 @@ private:
     void visitDrop(const Statement& /*statement*/) override { readOnly = false; }
     void visitCreateTable(const Statement& /*statement*/) override { readOnly = false; }
     void visitCreateIndex(const Statement& /*statement*/) override { readOnly = false; }
+    void visitCreateConstraint(const Statement& /*statement*/) override { readOnly = false; }
+    void visitDropConstraint(const Statement& /*statement*/) override { readOnly = false; }
     void visitCreateType(const Statement& /*statement*/) override { readOnly = false; }
     void visitAlter(const Statement& /*statement*/) override { readOnly = false; }
     void visitCopyFrom(const Statement& /*statement*/) override { readOnly = false; }
@@ -29,6 +32,14 @@ private:
     // entries), so they need write transactions for the changes to commit.
     void visitAttachDatabase(const Statement& /*statement*/) override { readOnly = false; }
     void visitDetachDatabase(const Statement& /*statement*/) override { readOnly = false; }
+    // CHECKPOINT writes the database files; the other transaction statements don't.
+    void visitTransaction(const Statement& statement) override {
+        if (statement.constCast<TransactionStatement>().getTransactionAction() ==
+            transaction::TransactionAction::CHECKPOINT) {
+            readOnly = false;
+        }
+    }
+    void visitImportDatabase(const Statement& /*statement*/) override { readOnly = false; }
     void visitExtension(const Statement& /*statement*/) override;
 
     void visitReadingClause(const ReadingClause* readingClause) override;

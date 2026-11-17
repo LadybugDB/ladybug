@@ -731,6 +731,43 @@ TEST_F(ArrowRelTableTest, LargeBatchArrowRelTable) {
     ASSERT_EQ(sumResult->getNext()->getValue(0)->getValue<common::int128_t>(), 2098176);
 }
 
+// The last extend of the fork's chain reads a chunk its child does not refill.
+TEST_F(ArrowRelTableTest, ForkOverArrowRelTablesKeepsCrossProduct) {
+    auto setup = conn->query("CREATE NODE TABLE P(id INT64 PRIMARY KEY);"
+                             "CREATE NODE TABLE X(id INT64 PRIMARY KEY);"
+                             "CREATE NODE TABLE Y(id INT64 PRIMARY KEY);"
+                             "CREATE NODE TABLE Z(id INT64 PRIMARY KEY);"
+                             "CREATE NODE TABLE W(id INT64 PRIMARY KEY);"
+                             "CREATE (:P {id: 1});"
+                             "UNWIND range(1, 4) AS i CREATE (:X {id: i}), (:Z {id: i});"
+                             "UNWIND range(1, 6) AS i CREATE (:Y {id: i}), (:W {id: i});");
+    ASSERT_TRUE(setup->isSuccess()) << setup->getErrorMessage();
+
+    auto createRel = [&](const std::string& name, const std::string& src, const std::string& dst,
+                         const std::vector<int64_t>& from, const std::vector<int64_t>& to) {
+        ArrowSchemaWrapper schema;
+        createStructSchema(&schema, 2);
+        createSchema<int64_t>(schema.children[0], "from");
+        createSchema<int64_t>(schema.children[1], "to");
+        std::vector<ArrowArrayWrapper> arrays;
+        arrays.push_back(createStructArray(from.size(),
+            {[&](ArrowArray* array) { createInt64Array(array, from); },
+                [&](ArrowArray* array) { createInt64Array(array, to); }}));
+        auto result = ArrowTableSupport::createRelTableFromArrowTable(*conn, name, src, dst,
+            std::move(schema), std::move(arrays));
+        ASSERT_TRUE(result.queryResult->isSuccess()) << result.queryResult->getErrorMessage();
+    };
+    createRel("p_x", "P", "X", {1, 1, 1, 1}, {1, 2, 3, 4});
+    createRel("p_y", "P", "Y", {1, 1, 1, 1, 1, 1}, {1, 2, 3, 4, 5, 6});
+    createRel("x_z", "X", "Z", {1, 2, 3, 4}, {1, 2, 3, 4});
+    createRel("y_w", "Y", "W", {1, 2, 3, 4, 5, 6}, {1, 2, 3, 4, 5, 6});
+
+    auto result = conn->query("MATCH (p:P)-[:p_x]->(x:X)-[:x_z]->(z:Z), "
+                              "(p)-[:p_y]->(y:Y)-[:y_w]->(w:W) WHERE p.id > 0 RETURN count(*)");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 24);
+}
+
 TEST_F(ArrowRelTableTest, CreateArrowRelTableReservedTableName) {
     // Use a reserved word as the relationship table name
     createArrowPersonTable(*conn);
@@ -1053,4 +1090,26 @@ TEST_F(ArrowRelTableImmutabilityTest, RelTableDeleteFails) {
     auto result = conn->query("MATCH (:person)-[e:knows]->(:person) WHERE e.weight = 10 DELETE e");
     ASSERT_FALSE(result->isSuccess());
     ASSERT_TRUE(result->getErrorMessage().find("Cannot delete") != std::string::npos);
+}
+
+// Regression test for #1527: primary key match over Arrow rel table must not return node 0's rels.
+TEST_F(ArrowRelTableTest, MatchPrimaryKeyOverArrowRelTableDoesNotReturnFirstNodeRels) {
+    createNativePersonTable(*conn);
+    createArrowKnowsTable(*conn);
+
+    auto result =
+        conn->query("MATCH (a:arrow_rel_person {id: 2})-[e:arrow_rel_knows]->(b:arrow_rel_person) "
+                    "RETURN b.id, e.weight");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_TRUE(result->hasNext());
+    auto row = result->getNext();
+    ASSERT_EQ(row->getValue(0)->getValue<int64_t>(), 3);
+    ASSERT_EQ(row->getValue(1)->getValue<int64_t>(), 30);
+    ASSERT_FALSE(result->hasNext());
+
+    auto resultEmpty =
+        conn->query("MATCH (a:arrow_rel_person {id: 3})-[e:arrow_rel_knows]->(b:arrow_rel_person) "
+                    "RETURN b.id, e.weight");
+    ASSERT_TRUE(resultEmpty->isSuccess()) << resultEmpty->getErrorMessage();
+    ASSERT_FALSE(resultEmpty->hasNext());
 }

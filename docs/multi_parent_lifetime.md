@@ -96,8 +96,8 @@ This is the part to be careful about.
 A pointer is safe **only while that input selection vector's contents remain
 valid**. In a strict pull pipeline the input is stable from the moment the
 extend returns until the consumer re-pulls the extend's child
-(`children[0]->getNextTuple`), at which point `setNodeIDVectorToFlat` /
-`initScanState` overwrite it. So:
+(`children[0]->getNextTuple`), at which point `restoreBoundNodeBatch`,
+`setNodeIDVectorToFlat` and `initScanState` overwrite it. So:
 
 - **Safe**: a consumer that reads `getPackedChildSlices()` synchronously off
   the output vectors before pulling the extend again (the immediate parent

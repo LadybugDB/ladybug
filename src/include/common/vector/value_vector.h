@@ -326,9 +326,9 @@ public:
 
     static inline void setTagField(ValueVector& vector, SelectionVector& sel,
         union_field_idx_t tag) {
-        DASSERT(vector.dataType.getLogicalTypeID() == LogicalTypeID::UNION);
+        auto tagVector = getTagVector(&vector);
         for (auto i = 0u; i < sel.getSelSize(); i++) {
-            vector.setValue<struct_field_idx_t>(sel[i], tag);
+            tagVector->setValue<union_field_idx_t>(sel[i], tag);
         }
     }
 };

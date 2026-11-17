@@ -18,11 +18,17 @@ using namespace lbug::main;
 namespace lbug {
 namespace catalog {
 
+// Infers the storage format for catalog entries written before STORAGE_VERSION_41,
+// which persisted no format field. Only the in-core icebug-disk suffix convention is
+// recognized: extension formats always require an explicit WITH (format = '<name>')
+// option (persisted as StorageFormat::EXTERNAL plus the format name), so no
+// extension-specific suffix checks belong here.
 static void upgradeLegacyStorageFormat(const std::string& storage,
-    common::StorageFormat& storageFormat) {
+    common::StorageFormat& storageFormat, std::string& storageFormatName) {
     const auto lowerStorage = common::StringUtils::getLower(storage);
     if (lowerStorage.ends_with("parquet")) {
         storageFormat = common::StorageFormat::ICEBUG_DISK;
+        storageFormatName.clear();
     }
 }
 
@@ -132,6 +138,8 @@ void RelGroupCatalogEntry::serialize(Serializer& serializer) const {
     serializer.serializeVector(relTableInfos);
     serializer.writeDebuggingInfo("storageFormat");
     serializer.serializeValue(storageFormat);
+    serializer.writeDebuggingInfo("storageFormatName");
+    serializer.write(storageFormatName);
     serializer.writeDebuggingInfo("csrSortedByDest");
     serializer.serializeValue(csrSortedByDest);
     serializer.writeDebuggingInfo("csrChangeEpoch");
@@ -146,6 +154,7 @@ std::unique_ptr<RelGroupCatalogEntry> RelGroupCatalogEntry::deserialize(
     auto storageDirection = ExtendDirection::BOTH;
     std::string storage;
     auto storageFormat = StorageFormat::NONE;
+    std::string storageFormatName;
     std::vector<RelTableCatalogInfo> relTableInfos;
     deserializer.validateDebuggingInfo(debuggingInfo, "srcMultiplicity");
     deserializer.deserializeValue(srcMultiplicity);
@@ -175,8 +184,13 @@ std::unique_ptr<RelGroupCatalogEntry> RelGroupCatalogEntry::deserialize(
         ::lbug::storage::StorageVersionInfo::STORAGE_VERSION_41) {
         deserializer.validateDebuggingInfo(debuggingInfo, "storageFormat");
         deserializer.deserializeValue(storageFormat);
+        if (deserializer.getStorageVersion() >=
+            ::lbug::storage::StorageVersionInfo::STORAGE_VERSION_50) {
+            deserializer.validateDebuggingInfo(debuggingInfo, "storageFormatName");
+            deserializer.deserializeValue(storageFormatName);
+        }
     } else {
-        upgradeLegacyStorageFormat(storage, storageFormat);
+        upgradeLegacyStorageFormat(storage, storageFormat, storageFormatName);
     }
     bool csrSortedByDest = false;
     uint64_t csrChangeEpoch = 0;
@@ -193,6 +207,7 @@ std::unique_ptr<RelGroupCatalogEntry> RelGroupCatalogEntry::deserialize(
     relGroupEntry->storageDirection = storageDirection;
     relGroupEntry->storage = storage;
     relGroupEntry->storageFormat = storageFormat;
+    relGroupEntry->storageFormatName = std::move(storageFormatName);
     relGroupEntry->scanFunction = scanFunction;
     relGroupEntry->relTableInfos = relTableInfos;
     relGroupEntry->csrSortedByDest = csrSortedByDest;
@@ -251,6 +266,9 @@ std::string RelGroupCatalogEntry::toCypher(const ToCypherInfo& info) const {
        << getMultiplicityStr(srcMultiplicity, dstMultiplicity) << ")";
     if (storageFormat == common::StorageFormat::ICEBUG_DISK) {
         ss << std::format(" WITH (storage = '{}', format = 'icebug-disk')", storage);
+    } else if (storageFormat == common::StorageFormat::EXTERNAL) {
+        ss << std::format(" WITH (storage = '{}', format = '{}')", storage,
+            common::StorageFormatUtils::displayName(storageFormat, storageFormatName));
     }
     ss << ";";
     return ss.str();
@@ -280,6 +298,7 @@ std::unique_ptr<TableCatalogEntry> RelGroupCatalogEntry::copy() const {
     other->storageDirection = storageDirection;
     other->storage = storage;
     other->storageFormat = storageFormat;
+    other->storageFormatName = storageFormatName;
     other->scanFunction = scanFunction;
     other->scanBindData = std::nullopt; // TODO: implement copy for bindData if needed
     other->foreignDatabaseName = foreignDatabaseName;
@@ -299,7 +318,8 @@ RelGroupCatalogEntry::getBoundExtraCreateInfo(transaction::Transaction*) const {
     }
     return std::make_unique<binder::BoundExtraCreateRelTableGroupInfo>(
         copyVector(propertyCollection.getDefinitions()), srcMultiplicity, dstMultiplicity,
-        storageDirection, std::move(boundRelTableInfos), storage, storageFormat);
+        storageDirection, std::move(boundRelTableInfos), storage, storageFormat, std::nullopt,
+        std::nullopt, "", storageFormatName);
 }
 
 } // namespace catalog

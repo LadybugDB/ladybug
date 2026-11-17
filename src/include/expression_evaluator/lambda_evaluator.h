@@ -84,6 +84,8 @@ protected:
 
 private:
     void evaluateInternal();
+    void copySliceToParamVector(const ListSliceInfo& sliceInfo,
+        const common::ValueVector& listVector) const;
 
     function::scalar_func_exec_t execFunc;
     ListLambdaBindData bindData;
@@ -95,6 +97,8 @@ private:
     ListLambdaType listLambdaType;
 
     storage::MemoryManager* memoryManager;
+    // The lambda variable's elements for the current slice, for all lambdas but list_reduce.
+    std::shared_ptr<common::ValueVector> sliceParamVector;
 };
 
 } // namespace evaluator

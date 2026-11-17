@@ -1,9 +1,15 @@
+#include <algorithm>
+
+#include "binder/expression/case_expression.h"
 #include "binder/expression/expression_util.h"
+#include "binder/expression/path_expression.h"
 #include "binder/expression/rel_expression.h"
+#include "binder/expression/scalar_function_expression.h"
 #include "binder/expression_binder.h"
 #include "common/exception/binder.h"
 #include "common/types/value/value.h"
 #include "function/arithmetic/vector_arithmetic_functions.h"
+#include "function/list/vector_list_functions.h"
 #include "function/path/vector_path_functions.h"
 #include "function/rewrite_function.h"
 
@@ -12,6 +18,24 @@ using namespace lbug::common;
 
 namespace lbug {
 namespace function {
+
+// A fixed-length path has a constant length, but a path from an OPTIONAL MATCH can be null, and
+// then so is its length. The path itself is tested because WITH carries it without its rels.
+static std::shared_ptr<Expression> nullIfUnmatched(const RewriteFunctionBindInput& input,
+    std::shared_ptr<Expression> length) {
+    auto path = input.arguments[0];
+    if (!path->constCast<PathExpression>().isOptional()) {
+        return length;
+    }
+    auto binder = input.expressionBinder;
+    auto isNull = binder->bindNullOperatorExpression(ExpressionType::IS_NULL, {path});
+    auto nullLength = binder->implicitCastIfNecessary(binder->createNullLiteralExpression(),
+        length->getDataType().copy());
+    auto result = std::make_shared<CaseExpression>(length->getDataType().copy(), length,
+        ScalarFunctionExpression::getUniqueName(LengthFunction::name, input.arguments));
+    result->addCaseAlternative(isNull, nullLength);
+    return result;
+}
 
 static std::shared_ptr<Expression> rewriteFunc(const RewriteFunctionBindInput& input) {
     DASSERT(input.arguments.size() == 1);
@@ -29,24 +53,39 @@ static std::shared_ptr<Expression> rewriteFunc(const RewriteFunctionBindInput& i
         }
         auto numRelsExpression = binder->createLiteralExpression(Value(numRels));
         if (recursiveRels.empty()) {
-            return numRelsExpression;
+            // Fixed-length paths have a constant length with no runtime dependency, so keep
+            // the cheap literal rewrite. A path from an OPTIONAL MATCH can still be null,
+            // and then so is its length (the path itself is tested because WITH carries
+            // it without its rels).
+            return nullIfUnmatched(input, std::move(numRelsExpression));
         }
-        expression_vector children;
-        children.push_back(std::move(numRelsExpression));
-        children.push_back(recursiveRels[0]->getLengthExpression());
-        auto result = binder->bindScalarFunctionExpression(children, AddFunction::name);
-        for (auto i = 1u; i < recursiveRels.size(); ++i) {
-            children[0] = std::move(result);
-            children[1] = recursiveRels[i]->getLengthExpression();
-            result = binder->bindScalarFunctionExpression(children, AddFunction::name);
+        // In the query part that matched the path, each recursive rel carries its length, and
+        // reading it lets the search skip tracking whole paths. The rels stay bound until a
+        // projection clears the scope (BinderScope::clear()).
+        if (std::ranges::all_of(recursiveRels,
+                [&](const RelExpression* rel) { return binder->isRecursiveRelBound(*rel); })) {
+            auto result = std::move(numRelsExpression);
+            for (auto* rel : recursiveRels) {
+                result = binder->bindScalarFunctionExpression({result, rel->getLengthExpression()},
+                    AddFunction::name);
+            }
+            return result;
         }
-        return result;
-    } else if (ExpressionUtil::isRecursiveRelPattern(*param)) {
-        return param->constPtrCast<RelExpression>()->getLengthExpression();
+    } else if (param->getDataType().getLogicalTypeID() != LogicalTypeID::RECURSIVE_REL) {
+        throw BinderException("LENGTH() expects a path or recursive relationship as input. "
+                              "Use LENGTH(path) where path is a MATCH path variable, e.g. MATCH "
+                              "p = "
+                              "(a)-[]->(b) RETURN LENGTH(p).");
+    } else if (ExpressionUtil::isRecursiveRelPattern(*param) &&
+               binder->isRecursiveRelBound(param->constCast<RelExpression>())) {
+        return param->constCast<RelExpression>().getLengthExpression();
     }
-    throw BinderException("LENGTH() expects a path or recursive relationship as input. "
-                          "Use LENGTH(path) where path is a MATCH path variable, e.g. MATCH p = "
-                          "(a)-[]->(b) RETURN LENGTH(p).");
+    // After a projection (WITH) the rels are no longer bound, but LENGTH(p) == SIZE(RELS(p)): the
+    // rels list lives inside the path/recursive-rel value itself, so this depends only on the
+    // path variable and survives `WITH p`, `WITH *`, aliasing (`WITH p AS q`), and
+    // `UNWIND collect(p) AS p`.
+    auto relsExpr = binder->bindScalarFunctionExpression({input.arguments[0]}, RelsFunction::name);
+    return binder->bindScalarFunctionExpression({relsExpr}, SizeFunction::name);
 }
 
 function_set LengthFunction::getFunctionSet() {

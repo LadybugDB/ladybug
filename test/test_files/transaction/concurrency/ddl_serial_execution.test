@@ -2,6 +2,8 @@
 --
 
 -CASE MultiWritesException
+-STATEMENT CALL enable_multi_writes=false;
+---- ok
 -STATEMENT BEGIN TRANSACTION;
 ---- ok
 -STATEMENT CREATE NODE TABLE t(a INT, b INT, PRIMARY KEY(a));
@@ -17,9 +19,45 @@ Cannot start a new write transaction in the system. Only one write transaction a
 0|a|INT32|NULL|True
 1|b|INT32|NULL|False
 
-# Test CALL debug_enable_multi_writes=true
+-CASE RefusedBeginKeepsConnectionUsable
+-STATEMENT CALL enable_multi_writes=false;
+---- ok
+-STATEMENT CREATE NODE TABLE t(a INT, PRIMARY KEY(a));
+---- ok
+-STATEMENT BEGIN TRANSACTION;
+---- ok
+-STATEMENT CREATE (:t {a: 1});
+---- ok
+-CREATE_CONNECTION conn2
+-STATEMENT [conn2] BEGIN TRANSACTION;
+---- error
+Cannot start a new write transaction in the system. Only one write transaction at a time is allowed in the system.
+-STATEMENT [conn2] ROLLBACK;
+---- error
+No active transaction for ROLLBACK.
+-STATEMENT [conn2] MATCH (n:t) RETURN count(*);
+---- 1
+0
+-STATEMENT [conn2] CREATE (:t {a: 3});
+---- error
+Cannot start a new write transaction in the system. Only one write transaction at a time is allowed in the system.
+-STATEMENT COMMIT;
+---- ok
+-STATEMENT [conn2] BEGIN TRANSACTION;
+---- ok
+-STATEMENT [conn2] CREATE (:t {a: 2});
+---- ok
+-STATEMENT [conn2] COMMIT;
+---- ok
+-STATEMENT MATCH (n:t) RETURN count(*);
+---- 1
+2
+
+# Test CALL enable_multi_writes=false/true toggle
 -CASE EnableMultiWrites
--STATEMENT CALL debug_enable_multi_writes=true;
+-STATEMENT CALL enable_multi_writes=false;
+---- ok
+-STATEMENT CALL enable_multi_writes=true;
 ---- ok
 -STATEMENT BEGIN TRANSACTION;
 ---- ok
@@ -77,7 +115,7 @@ Catalog exception: t does not exist in catalog.
 
 # Test W-W conflict
 -CASE CreateTableWriteWriteConflict
--STATEMENT CALL debug_enable_multi_writes=true;
+-STATEMENT CALL enable_multi_writes=true;
 ---- ok
 -STATEMENT BEGIN TRANSACTION;
 ---- ok
@@ -158,7 +196,7 @@ Catalog exception: t does not exist in catalog.
 1|b|INT32|NULL|False
 
 -CASE CreateAndDropMultiConnections
--STATEMENT CALL debug_enable_multi_writes=true;
+-STATEMENT CALL enable_multi_writes=true;
 ---- ok
 -STATEMENT BEGIN TRANSACTION;
 ---- ok
@@ -206,7 +244,7 @@ Binder exception: Table t does not exist.
 1|b|INT32|NULL|False
 
 -CASE RenameTable
--STATEMENT CALL debug_enable_multi_writes=true;
+-STATEMENT CALL enable_multi_writes=true;
 ---- ok
 -STATEMENT BEGIN TRANSACTION;
 ---- ok
@@ -243,7 +281,7 @@ Catalog exception: t does not exist in catalog.
 1|b|INT32|NULL|False
 
 -CASE RenameColumn
--STATEMENT CALL debug_enable_multi_writes=true;
+-STATEMENT CALL enable_multi_writes=true;
 ---- ok
 -STATEMENT CALL auto_checkpoint=false;
 ---- ok
@@ -272,3 +310,327 @@ Catalog exception: t does not exist in catalog.
 ---- 2
 0|a|INT32|NULL|True
 1|c|INT32|NULL|False
+
+-CASE AlterTableAddWriteWriteConflictUncommitted
+-STATEMENT CALL enable_multi_writes=true;
+---- ok
+-STATEMENT CREATE NODE TABLE t(a INT, b INT, PRIMARY KEY(a));
+---- ok
+-STATEMENT BEGIN TRANSACTION;
+---- ok
+-STATEMENT ALTER TABLE t ADD x INT;
+---- ok
+-CREATE_CONNECTION conn2
+-STATEMENT [conn2] BEGIN TRANSACTION;
+---- ok
+-STATEMENT [conn2] ALTER TABLE t ADD y INT;
+---- error
+Catalog exception: Write-write conflict on altering catalog entry with name t.
+# The failed statement aborts conn2's transaction, so there is nothing to roll back.
+-STATEMENT COMMIT;
+---- ok
+-STATEMENT CALL table_info('t') RETURN *;
+---- 3
+0|a|INT32|NULL|True
+1|b|INT32|NULL|False
+2|x|INT32|NULL|False
+
+-CASE AlterTableAddWriteWriteConflictCommitted
+-STATEMENT CALL enable_multi_writes=true;
+---- ok
+-STATEMENT CREATE NODE TABLE t(a INT, b INT, PRIMARY KEY(a));
+---- ok
+-STATEMENT BEGIN TRANSACTION;
+---- ok
+-CREATE_CONNECTION conn2
+-STATEMENT [conn2] BEGIN TRANSACTION;
+---- ok
+-STATEMENT [conn2] ALTER TABLE t ADD x INT;
+---- ok
+-STATEMENT [conn2] COMMIT;
+---- ok
+-STATEMENT ALTER TABLE t ADD y INT;
+---- error
+Catalog exception: Write-write conflict on altering catalog entry with name t.
+# The failed statement aborts the transaction, so there is nothing to roll back.
+-STATEMENT CALL table_info('t') RETURN *;
+---- 3
+0|a|INT32|NULL|True
+1|b|INT32|NULL|False
+2|x|INT32|NULL|False
+
+-CASE AlterVsDropWriteWriteConflict
+-STATEMENT CALL enable_multi_writes=true;
+---- ok
+-STATEMENT CREATE NODE TABLE t(a INT, b INT, PRIMARY KEY(a));
+---- ok
+-STATEMENT BEGIN TRANSACTION;
+---- ok
+-STATEMENT ALTER TABLE t ADD x INT;
+---- ok
+-CREATE_CONNECTION conn2
+-STATEMENT [conn2] BEGIN TRANSACTION;
+---- ok
+-STATEMENT [conn2] DROP TABLE t;
+---- error
+Catalog exception: Write-write conflict on dropping catalog entry with name t.
+# The failed statement aborts conn2's transaction, so there is nothing to roll back.
+-STATEMENT COMMIT;
+---- ok
+-STATEMENT CALL table_info('t') RETURN *;
+---- 3
+0|a|INT32|NULL|True
+1|b|INT32|NULL|False
+2|x|INT32|NULL|False
+
+-CASE InsertAfterConcurrentAddColumnConflicts
+-STATEMENT CALL enable_multi_writes=true;
+---- ok
+-STATEMENT CALL auto_checkpoint=false;
+---- ok
+-STATEMENT CALL force_checkpoint_on_close=false;
+---- ok
+-STATEMENT CREATE NODE TABLE t(id INT64 PRIMARY KEY, b INT64);
+---- ok
+-STATEMENT CREATE (:t {id: 1, b: 10});
+---- ok
+-CREATE_CONNECTION conn2
+-STATEMENT [conn2] BEGIN TRANSACTION;
+---- ok
+-STATEMENT [conn2] ALTER TABLE t ADD x INT64 DEFAULT 1;
+---- ok
+-STATEMENT BEGIN TRANSACTION;
+---- ok
+-STATEMENT CREATE (:t {id: 2, b: 20});
+---- error
+Catalog exception: Write-write conflict on inserting into table t: its columns were changed by another transaction.
+-STATEMENT [conn2] COMMIT;
+---- ok
+# The insert after the ADD committed conflicts too, since this snapshot predates it.
+-STATEMENT BEGIN TRANSACTION;
+---- ok
+-STATEMENT [conn2] ALTER TABLE t ADD y INT64 DEFAULT 2;
+---- ok
+-STATEMENT CREATE (:t {id: 3, b: 30});
+---- error
+Catalog exception: Write-write conflict on inserting into table t: its columns were changed by another transaction.
+# DROP then ADD of the same name keeps the names, types and order but moves b to a new column.
+-STATEMENT CREATE NODE TABLE s(id INT64 PRIMARY KEY, b INT64);
+---- ok
+-STATEMENT BEGIN TRANSACTION;
+---- ok
+-STATEMENT [conn2] BEGIN TRANSACTION;
+---- ok
+-STATEMENT [conn2] ALTER TABLE s DROP b;
+---- ok
+-STATEMENT [conn2] ALTER TABLE s ADD b INT64;
+---- ok
+-STATEMENT [conn2] COMMIT;
+---- ok
+-STATEMENT CREATE (:s {id: 1, b: 10});
+---- error
+Catalog exception: Write-write conflict on inserting into table s: its columns were changed by another transaction.
+# Reopening without a checkpoint replays the WAL, which must hold none of the rejected inserts.
+-RELOADDB
+-STATEMENT MATCH (n:t) RETURN n.* ORDER BY n.id;
+---- 1
+1|10|1|2
+-STATEMENT MATCH (n:s) RETURN count(*);
+---- 1
+0
+-STATEMENT CHECKPOINT;
+---- ok
+
+-CASE InsertAfterConcurrentRenameColumnCommits
+-STATEMENT CALL enable_multi_writes=true;
+---- ok
+-STATEMENT CREATE NODE TABLE t(id INT64 PRIMARY KEY, b INT64);
+---- ok
+-CREATE_CONNECTION conn2
+-STATEMENT [conn2] BEGIN TRANSACTION;
+---- ok
+-STATEMENT [conn2] ALTER TABLE t RENAME b TO c;
+---- ok
+-STATEMENT BEGIN TRANSACTION;
+---- ok
+-STATEMENT CREATE (:t {id: 1, b: 10});
+---- ok
+-STATEMENT [conn2] COMMIT;
+---- ok
+-STATEMENT COMMIT;
+---- ok
+-STATEMENT MATCH (n:t) RETURN n.*;
+---- 1
+1|10
+
+-CASE DropTableAfterUncommittedInsertConflicts
+-STATEMENT CALL enable_multi_writes=true;
+---- ok
+-STATEMENT CALL auto_checkpoint=false;
+---- ok
+-STATEMENT CALL force_checkpoint_on_close=false;
+---- ok
+-STATEMENT CREATE NODE TABLE t(id INT64 PRIMARY KEY, b INT64);
+---- ok
+-STATEMENT CREATE NODE TABLE u(id INT64 PRIMARY KEY);
+---- ok
+-STATEMENT CREATE REL TABLE r(FROM u TO u);
+---- ok
+-STATEMENT CREATE (:u {id: 1});
+---- ok
+-STATEMENT BEGIN TRANSACTION;
+---- ok
+-STATEMENT CREATE (:t {id: 1, b: 10});
+---- ok
+-STATEMENT MATCH (a:u) CREATE (a)-[:r]->(a);
+---- ok
+-CREATE_CONNECTION conn2
+-STATEMENT [conn2] DROP TABLE t;
+---- error
+Catalog exception: Write-write conflict on dropping table t: another transaction has uncommitted inserts into it.
+-STATEMENT [conn2] DROP TABLE r;
+---- error
+Catalog exception: Write-write conflict on dropping table r: another transaction has uncommitted inserts into it.
+-STATEMENT COMMIT;
+---- ok
+-STATEMENT [conn2] BEGIN TRANSACTION;
+---- ok
+-STATEMENT [conn2] DROP TABLE t;
+---- ok
+-STATEMENT CREATE (:t {id: 2, b: 20});
+---- error
+Catalog exception: Write-write conflict on inserting into table t: it was dropped by another transaction.
+-STATEMENT [conn2] COMMIT;
+---- ok
+-RELOADDB
+-STATEMENT MATCH ()-[e:r]->() RETURN count(*);
+---- 1
+1
+-STATEMENT CALL show_tables() WHERE name = 't' RETURN count(*);
+---- 1
+0
+
+# Inserts into a partitioned table are staged in its partitions.
+-CASE DropPartitionedTableAfterUncommittedInsertConflicts
+-STATEMENT CALL enable_multi_writes=true;
+---- ok
+-STATEMENT CREATE NODE TABLE p(id INT64 PRIMARY KEY, region STRING) PARTITION BY HASH (region) PARTITIONS 2;
+---- ok
+-STATEMENT BEGIN TRANSACTION;
+---- ok
+-STATEMENT CREATE (:p {id: 1, region: 'eu'});
+---- ok
+-CREATE_CONNECTION conn2
+-STATEMENT [conn2] DROP TABLE p;
+---- error
+Catalog exception: Write-write conflict on dropping table p: another transaction has uncommitted inserts into it.
+-STATEMENT COMMIT;
+---- ok
+-STATEMENT MATCH (n:p) RETURN n.id;
+---- 1
+1
+-STATEMENT [conn2] BEGIN TRANSACTION;
+---- ok
+-STATEMENT [conn2] DROP TABLE p;
+---- ok
+-STATEMENT CREATE (:p {id: 2, region: 'us'});
+---- error
+Catalog exception: Write-write conflict on inserting into table p: it was dropped by another transaction.
+
+-CASE AlterColumnsAfterUncommittedInsertConflicts
+-STATEMENT CALL enable_multi_writes=true;
+---- ok
+-STATEMENT CREATE NODE TABLE t(id INT64 PRIMARY KEY, b INT64);
+---- ok
+-STATEMENT CREATE REL TABLE r(FROM t TO t, w INT64);
+---- ok
+-STATEMENT CREATE (:t {id: 1, b: 10}), (:t {id: 2, b: 20});
+---- ok
+-STATEMENT BEGIN TRANSACTION;
+---- ok
+-STATEMENT CREATE (:t {id: 3, b: 30});
+---- ok
+-STATEMENT MATCH (a:t {id: 1}), (b:t {id: 2}) CREATE (a)-[:r {w: 5}]->(b);
+---- ok
+-CREATE_CONNECTION conn2
+-STATEMENT [conn2] ALTER TABLE t ADD x INT64 DEFAULT 1;
+---- error
+Catalog exception: Write-write conflict on altering table t: another transaction has uncommitted inserts into it.
+-STATEMENT [conn2] ALTER TABLE t DROP b;
+---- error
+Catalog exception: Write-write conflict on altering table t: another transaction has uncommitted inserts into it.
+-STATEMENT [conn2] ALTER TABLE r ADD v INT64 DEFAULT 1;
+---- error
+Catalog exception: Write-write conflict on altering table r: another transaction has uncommitted inserts into it.
+-STATEMENT [conn2] ALTER TABLE r DROP w;
+---- error
+Catalog exception: Write-write conflict on altering table r: another transaction has uncommitted inserts into it.
+-STATEMENT COMMIT;
+---- ok
+-STATEMENT [conn2] ALTER TABLE t ADD x INT64 DEFAULT 1;
+---- ok
+-STATEMENT [conn2] ALTER TABLE r ADD v INT64 DEFAULT 1;
+---- ok
+-STATEMENT MATCH (n:t) RETURN n.* ORDER BY n.id;
+---- 3
+1|10|1
+2|20|1
+3|30|1
+-STATEMENT MATCH ()-[e:r]->() RETURN e.w, e.v;
+---- 1
+5|1
+-STATEMENT CHECKPOINT;
+---- ok
+
+# A rename leaves a deleted catalog entry with the table's ID under the old name; enough
+# other tables make the catalog map rehash so iteration can reach it first.
+-CASE InsertAfterRenameCommits
+-STATEMENT CREATE NODE TABLE a(id INT64 PRIMARY KEY, v INT64);
+---- ok
+-STATEMENT ALTER TABLE a RENAME TO b;
+---- ok
+-STATEMENT CREATE NODE TABLE z0(id INT64 PRIMARY KEY);
+---- ok
+-STATEMENT CREATE NODE TABLE z1(id INT64 PRIMARY KEY);
+---- ok
+-STATEMENT CREATE NODE TABLE z2(id INT64 PRIMARY KEY);
+---- ok
+-STATEMENT CREATE NODE TABLE z3(id INT64 PRIMARY KEY);
+---- ok
+-STATEMENT CREATE NODE TABLE z4(id INT64 PRIMARY KEY);
+---- ok
+-STATEMENT CREATE NODE TABLE z5(id INT64 PRIMARY KEY);
+---- ok
+-STATEMENT CREATE NODE TABLE z6(id INT64 PRIMARY KEY);
+---- ok
+-STATEMENT CREATE NODE TABLE z7(id INT64 PRIMARY KEY);
+---- ok
+-STATEMENT CREATE NODE TABLE z8(id INT64 PRIMARY KEY);
+---- ok
+-STATEMENT CREATE NODE TABLE z9(id INT64 PRIMARY KEY);
+---- ok
+-STATEMENT CREATE NODE TABLE z10(id INT64 PRIMARY KEY);
+---- ok
+-STATEMENT CREATE NODE TABLE z11(id INT64 PRIMARY KEY);
+---- ok
+-STATEMENT CREATE NODE TABLE z12(id INT64 PRIMARY KEY);
+---- ok
+-STATEMENT CREATE NODE TABLE z13(id INT64 PRIMARY KEY);
+---- ok
+-STATEMENT CREATE NODE TABLE z14(id INT64 PRIMARY KEY);
+---- ok
+-STATEMENT CREATE NODE TABLE z15(id INT64 PRIMARY KEY);
+---- ok
+-STATEMENT CREATE NODE TABLE z16(id INT64 PRIMARY KEY);
+---- ok
+-STATEMENT CREATE NODE TABLE z17(id INT64 PRIMARY KEY);
+---- ok
+-STATEMENT CREATE NODE TABLE z18(id INT64 PRIMARY KEY);
+---- ok
+-STATEMENT CREATE NODE TABLE z19(id INT64 PRIMARY KEY);
+---- ok
+-STATEMENT CREATE (:b {id: 2, v: 2});
+---- ok
+-STATEMENT MATCH (n:b) RETURN n.*;
+---- 1
+2|2

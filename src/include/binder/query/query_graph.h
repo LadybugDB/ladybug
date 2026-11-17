@@ -55,6 +55,8 @@ struct SubqueryGraph {
     // return both (a) and (b) regardless of node selector. See needPruneJoin() in
     // join_order_enumerator.cpp for its use case.
     std::unordered_set<common::idx_t> getNodePositionsIgnoringNodeSelector() const;
+    // The selected nodes plus both ends of every selected rel.
+    std::bitset<MAX_NUM_QUERY_VARIABLES> getNodesSelectorWithRelEndpoints() const;
 
     std::vector<common::idx_t> getNbrNodeIndices() const;
 

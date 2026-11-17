@@ -24,6 +24,7 @@ add_library(lbug_storage_wal
         wal.cpp
         wal_record.cpp
         wal_replayer.cpp
+        records/abort_record.cpp
         records/begin_transaction_record.cpp
         records/commit_record.cpp
         records/checkpoint_record.cpp

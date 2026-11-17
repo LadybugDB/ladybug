@@ -55,7 +55,7 @@
 16|propA|INT64|False
 
 -CASE ConcurrentMultiWriteCreateTable
--STATEMENT CALL debug_enable_multi_writes=true;
+-STATEMENT CALL enable_multi_writes=true;
 ---- ok
 -CREATE_CONNECTION conn2
 -CREATE_CONNECTION conn3
@@ -74,40 +74,46 @@
 #TODO(Sam/Guodong): FIX-ME.
 #TODO(Howe): After fixing, please update table_info to return default_expr aswell.
 
+# Concurrent ALTERs on the same table now abort with a write-write conflict (see #1471):
+# concurrent DDL on one table forks from the same visible version and the loser would
+# silently drop the winner's change. Keep concurrency coverage with disjoint tables.
+# Same-table conflicts are covered deterministically in ddl_serial_execution.test.
 -CASE ConcurrentMultiWriteAlter
--STATEMENT CALL debug_enable_multi_writes=true;
+-STATEMENT CALL enable_multi_writes=true;
+---- ok
+-STATEMENT CREATE NODE TABLE t1(id INT, PRIMARY KEY(id));
+---- ok
+-STATEMENT CREATE NODE TABLE t2(id INT, PRIMARY KEY(id));
+---- ok
+-STATEMENT CREATE NODE TABLE t3(id INT, PRIMARY KEY(id));
+---- ok
+-STATEMENT CREATE NODE TABLE t4(id INT, PRIMARY KEY(id));
 ---- ok
 -CREATE_CONNECTION conn2
 -CREATE_CONNECTION conn3
 -CREATE_CONNECTION conn4
 -BEGIN_CONCURRENT_EXECUTION
--STATEMENT ALTER TABLE person ADD propA INT64;
+-STATEMENT ALTER TABLE t1 ADD propA INT64;
 ---- ok
--STATEMENT [conn2] ALTER TABLE person DROP gender;
+-STATEMENT [conn2] ALTER TABLE t2 ADD propB INT64;
 ---- ok
--STATEMENT [conn3] ALTER TABLE person RENAME fName TO pName;
+-STATEMENT [conn3] ALTER TABLE t3 ADD propC INT64;
 ---- ok
--STATEMENT [conn4] COMMENT ON TABLE person IS 'person information';
+-STATEMENT [conn4] COMMENT ON TABLE t4 IS 't4 information';
 ---- ok
 -END_CONCURRENT_EXECUTION
--STATEMENT CALL table_info('person') return *;
----- 16
-0|ID|INT64|True
-1|pName|STRING|False
-3|isStudent|BOOL|False
-4|isWorker|BOOL|False
-5|age|INT64|False
-6|eyeSight|DOUBLE|False
-7|birthdate|DATE|False
-8|registerTime|TIMESTAMP|False
-9|lastJobDuration|INTERVAL|False
-10|workedHours|INT64[]|False
-11|usedNames|STRING[]|False
-12|courseScoresPerTerm|INT64[][]|False
-13|grades|INT64[4]|False
-14|height|FLOAT|False
-15|u|UUID|False
-16|propA|INT64|False
--STATEMENT CALL show_tables() where name='person' return *;
+-STATEMENT CALL table_info('t1') return *;
+---- 2
+0|id|INT32|True
+1|propA|INT64|False
+-STATEMENT CALL table_info('t2') return *;
+---- 2
+0|id|INT32|True
+1|propB|INT64|False
+-STATEMENT CALL table_info('t3') return *;
+---- 2
+0|id|INT32|True
+1|propC|INT64|False
+-STATEMENT CALL show_tables() where name='t4' return *;
 ---- 1
-person|NODE|main(graph)|person information
+t4|NODE|main(graph)|t4 information

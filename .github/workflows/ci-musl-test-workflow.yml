@@ -232,6 +232,11 @@ jobs:
       image: alpine:latest
     env:
       GEN: Ninja
+      # The lance extension's native reader builds via Cargo, which the
+      # alpine container (and the extension repo's own CI) does not provide.
+      # Skip its e2e tests here until musl support lands upstream; the glibc
+      # minimal-linux-extension-test job in ci-workflow.yml builds it.
+      EXTENSION_TEST_EXCLUDE_FILTER: e2e_test_lance
       EXTRA_CMAKE_FLAGS: -DOPENSSL_ROOT_DIR=/usr/lib/openssl3 -DOPENSSL_INCLUDE_DIR=/usr/include/openssl3 -DOPENSSL_CRYPTO_LIBRARY=/usr/lib/openssl3/libcrypto.so -DOPENSSL_SSL_LIBRARY=/usr/lib/openssl3/libssl.so
       UW_S3_ACCESS_KEY_ID: ${{ secrets.UW_S3_ACCESS_KEY_ID }}
       UW_S3_SECRET_ACCESS_KEY: ${{ secrets.UW_S3_SECRET_ACCESS_KEY }}

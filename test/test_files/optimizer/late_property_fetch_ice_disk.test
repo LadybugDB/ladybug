@@ -1,0 +1,27 @@
+-DATASET ICEBUG-DISK ice-disk-test
+--
+
+-CASE LatePropertiesOfIceDiskNodes
+-LOG Icebug-disk nodes keep their properties: each query returns what its single-part form returns
+-STATEMENT MATCH (a:user) RETURN a.name ORDER BY a.id LIMIT 2
+-CHECK_ORDER
+---- 2
+Noura
+Adam
+-STATEMENT MATCH (a:user) WITH a ORDER BY a.id LIMIT 2 RETURN a.name
+-CHECK_ORDER
+---- 2
+Noura
+Adam
+-STATEMENT MATCH (a:user)-[:follows]->(b:user) RETURN b.name, count(*) ORDER BY b.name
+---- 4
+Adam|3
+Karissa|1
+Noura|1
+Zhang|2
+-STATEMENT MATCH (a:user)-[:follows]->(b:user) UNWIND [1] AS x WITH b, count(*) AS c RETURN b.name, c ORDER BY b.name
+---- 4
+Adam|3
+Karissa|1
+Noura|1
+Zhang|2

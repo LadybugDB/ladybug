@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <string>
 
 #include "catalog_entry_type.h"
@@ -35,7 +36,10 @@ public:
     CatalogEntry(CatalogEntryType type, std::string name)
         : type{type}, name{std::move(name)}, oid{common::INVALID_OID},
           timestamp{common::INVALID_TRANSACTION} {}
-    DELETE_COPY_DEFAULT_MOVE(CatalogEntry);
+    // timestamp is atomic, so the entry is not movable: explicitly delete the moves instead
+    // of defaulting them, which newer Clang (Xcode 26.6) rejects with
+    // -Werror,-Wdefaulted-function-deleted. Entries are held by unique_ptr, never by value.
+    DELETE_COPY_AND_MOVE(CatalogEntry);
     virtual ~CatalogEntry() = default;
 
     //===--------------------------------------------------------------------===//
@@ -47,8 +51,10 @@ public:
     std::string getOwningCatalogName() const;
     void rename(std::string name_) { this->name = std::move(name_); }
     std::string getName() const { return name; }
-    common::transaction_t getTimestamp() const { return timestamp; }
-    void setTimestamp(common::transaction_t timestamp_) { this->timestamp = timestamp_; }
+    common::transaction_t getTimestamp() const { return timestamp.load(std::memory_order_acquire); }
+    void setTimestamp(common::transaction_t timestamp_) {
+        timestamp.store(timestamp_, std::memory_order_release);
+    }
     bool isDeleted() const { return deleted; }
     void setDeleted(bool deleted_) { this->deleted = deleted_; }
     bool hasParent() const { return hasParent_; }
@@ -108,7 +114,10 @@ protected:
     Catalog* owningCatalog = nullptr;
     std::string name;
     common::oid_t oid;
-    common::transaction_t timestamp;
+    // Written once at commit without holding the CatalogSet lock while concurrent readers
+    // traverse version chains under a shared lock (see TableColumnsConcurrencyTest). Atomic
+    // with release/acquire so the commit publish synchronizes with reader snapshots.
+    std::atomic<common::transaction_t> timestamp;
     bool deleted = false;
     bool hasParent_ = false;
     // Older versions.

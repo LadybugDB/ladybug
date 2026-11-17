@@ -7,6 +7,7 @@
 #endif
 
 #include "common/null_buffer.h"
+#include "common/path_utils.h"
 #include "common/types/list_t.h"
 #include "common/types/string_t.h"
 #include "common/types/types.h"
@@ -93,7 +94,7 @@ std::string StorageUtils::expandPath(const main::ClientContext* context, const s
     // when the input already names a Windows drive/UNC path because absolute may
     // consult current_path(), which can fail if the process cwd has been deleted.
     std::filesystem::path normalizedPath;
-    std::filesystem::path filePath{fullPath};
+    std::filesystem::path filePath = PathUtils::toNativePath(fullPath);
     auto shouldAvoidAbsolute = filePath.is_absolute();
 #if defined(_WIN32) || defined(__EMSCRIPTEN__)
     shouldAvoidAbsolute =
@@ -104,7 +105,14 @@ std::string StorageUtils::expandPath(const main::ClientContext* context, const s
     } else {
         normalizedPath = std::filesystem::absolute(filePath).lexically_normal();
     }
-    return normalizedPath.string();
+    // generic_string() always uses '/' separators, matching FileSystem::joinPath and
+    // IceDiskUtils::joinPath which always emit '/'. path::string() would return '\\' on
+    // Windows while TestHelper::getTempDBPathStr normalizes to '/' (lbug does not support
+    // backslashes in paths), so derived paths (WAL, shadow, marker) compared as strings
+    // would mismatch across the StorageManager and test fixtures (see
+    // PinnedCheckpointCrashTest.LeftoverShadowKeepsCommitsInFrozenWAL, where the
+    // checkpoint image map missed the frozen WAL on Windows).
+    return PathUtils::toGenericUTF8String(normalizedPath);
 }
 
 uint32_t StorageUtils::getDataTypeSize(const LogicalType& type) {

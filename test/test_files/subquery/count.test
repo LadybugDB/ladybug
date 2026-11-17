@@ -43,3 +43,23 @@ Carol|Dan|1
 Alice|Bob|0
 Alice|Carol|1
 Alice|Dan|0
+
+-CASE CountSubqueryWithoutOuterProperty
+# Without a property of a, the outer scan is a bare node scan; every person must still
+# produce a row, including those whose count is 0.
+-STATEMENT MATCH (a:person) RETURN COUNT { MATCH (a)-[:knows]->(b:person) }
+---- 8
+0
+0
+0
+2
+3
+3
+3
+3
+-STATEMENT MATCH (a:person) WHERE COUNT { MATCH (a)-[:knows]->(b:person) } = 0 RETURN count(*)
+---- 1
+3
+-STATEMENT MATCH (a:person) RETURN count(*), sum(COUNT { MATCH (a)-[:knows]->(b:person) })
+---- 1
+8|14

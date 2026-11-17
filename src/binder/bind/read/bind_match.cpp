@@ -60,7 +60,8 @@ static bool isAnyGraphNodePattern(const NodeOrRelExpression& pattern,
 
 std::unique_ptr<BoundReadingClause> Binder::bindMatchClause(const ReadingClause& readingClause) {
     auto& matchClause = readingClause.constCast<MatchClause>();
-    auto boundGraphPattern = bindGraphPattern(matchClause.getPatternElementsRef());
+    auto boundGraphPattern = bindGraphPattern(matchClause.getPatternElementsRef(),
+        matchClause.getMatchClauseType() == MatchClauseType::OPTIONAL_MATCH);
     if (matchClause.hasWherePredicate()) {
         boundGraphPattern.where = bindWhereExpression(*matchClause.getWherePredicate());
     }

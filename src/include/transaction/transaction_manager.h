@@ -1,10 +1,15 @@
 #pragma once
 
 #include <atomic>
+#include <chrono>
 #include <condition_variable>
+#include <functional>
+#include <map>
 #include <memory>
 #include <mutex>
+#include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "common/constants.h"
@@ -52,17 +57,13 @@ public:
 
     // Minimum start timestamp over all currently open transactions (the snapshot horizon
     // that checkpoint retention must preserve). Returns INVALID_TRANSACTION when no
-    // transaction is open. Brief lock acquisition; callers holding the checkpoint write
-    // gate must use a value captured before the gate was acquired.
+    // transaction is open. Brief lock acquisition.
     common::transaction_t snapshotHorizon();
-    // Start timestamps of all currently open transactions, for CSR snapshot coverage and
-    // pruning. Brief lock acquisition; capture before the checkpoint write gate alongside
-    // the horizon (a small skew between the two snapshots is safe in both directions).
+    // Start timestamps of all currently open transactions. Brief lock acquisition.
     std::vector<common::transaction_t> snapshotOpenStartTSs();
     // Pin behind the snapshot horizon: the minimum open start timestamp, the transaction
     // holding it, and the open-transaction count (which transaction pins WAL growth).
-    // INVALID_TRANSACTION/0 when no transaction is open. Brief lock acquisition; capture
-    // before the checkpoint write gate alongside the horizon.
+    // INVALID_TRANSACTION/0 when no transaction is open. Brief lock acquisition.
     struct HorizonPinInfo {
         common::transaction_t horizon = common::INVALID_TRANSACTION;
         common::transaction_t pinningTxnID = common::INVALID_TRANSACTION;
@@ -72,12 +73,46 @@ public:
 
     static TransactionManager* Get(const main::ClientContext& context);
 
+    // Rollback holds the public-function mutex through undo replay. BEGIN registers a writer
+    // under the same mutex. The count includes the rolling-back writer until replay finishes.
+    // A count of one does not prove tail ownership: another writer may already have committed.
+    bool hasMultipleActiveWriteTransactions() const {
+        return activeWriteTransactionCount.load(std::memory_order_acquire) > 1;
+    }
+
+    // A transaction stages its inserts in its LocalStorage, with the columns of its catalog
+    // snapshot, and appends them to the table's storage at commit. Another transaction's ADD
+    // COLUMN, DROP COLUMN, or DROP TABLE therefore conflicts with them, and the second of the
+    // two fails at statement time, before anything reaches the WAL: registering as a writer
+    // fails in `checkTableUnchanged` if the table's columns changed or it was dropped after the
+    // writer's snapshot, and the
+    // DDL fails while another writer is registered. The DDL changes the catalog before it
+    // checks, and both checks run under localWritersMtx, so one of them sees the other. Tables
+    // are keyed by owner catalog name and table ID, as LocalStorage keys them.
+    void addLocalWriter(const std::string& ownerCatalogName, common::table_id_t tableID,
+        const storage::LocalStorage* writer, const std::function<void()>& checkTableUnchanged);
+    void removeLocalWriter(const std::string& ownerCatalogName, common::table_id_t tableID,
+        const storage::LocalStorage* writer);
+    bool hasLocalWriterOtherThan(const std::string& ownerCatalogName, common::table_id_t tableID,
+        const storage::LocalStorage* writer);
+
 private:
+    void commitAndCheckpoint(main::ClientContext& clientContext, Transaction* transaction);
+    // COPY FROM and CREATE INDEX on a large ART skip the WAL and are durable only once the
+    // checkpoint after their commit runs, which needs every other write transaction gone. So
+    // they wait for the others to leave before committing, and are rolled back if one stays
+    // open past the checkpoint wait timeout, or at once if another such commit is already
+    // waiting. New write transactions wait from then until endForcedCheckpoint, so none can
+    // block the checkpoint after the commit.
+    void waitForOtherWritersBeforeForcedCheckpoint();
+    void endForcedCheckpoint();
     bool hasNoActiveTransactions() const;
-    void checkpointNoLock(main::ClientContext& clientContext);
-    // Try to checkpoint without blocking. Returns immediately if another checkpoint is in
-    // progress. Used by auto-checkpoint after commit.
-    void tryCheckpoint(main::ClientContext& clientContext);
+    void checkpointNoLock(main::ClientContext& clientContext,
+        std::unique_lock<std::mutex> writeGate = {});
+    void logAbortOfDurableCommit(uint64_t walBlockStart, const std::string& publishError);
+    // An automatic checkpoint normally defers to active writers. Sustained deferral or WAL
+    // growth makes one committing thread take the normal checkpoint drain path.
+    void tryCheckpoint(main::ClientContext& clientContext, uint64_t checkpointThreshold);
 
     // This function locks the mutex to stop new transactions and waits until all transactions
     // (both read and write) leave the system. Used as a fallback.
@@ -85,7 +120,11 @@ private:
 
     // This function locks the mutex to stop new write transactions and waits until all active
     // write transactions leave the system. Read transactions are allowed to continue.
-    common::UniqLock stopNewWriteTransactionsAndWaitUntilAllWriteTransactionsLeave();
+    std::unique_lock<std::mutex> stopNewWriteTransactionsAndWaitUntilAllWriteTransactionsLeave();
+
+    // Reclaims superseded in-memory MVCC versions (see StorageManager::vacuumInMemoryUpdates).
+    // Used by in-memory commits and checkpoints, which otherwise never prune version chains.
+    void vacuumInMemoryUpdates(main::ClientContext& clientContext);
 
     bool hasActiveWriteTransactionNoLock() const {
         return activeWriteTransactionCount.load(std::memory_order_acquire) > 0;
@@ -107,6 +146,12 @@ private:
 
 private:
     storage::WAL& wal;
+    // Declared before activeTransactions so it outlives the transactions destroyed with this
+    // manager, whose LocalStorage deregisters from it.
+    std::mutex localWritersMtx;
+    std::map<std::pair<std::string, common::table_id_t>,
+        std::unordered_set<const storage::LocalStorage*>>
+        localWriters;
     std::vector<std::unique_ptr<Transaction>> activeTransactions;
     // Start timestamp of every open transaction, keyed by transaction ID. Checkpoint
     // retention keeps version data committed at or after the minimum (the horizon).
@@ -115,20 +160,30 @@ private:
     // Open-transaction counts are small, so a full rescan on erase is trivial.
     common::transaction_t cachedHorizon = common::INVALID_TRANSACTION;
     common::transaction_t lastTransactionID;
-    // Atomic so checkpointNoLock() can snapshot it without taking
-    // mtxForSerializingPublicFunctionCalls (which would invert the lock order against
-    // beginTransaction()'s public -> start acquisition order and deadlock concurrent
-    // writers during an auto-checkpoint triggered from commit()).
+    // Atomic so checkpointNoLock() can read and bump it before taking
+    // mtxForSerializingPublicFunctionCalls.
     std::atomic<common::transaction_t> lastTimestamp{1};
     uint64_t nextWALCommitSequenceToPublish = 1;
     std::condition_variable cvForPublishingCommit;
     std::condition_variable cvForCommittingWriteTransaction;
+    // Set while a forced-checkpoint commit waits for other writers and then commits and
+    // checkpoints; cleared on timeout or by endForcedCheckpoint. Guarded by
+    // mtxForSerializingPublicFunctionCalls; changes notify cvForCommittingWriteTransaction.
+    bool forcedCheckpointPending = false;
     // This mutex serializes begin/commit/rollback calls to protect activeTransactions.
     std::mutex mtxForSerializingPublicFunctionCalls;
+    // Held by a checkpoint for as long as it waits for write transactions to leave and then runs.
+    // Those transactions need mtxForSerializingPublicFunctionCalls to leave, so nothing may block
+    // on this mutex while holding that one: take this one first.
     std::mutex mtxForStartingNewTransactions;
     // Prevents concurrent checkpoints. Separate from mtxForSerializingPublicFunctionCalls so
     // that active writers can commit/rollback while the checkpoint is draining them.
     std::mutex mtxForCheckpoint;
+    // Protected by mtxForCheckpoint. A failed drain starts a fresh deferral window, so the
+    // same oversized WAL cannot make every subsequent commit wait for the same writer.
+    uint64_t autoCheckpointSkips = 0;
+    std::chrono::steady_clock::time_point firstAutoCheckpointSkip;
+    uint64_t walBytesAtLastDrainAttempt = 0;
     // Atomic counter tracking active write/recovery transactions so the checkpoint drain loop
     // can poll without holding mtxForSerializingPublicFunctionCalls.
     std::atomic<uint32_t> activeWriteTransactionCount{0};

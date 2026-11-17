@@ -3,6 +3,7 @@
 #include <limits>
 
 #include "binder/expression/expression_util.h"
+#include "common/string_utils.h"
 #include "processor/execution_context.h"
 
 using namespace lbug::common;
@@ -12,7 +13,7 @@ namespace lbug {
 namespace processor {
 
 std::string PrimaryKeyScanPrintInfo::toString() const {
-    std::string result = "Key: ";
+    std::string result = "Tables: " + StringUtils::join(tableNames, ", ") + ", Key: ";
     result += key;
     if (!alias.empty()) {
         result += ",Alias: ";

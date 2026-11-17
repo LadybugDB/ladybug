@@ -245,5 +245,6 @@ Keep reports blameless: focus on systems, APIs, automation, and process rather t
 
 | Date | Document | Short description |
 |------|----------|-------------------|
+| 2026-11-06 | [2026-11-06-security-torn-wal-read-crash.md](2026-11-06-security-torn-wal-read-crash.md) | P2. Opening a database crashed on a WAL torn past a read-buffer boundary, reachable by a plain kill; `BufferedFileReader::read` did not check how much the next page held. Fixed in 0.22.3. |
 
 *(Add new rows here when you add a new incident document.)*

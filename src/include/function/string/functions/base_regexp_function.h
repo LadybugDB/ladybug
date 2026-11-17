@@ -27,6 +27,13 @@ struct BaseRegexpOperation {
     static regex::StringPiece toStringPiece(const common::string_t& value) {
         return regex::StringPiece(reinterpret_cast<const char*>(value.getData()), value.len);
     }
+
+    // Only a STRING literal can be compiled at bind time: the binder casts a literal of any other
+    // type to STRING after the bind function returns, so such a pattern is compiled per row.
+    static bool isStringLiteral(const binder::Expression& pattern) {
+        return pattern.expressionType == common::ExpressionType::LITERAL &&
+               pattern.getDataType().getLogicalTypeID() == common::LogicalTypeID::STRING;
+    }
 };
 
 // Keeps the last compiled pattern and recompiles only when the pattern changes, so a pattern

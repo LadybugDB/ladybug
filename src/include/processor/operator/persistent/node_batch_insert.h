@@ -113,6 +113,7 @@ struct NodeBatchInsertSharedState final : BatchInsertSharedState {
     // Index of the partition-key column among the evaluated column vectors; INVALID when the
     // write is not into a partitioned parent.
     common::column_id_t partitionKeyColumnIdx = common::INVALID_COLUMN_ID;
+    const catalog::NodeTableCatalogEntry* partitionConstraint = nullptr;
     // Set only for LIST-partitioned parents: creates partitions on first sight of a new key
     // value and serializes discovery across COPY workers.
     std::unique_ptr<ListPartitionRouter> listRouter;

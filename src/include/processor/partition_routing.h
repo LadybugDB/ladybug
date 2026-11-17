@@ -41,6 +41,11 @@ void computePartitionIndexes(const common::ValueVector& keyVector, uint64_t numP
 // encode as their little-endian representation, strings/blobs as length-prefixed bytes.
 std::string encodeListPartitionKey(const common::ValueVector& keyVector, uint32_t pos);
 
+// Direct writes to a child must satisfy the same routing rule as writes through its parent.
+// Validate the entire selected vector before appending any of its rows.
+void validatePartitionKey(main::ClientContext* context, const catalog::NodeTableCatalogEntry& child,
+    const common::ValueVector& keyVector);
+
 // Creates list partitions on first sight of a new partition-key value.
 //
 // A LIST parent starts with zero partitions; every distinct encoded key gets its own node-table

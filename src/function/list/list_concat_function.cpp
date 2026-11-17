@@ -43,7 +43,11 @@ std::unique_ptr<FunctionBindData> ListConcatFunction::bindFunc(const ScalarBindF
         throw BinderException(ExceptionMessage::listFunctionIncompatibleChildrenType(name,
             types[0].toString(), types[1].toString()));
     }
-    return std::make_unique<FunctionBindData>(std::move(types), types[0].copy());
+    // The result is longer than an ARRAY argument's fixed size, so it is a LIST.
+    auto resultType = types[0].getLogicalTypeID() == LogicalTypeID::ARRAY ?
+                          LogicalType::LIST(ArrayType::getChildType(types[0]).copy()) :
+                          types[0].copy();
+    return std::make_unique<FunctionBindData>(std::move(types), std::move(resultType));
 }
 
 function_set ListConcatFunction::getFunctionSet() {

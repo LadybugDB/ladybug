@@ -6,6 +6,7 @@
 #include <type_traits>
 
 #include "common/constants.h"
+#include "common/path_utils.h"
 #include "common/system_config.h"
 #include "common/types/types.h"
 #include <concepts>
@@ -77,15 +78,26 @@ public:
     static std::string getShadowFilePath(const std::string& path) {
         return std::format("{}.{}", path, common::StorageConstants::SHADOWING_SUFFIX);
     }
-    // Marker proving a pinned checkpoint (CHECKPOINT record in the active WAL with no WAL
-    // rotation) completed and its shadow was applied before cleanup removed the shadow.
-    // Recovery only treats a trailing/mid-file active-WAL CHECKPOINT with no shadow as
-    // durable when this marker exists; otherwise a missing shadow is an error, never a
-    // silent WAL delete (out-of-band shadow loss must stay loud). Uses a `.tmp` suffix so
-    // the file-deletion allowlist permits cleanup.
+    // Marker proving that every CHECKPOINT record in the active WAL (left there by pinned
+    // checkpoints, which skip WAL rotation) has been applied: WAL::logAndFlushCheckpoint removes
+    // it before logging a record, and a pinned checkpoint's cleanup writes it again after
+    // applying its shadows, before removing them. Recovery writes it too, before removing a
+    // shadow, when a transaction after the last record is what proves the records applied and
+    // they stay in the WAL. With the marker, any shadow file recovery finds
+    // belongs to a later checkpoint that never logged its record, or to an interrupted cleanup.
+    // A marker from an older build (see below) only proves that a missing shadow was applied.
+    // Without any marker, CHECKPOINT records with no shadow are an error, never a silent WAL
+    // delete (out-of-band shadow loss must stay loud). Uses a `.tmp` suffix so the file-deletion
+    // allowlist permits cleanup.
     static std::string getPinnedCheckpointMarkerPath(const std::string& path) {
         return std::format("{}.pinned.tmp", path);
     }
+    // Content of the marker above. Older builds wrote 1 and kept the marker while logging a new
+    // CHECKPOINT record, so their marker does not prove a trailing record was applied. A marker
+    // that is not exactly one of these bytes, such as the empty file a crash while writing it can
+    // leave, counts as no marker.
+    static constexpr uint8_t PINNED_CHECKPOINT_MARKER_LEGACY = 1;
+    static constexpr uint8_t PINNED_CHECKPOINT_MARKER_APPLIED = 2;
     static std::string getCheckpointIntentLockFilePath(const std::string& path) {
         return std::format("{}.checkpoint.intent.lock", path);
     }
@@ -96,11 +108,15 @@ public:
         return std::format("{}.{}", path, common::StorageConstants::TEMP_FILE_SUFFIX);
     }
     static std::string getGraphPath(const std::string& dbPath, const std::string& graphName) {
-        auto path = std::filesystem::path(dbPath);
-        auto base = path.stem().string();
-        auto ext = path.extension().string();
-        auto graphFile = std::filesystem::path(base + "." + graphName + ext);
-        return (path.parent_path() / graphFile).string();
+        // u8string round-trips UTF-8 on Windows and is byte-preserving on POSIX,
+        // so this single spelling is correct on all platforms.
+        const auto path = common::PathUtils::toNativePath(dbPath);
+        const auto base = path.stem().u8string();
+        const auto ext = path.extension().u8string();
+        const auto graphFile = std::filesystem::path(
+            base + std::u8string(u8".") + std::u8string(graphName.begin(), graphName.end()) + ext);
+        // generic form keeps '/' separators on all platforms, matching expandPath().
+        return common::PathUtils::toGenericUTF8String(path.parent_path() / graphFile);
     }
 
     static std::string expandPath(const main::ClientContext* context, const std::string& path);

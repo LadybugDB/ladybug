@@ -417,6 +417,37 @@ TEST_F(ArrowCsrRelTableTest, MultiBatchCsrIndicesAndIndptr) {
     ASSERT_EQ(sumResult->getNext()->getValue(0)->getValue<common::int128_t>(), 100);
 }
 
+// Regression test for #1527: primary key match over Arrow CSR rel table must not return node 0's
+// rels.
+TEST_F(ArrowCsrRelTableTest, MatchPrimaryKeyOverArrowCsrRelTableDoesNotReturnFirstNodeRels) {
+    std::vector<ArrowArrayWrapper> fwdIndices, fwdIndptr;
+    fwdIndices.push_back(makeFwdIndicesArray());
+    fwdIndptr.push_back(makeFwdIndptrArray());
+
+    auto result = ArrowTableSupport::createRelTableFromArrowCSR(*conn, "csr_knows", "csr_person",
+        "csr_person", makeFwdIndicesSchema(), std::move(fwdIndices), makeIndptrSchema(),
+        std::move(fwdIndptr));
+    ASSERT_TRUE(result.queryResult->isSuccess()) << result.queryResult->getErrorMessage();
+
+    // Node 0 connects to: 1 (weight 10), 2 (weight 20).
+    // Node 1 connects to: 2 (weight 30).
+    // Node 2 connects to: 3 (weight 40).
+    // Node 3 has no outgoing edges.
+    auto match1 = conn->query(
+        "MATCH (a:csr_person {id: 1})-[e:csr_knows]->(b:csr_person) RETURN b.id, e.weight");
+    ASSERT_TRUE(match1->isSuccess()) << match1->getErrorMessage();
+    ASSERT_TRUE(match1->hasNext());
+    auto row = match1->getNext();
+    ASSERT_EQ(row->getValue(0)->getValue<int64_t>(), 2);
+    ASSERT_EQ(row->getValue(1)->getValue<int64_t>(), 30);
+    ASSERT_FALSE(match1->hasNext());
+
+    auto match3 = conn->query(
+        "MATCH (a:csr_person {id: 3})-[e:csr_knows]->(b:csr_person) RETURN b.id, e.weight");
+    ASSERT_TRUE(match3->isSuccess()) << match3->getErrorMessage();
+    ASSERT_FALSE(match3->hasNext());
+}
+
 class ArrowCsrLargeBatchTest : public lbug::testing::EmptyDBTest {
     static constexpr int64_t NUM_NODES = 2050;
     static constexpr int64_t NUM_EDGES = 2049;

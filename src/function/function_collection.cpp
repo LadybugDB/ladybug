@@ -219,6 +219,7 @@ FunctionCollection* FunctionCollection::getFunctions() {
 
         // Sequence functions
         SCALAR_FUNCTION(CurrValFunction), SCALAR_FUNCTION(NextValFunction),
+        SCALAR_FUNCTION(SetValFunction),
 
         // Aggregate functions
         AGGREGATE_FUNCTION(CountStarFunction), AGGREGATE_FUNCTION(CountFunction),
@@ -240,6 +241,7 @@ FunctionCollection* FunctionCollection::getFunctions() {
         TABLE_FUNCTION(FileInfoFunction), TABLE_FUNCTION(DiskSizeInfoFunction),
         TABLE_FUNCTION(DiskInfoFunction), TABLE_FUNCTION(ShowLoadedExtensionsFunction),
         TABLE_FUNCTION(ShowOfficialExtensionsFunction), TABLE_FUNCTION(ShowIndexesFunction),
+        STANDALONE_TABLE_FUNCTION(ShowConstraintsFunction),
         TABLE_FUNCTION(ShowProjectedGraphsFunction), TABLE_FUNCTION(ProjectedGraphInfoFunction),
         TABLE_FUNCTION(ShowMacrosFunction),
 

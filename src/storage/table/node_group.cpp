@@ -448,6 +448,17 @@ bool NodeGroup::hasRetainedHorizon() const {
     return false;
 }
 
+bool NodeGroup::vacuumInMemoryUpdates(transaction_t horizon) {
+    const auto lock = chunkedGroups.lock();
+    bool didWork = false;
+    for (auto& chunkedGroup : chunkedGroups.getAllGroups(lock)) {
+        if (chunkedGroup->vacuumInMemoryUpdates(horizon)) {
+            didWork = true;
+        }
+    }
+    return didWork;
+}
+
 void NodeGroup::addColumn(TableAddColumnState& addColumnState, PageAllocator* pageAllocator,
     ColumnStats* newColumnStats) {
     dataTypes.push_back(addColumnState.propertyDefinition.getType().copy());
@@ -460,14 +471,22 @@ void NodeGroup::addColumn(TableAddColumnState& addColumnState, PageAllocator* pa
 
 void NodeGroup::rollbackInsert(row_idx_t startRow) {
     const auto lock = chunkedGroups.lock();
-    // Version rollback truncates chunked groups, but a startRow of 0 means every
-    // in-memory row is undone. Drop all chunked groups so a later append cannot
-    // stack on stale physical rows while NodeGroup::numRows is already 0.
+    // The collection calls this only for an owned suffix with no concurrent writer.
+    for (auto& group : chunkedGroups.getAllGroups(lock)) {
+        const auto groupStart = group->getStartRowIdx();
+        if (groupStart >= startRow) {
+            group->truncate(0);
+        } else if (groupStart + group->getNumRows() > startRow) {
+            group->truncate(startRow - groupStart);
+        }
+    }
+    nextRowToAppend = startRow;
     if (startRow == 0) {
         chunkedGroups.clear(lock);
         numRows = 0;
         return;
     }
+    // This also removes a chunk starting exactly at startRow, now truncated to zero.
     const auto numEmptyTrailingGroups = chunkedGroups.getNumEmptyTrailingGroups(lock);
     chunkedGroups.removeTrailingGroups(lock, numEmptyTrailingGroups);
     numRows = startRow;
@@ -663,9 +682,14 @@ std::unique_ptr<VersionInfo> NodeGroup::checkpointVersionInfo(const UniqLock& lo
                             checkpointVersionInfo->stampDeleteCommitTS(currRow + i, deleteTS);
                         }
                     }
-                } else if (retain) {
+                }
+                if (retain) {
                     const auto insertTS = chunkedGroup->getInsertCommitTS(i);
+                    // INVALID_TRANSACTION (UINT64_MAX): a row an earlier checkpoint made visible
+                    // to every reader; stamping it would hide it.
                     if (insertTS != INVALID_TRANSACTION && insertTS >= retentionHorizon) {
+                        // Deleted rows too: delete_ marks a fresh vector ALWAYS_INSERTED, and an
+                        // earlier stamp in this vector 0-fills every other slot.
                         checkpointVersionInfo->stampInsertCommitTS(currRow + i, insertTS);
                     }
                 }
@@ -926,6 +950,22 @@ bool NodeGroup::isVisible(const Transaction* transaction, row_idx_t rowIdxInGrou
     const auto rowIdxInChunkedGroup = rowIdxInGroup - chunkedGroup->getStartRowIdx();
     return !chunkedGroup->isDeleted(transaction, rowIdxInChunkedGroup) &&
            chunkedGroup->isInserted(transaction, rowIdxInChunkedGroup);
+}
+
+row_idx_t NodeGroup::getNumLeadingVisibleRows(const Transaction* transaction) const {
+    const auto lock = chunkedGroups.lock();
+    row_idx_t numVisible = 0;
+    for (const auto& chunkedGroup : chunkedGroups.getAllGroups(lock)) {
+        if (chunkedGroup->getStartRowIdx() != numVisible) {
+            break;
+        }
+        const auto numLeading = chunkedGroup->getNumLeadingVisibleRows(transaction);
+        numVisible += numLeading;
+        if (numLeading < chunkedGroup->getNumRows()) {
+            break;
+        }
+    }
+    return numVisible;
 }
 
 bool NodeGroup::isVisibleNoLock(const Transaction* transaction, row_idx_t rowIdxInGroup) const {

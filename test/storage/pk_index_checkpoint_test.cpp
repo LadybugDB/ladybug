@@ -98,5 +98,60 @@ TEST_F(PKIndexCheckpointTest, InsertAfterEmptyStringPKCheckpoint) {
     EXPECT_NE(info.overflowHeaderPage, INVALID_PAGE_IDX);
 }
 
+// Regression test for #1510: one checkpoint can grow an index enough to split a slot created
+// earlier in the same pass, whose overflow chain then still lives in the pass's buffer of new
+// overflow slots.
+TEST_F(PKIndexCheckpointTest, SplitOfChainInNewOverflowSlotsKeepsKeysReachable) {
+    // The keys below are chosen for an index that starts at 16 slots, one 4 KiB page of them.
+    if (inMemMode || LBUG_PAGE_SIZE != 4096) {
+        GTEST_SKIP();
+    }
+    // Low hash bits 1100011 put the chained keys in slot 3 of a 16-slot sub-index, across a primary
+    // and an overflow slot. Growing that sub-index to 100 slots moves them to slot 35, then
+    // slot 99.
+    constexpr uint64_t chainedBits = 0b1100011;
+    constexpr uint64_t chainedMask = 0b1111111;
+    constexpr size_t numChained = 18;
+    constexpr size_t numOthers = 582;
+    std::vector<std::string> chained;
+    std::vector<std::string> others;
+    for (auto i = 0u; chained.size() < numChained || others.size() < numOthers; i++) {
+        auto key = "long-enough-primary-key-" + std::to_string(i);
+        const auto hash = HashIndexUtils::hash(key);
+        if (HashIndexUtils::getHashIndexPositionForHash(hash) != 0) {
+            continue;
+        }
+        const auto isChained = (hash & chainedMask) == chainedBits;
+        auto& keys = isChained ? chained : others;
+        if (keys.size() < (isChained ? numChained : numOthers)) {
+            keys.push_back(std::move(key));
+        }
+    }
+    const auto createNodes = [&](const std::vector<std::string>& keys) {
+        std::string list;
+        for (const auto& key : keys) {
+            list += "'" + key + "',";
+        }
+        list.pop_back();
+        assertQuery("UNWIND [" + list + "] AS k CREATE (:t {id: k});");
+    };
+
+    assertQuery("CREATE NODE TABLE t(id STRING PRIMARY KEY);");
+    createNodes(chained);
+    assertQuery("CHECKPOINT;");
+    createNodes(others);
+    assertQuery("CHECKPOINT;");
+
+    ASSERT_NO_THROW(reopen());
+    for (const auto* keys : {&chained, &others}) {
+        for (const auto& key : *keys) {
+            auto result = conn->query("MATCH (n:t {id: '" + key + "'}) RETURN count(n);");
+            ASSERT_TRUE(result->isSuccess()) << result->toString();
+            EXPECT_EQ(TestHelper::convertResultToString(*result), std::vector<std::string>{"1"})
+                << key;
+        }
+    }
+}
+
 } // namespace testing
 } // namespace lbug

@@ -302,6 +302,42 @@ TEST(VFSTests, VirtualFileSystemDeleteFilesPatternValidation) {
     std::filesystem::remove_all("/tmp/foo.db");
 }
 
+TEST(VFSTests, VirtualFileSystemDeleteExtensionlessDbGraphFiles) {
+    const std::string dbPath = "/tmp/mydb";
+    lbug::common::VirtualFileSystem vfs(dbPath);
+    std::filesystem::create_directories("/tmp/mydb");
+
+    const std::string graphPath = "/tmp/mydb.g1";
+    std::ofstream(graphPath).close();
+    ASSERT_TRUE(std::filesystem::exists(graphPath));
+
+    ASSERT_NO_THROW(vfs.removeFileIfExists(graphPath));
+    EXPECT_FALSE(std::filesystem::exists(graphPath));
+
+    std::ofstream(graphPath).close();
+    ASSERT_NO_THROW(vfs.removeFileIfExists("/tmp/mydb.g1.wal"));
+    ASSERT_NO_THROW(vfs.removeFileIfExists("/tmp/mydb.g1.shadow"));
+    ASSERT_NO_THROW(vfs.removeFileIfExists("/tmp/mydb.g1.tmp"));
+
+    try {
+        vfs.removeFileIfExists("/tmp/mydb");
+        FAIL() << "Expected exception when deleting the main database file";
+    } catch (const lbug::common::IOException& e) {
+        EXPECT_STREQ(e.what(), "IO exception: Error: Path /tmp/mydb is not within the allowed "
+                               "list of files to be removed.");
+    }
+
+    try {
+        vfs.removeFileIfExists("/tmp/otherdb.g1");
+        FAIL() << "Expected exception for unrelated graph file";
+    } catch (const lbug::common::IOException& e) {
+        EXPECT_STREQ(e.what(), "IO exception: Error: Path /tmp/otherdb.g1 is not within the "
+                               "allowed list of files to be removed.");
+    }
+
+    std::filesystem::remove_all("/tmp/mydb");
+}
+
 class CrossFileSystemRenameProbe final : public FileSystem {
 public:
     explicit CrossFileSystemRenameProbe(std::string knownPath) : knownPath{std::move(knownPath)} {}

@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
+#include "common/api.h"
 #include "storage/table/rel_table_data.h"
 #include "storage/table/table.h"
 
@@ -18,14 +19,16 @@ namespace storage {
 class MemoryManager;
 
 struct LocalRelTableScanState;
-struct RelTableScanState : TableScanState {
+// Exported for extensions providing columnar table storage (e.g. the lance extension).
+struct LBUG_API RelTableScanState : TableScanState {
     common::RelDataDirection direction;
     common::sel_t currBoundNodeIdx;
     Column* csrOffsetColumn;
     Column* csrLengthColumn;
     bool randomLookup;
 
-    // This is a reference of the original selVector of the input boundNodeIDVector.
+    // Copy of the input boundNodeIDVector's selection. Native tables sort it by node offset and,
+    // while a multi-group batch is scanned, keep only the current node group's positions in it.
     common::SelectionVector cachedBoundNodeSelVector;
 
     // Per-node-group scan plan for the current batch of bound nodes. When the input is a
@@ -34,9 +37,9 @@ struct RelTableScanState : TableScanState {
     // planning (a)->(b)->(c) as scan(a) -> extend(a->b) -> extend(b->c)), the bound nodes
     // are the children of a single parent and can have arbitrary offsets, spanning
     // multiple node groups. Such batches are scanned one node group at a time: each plan
-    // entry holds a node group and the positions (into nodeIDVector) of the bound nodes
-    // that belong to it. Empty when the batch is covered by a single node group (the
-    // common case).
+    // entry holds a node group, null past the rel table's last one, and the positions (into
+    // nodeIDVector) of the bound nodes that belong to it. Empty when the batch is covered by
+    // a single node group (the common case).
     std::vector<std::pair<NodeGroup*, std::vector<common::sel_t>>> boundNodeGroupPlan;
     // All bound node positions of the current batch. Only populated for multi-group
     // batches, so cachedBoundNodeSelVector can be restored to the full batch once all node
@@ -66,17 +69,6 @@ struct RelTableScanState : TableScanState {
     // exhausted. The state can be scanned again: the next initScanState pins afresh.
     void releaseScanPin();
 
-    // Optional state used by Arrow-backed relationship tables. Keep it on the common scan state so
-    // a single multi-rel scan state can scan native, icebug-disk-backed, and Arrow-backed tables.
-    size_t arrowCurrentBatchIdx = 0;
-    size_t arrowCurrentBatchOffset = 0;
-    size_t arrowCSRBoundIdx = 0;
-    common::offset_t arrowCSRCurrentRelOffset = common::INVALID_OFFSET;
-    std::unordered_map<common::offset_t, common::sel_t> arrowBoundNodeOffsetToSelPos;
-    std::unique_ptr<common::ValueVector> arrowSrcKeyVector;
-    std::unique_ptr<common::ValueVector> arrowDstKeyVector;
-    bool arrowScanCompleted = true;
-
     RelTableScanState(MemoryManager& mm, common::ValueVector* nodeIDVector,
         std::vector<common::ValueVector*> outputVectors,
         std::shared_ptr<common::DataChunkState> outChunkState, bool randomLookup = false);
@@ -101,6 +93,11 @@ struct RelTableScanState : TableScanState {
     void setCachedBoundNodeSelVectorToPositions(const std::vector<common::sel_t>& positions);
 
     void setNodeIDVectorToFlat(common::sel_t selPos) const;
+
+    // The scan leaves the bound chunk flat on the last node it served, and pulling the next tuple
+    // refills that chunk only if the pull reaches its producer. Call this after the batch is
+    // exhausted and before pulling. Each batch is restored at most once.
+    void restoreBoundNodeBatch();
 
 private:
     bool hasUnCommittedData() const;
@@ -256,6 +253,7 @@ public:
     void rollbackCheckpoint() override;
     void finalizeCheckpoint(main::ClientContext& context) override;
     void reclaimStorage(PageAllocator& pageAllocator) const override;
+    bool vacuumInMemoryUpdates(common::transaction_t horizon) override;
 
     common::row_idx_t getNumTotalRows(const transaction::Transaction* transaction) override;
     // Rels of a native rel table that the transaction can see, as count(*) counts them.

@@ -13,14 +13,18 @@ struct SubStr {
 public:
     static inline void operation(common::string_t& src, int64_t start, int64_t len,
         common::string_t& result, common::ValueVector& resultValueVector) {
-        std::string srcStr = src.getAsString();
-        bool isAscii = true;
-        int64_t startPos = start - 1;
-        int64_t endPos = std::min(srcStr.size(), (size_t)(startPos + len));
-        if (startPos >= endPos || startPos < 0 || startPos >= (int64_t)srcStr.size()) {
+        const auto size = static_cast<int64_t>(src.len);
+        // A start before the first character or past the end, or a length below 1, gives the
+        // empty string.
+        if (start < 1 || start > size || len < 1) {
             result.len = 0;
             return;
         }
+        std::string srcStr = src.getAsString();
+        bool isAscii = true;
+        int64_t startPos = start - 1;
+        // Compared before adding, so that startPos + len cannot overflow.
+        int64_t endPos = len >= size - startPos ? size : startPos + len;
         // 1 character more than length has to be scanned for diatrics case: y + ˘ = ў.
         for (auto i = 0u; i < std::min<int64_t>(srcStr.size(), endPos + 1); i++) {
             // UTF-8 character encountered.
@@ -33,10 +37,12 @@ public:
             copySubstr(src, start, len, result, resultValueVector, true /* isAscii */);
         } else {
             int64_t characterCount = 0, startBytePos = 0, endBytePos = 0;
+            bool foundStart = false;
             lbug::utf8proc::utf8proc_grapheme_callback(srcStr.c_str(), srcStr.size(),
                 [&](int64_t gstart, int64_t /*gend*/) {
                     if (characterCount == startPos) {
                         startBytePos = gstart;
+                        foundStart = true;
                     } else if (characterCount == endPos) {
                         endBytePos = gstart;
                         return false;
@@ -44,7 +50,12 @@ public:
                     characterCount++;
                     return true;
                 });
-            if (endBytePos == 0 && len != 0) {
+            // start is checked against the byte size, which can exceed the character count.
+            if (!foundStart) {
+                result.len = 0;
+                return;
+            }
+            if (endBytePos == 0) {
                 endBytePos = src.len;
             }
             // In this case, the function gets the EXACT byte location to start copying from.

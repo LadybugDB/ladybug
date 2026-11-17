@@ -39,14 +39,8 @@ void BaseAggregate::initLocalStateInternal(ResultSet* resultSet, ExecutionContex
     }
 }
 
-BaseAggregateSharedState::HashTableQueue::HashTableQueue(storage::MemoryManager* memoryManager,
-    FactorizedTableSchema tableSchema) {
-    headBlock = new TupleBlock(memoryManager, std::move(tableSchema));
-    numTuplesPerBlock = headBlock.load()->table.getNumTuplesPerBlock();
-}
-
-BaseAggregateSharedState::HashTableQueue::~HashTableQueue() {
-    delete headBlock.load();
+void BaseAggregateSharedState::HashTableQueue::clear() {
+    delete headBlock.exchange(nullptr);
     TupleBlock* block = nullptr;
     while (queuedTuples.pop(block)) {
         delete block;
@@ -54,28 +48,33 @@ BaseAggregateSharedState::HashTableQueue::~HashTableQueue() {
 }
 
 void BaseAggregateSharedState::HashTableQueue::appendTuple(std::span<uint8_t> tuple) {
+    DASSERT(tuple.size() == tableSchema.getNumBytesPerTuple());
     while (true) {
         auto* block = headBlock.load();
-        DASSERT(tuple.size() == block->table.getTableSchema()->getNumBytesPerTuple());
+        if (block == nullptr) {
+            std::lock_guard lock{firstBlockMtx};
+            if (headBlock.load() == nullptr) {
+                headBlock.store(new TupleBlock(memoryManager, tableSchema.copy()));
+            }
+            continue;
+        }
         auto posToWrite = block->numTuplesReserved++;
-        if (posToWrite < numTuplesPerBlock) {
+        if (posToWrite < block->table.getNumTuplesPerBlock()) {
             memcpy(block->table.getTuple(posToWrite), tuple.data(), tuple.size());
             block->numTuplesWritten++;
             return;
+        }
+        // No more space in the block, allocate and replace it
+        auto* newBlock = new TupleBlock(memoryManager, tableSchema.copy());
+        if (headBlock.compare_exchange_strong(block, newBlock)) {
+            // TODO(bmwinger): if the queuedTuples has at least a certain size (benchmark to see
+            // if there's a benefit to waiting for multiple blocks) then cycle through the queue
+            // and flush any blocks which have been fully written
+            queuedTuples.push(block);
         } else {
-            // No more space in the block, allocate and replace it
-            auto* newBlock = new TupleBlock(block->table.getMemoryManager(),
-                block->table.getTableSchema()->copy());
-            if (headBlock.compare_exchange_strong(block, newBlock)) {
-                // TODO(bmwinger): if the queuedTuples has at least a certain size (benchmark to see
-                // if there's a benefit to waiting for multiple blocks) then cycle through the queue
-                // and flush any blocks which have been fully written
-                queuedTuples.push(block);
-            } else {
-                // If the block was replaced by another thread, discard the block we created and try
-                // again with the block allocated by the other thread
-                delete newBlock;
-            }
+            // If the block was replaced by another thread, discard the block we created and try
+            // again with the block allocated by the other thread
+            delete newBlock;
         }
     }
 }
@@ -83,14 +82,13 @@ void BaseAggregateSharedState::HashTableQueue::appendTuple(std::span<uint8_t> tu
 void BaseAggregateSharedState::HashTableQueue::mergeInto(AggregateHashTable& hashTable) {
     TupleBlock* partitionToMerge = nullptr;
     auto headBlock = this->headBlock.load();
-    DASSERT(headBlock != nullptr);
     while (queuedTuples.pop(partitionToMerge)) {
         DASSERT(
             partitionToMerge->numTuplesWritten == partitionToMerge->table.getNumTuplesPerBlock());
         hashTable.merge(std::move(partitionToMerge->table));
         delete partitionToMerge;
     }
-    if (headBlock->numTuplesWritten > 0) {
+    if (headBlock != nullptr && headBlock->numTuplesWritten > 0) {
         headBlock->table.resize(headBlock->numTuplesWritten);
         hashTable.merge(std::move(headBlock->table));
     }

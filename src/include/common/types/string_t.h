@@ -14,8 +14,12 @@ struct LBUG_API string_t {
     static constexpr uint64_t PREFIX_LENGTH = 4;
     static constexpr uint64_t INLINED_SUFFIX_LENGTH = 8;
     static constexpr uint64_t SHORT_STR_LENGTH = PREFIX_LENGTH + INLINED_SUFFIX_LENGTH;
+    // len is a uint32_t, so no string can hold more bytes.
+    static constexpr uint64_t MAX_LENGTH = UINT32_MAX;
 
     uint32_t len;
+    static_assert(MAX_LENGTH == static_cast<decltype(len)>(-1),
+        "MAX_LENGTH must be the largest length len can hold");
     uint8_t prefix[PREFIX_LENGTH];
     union {
         uint8_t data[INLINED_SUFFIX_LENGTH];

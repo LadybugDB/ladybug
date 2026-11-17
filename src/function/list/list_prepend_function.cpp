@@ -44,7 +44,7 @@ static std::unique_ptr<FunctionBindData> bindFunc(const ScalarBindFuncInput& inp
     if (types[0].getLogicalTypeID() != LogicalTypeID::ANY &&
         types[1] != ListType::getChildType(types[0])) {
         throw BinderException(ExceptionMessage::listFunctionIncompatibleChildrenType(
-            ListAppendFunction::name, types[0].toString(), types[1].toString()));
+            ListPrependFunction::name, types[0].toString(), types[1].toString()));
     }
 
     auto scalarFunction = input.definition->ptrCast<ScalarFunction>();
@@ -53,7 +53,11 @@ static std::unique_ptr<FunctionBindData> bindFunc(const ScalarBindFuncInput& inp
             list_entry_t, ListPrepend>;
     });
 
-    return std::make_unique<FunctionBindData>(std::move(types), types[0].copy());
+    // The result's length can differ from an ARRAY argument's fixed size, so it is a LIST.
+    auto resultType = types[0].getLogicalTypeID() == LogicalTypeID::ARRAY ?
+                          LogicalType::LIST(ArrayType::getChildType(types[0]).copy()) :
+                          types[0].copy();
+    return std::make_unique<FunctionBindData>(std::move(types), std::move(resultType));
 }
 
 function_set ListPrependFunction::getFunctionSet() {

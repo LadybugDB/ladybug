@@ -94,3 +94,11 @@ Binder exception: LIST_FILTER requires the result type of lambda expression be B
 -STATEMENT unwind range(1, 5000) as t with collect(t) as lst return list_filter(lst, x->x < 3);
 ---- 1
 [1,2]
+-STATEMENT UNWIND range(1, 10) AS i WITH i, CASE WHEN i % 3 = 0 THEN NULL ELSE [i, -i] END AS l WHERE i > 4 RETURN i, list_filter(l, x -> x > 0) ORDER BY i;
+---- 6
+5|[5]
+6|
+7|[7]
+8|[8]
+9|
+10|[10]

@@ -37,6 +37,19 @@ struct NextVal {
     }
 };
 
+struct SetVal {
+    static void operation(string_t& sequenceName, int64_t& value, int64_t& result,
+        ValueVector& /*leftVector*/, ValueVector& /*rightVector*/, ValueVector& /*resultVector*/,
+        void* dataPtr) {
+        auto ctx = reinterpret_cast<FunctionBindData*>(dataPtr)->clientContext;
+        auto catalog = catalog::Catalog::Get(*ctx);
+        auto transaction = transaction::Transaction::Get(*ctx);
+        auto sequenceEntry = catalog->getSequenceEntry(transaction, sequenceName.getAsString(),
+            ctx->useInternalCatalogEntry());
+        result = sequenceEntry->setVal(transaction, value);
+    }
+};
+
 function_set CurrValFunction::getFunctionSet() {
     function_set functionSet;
     functionSet.push_back(make_unique<ScalarFunction>(name,
@@ -50,6 +63,17 @@ function_set NextValFunction::getFunctionSet() {
     auto func = make_unique<ScalarFunction>(name, std::vector<LogicalTypeID>{LogicalTypeID::STRING},
         LogicalTypeID::INT64,
         ScalarFunction::UnarySequenceExecFunction<string_t, ValueVector, NextVal>);
+    func->isReadOnly = false;
+    functionSet.push_back(std::move(func));
+    return functionSet;
+}
+
+function_set SetValFunction::getFunctionSet() {
+    function_set functionSet;
+    auto func = make_unique<ScalarFunction>(name,
+        std::vector<LogicalTypeID>{LogicalTypeID::STRING, LogicalTypeID::INT64},
+        LogicalTypeID::INT64,
+        ScalarFunction::BinaryExecWithBindData<string_t, int64_t, int64_t, SetVal>);
     func->isReadOnly = false;
     functionSet.push_back(std::move(func));
     return functionSet;

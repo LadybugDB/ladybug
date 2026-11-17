@@ -48,6 +48,7 @@ class RelGroupCatalogEntry;
 class FunctionCatalogEntry;
 class SequenceCatalogEntry;
 class IndexCatalogEntry;
+class ConstraintCatalogEntry;
 
 template<typename T>
 concept TableCatalogEntryType =
@@ -75,6 +76,13 @@ public:
     // Get table entry with id.
     TableCatalogEntry* getTableCatalogEntry(const transaction::Transaction* transaction,
         common::table_id_t tableID) const;
+    // Calls `read` with the newest version-chain head for a table OID, bypassing transaction
+    // visibility (see CatalogSet::readHeadEntryOfOID). The head is null when no chain head
+    // carries the OID, and may be a deleted tombstone or a non-table entry.
+    void readLatestTableEntry(common::table_id_t tableID,
+        const std::function<void(const CatalogEntry*)>& read) const;
+    NodeTableCatalogEntry* getPartitionParentForWrite(transaction::Transaction* transaction,
+        common::table_id_t tableID);
     // Get all node table entries.
     std::vector<NodeTableCatalogEntry*> getNodeTableEntries(
         const transaction::Transaction* transaction, bool useInternal = true) const;
@@ -158,6 +166,29 @@ public:
     // Create index entry.
     common::oid_t createIndex(transaction::Transaction* transaction,
         std::unique_ptr<CatalogEntry> indexCatalogEntry, bool skipLoggingToWAL = false);
+    // ----------------------------- Constraints ----------------------------
+
+    // Check if a constraint with the given name exists.
+    bool containsConstraint(const transaction::Transaction* transaction,
+        const std::string& name) const;
+    // Get constraint entry with name.
+    ConstraintCatalogEntry* getConstraint(const transaction::Transaction* transaction,
+        const std::string& name) const;
+    // Get all constraint entries.
+    std::vector<ConstraintCatalogEntry*> getConstraintEntries(
+        const transaction::Transaction* transaction) const;
+    // Get all constraint entries for given table.
+    std::vector<ConstraintCatalogEntry*> getConstraintEntries(
+        const transaction::Transaction* transaction, common::table_id_t tableID) const;
+
+    // Create constraint entry.
+    common::oid_t createConstraint(transaction::Transaction* transaction,
+        std::unique_ptr<CatalogEntry> constraintCatalogEntry, bool skipLoggingToWAL = false);
+    // Drop all constraint entries within a table.
+    void dropAllConstraints(transaction::Transaction* transaction, common::table_id_t tableID);
+    // Drop constraint entry with name.
+    void dropConstraint(transaction::Transaction* transaction, const std::string& name);
+    void dropConstraintByOID(transaction::Transaction* transaction, common::oid_t constraintOID);
     // Drop all index entries within a table.
     void dropAllIndexes(transaction::Transaction* transaction, common::table_id_t tableID);
     // Drop index entry with name.
@@ -238,10 +269,16 @@ public:
         return version.load(std::memory_order_relaxed) - lastCheckpointVersion;
     }
     bool changedSinceLastCheckpoint() const {
-        return version.load(std::memory_order_relaxed) != lastCheckpointVersion;
+        return version.load(std::memory_order_relaxed) != lastCheckpointVersion ||
+               columnIDsVersion.load(std::memory_order_relaxed) != lastCheckpointColumnIDsVersion;
     }
-    void resetVersion() { lastCheckpointVersion = version.load(std::memory_order_relaxed); }
-    void resetVersion(uint64_t checkpointedVersion) { lastCheckpointVersion = checkpointedVersion; }
+    void resetVersion() { resetVersion(version.load(std::memory_order_relaxed)); }
+    void resetVersion(uint64_t checkpointedVersion) {
+        lastCheckpointVersion = checkpointedVersion;
+        // Compaction renumbers slots during checkpoint, after the catalog-version snapshot.
+        // Post-checkpoint cleanup still holds the write gate and records the IDs just persisted.
+        lastCheckpointColumnIDsVersion = columnIDsVersion.load(std::memory_order_relaxed);
+    }
     // Bumped when a checkpoint renumbers column IDs: no definition changes, so version stays.
     void incrementColumnIDsVersion() { columnIDsVersion.fetch_add(1, std::memory_order_relaxed); }
     // Changes whenever a bound plan may be stale: after a catalog change or a renumbering.
@@ -310,6 +347,7 @@ private:
     std::unique_ptr<CatalogSet> functions;
     std::unique_ptr<CatalogSet> types;
     std::unique_ptr<CatalogSet> indexes;
+    std::unique_ptr<CatalogSet> constraints;
     std::unique_ptr<CatalogSet> macros;
     std::unique_ptr<CatalogSet> internalTables;
     std::unique_ptr<CatalogSet> internalSequences;
@@ -321,6 +359,7 @@ private:
     std::atomic<uint64_t> version;
     uint64_t lastCheckpointVersion = 0;
     std::atomic<uint64_t> columnIDsVersion{0};
+    uint64_t lastCheckpointColumnIDsVersion = 0;
     std::string catalogName;
     std::unique_ptr<storage::StorageManager> storageManager;
     // Main catalog for function lookup (nullptr for the main catalog itself).

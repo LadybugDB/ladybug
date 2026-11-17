@@ -1,0 +1,320 @@
+-DATASET CSV tinysnb
+
+--
+
+-CASE LatePropertiesAfterAggregate
+-LOG Results equal base for every statement; EmptyDBTest.LatePropertyFetchConditions checks analogous shapes for which ones fetch late
+-STATEMENT MATCH (a:person)-[:knows]->(b:person) MATCH (b)-[:studyAt]->(o:organisation) WITH b, count(*) AS c RETURN b.fName, b.age, c ORDER BY b.fName
+---- 3
+Alice|35|3
+Bob|30|3
+Farooq|25|1
+-STATEMENT MATCH (a:person)-[:knows]->(b:person) WITH b, collect(a.ID) AS ids MATCH (b)-[:studyAt]->(o:organisation) WITH b, count(o) AS c RETURN b.fName, c ORDER BY b.fName
+---- 3
+Alice|1
+Bob|1
+Farooq|1
+-STATEMENT MATCH (a:person)-[:knows]->(b:person) WITH DISTINCT a, b WITH b, count(a) AS c RETURN b.fName, c ORDER BY b.fName
+---- 6
+Alice|3
+Bob|3
+Carol|3
+Dan|3
+Farooq|1
+Greg|1
+-STATEMENT MATCH (a:person)-[:studyAt]->(o:organisation) MATCH (a)-[:knows]->(f:person) WITH o, count(*) AS c RETURN o.name, o.state, o.info, c
+---- 1
+ABFsUni|{revenue: 138, location: ['toronto','montr,eal'], stock: {price: [96,56], volume: 1000}}|3.120000|6
+-STATEMENT MATCH (a:person)-[:knows]->(b:person) WITH b, count(*) AS c RETURN b.fName, b.age, c ORDER BY b.fName
+---- 6
+Alice|35|3
+Bob|30|3
+Carol|45|3
+Dan|20|3
+Farooq|25|1
+Greg|40|1
+-STATEMENT MATCH (a:person)-[:knows]->(b:person) WITH b, count(*) AS c WHERE b.age > 30 RETURN b.age, b.fName, c ORDER BY b.fName
+---- 3
+35|Alice|3
+45|Carol|3
+40|Greg|1
+
+-CASE LatePropertiesAfterDistinct
+-STATEMENT MATCH (a:person)-[:knows]->(b:person) MATCH (b)-[:studyAt]->(o:organisation) WITH DISTINCT b RETURN b.fName ORDER BY b.fName
+---- 3
+Alice
+Bob
+Farooq
+-STATEMENT MATCH (a:person)-[:knows]->(b:person) UNWIND [1, 2] AS x WITH b LIMIT 2000 RETURN b.fName, count(*) ORDER BY b.fName
+---- 6
+Alice|6
+Bob|6
+Carol|6
+Dan|6
+Farooq|2
+Greg|2
+-STATEMENT MATCH (a:person)-[:knows]->(b:person) WITH DISTINCT b RETURN count(b.fName), min(b.age)
+---- 1
+6|20
+
+-CASE LatePropertiesAfterLimit
+-STATEMENT MATCH (a:person) WITH a ORDER BY a.ID DESC LIMIT 3 RETURN a.fName, a.usedNames, a.courseScoresPerTerm
+-CHECK_ORDER
+---- 3
+Hubert Blaine Wolfeschlegelsteinhausenbergerdorff|[Ad,De,Hi,Kye,Orlan]|[[7],[10],[6,7]]
+Greg|[Grad]|[[10]]
+Farooq|[Fesdwe]|[[8]]
+-STATEMENT MATCH (a:person)-[:knows]->(b:person) WITH b, count(*) AS c ORDER BY c DESC, b.ID LIMIT 2 RETURN b.fName, c
+-CHECK_ORDER
+---- 2
+Alice|3
+Bob|3
+-STATEMENT MATCH (a:person) WHERE a.ID < 3 WITH a LIMIT 10 RETURN a.fName ORDER BY a.fName
+---- 2
+Alice
+Bob
+-STATEMENT MATCH (a:person) WITH a ORDER BY a.ID LIMIT 2000 RETURN a.fName
+-CHECK_ORDER
+---- 8
+Alice
+Bob
+Carol
+Dan
+Elizabeth
+Farooq
+Greg
+Hubert Blaine Wolfeschlegelsteinhausenbergerdorff
+-STATEMENT MATCH (a:person) WITH a LIMIT 2000 RETURN a.fName ORDER BY a.fName
+---- 8
+Alice
+Bob
+Carol
+Dan
+Elizabeth
+Farooq
+Greg
+Hubert Blaine Wolfeschlegelsteinhausenbergerdorff
+
+-CASE LatePropertiesOfTwoNodesAndOtherTypes
+-STATEMENT MATCH (a:person)-[:knows]->(b:person) WITH a, b ORDER BY a.ID, b.ID LIMIT 3 RETURN a.fName, b.fName
+-CHECK_ORDER
+---- 3
+Alice|Bob
+Alice|Carol
+Alice|Dan
+-STATEMENT MATCH (a:person)-[:knows]->(b:person) MATCH (b)-[:studyAt]->(o:organisation) WITH a, b, count(*) AS c RETURN a.fName, b.fName, c ORDER BY a.fName, b.fName
+---- 7
+Alice|Bob|1
+Bob|Alice|1
+Carol|Alice|1
+Carol|Bob|1
+Dan|Alice|1
+Dan|Bob|1
+Elizabeth|Farooq|1
+-STATEMENT MATCH (a:person)-[:knows]->(b:person) MATCH (b)-[:studyAt]->(o:organisation) WITH b, count(*) AS c RETURN c ORDER BY b.fName DESC
+-CHECK_ORDER
+---- 3
+1
+3
+3
+-STATEMENT MATCH (a:person)-[:studyAt]->(o:organisation) MATCH (a)-[:knows]->(f:person) WITH o, count(*) AS c RETURN o, c
+---- 1
+{_ID: 1:0, _LABEL: organisation, ID: 1, name: ABFsUni, orgCode: 325, mark: 3.700000, score: -2, history: 10 years 5 months 13 hours 24 us, licenseValidInterval: 3 years 5 days, rating: 1.000000, state: {revenue: 138, location: ['toronto','montr,eal'], stock: {price: [96,56], volume: 1000}}, info: 3.120000}|6
+-STATEMENT MATCH (o:organisation) WITH o ORDER BY o.ID LIMIT 1 RETURN o
+---- 1
+{_ID: 1:0, _LABEL: organisation, ID: 1, name: ABFsUni, orgCode: 325, mark: 3.700000, score: -2, history: 10 years 5 months 13 hours 24 us, licenseValidInterval: 3 years 5 days, rating: 1.000000, state: {revenue: 138, location: ['toronto','montr,eal'], stock: {price: [96,56], volume: 1000}}, info: 3.120000}
+-STATEMENT MATCH (a:person)-[:knows]->(b:person) MATCH (b)-[:studyAt]->(o:organisation) WITH b, count(*) AS c RETURN id(b), b.fName ORDER BY b.fName
+---- 3
+0:0|Alice
+0:1|Bob
+0:5|Farooq
+-STATEMENT MATCH (m:movies) WITH m ORDER BY m.name LIMIT 2 RETURN m.name, m.audience, m.content, m.grade, m.description.release
+-CHECK_ORDER
+---- 2
+Roma|{}|pure ascii characters|254.000000|2011-02-11 16:44:22
+Sóló cón tu párejâ|{audience1=52, audience53=42}|\xAA\xABinteresting\x0B|True|2011-08-20 11:25:30
+-STATEMENT MATCH (a:person)-[:knows]->(b:person) MATCH (b)-[:studyAt]->(o:organisation) WITH b, count(*) AS c RETURN b.birthdate, b.registerTime, b.lastJobDuration, b.u, b.grades, b.height, c
+---- 3
+1900-01-01|2008-11-03 15:25:30.000526|10 years 5 months 13:00:00.000024|a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12|[98,42,93,88]|0.990000|3
+1900-01-01|2011-08-20 11:25:30|3 years 2 days 13:02:00|a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11|[96,54,86,92]|1.731000|3
+1980-10-26|1972-07-31 13:22:30.678559|00:18:00.024|a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a16|[80,78,34,83]|1.510000|1
+
+-CASE LatePropertiesOfEmptiedOrOrderedNodes
+-LOG Label pruning leaves b without a table after the rewrite: no rows
+-STATEMENT MATCH (a:person)-[:studyAt]->(b:person) WITH b LIMIT 5 RETURN b.fName
+---- 0
+-STATEMENT MATCH (a:person)-[:studyAt]->(b:person) MATCH (b)-[:knows]->(c:person) WITH b, count(*) AS n RETURN b.fName, n
+---- 0
+-LOG An earlier ORDER BY keeps its order, also for the rows an aggregate in the RETURN reads
+-STATEMENT MATCH (a:person) MATCH (a)-[:knows]->(b:person) WITH DISTINCT a ORDER BY a.age, a.ID LIMIT 2000 RETURN a.gender, collect(a.fName) AS names ORDER BY a.gender
+-CHECK_ORDER
+---- 2
+1|[Elizabeth,Alice,Carol]
+2|[Dan,Bob]
+-LOG The RETURN sorts again without aggregating: the join is allowed, and rows are ordered by its keys
+-STATEMENT MATCH (a:person) MATCH (a)-[:knows]->(b:person) WITH DISTINCT a ORDER BY a.age, a.ID LIMIT 2000 RETURN a.fName, a.gender ORDER BY a.gender, a.fName
+-CHECK_ORDER
+---- 5
+Alice|1
+Carol|1
+Elizabeth|1
+Bob|2
+Dan|2
+-STATEMENT MATCH (a:person)-[:knows]->(b:person) WITH DISTINCT a ORDER BY a.ID DESC LIMIT 5000 MATCH (a)-[:knows]->(c:person) WITH a LIMIT 2000 RETURN a.fName
+-CHECK_ORDER
+---- 14
+Elizabeth
+Elizabeth
+Dan
+Dan
+Dan
+Carol
+Carol
+Carol
+Bob
+Bob
+Bob
+Alice
+Alice
+Alice
+
+-CASE LatePropertiesWithoutPrimaryKeyIndex
+-STATEMENT CALL enable_default_hash_index=false;
+---- ok
+-STATEMENT CREATE NODE TABLE U (id INT64, name STRING, PRIMARY KEY(id));
+---- ok
+-STATEMENT UNWIND range(0, 4) AS i CREATE (:U {id: i, name: 'n' + cast(i AS STRING)});
+---- ok
+-STATEMENT MATCH (u:U) WITH u ORDER BY u.id DESC LIMIT 2 RETURN u.name
+-CHECK_ORDER
+---- 2
+n4
+n3
+-STATEMENT CALL enable_default_hash_index=true;
+---- ok
+
+-CASE LatePropertiesOfNarrowedAliasedAndUnionNodes
+-LOG b is narrowed to person by the second pattern and keeps organisation's orgCode, which is NULL
+-STATEMENT MATCH (b), (b:person) WITH b ORDER BY b.ID LIMIT 2 RETURN b.fName, b.orgCode
+-CHECK_ORDER
+---- 2
+Alice|
+Bob|
+-STATEMENT MATCH (b) MATCH (b:person)-[:knows]->(c:person) MATCH (b)-[:studyAt]->(o:organisation) WITH b, count(*) AS n RETURN b.fName, b.orgCode, n ORDER BY b.fName
+---- 2
+Alice||3
+Bob||3
+-STATEMENT MATCH (a:person)-[:knows]->(b:person) MATCH (b)-[:studyAt]->(o:organisation) WITH b AS x, count(*) AS c RETURN x.fName, c ORDER BY x.fName
+---- 3
+Alice|3
+Bob|3
+Farooq|1
+-STATEMENT MATCH (a:person) WITH a ORDER BY a.ID LIMIT 1 RETURN a.fName AS x UNION ALL MATCH (o:organisation) WITH o ORDER BY o.ID LIMIT 1 RETURN o.name AS x
+---- 2
+Alice
+ABFsUni
+
+-CASE LatePropertiesOfPartitionChild
+-STATEMENT CREATE NODE TABLE Pt (id INT64 PRIMARY KEY, name STRING) PARTITION BY HASH (name) PARTITIONS 1;
+---- 1
+Table Pt has been created.
+-STATEMENT CREATE (:Pt_p0 {id: 1, name: 'a'}), (:Pt_p0 {id: 2, name: 'b'}), (:Pt_p0 {id: 3, name: 'c'});
+---- ok
+-STATEMENT MATCH (a:Pt) RETURN a.name ORDER BY a.id DESC LIMIT 2
+-CHECK_ORDER
+---- 2
+c
+b
+-STATEMENT MATCH (a:Pt) WITH a ORDER BY a.id DESC LIMIT 2 RETURN a.name
+-CHECK_ORDER
+---- 2
+c
+b
+-RELOADDB
+-STATEMENT MATCH (a:Pt) WITH a ORDER BY a.id DESC LIMIT 2 RETURN a.name
+-CHECK_ORDER
+---- 2
+c
+b
+-STATEMENT MATCH (a:Pt) UNWIND [1] AS x WITH a, count(*) AS n RETURN a.name, n ORDER BY a.name
+---- 3
+a|1
+b|1
+c|1
+
+-CASE LatePropertiesKeepNullsAndLabels
+-LOG A node bound by OPTIONAL MATCH can be NULL, and a multi-label node has no single table: both keep their properties
+-STATEMENT MATCH (a:person) OPTIONAL MATCH (a)-[:studyAt]->(o:organisation) WITH o, count(*) AS c RETURN o.name, c ORDER BY o.name
+---- 2
+ABFsUni|3
+|5
+-STATEMENT MATCH (a:person)-[]->(b) WITH b, count(*) AS c RETURN label(b), b.ID, c ORDER BY label(b), b.ID
+---- 10
+organisation|1|3
+organisation|4|1
+organisation|6|2
+person|0|3
+person|2|6
+person|3|6
+person|5|5
+person|7|1
+person|8|2
+person|9|1
+
+-CASE LatePropertiesSeeUncommittedNodes
+-STATEMENT BEGIN TRANSACTION
+---- ok
+-STATEMENT CREATE (:person {ID: 100, fName: 'Zed', age: 1})
+---- ok
+-STATEMENT MATCH (a:person) WITH a ORDER BY a.ID DESC LIMIT 2 RETURN a.fName, a.age, a.eyeSight
+-CHECK_ORDER
+---- 2
+Zed|1|
+Hubert Blaine Wolfeschlegelsteinhausenbergerdorff|83|4.900000
+-STATEMENT MATCH (a:person) UNWIND [1] AS x WITH a, count(*) AS c RETURN a.fName, c ORDER BY a.fName
+---- 9
+Alice|1
+Bob|1
+Carol|1
+Dan|1
+Elizabeth|1
+Farooq|1
+Greg|1
+Hubert Blaine Wolfeschlegelsteinhausenbergerdorff|1
+Zed|1
+-STATEMENT ROLLBACK
+---- ok
+-STATEMENT BEGIN TRANSACTION
+---- ok
+-STATEMENT MATCH (a:person) WHERE a.ID = 0 SET a.fName = 'Zoe'
+---- ok
+-STATEMENT MATCH (a:person) WITH a ORDER BY a.ID LIMIT 2 RETURN a.fName
+-CHECK_ORDER
+---- 2
+Zoe
+Bob
+-STATEMENT MATCH (a:person)-[:knows]->(b:person) MATCH (b)-[:studyAt]->(o:organisation) WITH b, count(*) AS c RETURN b.fName, c ORDER BY b.fName
+---- 3
+Bob|3
+Farooq|1
+Zoe|3
+-STATEMENT ROLLBACK
+---- ok
+-STATEMENT BEGIN TRANSACTION
+---- ok
+-STATEMENT MATCH (a:person) WHERE a.ID = 0 DETACH DELETE a
+---- ok
+-STATEMENT MATCH (a:person) WITH a ORDER BY a.ID LIMIT 2 RETURN a.fName
+-CHECK_ORDER
+---- 2
+Bob
+Carol
+-STATEMENT MATCH (a:person)-[:knows]->(b:person) MATCH (b)-[:studyAt]->(o:organisation) WITH b, count(*) AS c RETURN b.fName, c ORDER BY b.fName
+---- 2
+Bob|2
+Farooq|1
+-STATEMENT ROLLBACK
+---- ok
+-STATEMENT MATCH (a:person) WITH a ORDER BY a.ID DESC LIMIT 1 RETURN a.fName
+---- 1
+Hubert Blaine Wolfeschlegelsteinhausenbergerdorff

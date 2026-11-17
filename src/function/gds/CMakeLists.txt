@@ -4,6 +4,7 @@ add_library(lbug_function_algorithm
         asp_paths.cpp
         awsp_paths.cpp
         bfs_graph.cpp
+        bidirectional_sp.cpp
         frontier_morsel.cpp
         gds.cpp
         gds_frontier.cpp

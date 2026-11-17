@@ -33,6 +33,15 @@ std::unique_ptr<BoundStatement> Binder::bind(const Statement& statement) {
     case StatementType::CREATE_INDEX: {
         boundStatement = bindCreateIndex(statement);
     } break;
+    case StatementType::CREATE_CONSTRAINT: {
+        boundStatement = bindCreateConstraint(statement);
+    } break;
+    case StatementType::DROP_CONSTRAINT: {
+        boundStatement = bindDropConstraint(statement);
+    } break;
+    case StatementType::SHOW_CONSTRAINTS: {
+        boundStatement = bindShowConstraints(statement);
+    } break;
     case StatementType::CREATE_TYPE: {
         boundStatement = bindCreateType(statement);
     } break;

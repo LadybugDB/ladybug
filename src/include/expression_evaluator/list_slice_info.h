@@ -6,8 +6,6 @@
 
 namespace lbug::evaluator {
 
-class LambdaParamEvaluator;
-
 class ListEntryTracker {
 public:
     explicit ListEntryTracker(common::ValueVector* listVector);
@@ -43,6 +41,11 @@ private:
  * and thus it is unreasonable to have execFuncs operate on a list-by-list basis. Instead, they
  * should operate on each data vector entry individually.
  *
+ * Before each execFunc call, the lambda evaluator gathers the slice's elements into the lambda
+ * variable's vector at positions 0 to getSliceSize() - 1, so every vector computed from the
+ * variable holds its value for slice element i at position i. Strings and the elements of nested
+ * lists are referenced in the list's data vector, not copied.
+ *
  * Instead, any lambda execFunc should follow this pattern using the ListSliceInfo struct
  * void execFunc(...) {
  *   auto& sliceInfo = *listLambdaBindData->sliceInfo;
@@ -77,11 +80,6 @@ public:
 
     void nextSlice();
 
-    std::vector<std::shared_ptr<common::DataChunkState>> overrideAndSaveParamStates(
-        std::span<LambdaParamEvaluator*> lambdaParamEvaluators);
-    static void restoreParamStates(std::span<LambdaParamEvaluator*> lambdaParamEvaluators,
-        std::vector<std::shared_ptr<common::DataChunkState>> savedStates);
-
     // use in cases (like list filter) where the output data offset may not correspond to the input
     // data offset
     common::offset_t& getResultSliceOffset() { return resultSliceOffset; }
@@ -96,6 +94,11 @@ public:
     // returns {list entry pos, data pos}
     std::pair<common::sel_t, common::sel_t> getPos(common::idx_t i) const {
         return {sliceListEntryState->getSelVector()[i], sliceDataState->getSelVector()[i]};
+    }
+
+    // The slice's data positions, in slice order.
+    const common::SelectionVector& getDataSelVector() const {
+        return sliceDataState->getSelVector();
     }
 
     void incrementQuantifierCount(common::sel_t listEntryPos) {

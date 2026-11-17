@@ -1,10 +1,15 @@
 #include <iostream>
 #include <sstream>
+#ifndef _WIN32
+#include <unistd.h>
+#endif
 
+#include "agent_mode.h"
 #include "args.hxx"
 #include "common/file_system/file_info.h"
 #include "common/file_system/local_file_system.h"
 #include "common/file_system/virtual_file_system.h"
+#include "common/path_utils.h"
 #include "common/string_utils.h"
 #include "common/task_system/progress_bar.h"
 #include "embedded_shell.h"
@@ -36,7 +41,7 @@ void addInitFileDirToSearchPath(const std::shared_ptr<Connection>& conn,
     if (initDirPath.empty()) {
         initDirPath = "/";
     } else if (initFile.find("://") == std::string::npos) {
-        initDirPath = std::filesystem::absolute(initDirPath).lexically_normal().string();
+        initDirPath = PathUtils::absoluteLexicallyNormalUTF8(initDirPath);
     }
     auto clientConfig = conn->getClientContext()->getClientConfigUnsafe();
     auto& fileSearchPath = clientConfig->fileSearchPath;
@@ -133,6 +138,10 @@ int main(int argc, char* argv[]) {
     args::ValueFlag<std::string> mode(parser, "", "Set the output mode of the shell",
         {'m', "mode"});
     args::Flag stats(parser, "no_stats", "Disable query stats", {'s', "no_stats", "nostats"});
+    args::Flag agent(parser, "agent",
+        "Force agent mode on (compact Markdown, JSON errors, capped results)", {"agent"});
+    args::Flag noAgent(parser, "no_agent", "Force agent mode off",
+        {"no_agent", "noagent", "no-agent"});
     args::Flag progress_bar(parser, "no_progress_bar", "Disable query progress bar",
         {'b', "no_progress_bar", "noprogressbar"});
     args::Flag ignore_wal_replay_errors(parser, "ignore_wal_replay_errors",
@@ -226,6 +235,7 @@ int main(int argc, char* argv[]) {
 
     ShellConfig shellConfig;
     shellConfig.path_to_history = pathToHistory.c_str();
+    bool explicitFormat = (bool)mode;
     if (mode) {
         if (setConfigOutputMode(args::get(mode), shellConfig) != 0) {
             return 1;
@@ -233,6 +243,35 @@ int main(int argc, char* argv[]) {
     }
     if (stats) {
         shellConfig.stats = false;
+    }
+    // Agent mode detection: an agent env var is set, stdout is not a terminal,
+    // and no explicit output-format flag was passed. --agent / LBUG_AGENT_MODE=1
+    // force it on, --no-agent forces it off.
+    bool stdoutIsTTY = false;
+#ifndef _WIN32
+    stdoutIsTTY = isatty(fileno(stdout)) != 0;
+#endif
+    shellConfig.stdoutIsTTY = stdoutIsTTY;
+    shellConfig.agentFlagGiven = (bool)agent || (bool)noAgent;
+    std::string detectedEnv = agent::detectAgentEnv();
+    shellConfig.agentEnv = detectedEnv;
+    bool agentOn = false;
+    bool agentAuto = false;
+    if (noAgent) {
+        agentOn = false;
+    } else if (agent || agent::envForcesAgentOn()) {
+        agentOn = true;
+    } else if (!detectedEnv.empty() && !stdoutIsTTY && !explicitFormat) {
+        agentOn = true;
+        agentAuto = true;
+    }
+    shellConfig.agentMode = agentOn;
+    shellConfig.agentAutoDetected = agentAuto;
+    if (agentAuto) {
+        fprintf(stderr,
+            "lbug agent mode on: %s is set and stdout is not a terminal; --no_agent "
+            "turns it off, .help agent explains the output\n",
+            detectedEnv.c_str());
     }
 
     auto databasePath = args::get(inputDirFlag);
@@ -245,7 +284,7 @@ int main(int argc, char* argv[]) {
         std::cerr << e.what() << '\n';
         return 1;
     }
-    if (!progress_bar) {
+    if (!progress_bar && !shellConfig.agentMode) {
         auto clientContext = conn->getClientContext();
         clientContext->getClientConfigUnsafe()->enableProgressBar = true;
         ProgressBar::Get(*clientContext)->toggleProgressBarPrinting(true);
@@ -260,7 +299,7 @@ int main(int argc, char* argv[]) {
     try {
         auto shell = EmbeddedShell(database, conn, shellConfig);
         processRunCommands(shell, conn, initFile);
-        if (shellConfig.stats) {
+        if (shellConfig.stats && !shellConfig.agentMode) {
             if (DBConfig::isDBPathInMemory(databasePath)) {
                 std::cout << "Opening the database under in-memory mode." << '\n';
             } else {

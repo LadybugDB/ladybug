@@ -20,6 +20,8 @@ public:
 
     bool isSource() const override { return true; }
 
+    uint64_t getNumSortedKeyBlocks() const { return sharedState->getSortedKeyBlocks()->size(); }
+
     void initLocalStateInternal(ResultSet* resultSet, ExecutionContext* context) override;
 
     void executeInternal(ExecutionContext* context) override;

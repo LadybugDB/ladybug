@@ -263,8 +263,16 @@ void VectorVersionInfo::getSelVectorForScan(const transaction_t startTS,
     const transaction_t transactionID, SelectionVector& selVector, const row_idx_t startRow,
     const row_idx_t numRows, sel_t startOutputPos) const {
     auto numSelected = selVector.getSelSize();
-    if (deletionStatus == DeletionStatus::NO_DELETED &&
-        insertionStatus == InsertionStatus::ALWAYS_INSERTED) {
+    // With one insert version for the whole vector, isInserted ignores the row (as in
+    // getNumInsertedRows); without deletions, a reader that sees that insert takes the whole range
+    // and an unfiltered selection stays unfiltered. That version covers only the rows appended so
+    // far, so the range must stay inside them, as ChunkedNodeGroup::scan asserts; slots after them
+    // would be selected too.
+    const auto allVisible =
+        deletionStatus == DeletionStatus::NO_DELETED &&
+        (insertionStatus == InsertionStatus::ALWAYS_INSERTED ||
+            (isSameInsertionVersion() && isInserted(startTS, transactionID, startRow)));
+    if (allVisible) {
         if (selVector.isUnfiltered()) {
             selVector.setSelSize(selVector.getSelSize() + numRows);
         } else {
@@ -358,6 +366,7 @@ row_idx_t VectorVersionInfo::getNumInsertedRows(transaction_t startTS, transacti
         return 0;
     }
     if (insertionStatus == InsertionStatus::ALWAYS_INSERTED || isSameInsertionVersion()) {
+        // The range must stay inside the appended rows, as in getSelVectorForScan.
         return isInserted(startTS, transactionID, startRow) ? numRows : 0;
     }
     // Rows are appended in commit order by one writer at a time and rolled back from the end,
@@ -414,7 +423,6 @@ void VectorVersionInfo::rollbackInsertions(row_idx_t startRowInVector, row_idx_t
     }
     if (!insertedVersions) {
         insertionStatus = InsertionStatus::NO_INSERTED;
-        deletionStatus = DeletionStatus::NO_DELETED;
     }
 }
 
@@ -772,6 +780,23 @@ row_idx_t VersionInfo::getNumVisibleRows(const transaction::Transaction* transac
     return numVisible;
 }
 
+row_idx_t VersionInfo::getNumLeadingVisibleRows(const transaction::Transaction* transaction,
+    row_idx_t numRows) const {
+    row_idx_t numVisible = 0;
+    for (idx_t vectorIdx = 0; numVisible < numRows; ++vectorIdx) {
+        const auto numRowsInVector =
+            std::min<row_idx_t>(DEFAULT_VECTOR_CAPACITY, numRows - numVisible);
+        const auto vectorVersion = getVectorVersionInfo(vectorIdx);
+        if (vectorVersion != nullptr &&
+            vectorVersion->getNumVisibleRows(transaction->getStartTS(), transaction->getID(), 0,
+                numRowsInVector) != numRowsInVector) {
+            break;
+        }
+        numVisible += numRowsInVector;
+    }
+    return numVisible;
+}
+
 row_idx_t VersionInfo::getNumInsertedRows(const transaction::Transaction* transaction,
     row_idx_t startRow, length_t numRows) const {
     if (numRows == 0) {
@@ -936,6 +961,12 @@ void VersionInfo::rollbackInsert(row_idx_t startRow, row_idx_t numRows) {
             vectorIdx == endVectorIdx ? endRowIdxInVector : DEFAULT_VECTOR_CAPACITY - 1;
         auto& vectorVersionInfo = getOrCreateVersionInfo(vectorIdx);
         vectorVersionInfo.rollbackInsertions(startRowIdx, endRowIdx - startRowIdx + 1);
+        // Other writers can own later rows, so aborted slots may survive physically.
+        // Real commit timestamps start above zero. A delete at zero hides these slots from
+        // every snapshot and survives checkpoint even after insertion versions are discarded.
+        for (auto row = startRowIdx; row <= endRowIdx; ++row) {
+            vectorVersionInfo.stampDeleteCommitTS(row, 0);
+        }
     }
 }
 

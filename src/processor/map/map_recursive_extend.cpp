@@ -18,7 +18,7 @@ std::unique_ptr<NodeOffsetMaskMap> createNodeOffsetMaskMap(const Expression& exp
     auto& node = expr.constCast<NodeExpression>();
     auto maskMap = std::make_unique<NodeOffsetMaskMap>();
     for (auto tableID : node.getTableIDs()) {
-        maskMap->addMask(tableID, mapper->createSemiMask(tableID));
+        maskMap->addMask(tableID, mapper->createSemiMask(tableID, node.getDbName(tableID)));
     }
     return maskMap;
 }

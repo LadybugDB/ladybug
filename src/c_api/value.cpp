@@ -1638,9 +1638,23 @@ void lbug_destroy_blob(uint8_t* blob) {
     LBUG_C_API_GUARD_END_VOID
 }
 
+static inline int64_t floor_div(int64_t val, int64_t divisor) {
+    int64_t res = val / divisor;
+    int64_t rem = val % divisor;
+    if (rem != 0 && val < 0) {
+        res--;
+    }
+    return res;
+}
+
+static inline bool is_valid_epoch_minus_one(const struct tm& tm) {
+    return tm.tm_year == 69 && tm.tm_mon == 11 && tm.tm_mday == 31 && tm.tm_hour == 23 &&
+           tm.tm_min == 59 && (tm.tm_sec == 59 || tm.tm_sec == 60);
+}
+
 lbug_state lbug_timestamp_ns_to_tm(lbug_timestamp_ns_t timestamp, struct tm* out_result) {
     LBUG_C_API_GUARD_BEGIN
-    time_t time = timestamp.value / 1000000000;
+    time_t time = static_cast<time_t>(floor_div(timestamp.value, 1000000000LL));
 #ifdef _WIN32
     if (convertTimeToTm(time, out_result) != 0) {
         return LbugError;
@@ -1656,7 +1670,7 @@ lbug_state lbug_timestamp_ns_to_tm(lbug_timestamp_ns_t timestamp, struct tm* out
 
 lbug_state lbug_timestamp_ms_to_tm(lbug_timestamp_ms_t timestamp, struct tm* out_result) {
     LBUG_C_API_GUARD_BEGIN
-    time_t time = timestamp.value / 1000;
+    time_t time = static_cast<time_t>(floor_div(timestamp.value, 1000LL));
 #ifdef _WIN32
     if (convertTimeToTm(time, out_result) != 0) {
         return LbugError;
@@ -1688,7 +1702,7 @@ lbug_state lbug_timestamp_sec_to_tm(lbug_timestamp_sec_t timestamp, struct tm* o
 
 lbug_state lbug_timestamp_tz_to_tm(lbug_timestamp_tz_t timestamp, struct tm* out_result) {
     LBUG_C_API_GUARD_BEGIN
-    time_t time = timestamp.value / 1000000;
+    time_t time = static_cast<time_t>(floor_div(timestamp.value, 1000000LL));
 #ifdef _WIN32
     if (convertTimeToTm(time, out_result) != 0) {
         return LbugError;
@@ -1704,7 +1718,7 @@ lbug_state lbug_timestamp_tz_to_tm(lbug_timestamp_tz_t timestamp, struct tm* out
 
 lbug_state lbug_timestamp_to_tm(lbug_timestamp_t timestamp, struct tm* out_result) {
     LBUG_C_API_GUARD_BEGIN
-    time_t time = timestamp.value / 1000000;
+    time_t time = static_cast<time_t>(floor_div(timestamp.value, 1000000LL));
 #ifdef _WIN32
     if (convertTimeToTm(time, out_result) != 0) {
         return LbugError;
@@ -1725,10 +1739,15 @@ lbug_state lbug_timestamp_ns_from_tm(struct tm tm, lbug_timestamp_ns_t* out_resu
 #else
     int64_t time = timegm(&tm);
 #endif
-    if (time == -1) {
+    if (time == -1 && !is_valid_epoch_minus_one(tm)) {
         return LbugError;
     }
-    out_result->value = time * 1000000000;
+    constexpr int64_t MAX_SEC_NS = INT64_MAX / 1000000000LL;
+    constexpr int64_t MIN_SEC_NS = INT64_MIN / 1000000000LL;
+    if (time > MAX_SEC_NS || time < MIN_SEC_NS) {
+        return LbugError;
+    }
+    out_result->value = time * 1000000000LL;
     return LbugSuccess;
     LBUG_C_API_GUARD_END(LbugError)
 }
@@ -1740,10 +1759,15 @@ lbug_state lbug_timestamp_ms_from_tm(struct tm tm, lbug_timestamp_ms_t* out_resu
 #else
     int64_t time = timegm(&tm);
 #endif
-    if (time == -1) {
+    if (time == -1 && !is_valid_epoch_minus_one(tm)) {
         return LbugError;
     }
-    out_result->value = time * 1000;
+    constexpr int64_t MAX_SEC_MS = INT64_MAX / 1000LL;
+    constexpr int64_t MIN_SEC_MS = INT64_MIN / 1000LL;
+    if (time > MAX_SEC_MS || time < MIN_SEC_MS) {
+        return LbugError;
+    }
+    out_result->value = time * 1000LL;
     return LbugSuccess;
     LBUG_C_API_GUARD_END(LbugError)
 }
@@ -1755,7 +1779,7 @@ lbug_state lbug_timestamp_sec_from_tm(struct tm tm, lbug_timestamp_sec_t* out_re
 #else
     int64_t time = timegm(&tm);
 #endif
-    if (time == -1) {
+    if (time == -1 && !is_valid_epoch_minus_one(tm)) {
         return LbugError;
     }
     out_result->value = time;
@@ -1770,10 +1794,15 @@ lbug_state lbug_timestamp_tz_from_tm(struct tm tm, lbug_timestamp_tz_t* out_resu
 #else
     int64_t time = timegm(&tm);
 #endif
-    if (time == -1) {
+    if (time == -1 && !is_valid_epoch_minus_one(tm)) {
         return LbugError;
     }
-    out_result->value = time * 1000000;
+    constexpr int64_t MAX_SEC_US = INT64_MAX / 1000000LL;
+    constexpr int64_t MIN_SEC_US = INT64_MIN / 1000000LL;
+    if (time > MAX_SEC_US || time < MIN_SEC_US) {
+        return LbugError;
+    }
+    out_result->value = time * 1000000LL;
     return LbugSuccess;
     LBUG_C_API_GUARD_END(LbugError)
 }
@@ -1785,17 +1814,22 @@ lbug_state lbug_timestamp_from_tm(struct tm tm, lbug_timestamp_t* out_result) {
 #else
     int64_t time = timegm(&tm);
 #endif
-    if (time == -1) {
+    if (time == -1 && !is_valid_epoch_minus_one(tm)) {
         return LbugError;
     }
-    out_result->value = time * 1000000;
+    constexpr int64_t MAX_SEC_US = INT64_MAX / 1000000LL;
+    constexpr int64_t MIN_SEC_US = INT64_MIN / 1000000LL;
+    if (time > MAX_SEC_US || time < MIN_SEC_US) {
+        return LbugError;
+    }
+    out_result->value = time * 1000000LL;
     return LbugSuccess;
     LBUG_C_API_GUARD_END(LbugError)
 }
 
 lbug_state lbug_date_to_tm(lbug_date_t date, struct tm* out_result) {
     LBUG_C_API_GUARD_BEGIN
-    time_t time = date.days * 86400;
+    time_t time = static_cast<time_t>(date.days) * 86400;
 #ifdef _WIN32
     if (convertTimeToTm(time, out_result) != 0) {
         return LbugError;
@@ -1819,10 +1853,14 @@ lbug_state lbug_date_from_tm(struct tm tm, lbug_date_t* out_result) {
 #else
     int64_t time = timegm(&tm);
 #endif
-    if (time == -1) {
+    if (time == -1 && !is_valid_epoch_minus_one(tm)) {
         return LbugError;
     }
-    out_result->days = time / 86400;
+    int64_t days = floor_div(time, 86400LL);
+    if (days > INT32_MAX || days < INT32_MIN) {
+        return LbugError;
+    }
+    out_result->days = static_cast<int32_t>(days);
     return LbugSuccess;
     LBUG_C_API_GUARD_END(LbugError)
 }

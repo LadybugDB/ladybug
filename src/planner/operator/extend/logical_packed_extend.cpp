@@ -26,6 +26,7 @@ std::unique_ptr<LogicalOperator> LogicalPackedExtend::copy() {
         extendFromSource_, getProperties(), children[0]->copy(), cardinality);
     extend->setPropertyPredicates(copyVector(getPropertyPredicates()));
     extend->setScanNbrID(shouldScanNbrID());
+    extend->setRequireBoundFlatten(requireBoundFlattenFlag());
     return extend;
 }
 

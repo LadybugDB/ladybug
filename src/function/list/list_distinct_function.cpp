@@ -26,7 +26,12 @@ struct ListDistinct {
 };
 
 static std::unique_ptr<FunctionBindData> bindFunc(const ScalarBindFuncInput& input) {
-    return FunctionBindData::getSimpleBindData(input.arguments, input.arguments[0]->getDataType());
+    // The result's length can differ from an ARRAY argument's fixed size, so it is a LIST.
+    const auto& argType = input.arguments[0]->getDataType();
+    auto resultType = argType.getLogicalTypeID() == LogicalTypeID::ARRAY ?
+                          LogicalType::LIST(ArrayType::getChildType(argType).copy()) :
+                          argType.copy();
+    return FunctionBindData::getSimpleBindData(input.arguments, resultType);
 }
 
 function_set ListDistinctFunction::getFunctionSet() {

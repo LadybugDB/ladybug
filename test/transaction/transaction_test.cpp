@@ -1,14 +1,23 @@
+#include <array>
 #include <fstream>
+#include <tuple>
 
 #include "api_test/api_test.h"
 #include "api_test/private_api_test.h"
+#include "common/checksum.h"
+#include "common/exception/connection.h"
 #include "common/exception/runtime.h"
+#include "common/exception/transaction_manager.h"
+#include "common/serializer/buffer_writer.h"
+#include "common/serializer/serializer.h"
 #include "graph_test/private_graph_test.h"
 #include "storage/buffer_manager/buffer_manager.h"
 #include "storage/buffer_manager/memory_manager.h"
 #include "storage/storage_utils.h"
 #include "storage/wal/wal.h"
+#include "storage/wal/wal_record.h"
 #include "transaction/transaction.h"
+#include "transaction/transaction_manager.h"
 #include <format>
 
 using namespace lbug::common;
@@ -46,6 +55,53 @@ TEST_F(PrivateApiTest, TransactionModes) {
     ASSERT_EQ(TransactionMode::AUTO, getTransactionMode(*conn));
 }
 
+TEST_F(PrivateApiTest, RefusedBeginKeepsAutoMode) {
+    ASSERT_TRUE(conn->query("CALL enable_multi_writes=false;")->isSuccess());
+    auto conn2 = std::make_unique<lbug::main::Connection>(database.get());
+    ASSERT_TRUE(conn->query("BEGIN TRANSACTION;")->isSuccess());
+    ASSERT_FALSE(conn2->query("BEGIN TRANSACTION;")->isSuccess());
+    ASSERT_EQ(TransactionMode::AUTO, getTransactionMode(*conn2));
+    EXPECT_THROW(TransactionContext::Get(*getClientContext(*conn2))->beginRecoveryTransaction(),
+        TransactionManagerException);
+    ASSERT_EQ(TransactionMode::AUTO, getTransactionMode(*conn2));
+    ASSERT_TRUE(conn2->query("RETURN 1;")->isSuccess());
+    ASSERT_TRUE(conn->query("COMMIT;")->isSuccess());
+}
+
+TEST_F(PrivateApiTest, RefusedPreparedAndMultiStatementBeginKeepAutoMode) {
+    ASSERT_TRUE(conn->query("CALL enable_multi_writes=false;")->isSuccess());
+    auto conn2 = std::make_unique<lbug::main::Connection>(database.get());
+    ASSERT_TRUE(conn->query("BEGIN TRANSACTION;")->isSuccess());
+    auto prepared = conn2->prepare("BEGIN TRANSACTION;");
+    ASSERT_TRUE(prepared->isSuccess()) << prepared->getErrorMessage();
+    ASSERT_FALSE(conn2->execute(prepared.get())->isSuccess());
+    ASSERT_EQ(TransactionMode::AUTO, getTransactionMode(*conn2));
+    ASSERT_FALSE(conn2->query("BEGIN TRANSACTION; RETURN 1;")->isSuccess());
+    ASSERT_EQ(TransactionMode::AUTO, getTransactionMode(*conn2));
+    ASSERT_TRUE(conn2->query("RETURN 1;")->isSuccess());
+    ASSERT_TRUE(conn->query("COMMIT;")->isSuccess());
+}
+
+TEST_F(PrivateApiTest, BeginOnPoisonedWALKeepsAutoMode) {
+    lbug::storage::WAL::Get(*getClientContext(*conn))->poison("test");
+    auto result = conn->query("BEGIN TRANSACTION;");
+    ASSERT_FALSE(result->isSuccess());
+    EXPECT_NE(result->getErrorMessage().find("panic state"), std::string::npos)
+        << result->getErrorMessage();
+    ASSERT_EQ(TransactionMode::AUTO, getTransactionMode(*conn));
+    ASSERT_TRUE(conn->query("RETURN 1;")->isSuccess());
+}
+
+TEST_F(PrivateApiTest, ReadOnlyBeginBesideWriterSwitchesToManual) {
+    auto conn2 = std::make_unique<lbug::main::Connection>(database.get());
+    ASSERT_TRUE(conn->query("BEGIN TRANSACTION;")->isSuccess());
+    ASSERT_TRUE(conn2->query("BEGIN TRANSACTION READ ONLY;")->isSuccess());
+    ASSERT_EQ(TransactionMode::MANUAL, getTransactionMode(*conn2));
+    ASSERT_TRUE(conn2->query("COMMIT;")->isSuccess());
+    ASSERT_EQ(TransactionMode::AUTO, getTransactionMode(*conn2));
+    ASSERT_TRUE(conn->query("COMMIT;")->isSuccess());
+}
+
 TEST_F(PrivateApiTest, MultipleCallsFromSameTransaction) {
     conn->query("BEGIN TRANSACTION READ ONLY;");
     auto activeTransactionID = getActiveTransactionID(*conn);
@@ -74,7 +130,7 @@ TEST_F(PrivateApiTest, CommitRollbackRemoveActiveTransaction) {
 
 TEST_F(PrivateApiTest, DirectTransactionCommitRequiresCommitTimestamp) {
     Transaction transaction(TransactionType::WRITE);
-    EXPECT_THROW(transaction.commit(nullptr), lbug::common::RuntimeException);
+    EXPECT_THROW(transaction.publishCommit(), lbug::common::RuntimeException);
 }
 
 TEST_F(PrivateApiTest, CloseConnectionWithActiveTransaction) {
@@ -144,6 +200,237 @@ TEST_F(EmptyDBTransactionTest, DatabaseFilesAfterCheckpoint) {
     conn->query("CREATE NODE TABLE test(id INT64 PRIMARY KEY, name STRING);");
 }
 
+class CheckpointSchemaTest
+    : public EmptyDBTransactionTest,
+      public ::testing::WithParamInterface<std::tuple<unsigned, bool, bool, bool>> {};
+
+TEST_P(CheckpointSchemaTest, ReaderKeepsDroppedColumns) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    const auto [scenario, persistent, copyCheckpoint, namedGraph] = GetParam();
+    ASSERT_TRUE(conn->query("CALL auto_checkpoint=false")->isSuccess());
+    if (namedGraph) {
+        ASSERT_TRUE(conn->query("CREATE GRAPH g")->isSuccess());
+        ASSERT_TRUE(conn->query("USE GRAPH g")->isSuccess());
+    }
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE T(id INT64 PRIMARY KEY, c0 INT64 DEFAULT 5, "
+                            "c1 INT64 DEFAULT 6, c2 INT64 DEFAULT 7)")
+                    ->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE REL TABLE R(FROM T TO T)")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:T {id: 1})")->isSuccess());
+    if (persistent) {
+        ASSERT_TRUE(conn->query("CHECKPOINT")->isSuccess());
+    }
+    auto reader = std::make_unique<lbug::main::Connection>(database.get());
+    if (namedGraph) {
+        ASSERT_TRUE(reader->query("USE GRAPH g")->isSuccess());
+    }
+    ASSERT_TRUE(reader->query("BEGIN TRANSACTION READ ONLY")->isSuccess());
+    const std::array<std::string, 4> ddl = {"ALTER TABLE T DROP c2", "ALTER TABLE T DROP c1",
+        "ALTER TABLE T DROP c1", "ALTER TABLE T DROP c0; ALTER TABLE T ADD c0 INT64 DEFAULT -4"};
+    ASSERT_TRUE(conn->query(ddl[scenario])->isSuccess());
+    auto newerReader = std::make_unique<lbug::main::Connection>(database.get());
+    if (namedGraph) {
+        ASSERT_TRUE(newerReader->query("USE GRAPH g")->isSuccess());
+    }
+    ASSERT_TRUE(newerReader->query("BEGIN TRANSACTION READ ONLY")->isSuccess());
+    const auto oldQuery =
+        scenario == 2 ? "MATCH (t:T) RETURN t.c1" : "MATCH (t:T) RETURN t.c0, t.c1, t.c2";
+    const std::array<std::string, 4> newQueries = {"MATCH (t:T) RETURN t.c0, t.c1 ORDER BY t.id",
+        "MATCH (t:T) RETURN t.c0, t.c2 ORDER BY t.id",
+        "MATCH (t:T) RETURN t.c0, t.c2 ORDER BY t.id",
+        "MATCH (t:T) RETURN t.c0, t.c1, t.c2 ORDER BY t.id"};
+    if (copyCheckpoint) {
+        // COPY only forces a checkpoint when automatic checkpointing is enabled.
+        ASSERT_TRUE(conn->query("CALL auto_checkpoint=true")->isSuccess());
+    }
+    for (auto round = 0; round < 2; ++round) {
+        if (round == 1) {
+            ASSERT_TRUE(conn->query("CREATE (:T {id: 2})")->isSuccess());
+        }
+        auto checkpoint = conn->query(
+            copyCheckpoint ? "COPY R FROM (MATCH (t:T) RETURN t.id AS FROM, t.id AS TO)" :
+                             "CHECKPOINT");
+        ASSERT_TRUE(checkpoint->isSuccess()) << checkpoint->getErrorMessage();
+        auto oldResult = reader->query(oldQuery);
+        ASSERT_TRUE(oldResult->isSuccess()) << oldResult->getErrorMessage();
+        ASSERT_EQ(oldResult->getNumTuples(), 1);
+        auto oldRow = oldResult->getNext();
+        if (scenario == 2) {
+            EXPECT_EQ(oldRow->getValue(0)->getValue<int64_t>(), 6);
+        } else {
+            for (auto col = 0u; col < 3; ++col) {
+                EXPECT_EQ(oldRow->getValue(col)->getValue<int64_t>(), 5 + col);
+            }
+        }
+        for (auto* connection : {conn.get(), newerReader.get()}) {
+            auto result = connection->query(newQueries[scenario]);
+            ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+            auto row = result->getNext();
+            EXPECT_EQ(row->getValue(0)->getValue<int64_t>(), scenario == 3 ? -4 : 5);
+            EXPECT_EQ(row->getValue(1)->getValue<int64_t>(),
+                scenario == 1 || scenario == 2 ? 7 : 6);
+            if (scenario == 3) {
+                EXPECT_EQ(row->getValue(2)->getValue<int64_t>(), 7);
+            }
+        }
+    }
+    ASSERT_TRUE(reader->query("COMMIT")->isSuccess());
+    ASSERT_TRUE(newerReader->query("COMMIT")->isSuccess());
+    reader.reset();
+    newerReader.reset();
+    ASSERT_TRUE(conn->query("CHECKPOINT")->isSuccess());
+    createDBAndConn();
+    if (namedGraph) {
+        ASSERT_TRUE(conn->query("USE GRAPH g")->isSuccess());
+    }
+    auto result = conn->query(newQueries[scenario]);
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(result->getNumTuples(), 2);
+    while (result->hasNext()) {
+        auto row = result->getNext();
+        EXPECT_EQ(row->getValue(0)->getValue<int64_t>(), scenario == 3 ? -4 : 5);
+        EXPECT_EQ(row->getValue(1)->getValue<int64_t>(), scenario == 1 || scenario == 2 ? 7 : 6);
+        if (scenario == 3) {
+            EXPECT_EQ(row->getValue(2)->getValue<int64_t>(), 7);
+        }
+    }
+}
+
+INSTANTIATE_TEST_SUITE_P(DroppedColumns, CheckpointSchemaTest,
+    ::testing::Combine(::testing::Values(0u, 1u, 2u, 3u), ::testing::Bool(), ::testing::Bool(),
+        ::testing::Bool()));
+
+TEST_F(EmptyDBTransactionTest, ReopenDroppedColumnsFromPinnedCheckpoint) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    const auto lastID = StorageConfig::NODE_GROUP_SIZE + 2;
+    for (const bool empty : {false, true}) {
+        const auto table = empty ? "EmptyT" : "PopulatedT";
+        SCOPED_TRACE(table);
+        ASSERT_TRUE(conn->query("CALL auto_checkpoint=false")->isSuccess());
+        ASSERT_TRUE(conn->query("CALL force_checkpoint_on_close=false")->isSuccess());
+        ASSERT_TRUE(conn->query(std::format("CREATE NODE TABLE {}(id INT64 PRIMARY KEY, "
+                                            "dropped STRING, dropped_list INT64[] DEFAULT [1, 2], "
+                                            "dropped_struct STRUCT(x STRING) DEFAULT {{x: 'old'}}, "
+                                            "kept INT64 DEFAULT 7)",
+                                    table))
+                        ->isSuccess());
+        if (!empty) {
+            ASSERT_TRUE(conn->query(std::format("CREATE (:{} {{id: 1, dropped: 'old'}})", table))
+                            ->isSuccess());
+        }
+        auto reader = std::make_unique<lbug::main::Connection>(database.get());
+        ASSERT_TRUE(reader->query("BEGIN TRANSACTION READ ONLY")->isSuccess());
+        ASSERT_TRUE(conn->query("BEGIN TRANSACTION")->isSuccess());
+        ASSERT_TRUE(
+            conn->query(
+                    std::format("ALTER TABLE {} ADD rolled_back STRING DEFAULT 'unused'", table))
+                ->isSuccess());
+        ASSERT_TRUE(conn->query("ROLLBACK")->isSuccess());
+        ASSERT_TRUE(conn->query(std::format("ALTER TABLE {} DROP dropped", table))->isSuccess());
+        ASSERT_TRUE(
+            conn->query(std::format("ALTER TABLE {} DROP dropped_list", table))->isSuccess());
+        ASSERT_TRUE(
+            conn->query(std::format("ALTER TABLE {} DROP dropped_struct", table))->isSuccess());
+        ASSERT_TRUE(conn->query("CHECKPOINT")->isSuccess());
+        auto result = reader->query(std::format("MATCH (t:{}) RETURN t.dropped, t.kept", table));
+        ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+        ASSERT_EQ(result->getNumTuples(), empty ? 0 : 1);
+        if (!empty) {
+            auto row = result->getNext();
+            EXPECT_EQ(row->getValue(0)->getValue<std::string>(), "old");
+            EXPECT_EQ(row->getValue(1)->getValue<int64_t>(), 7);
+        }
+        result.reset();
+        ASSERT_TRUE(reader->query("COMMIT")->isSuccess());
+        reader.reset();
+        // Reopen the pinned checkpoint image without a final vacuum on close.
+        createDBAndConn();
+        ASSERT_TRUE(conn->query("CALL auto_checkpoint=false")->isSuccess());
+        reader = std::make_unique<lbug::main::Connection>(database.get());
+        ASSERT_TRUE(reader->query("BEGIN TRANSACTION READ ONLY")->isSuccess());
+        ASSERT_TRUE(conn->query(std::format("ALTER TABLE {} ADD extra STRING DEFAULT 'new'", table))
+                        ->isSuccess());
+        ASSERT_TRUE(conn->query(std::format("UNWIND range(2, {}) AS id CREATE (:{} {{id: id}})",
+                                    lastID, table))
+                        ->isSuccess());
+        ASSERT_TRUE(conn->query("CHECKPOINT")->isSuccess());
+        ASSERT_TRUE(reader->query("COMMIT")->isSuccess());
+        reader.reset();
+        ASSERT_TRUE(conn->query("CHECKPOINT")->isSuccess());
+        createDBAndConn();
+        result = conn->query(std::format("MATCH (t:{}) WHERE t.extra = 'new' AND t.kept = 7 "
+                                         "RETURN count(*)",
+            table));
+        ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+        EXPECT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), lastID - (empty ? 1 : 0));
+    }
+}
+
+TEST_F(EmptyDBTransactionTest, ReopenRetypedColumnFromPinnedCheckpoint) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CALL auto_checkpoint=false")->isSuccess());
+    ASSERT_TRUE(conn->query("CALL force_checkpoint_on_close=false")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE T(id INT64 PRIMARY KEY, c INT64)")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:T {id: 1, c: 41})")->isSuccess());
+    const auto query = "MATCH (t:T) RETURN t.c ORDER BY t.id";
+    {
+        lbug::main::Connection reader{database.get()};
+        ASSERT_TRUE(reader.query("BEGIN TRANSACTION READ ONLY")->isSuccess());
+        ASSERT_TRUE(conn->query("ALTER TABLE T DROP c")->isSuccess());
+        ASSERT_TRUE(conn->query("ALTER TABLE T ADD c STRING DEFAULT 'new'")->isSuccess());
+        ASSERT_TRUE(conn->query("CREATE (:T {id: 2, c: 'written'})")->isSuccess());
+        ASSERT_TRUE(conn->query("CHECKPOINT")->isSuccess());
+        auto old = reader.query(query);
+        ASSERT_TRUE(old->isSuccess()) << old->getErrorMessage();
+        ASSERT_EQ(old->getNumTuples(), 1u);
+        EXPECT_EQ(old->getNext()->getValue(0)->getValue<int64_t>(), 41);
+        ASSERT_TRUE(reader.query("COMMIT")->isSuccess());
+    }
+    createDBAndConn();
+    auto result = conn->query(query);
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(result->getColumnDataTypes()[0].getLogicalTypeID(), LogicalTypeID::STRING);
+    ASSERT_EQ(result->getNumTuples(), 2u);
+    EXPECT_EQ(result->getNext()->getValue(0)->getValue<std::string>(), "new");
+    EXPECT_EQ(result->getNext()->getValue(0)->getValue<std::string>(), "written");
+}
+
+TEST_F(EmptyDBTransactionTest, CheckpointOnReadOnlyDatabaseWritesNothing) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE ro(id INT64 PRIMARY KEY);")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:ro {id: 1});")->isSuccess());
+    systemConfig->readOnly = true;
+    createDBAndConn();
+    const auto walPath = lbug::storage::StorageUtils::getWALFilePath(databasePath);
+    const auto shadowPath = lbug::storage::StorageUtils::getShadowFilePath(databasePath);
+    const auto walExisted = std::filesystem::exists(walPath);
+    const auto walSize = walExisted ? std::filesystem::file_size(walPath) : 0;
+    auto result = conn->query("CHECKPOINT;");
+    ASSERT_FALSE(result->isSuccess());
+    ASSERT_EQ(result->getErrorMessage(),
+        "Connection exception: Cannot execute write operations in a read-only database!");
+    // A caller that skips ClientContext::validateTransaction is refused as well.
+    auto* clientContext = getClientContext(*conn);
+    EXPECT_THROW(TransactionManager::Get(*clientContext)->checkpoint(*clientContext),
+        ConnectionException);
+    ASSERT_FALSE(std::filesystem::exists(shadowPath));
+    ASSERT_EQ(std::filesystem::exists(walPath), walExisted);
+    if (walExisted) {
+        ASSERT_EQ(std::filesystem::file_size(walPath), walSize);
+    }
+    ASSERT_EQ(
+        conn->query("MATCH (n:ro) RETURN count(*);")->getNext()->getValue(0)->getValue<int64_t>(),
+        1);
+}
+
 #ifndef __SINGLE_THREADED__
 static void insertNodes(uint64_t startID, uint64_t num, lbug::main::Database& database) {
     auto conn = std::make_unique<lbug::main::Connection>(&database);
@@ -159,7 +446,7 @@ TEST_F(EmptyDBTransactionTest, ConcurrentNodeInsertions) {
     if (systemConfig->checkpointThreshold == 0) {
         GTEST_SKIP();
     }
-    conn->query("CALL debug_enable_multi_writes=true;");
+    conn->query("CALL enable_multi_writes=true;");
     // Disable auto-checkpoint so checkpoint overhead doesn't interfere with
     // concurrent write throughput measurements. Explicit CHECKPOINT at end.
     conn->query("CALL auto_checkpoint=false;");
@@ -192,7 +479,7 @@ TEST_F(EmptyDBTransactionTest, ConcurrentNodeInsertionsRecoverFromWAL) {
     if (inMemMode || systemConfig->checkpointThreshold == 0) {
         GTEST_SKIP();
     }
-    conn->query("CALL debug_enable_multi_writes=true;");
+    conn->query("CALL enable_multi_writes=true;");
     conn->query("CALL auto_checkpoint=false;");
     conn->query("CALL force_checkpoint_on_close=false;");
     auto numThreads = 8;
@@ -245,7 +532,7 @@ TEST_F(EmptyDBTransactionTest, ConcurrentNodeInsertionsMixedTypes) {
     if (systemConfig->checkpointThreshold == 0) {
         GTEST_SKIP();
     }
-    conn->query("CALL debug_enable_multi_writes=true;");
+    conn->query("CALL enable_multi_writes=true;");
     auto numThreads = 4;
     auto numInsertsPerThread = 1000;
     conn->query("CREATE NODE TABLE mixed_test(id INT64 PRIMARY KEY, score DOUBLE, active BOOLEAN, "
@@ -291,7 +578,7 @@ TEST_F(EmptyDBTransactionTest, ConcurrentRelationshipInsertions) {
     if (systemConfig->checkpointThreshold == 0) {
         GTEST_SKIP();
     }
-    conn->query("CALL debug_enable_multi_writes=true;");
+    conn->query("CALL enable_multi_writes=true;");
     // Disable auto-checkpoint so checkpoint overhead doesn't interfere with
     // concurrent write throughput measurements. Explicit CHECKPOINT at end.
     conn->query("CALL auto_checkpoint=false;");
@@ -357,7 +644,7 @@ TEST_F(EmptyDBTransactionTest, ConcurrentComplexRelationshipInsertions) {
     if (systemConfig->checkpointThreshold == 0) {
         GTEST_SKIP();
     }
-    conn->query("CALL debug_enable_multi_writes=true;");
+    conn->query("CALL enable_multi_writes=true;");
     auto numThreads = 3;
     auto numInsertsPerThread = 1500;
     auto numTotalInsertions = numThreads * numInsertsPerThread;
@@ -417,7 +704,7 @@ TEST_F(EmptyDBTransactionTest, ConcurrentNodeUpdates) {
     if (systemConfig->checkpointThreshold == 0) {
         GTEST_SKIP();
     }
-    conn->query("CALL debug_enable_multi_writes=true;");
+    conn->query("CALL enable_multi_writes=true;");
     // Disable auto-checkpoint so checkpoint overhead doesn't interfere with
     // concurrent write throughput measurements. Explicit CHECKPOINT at end.
     conn->query("CALL auto_checkpoint=false;");
@@ -481,7 +768,7 @@ TEST_F(EmptyDBTransactionTest, ConcurrentMixedTypeUpdates) {
     if (systemConfig->checkpointThreshold == 0) {
         GTEST_SKIP();
     }
-    conn->query("CALL debug_enable_multi_writes=true;");
+    conn->query("CALL enable_multi_writes=true;");
     auto numThreads = 4;
     auto numUpdatesPerThread = 2500;
     auto numTotalNodes = numThreads * numUpdatesPerThread;
@@ -558,7 +845,7 @@ TEST_F(EmptyDBTransactionTest, ConcurrentRelationshipUpdates) {
     if (systemConfig->checkpointThreshold == 0) {
         GTEST_SKIP();
     }
-    conn->query("CALL debug_enable_multi_writes=true;");
+    conn->query("CALL enable_multi_writes=true;");
     // Disable auto-checkpoint so checkpoint overhead doesn't interfere with
     // concurrent write throughput measurements. Explicit CHECKPOINT at end.
     conn->query("CALL auto_checkpoint=false;");
@@ -639,7 +926,7 @@ TEST_F(EmptyDBTransactionTest, ConcurrentNodeUpdatesWithMixedTransactions) {
     if (systemConfig->checkpointThreshold == 0) {
         GTEST_SKIP();
     }
-    conn->query("CALL debug_enable_multi_writes=true;");
+    conn->query("CALL enable_multi_writes=true;");
     auto numThreads = 4;
     auto numUpdatesPerThread = 100;
     auto numTotalNodes = numThreads * numUpdatesPerThread;
@@ -711,7 +998,7 @@ TEST_F(EmptyDBTransactionTest, ConcurrentRelationshipUpdatesWithMixedTransaction
     if (systemConfig->checkpointThreshold == 0) {
         GTEST_SKIP();
     }
-    conn->query("CALL debug_enable_multi_writes=true;");
+    conn->query("CALL enable_multi_writes=true;");
     auto numThreads = 4;
     auto numUpdatesPerThread = 1000;
     auto numTotalUpdates = numThreads * numUpdatesPerThread;
@@ -779,6 +1066,10 @@ public:
         auto* transaction = ctx ? Transaction::Get(*ctx) : nullptr;
         if (transaction && transaction->getCommitTS() != INVALID_TRANSACTION &&
             failNextCommit.exchange(false)) {
+            if (failAbortToo) {
+                // Logging the ABORT record then fails as well.
+                lbug::storage::WAL::Get(*ctx)->poison("injected failure");
+            }
             return false;
         }
         return lbug::storage::BufferManager::reserve(sizeToReserve);
@@ -786,7 +1077,24 @@ public:
 
     lbug::main::ClientContext* ctx = nullptr;
     std::atomic<bool> failNextCommit = false;
+    bool failAbortToo = false;
 };
+
+// The bytes of one framed WAL record, with its checksum when the WAL has them.
+static std::vector<char> walRecordBytes(const lbug::storage::WALRecord& record,
+    bool enableChecksums) {
+    auto writer = std::make_shared<BufferWriter>();
+    Serializer serializer{writer};
+    lbug::storage::WALRecord::serializeWithLength(serializer, record);
+    auto data = writer->getData();
+    std::vector<char> bytes(data.data.get(), data.data.get() + data.size);
+    if (enableChecksums) {
+        const auto recordChecksum = checksum(data.data.get(), data.size);
+        const auto* checksumBytes = reinterpret_cast<const char*>(&recordChecksum);
+        bytes.insert(bytes.end(), checksumBytes, checksumBytes + sizeof(recordChecksum));
+    }
+    return bytes;
+}
 
 class FailedCommitTest : public EmptyDBTest {
 public:
@@ -798,9 +1106,289 @@ public:
         EmptyDBTest::TearDown();
     }
 
+    void constructFailingDB() {
+        auto constructBM = [&](const lbug::main::Database& db) {
+            auto manager = std::make_unique<FailOnceInCommitBufferManager>(databasePath,
+                databasePath + ".tmp", systemConfig->bufferPoolSize, systemConfig->maxDBSize,
+                getFileSystem(db), systemConfig->readOnly);
+            bm = manager.get();
+            return manager;
+        };
+        database = BaseGraphTest::constructDB(databasePath, *systemConfig, constructBM);
+        conn = std::make_unique<lbug::main::Connection>(database.get());
+        bm->ctx = conn->getClientContext();
+        query("CALL force_checkpoint_on_close=false");
+        query("CALL auto_checkpoint=false");
+    }
+
+    void query(const std::string& statement) {
+        auto result = conn->query(statement);
+        ASSERT_TRUE(result->isSuccess()) << statement << ": " << result->getErrorMessage();
+    }
+
+    void commitFailingOnce() {
+        getMemoryManager(*database)->releaseReusableBuffers();
+        bm->failNextCommit = true;
+        auto commit = conn->query("COMMIT");
+        ASSERT_FALSE(commit->isSuccess());
+        ASSERT_FALSE(hasActiveTransaction(*conn));
+    }
+
+    // Tears down without a closing checkpoint, as when the process dies, and reopens with the
+    // default buffer manager.
+    void crashAndReopen() {
+        if (bm) {
+            bm->ctx = nullptr;
+            bm = nullptr;
+        }
+        conn.reset();
+        database.reset();
+        createDBAndConn();
+    }
+
+    void appendAbort(const std::string& walPath, uint64_t abortedStart, uint64_t bytesToDrop) {
+        const auto bytes =
+            walRecordBytes(lbug::storage::AbortRecord{abortedStart}, systemConfig->enableChecksums);
+        std::ofstream wal{walPath, std::ios::binary | std::ios::app};
+        wal.write(bytes.data(), static_cast<std::streamsize>(bytes.size() - bytesToDrop));
+    }
+
+    void crashAndReopenWithAbort(const std::string& walPath, uint64_t abortedStart,
+        uint64_t bytesToDrop) {
+        conn.reset();
+        database.reset();
+        appendAbort(walPath, abortedStart, bytesToDrop);
+        createDBAndConn();
+    }
+
+    int64_t count(const std::string& query) {
+        auto result = conn->query(query);
+        EXPECT_TRUE(result->isSuccess()) << result->getErrorMessage();
+        return result->isSuccess() ? result->getNext()->getValue(0)->getValue<int64_t>() : -1;
+    }
+
+    void expectFailedCommitNotAppliedAfterCrash() {
+        constructFailingDB();
+        query("CREATE NODE TABLE A(id INT64 PRIMARY KEY, b INT64)");
+        query("CREATE REL TABLE T(FROM A TO A)");
+        query("CREATE (:A {id: 0, b: 0}), (:A {id: 1, b: 0})");
+        const auto insert = "MATCH (a:A {id: 0}), (c:A {id: 1}) CREATE (a)-[:T]->(c)";
+        query(insert);
+        query("CHECKPOINT");
+        query("BEGIN TRANSACTION");
+        query("MATCH (a:A {id: 0}) SET a.b = 1");
+        query(insert);
+        commitFailingOnce();
+        crashAndReopen();
+        EXPECT_EQ(count("MATCH (:A)-[t:T]->(:A) RETURN count(t)"), 1);
+        EXPECT_EQ(count("MATCH (a:A) WHERE a.b = 1 RETURN count(a)"), 0);
+    }
+
     FailOnceInCommitBufferManager* bm = nullptr;
 };
+
+class FailedCommitWithoutChecksumsTest : public FailedCommitTest {
+public:
+    void SetUp() override {
+        FailedCommitTest::SetUp();
+        systemConfig->enableChecksums = false;
+    }
+};
+
 } // namespace
+
+// The COMMIT record is in the WAL when applying the transaction fails, so without its ABORT
+// record recovery applied what the connection had rolled back.
+TEST_F(FailedCommitTest, FailedCommitIsNotAppliedAfterCrash) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+    expectFailedCommitNotAppliedAfterCrash();
+}
+
+// Without per-record checksums the transaction's records start at other offsets, which the ABORT
+// record must still name.
+TEST_F(FailedCommitWithoutChecksumsTest, FailedCommitIsNotAppliedAfterCrash) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+    expectFailedCommitNotAppliedAfterCrash();
+}
+
+// A client retrying the failed insert of a primary key left a database that no longer opened.
+TEST_F(FailedCommitTest, RetriedPrimaryKeyInsertReopensAfterCrash) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+    constructFailingDB();
+    query("CREATE NODE TABLE A(id INT64 PRIMARY KEY)");
+    query("CREATE (:A {id: 1})");
+    query("CHECKPOINT");
+    query("BEGIN TRANSACTION");
+    query("CREATE (:A {id: 2})");
+    commitFailingOnce();
+    EXPECT_EQ(count("MATCH (a:A) WHERE a.id = 2 RETURN count(a)"), 0);
+    query("CREATE (:A {id: 2})");
+    crashAndReopen();
+    EXPECT_EQ(count("MATCH (a:A) RETURN count(a)"), 2);
+    EXPECT_EQ(count("MATCH (a:A) WHERE a.id = 2 RETURN count(a)"), 1);
+}
+
+TEST_F(FailedCommitTest, FailedCommitOfTwoTablesLeavesNeither) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+    constructFailingDB();
+    query("CREATE NODE TABLE A(id INT64 PRIMARY KEY)");
+    query("CREATE NODE TABLE B(id INT64 PRIMARY KEY)");
+    query("CREATE REL TABLE T(FROM A TO B)");
+    query("CREATE (:A {id: 0}), (:B {id: 0})");
+    query("CHECKPOINT");
+    query("BEGIN TRANSACTION");
+    query("CREATE (:A {id: 1})");
+    query("MATCH (a:A {id: 0}), (b:B {id: 0}) CREATE (a)-[:T]->(b)");
+    commitFailingOnce();
+    EXPECT_EQ(count("MATCH (a:A) RETURN count(a)"), 1);
+    EXPECT_EQ(count("MATCH ()-[t:T]->() RETURN count(t)"), 0);
+    crashAndReopen();
+    EXPECT_EQ(count("MATCH (a:A) RETURN count(a)"), 1);
+    EXPECT_EQ(count("MATCH ()-[t:T]->() RETURN count(t)"), 0);
+}
+
+// An ABORT record skips exactly the transaction whose records start at the offset it names, not
+// the ones around it.
+TEST_F(FailedCommitTest, AbortRecordSkipsOnlyTheNamedTransaction) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+    createDBAndConn();
+    query("CALL force_checkpoint_on_close=false");
+    query("CALL auto_checkpoint=false");
+    query("CREATE NODE TABLE A(id INT64 PRIMARY KEY)");
+    query("CHECKPOINT");
+    query("CREATE (:A {id: 0})");
+    const auto walPath = lbug::storage::StorageUtils::getWALFilePath(databasePath);
+    const auto abortedStart = std::filesystem::file_size(walPath);
+    query("CREATE (:A {id: 1})");
+    query("CREATE (:A {id: 2})");
+    crashAndReopenWithAbort(walPath, abortedStart, 0 /* bytesToDrop */);
+    EXPECT_EQ(count("MATCH (a:A) WHERE a.id = 1 RETURN count(a)"), 0);
+    EXPECT_EQ(count("MATCH (a:A) RETURN count(a)"), 2);
+}
+
+// The other writer's commits before and after the failed one stay: the ABORT names only its block.
+TEST_F(FailedCommitTest, FailedCommitLeavesOtherWritersCommits) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+    constructFailingDB();
+    query("CREATE NODE TABLE A(id INT64 PRIMARY KEY)");
+    query("CHECKPOINT");
+    auto other = std::make_unique<lbug::main::Connection>(database.get());
+    ASSERT_TRUE(other->query("CREATE (:A {id: 1})")->isSuccess());
+    ASSERT_TRUE(other->query("BEGIN TRANSACTION")->isSuccess());
+    ASSERT_TRUE(other->query("CREATE (:A {id: 3})")->isSuccess());
+    query("BEGIN TRANSACTION");
+    query("CREATE (:A {id: 2})");
+    commitFailingOnce();
+    ASSERT_TRUE(other->query("COMMIT")->isSuccess());
+    other.reset();
+    crashAndReopen();
+    EXPECT_EQ(count("MATCH (a:A) RETURN count(a)"), 2);
+    EXPECT_EQ(count("MATCH (a:A) WHERE a.id = 2 RETURN count(a)"), 0);
+}
+
+// A crash while the ABORT record was being written leaves it torn: the transaction stands, as
+// after any crash during its COMMIT.
+TEST_F(FailedCommitTest, TornAbortRecordLeavesTheTransaction) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+    createDBAndConn();
+    query("CALL force_checkpoint_on_close=false");
+    query("CALL auto_checkpoint=false");
+    query("CREATE NODE TABLE A(id INT64 PRIMARY KEY)");
+    query("CHECKPOINT");
+    query("CREATE (:A {id: 0})");
+    const auto walPath = lbug::storage::StorageUtils::getWALFilePath(databasePath);
+    const auto abortedStart = std::filesystem::file_size(walPath);
+    query("CREATE (:A {id: 1})");
+    crashAndReopenWithAbort(walPath, abortedStart, 3 /* bytesToDrop */);
+    EXPECT_EQ(count("MATCH (a:A) RETURN count(a)"), 2);
+}
+
+// When even the ABORT record cannot be logged, the WAL refuses writes and the next open applies
+// the transaction, as the error says.
+TEST_F(FailedCommitTest, FailedAbortLeavesTheTransactionToRecovery) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+    constructFailingDB();
+    query("CREATE NODE TABLE A(id INT64 PRIMARY KEY)");
+    query("CHECKPOINT");
+    query("BEGIN TRANSACTION");
+    query("CREATE (:A {id: 1})");
+    getMemoryManager(*database)->releaseReusableBuffers();
+    bm->failAbortToo = true;
+    bm->failNextCommit = true;
+    auto commit = conn->query("COMMIT");
+    ASSERT_FALSE(commit->isSuccess());
+    EXPECT_NE(commit->getErrorMessage().find("logging its abort failed"), std::string::npos)
+        << commit->getErrorMessage();
+    auto write = conn->query("CREATE (:A {id: 2})");
+    ASSERT_FALSE(write->isSuccess());
+    EXPECT_NE(write->getErrorMessage().find("refuses further writes"), std::string::npos)
+        << write->getErrorMessage();
+    crashAndReopen();
+    EXPECT_EQ(count("MATCH (a:A) WHERE a.id = 1 RETURN count(a)"), 1);
+    EXPECT_EQ(count("MATCH (a:A) WHERE a.id = 2 RETURN count(a)"), 0);
+}
+
+// A crash after a checkpoint rotated the WAL leaves the ABORT in the frozen WAL, whose recovery
+// finishes the interrupted checkpoint; the transaction stays skipped across both opens.
+TEST_F(FailedCommitTest, AbortRecordSkipsTheTransactionInAFrozenWAL) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+    createDBAndConn();
+    query("CALL force_checkpoint_on_close=false");
+    query("CALL auto_checkpoint=false");
+    query("CREATE NODE TABLE A(id INT64 PRIMARY KEY)");
+    query("CHECKPOINT");
+    query("CREATE (:A {id: 0})");
+    const auto walPath = lbug::storage::StorageUtils::getWALFilePath(databasePath);
+    const auto abortedStart = std::filesystem::file_size(walPath);
+    query("CREATE (:A {id: 1})");
+    conn.reset();
+    database.reset();
+    appendAbort(walPath, abortedStart, 0 /* bytesToDrop */);
+    std::filesystem::rename(walPath,
+        lbug::storage::StorageUtils::getCheckpointWALFilePath(databasePath));
+    createDBAndConn();
+    EXPECT_EQ(count("MATCH (a:A) RETURN count(a)"), 1);
+    conn.reset();
+    database.reset();
+    createDBAndConn();
+    EXPECT_EQ(count("MATCH (a:A) RETURN count(a)"), 1);
+    EXPECT_EQ(count("MATCH (a:A) WHERE a.id = 0 RETURN count(a)"), 1);
+}
+
+TEST_F(FailedCommitTest, AbortRecordNamingNoTransactionIsIgnored) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+    createDBAndConn();
+    query("CALL force_checkpoint_on_close=false");
+    query("CALL auto_checkpoint=false");
+    query("CREATE NODE TABLE A(id INT64 PRIMARY KEY)");
+    query("CHECKPOINT");
+    query("CREATE (:A {id: 0})");
+    const auto walPath = lbug::storage::StorageUtils::getWALFilePath(databasePath);
+    const auto middleOfARecord = std::filesystem::file_size(walPath) - 1;
+    query("CREATE (:A {id: 1})");
+    crashAndReopenWithAbort(walPath, middleOfARecord, 0 /* bytesToDrop */);
+    EXPECT_EQ(count("MATCH (a:A) RETURN count(a)"), 2);
+}
 
 TEST_F(FailedCommitTest, KeepsCheckpointedRels) {
     auto constructBM = [&](const lbug::main::Database& db) {

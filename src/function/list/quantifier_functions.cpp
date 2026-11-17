@@ -19,9 +19,6 @@ void execQuantifierFunc(quantifier_handler handler,
     auto& inputVector = *input[0];
     DASSERT(input.size() == 2);
 
-    auto savedParamStates =
-        sliceInfo->overrideAndSaveParamStates(listLambdaBindData->lambdaParamEvaluators);
-
     listLambdaBindData->rootEvaluator->evaluate();
 
     auto& filterVector = *input[1];
@@ -66,9 +63,6 @@ void execQuantifierFunc(quantifier_handler handler,
             result.setValue((*resultSelVector)[i], handler(numSelectedValues, srcListEntry.size));
         }
     }
-
-    sliceInfo->restoreParamStates(listLambdaBindData->lambdaParamEvaluators,
-        std::move(savedParamStates));
 }
 
 std::unique_ptr<FunctionBindData> bindQuantifierFunc(const ScalarBindFuncInput& input) {

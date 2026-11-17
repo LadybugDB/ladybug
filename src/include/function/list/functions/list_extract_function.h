@@ -1,9 +1,7 @@
 #pragma once
 #include "common/exception/runtime.h"
 #include "common/type_utils.h"
-#include "common/types/string_t.h"
 #include "common/vector/value_vector.h"
-#include "function/string/functions/array_extract_function.h"
 #include <format>
 
 namespace lbug {
@@ -37,14 +35,6 @@ public:
                 common::ListVector::getListValuesWithOffset(&listVector, listEntry, pos);
             resultVector.copyFromVectorData(reinterpret_cast<uint8_t*>(&result), listDataVector,
                 listValues);
-        }
-    }
-
-    static inline void operation(common::string_t& str, int64_t& idx, common::string_t& result) {
-        if (str.len < idx) {
-            result.set("", 0);
-        } else {
-            ArrayExtract::operation(str, idx, result);
         }
     }
 };

@@ -1,14 +1,19 @@
+#include <algorithm>
 #include <optional>
 
 #include "binder/binder.h"
+#include "binder/bound_standalone_call_function.h"
 #include "binder/ddl/bound_alter.h"
+#include "binder/ddl/bound_create_constraint.h"
 #include "binder/ddl/bound_create_index.h"
 #include "binder/ddl/bound_create_sequence.h"
 #include "binder/ddl/bound_create_table.h"
 #include "binder/ddl/bound_create_type.h"
 #include "binder/ddl/bound_drop.h"
+#include "binder/ddl/bound_drop_constraint.h"
 #include "binder/expression_visitor.h"
 #include "catalog/catalog.h"
+#include "catalog/catalog_entry/constraint_catalog_entry.h"
 #include "catalog/catalog_entry/index_catalog_entry.h"
 #include "catalog/catalog_entry/node_table_catalog_entry.h"
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
@@ -23,16 +28,21 @@
 #include "common/types/types.h"
 #include "function/cast/functions/cast_from_string_functions.h"
 #include "function/sequence/sequence_functions.h"
+#include "function/table/simple_table_function.h"
 #include "function/table/table_function.h"
 #include "main/client_context.h"
 #include "main/database_manager.h"
 #include "parser/ddl/alter.h"
+#include "parser/ddl/create_constraint.h"
 #include "parser/ddl/create_index.h"
 #include "parser/ddl/create_sequence.h"
 #include "parser/ddl/create_table.h"
 #include "parser/ddl/create_table_info.h"
 #include "parser/ddl/create_type.h"
 #include "parser/ddl/drop.h"
+#include "parser/ddl/drop_constraint.h"
+#include "parser/ddl/show_constraints.h"
+#include "parser/expression/parsed_expression_visitor.h"
 #include "parser/expression/parsed_function_expression.h"
 #include "parser/expression/parsed_literal_expression.h"
 #include "storage/index/art_index.h"
@@ -95,6 +105,22 @@ std::vector<PropertyDefinition> Binder::bindPropertyDefinitions(
     return definitions;
 }
 
+namespace {
+// A DEFAULT is evaluated for every inserted row, and the default evaluator handles nextval as its
+// only side-effecting function, so setval is refused there.
+class SetValFinder final : public ParsedExpressionVisitor {
+public:
+    bool found = false;
+
+    void visitFunctionExpr(const ParsedExpression* expr) override {
+        const auto& functionName = expr->constCast<ParsedFunctionExpression>().getFunctionName();
+        if (StringUtils::getUpper(functionName) == function::SetValFunction::name) {
+            found = true;
+        }
+    }
+};
+} // namespace
+
 std::unique_ptr<ParsedExpression> Binder::resolvePropertyDefault(ParsedExpression* parsedDefault,
     const LogicalType& type, const std::string& tableName, const std::string& propertyName) {
     if (parsedDefault == nullptr) { // No default provided.
@@ -109,6 +135,11 @@ std::unique_ptr<ParsedExpression> Binder::resolvePropertyDefault(ParsedExpressio
     } else {
         if (type.getLogicalTypeID() == LogicalTypeID::SERIAL) {
             throw BinderException("No DEFAULT value should be set for SERIAL columns");
+        }
+        SetValFinder finder;
+        finder.visit(parsedDefault);
+        if (finder.found) {
+            throw BinderException("setval is not allowed in a DEFAULT expression.");
         }
         return parsedDefault->copy();
     }
@@ -205,12 +236,12 @@ static ExtendDirection getStorageDirection(const case_insensitive_map_t<Value>& 
     return DEFAULT_EXTEND_DIRECTION;
 }
 
-static StorageFormat getStorageFormat(const case_insensitive_map_t<Value>& options) {
+static ParsedStorageFormat getStorageFormat(const case_insensitive_map_t<Value>& options) {
     if (options.contains(TableOptionConstants::STORAGE_FORMAT_OPTION)) {
-        return StorageFormatUtils::fromString(
+        return StorageFormatUtils::parse(
             options.at(TableOptionConstants::STORAGE_FORMAT_OPTION).toString());
     }
-    return StorageFormat::NONE;
+    return ParsedStorageFormat{StorageFormat::NONE, ""};
 }
 
 static void validatePartitionColumn(const std::vector<PropertyDefinition>& propertyDefinitions,
@@ -257,7 +288,9 @@ BoundCreateTableInfo Binder::bindCreateNodeTableInfo(const CreateTableInfo* info
     validatePrimaryKey(extraInfo.pKName, propertyDefinitions);
     auto boundOptions = bindParsingOptions(extraInfo.options);
     auto storage = getStorage(boundOptions);
-    auto storageFormat = getStorageFormat(boundOptions);
+    auto parsedFormat = getStorageFormat(boundOptions);
+    auto storageFormat = parsedFormat.format;
+    auto storageFormatName = std::move(parsedFormat.externalName);
     std::optional<BoundPartitionInfo> partitionInfo;
     if (extraInfo.partitionInfo.has_value()) {
         const auto& parsed = *extraInfo.partitionInfo;
@@ -294,7 +327,7 @@ BoundCreateTableInfo Binder::bindCreateNodeTableInfo(const CreateTableInfo* info
     }
     auto boundExtraInfo = std::make_unique<BoundExtraCreateNodeTableInfo>(extraInfo.pKName,
         std::move(propertyDefinitions), std::move(storage), std::move(storageFormat),
-        std::move(partitionInfo));
+        std::move(partitionInfo), std::move(storageFormatName));
     return BoundCreateTableInfo(CatalogEntryType::NODE_TABLE_ENTRY, info->tableName,
         info->onConflict, std::move(boundExtraInfo), clientContext->useInternalCatalogEntry());
 }
@@ -317,17 +350,20 @@ BoundCreateTableInfo Binder::bindCreateRelTableGroupInfo(const CreateTableInfo* 
     auto boundOptions = bindParsingOptions(extraInfo.options);
     auto storageDirection = getStorageDirection(boundOptions);
     auto storage = getStorage(boundOptions);
-    auto storageFormat = getStorageFormat(boundOptions);
+    auto parsedFormat = getStorageFormat(boundOptions);
+    auto storageFormat = parsedFormat.format;
+    auto storageFormatName = std::move(parsedFormat.externalName);
     std::optional<function::TableFunction> scanFunction = std::nullopt;
     std::optional<std::unique_ptr<function::TableFuncBindData>> scanBindData = std::nullopt;
     std::string foreignDatabaseName;
     if (!storage.empty()) {
         auto dotPos = storage.find('.');
         // Check if storage is database.table format by verifying the attached database exists
-        // Handle special case where icebug-disk storage could contain a dot
+        // Handle special case where columnar storage paths (e.g. icebug-disk, lance)
+        // could contain a dot. Only unformatted storage is probed as database.table.
         // Otherwise, treat as file path (e.g., "dataset/demo-db/icebug-disk/demo" or
         // "data.parquet")
-        if (storageFormat != StorageFormat::ICEBUG_DISK && dotPos != std::string::npos) {
+        if (storageFormat == StorageFormat::NONE && dotPos != std::string::npos) {
             std::string dbName = storage.substr(0, dotPos);
             std::string tableName = storage.substr(dotPos + 1);
             if (!dbName.empty()) {
@@ -422,22 +458,36 @@ BoundCreateTableInfo Binder::bindCreateRelTableGroupInfo(const CreateTableInfo* 
             }
         }
 
-        bool isSrcIcebugDisk = srcEntry->getType() == CatalogEntryType::NODE_TABLE_ENTRY ?
-                                   srcEntry->ptrCast<NodeTableCatalogEntry>()->getStorageFormat() ==
-                                       StorageFormat::ICEBUG_DISK :
-                                   false;
-        bool isDstIcebugDisk = dstEntry->getType() == CatalogEntryType::NODE_TABLE_ENTRY ?
-                                   dstEntry->ptrCast<NodeTableCatalogEntry>()->getStorageFormat() ==
-                                       StorageFormat::ICEBUG_DISK :
-                                   false;
-        bool isRelIcebugDisk = (storageFormat == StorageFormat::ICEBUG_DISK);
+        auto getEntryStorageFormat = [](TableCatalogEntry* entry) {
+            if (entry->getType() == CatalogEntryType::NODE_TABLE_ENTRY) {
+                auto* nodeEntry = entry->ptrCast<NodeTableCatalogEntry>();
+                return std::pair{nodeEntry->getStorageFormat(), nodeEntry->getStorageFormatName()};
+            }
+            return std::pair{StorageFormat::NONE, std::string{}};
+        };
+        const auto [srcStorageFormat, srcStorageFormatName] = getEntryStorageFormat(srcEntry);
+        const auto [dstStorageFormat, dstStorageFormatName] = getEntryStorageFormat(dstEntry);
 
-        // We don't allow mixing icebug-disk tables with non-icebug-disk tables
-        // We only allow icebug-disk rel tables to connect icebug-disk node tables
-        if ((!isRelIcebugDisk && (isSrcIcebugDisk || isDstIcebugDisk)) ||
-            (isRelIcebugDisk && (!isSrcIcebugDisk || !isDstIcebugDisk))) {
-            throw BinderException(
-                "Cannot mix icebug-disk tables with non-icebug-disk tables in CREATE REL TABLE.");
+        // We don't allow mixing columnar-format tables with tables of another format.
+        // A rel table must use the same storage format as the node tables it connects:
+        // native with native, icebug-disk with icebug-disk, and an extension format
+        // (e.g. lance) only with the same extension format. Core compares the format
+        // enum plus the external format name without enumerating extension names.
+        if (!StorageFormatUtils::equals(storageFormat, storageFormatName, srcStorageFormat,
+                srcStorageFormatName) ||
+            !StorageFormatUtils::equals(storageFormat, storageFormatName, dstStorageFormat,
+                dstStorageFormatName)) {
+            const auto oddFormat = !StorageFormatUtils::equals(storageFormat, storageFormatName,
+                                       StorageFormat::NONE, "") ?
+                                       std::pair{storageFormat, storageFormatName} :
+                                   !StorageFormatUtils::equals(srcStorageFormat,
+                                       srcStorageFormatName, StorageFormat::NONE, "") ?
+                                       std::pair{srcStorageFormat, srcStorageFormatName} :
+                                       std::pair{dstStorageFormat, dstStorageFormatName};
+            const auto oddName = StorageFormatUtils::displayName(oddFormat.first, oddFormat.second);
+            throw BinderException(std::format("Cannot mix {} tables with non-{} tables in CREATE "
+                                              "REL TABLE.",
+                oddName, oddName));
         }
 
         // Use the actual shadow table IDs, not FOREIGN_TABLE_ID
@@ -462,10 +512,11 @@ BoundCreateTableInfo Binder::bindCreateRelTableGroupInfo(const CreateTableInfo* 
             }
         }
     }
-    auto boundExtraInfo = std::make_unique<BoundExtraCreateRelTableGroupInfo>(
-        std::move(propertyDefinitions), srcMultiplicity, dstMultiplicity, storageDirection,
-        std::move(relTableInfos), std::move(storage), std::move(storageFormat),
-        std::move(scanFunction), std::move(scanBindData), std::move(foreignDatabaseName));
+    auto boundExtraInfo =
+        std::make_unique<BoundExtraCreateRelTableGroupInfo>(std::move(propertyDefinitions),
+            srcMultiplicity, dstMultiplicity, storageDirection, std::move(relTableInfos),
+            std::move(storage), std::move(storageFormat), std::move(scanFunction),
+            std::move(scanBindData), std::move(foreignDatabaseName), std::move(storageFormatName));
     return BoundCreateTableInfo(CatalogEntryType::REL_GROUP_ENTRY, info->tableName,
         info->onConflict, std::move(boundExtraInfo), clientContext->useInternalCatalogEntry());
 }
@@ -543,6 +594,142 @@ std::unique_ptr<BoundStatement> Binder::bindCreateIndex(const Statement& stateme
         tableEntry->getColumnID(property.getName()), property.getType().getPhysicalType(),
         isPrimaryIndex, info.onConflict};
     return std::make_unique<BoundCreateIndex>(std::move(boundInfo));
+}
+
+std::string BoundCreateConstraintInfo::toString() const {
+    std::string props;
+    for (auto i = 0u; i < propertyNames.size(); i++) {
+        props += (i == 0 ? "" : ", ") + propertyNames[i];
+    }
+    return std::format("CONSTRAINT {} ON {}({})", constraintName, tableName, props);
+}
+
+std::unique_ptr<BoundStatement> Binder::bindCreateConstraint(const Statement& statement) {
+    auto& createConstraint = statement.constCast<CreateConstraint>();
+    auto& info = createConstraint.getInfo();
+    auto catalog = Catalog::Get(*clientContext);
+    auto transaction = transaction::Transaction::Get(*clientContext);
+    validateTableExistence(*clientContext, info.tableName);
+    auto tableEntry = catalog->getTableCatalogEntry(transaction, info.tableName);
+    if (tableEntry->getType() != CatalogEntryType::NODE_TABLE_ENTRY &&
+        tableEntry->getType() != CatalogEntryType::REL_GROUP_ENTRY) {
+        throw BinderException("CREATE CONSTRAINT is only supported on native node and rel tables.");
+    }
+    // Immutable columnar formats manage their own storage layout; scan-based enforcement
+    // does not cover them. BWD-only rel storage is rejected too: the engine cannot
+    // address it through the directional table data used by the scans.
+    if (tableEntry->getTableType() == common::TableType::REL) {
+        auto directions = tableEntry->ptrCast<RelGroupCatalogEntry>()->getRelDataDirections();
+        if (std::find(directions.begin(), directions.end(), common::RelDataDirection::FWD) ==
+            directions.end()) {
+            throw BinderException("CREATE CONSTRAINT is not supported on rel tables without "
+                                  "forward storage direction.");
+        }
+    }
+    if (tableEntry->getTableType() == common::TableType::NODE) {
+        if (tableEntry->ptrCast<NodeTableCatalogEntry>()->getStorageFormat() !=
+            common::StorageFormat::NONE) {
+            throw BinderException("CREATE CONSTRAINT is only supported on native tables.");
+        }
+    } else {
+        if (tableEntry->ptrCast<RelGroupCatalogEntry>()->getStorageFormat() !=
+            common::StorageFormat::NONE) {
+            throw BinderException("CREATE CONSTRAINT is only supported on native tables.");
+        }
+    }
+    // Writes to a partitioned parent route to its partition subgraphs, so a constraint
+    // bound to the parent (or to an individual child) would silently enforce nothing.
+    if (tableEntry->getType() == CatalogEntryType::NODE_TABLE_ENTRY) {
+        auto* nodeEntry = tableEntry->ptrCast<NodeTableCatalogEntry>();
+        if (nodeEntry->isPartitioned() || nodeEntry->isPartitionChild()) {
+            throw BinderException("CREATE CONSTRAINT is not supported on partitioned node "
+                                  "tables yet. Create the constraint on a non-partitioned "
+                                  "table instead.");
+        }
+    }
+    const auto isRelTable = tableEntry->getType() == CatalogEntryType::REL_GROUP_ENTRY;
+    if (info.isRelConstraint != isRelTable) {
+        throw BinderException(std::format("CREATE CONSTRAINT on {} must use a {} pattern.",
+            info.tableName, isRelTable ? "relationship" : "node"));
+    }
+    if (info.onConflict == ConflictAction::ON_CONFLICT_THROW &&
+        catalog->containsConstraint(transaction, info.constraintName)) {
+        throw BinderException(std::format("Constraint {} already exists.", info.constraintName));
+    }
+    // Endpoint references (src/dst) are only meaningful on rel patterns. They resolve to
+    // the edge's endpoints unless the table defines a real property with that name, in
+    // which case the property wins and the endpoint is not referenceable.
+    auto resolveEndpoint = [&](const std::string& propertyName,
+                               std::optional<common::property_id_t>& endpointID) -> bool {
+        if (!info.isRelConstraint) {
+            return false;
+        }
+        if (common::StringUtils::caseInsensitiveEquals(propertyName, "src")) {
+            endpointID = ConstraintCatalogEntry::SRC_ENDPOINT_ID;
+        } else if (common::StringUtils::caseInsensitiveEquals(propertyName, "dst")) {
+            endpointID = ConstraintCatalogEntry::DST_ENDPOINT_ID;
+        } else {
+            return false;
+        }
+        return !tableEntry->containsProperty(propertyName);
+    };
+    std::vector<common::property_id_t> propertyIDs;
+    case_insensitve_set_t seenProperties;
+    for (auto& propertyName : info.propertyNames) {
+        std::optional<common::property_id_t> endpointID;
+        if (resolveEndpoint(propertyName, endpointID)) {
+            if (!seenProperties.insert("\x00endpoint:" + propertyName).second) {
+                throw BinderException(
+                    std::format("Duplicated property {} in CREATE CONSTRAINT.", propertyName));
+            }
+            propertyIDs.push_back(*endpointID);
+            continue;
+        }
+        validateColumnExistence(tableEntry, propertyName);
+        if (!seenProperties.insert(propertyName).second) {
+            throw BinderException(
+                std::format("Duplicated property {} in CREATE CONSTRAINT.", propertyName));
+        }
+        propertyIDs.push_back(tableEntry->getPropertyID(propertyName));
+    }
+    BoundCreateConstraintInfo boundInfo{info.constraintName, info.tableName,
+        tableEntry->getTableID(), info.isRelConstraint, info.propertyNames, std::move(propertyIDs),
+        info.onConflict};
+    return std::make_unique<BoundCreateConstraint>(std::move(boundInfo));
+}
+
+std::unique_ptr<BoundStatement> Binder::bindDropConstraint(const Statement& statement) {
+    auto& dropConstraint = statement.constCast<DropConstraint>();
+    auto& info = dropConstraint.getInfo();
+    if (info.onConflict == ConflictAction::ON_CONFLICT_THROW) {
+        auto catalog = Catalog::Get(*clientContext);
+        auto transaction = transaction::Transaction::Get(*clientContext);
+        if (!catalog->containsConstraint(transaction, info.constraintName)) {
+            throw BinderException(
+                std::format("Constraint {} does not exist.", info.constraintName));
+        }
+    }
+    return std::make_unique<BoundDropConstraint>(
+        BoundDropConstraintInfo{info.constraintName, info.onConflict});
+}
+
+std::unique_ptr<BoundStatement> Binder::bindShowConstraints(const Statement& /*statement*/) {
+    ParsedFunctionExpression funcExpr(std::string{function::ShowConstraintsFunction::name},
+        false /* isDistinct */);
+    auto boundTableFunction =
+        bindTableFunc(funcExpr.getFunctionName(), funcExpr, {} /* yieldVariables */);
+    // A bare SHOW CONSTRAINTS has no RETURN clause, so expose the table function's output
+    // columns as the statement result (like CALL ... RETURN * would).
+    auto result = std::make_unique<BoundStandaloneCallFunction>(std::move(boundTableFunction));
+    auto statementResult = result->getStatementResultUnsafe();
+    for (auto& column : result->getBindData()->columns) {
+        auto name = column->getAlias();
+        if (name.empty()) {
+            name = column->toString();
+        }
+        statementResult->addColumn(name, column);
+    }
+    return result;
 }
 
 std::unique_ptr<BoundStatement> Binder::bindCreateTableAs(const Statement& statement) {
@@ -690,7 +877,7 @@ std::unique_ptr<BoundStatement> Binder::bindDrop(const Statement& statement) {
     return std::make_unique<BoundDrop>(drop.getDropInfo());
 }
 
-static void validateNotIceDiskTable(main::ClientContext* clientContext,
+static void validateImmutableColumnarTable(main::ClientContext* clientContext,
     const std::string& tableName) {
     auto catalog = Catalog::Get(*clientContext);
     auto transaction = transaction::Transaction::Get(*clientContext);
@@ -701,24 +888,29 @@ static void validateNotIceDiskTable(main::ClientContext* clientContext,
 
     auto tableEntry = catalog->getTableCatalogEntry(transaction, tableName);
     StorageFormat storageFormat = StorageFormat::NONE;
+    std::string storageFormatName;
 
     if (tableEntry->getTableType() == common::TableType::NODE) {
-        storageFormat = tableEntry->ptrCast<NodeTableCatalogEntry>()->getStorageFormat();
+        auto* nodeEntry = tableEntry->ptrCast<NodeTableCatalogEntry>();
+        storageFormat = nodeEntry->getStorageFormat();
+        storageFormatName = nodeEntry->getStorageFormatName();
     } else if (tableEntry->getTableType() == common::TableType::REL) {
-        storageFormat = tableEntry->ptrCast<RelGroupCatalogEntry>()->getStorageFormat();
+        auto* relEntry = tableEntry->ptrCast<RelGroupCatalogEntry>();
+        storageFormat = relEntry->getStorageFormat();
+        storageFormatName = relEntry->getStorageFormatName();
     }
 
-    if (storageFormat == StorageFormat::ICEBUG_DISK) {
-        throw BinderException(
-            std::format("Cannot alter table {}: icebug-disk tables are immutable.", tableName));
+    if (storageFormat != StorageFormat::NONE) {
+        throw BinderException(std::format("Cannot alter table {}: {} tables are immutable.",
+            tableName, StorageFormatUtils::displayName(storageFormat, storageFormatName)));
     }
 }
 
 std::unique_ptr<BoundStatement> Binder::bindAlter(const Statement& statement) {
     auto& alter = statement.constCast<Alter>();
 
-    // we don't support alter operations on icebug-disk tables
-    validateNotIceDiskTable(clientContext, alter.getInfo()->tableName);
+    // we don't support alter operations on immutable columnar tables
+    validateImmutableColumnarTable(clientContext, alter.getInfo()->tableName);
 
     // Partitioned tables have restricted ALTER support until ALTER propagation to partition
     // subgraphs lands: only RENAME (which renames the <parent>_p<i> partitions along with the
@@ -791,12 +983,47 @@ std::unique_ptr<BoundStatement> Binder::bindRenameTable(const Statement& stateme
     return std::make_unique<BoundAlter>(std::move(boundInfo));
 }
 
+// An endpoint key part (src/dst) is stored by REQUIRE name and resolved at bind time, with
+// a real property of the same name winning. If the table later gains such a property via
+// ADD or RENAME ... TO, the next bind (e.g. on IMPORT DATABASE, which replays the
+// exported r.src spelling) would silently switch the constraint from the endpoint to the
+// property. Keep the names unambiguous by rejecting those schema changes while an
+// endpoint constraint exists on the table.
+static void validateNoEndpointNameConflict(const main::ClientContext* clientContext,
+    const std::string& tableName, const std::string& propertyName) {
+    if (!common::StringUtils::caseInsensitiveEquals(propertyName, "src") &&
+        !common::StringUtils::caseInsensitiveEquals(propertyName, "dst")) {
+        return;
+    }
+    auto* catalog = Catalog::Get(*clientContext);
+    auto* transaction = transaction::Transaction::Get(*clientContext);
+    if (!catalog->containsTable(transaction, tableName)) {
+        return;
+    }
+    auto* tableEntry = catalog->getTableCatalogEntry(transaction, tableName);
+    if (tableEntry->getType() != CatalogEntryType::REL_GROUP_ENTRY) {
+        return;
+    }
+    for (auto* constraint : catalog->getConstraintEntries(transaction, tableEntry->getTableID())) {
+        for (auto propertyID : constraint->getPropertyIDs()) {
+            if (ConstraintCatalogEntry::isEndpointPropertyID(propertyID)) {
+                throw BinderException(std::format(
+                    "Cannot add or rename a property to {} in table {} because it conflicts "
+                    "with the {} endpoint of unique constraint {}. Drop the constraint first "
+                    "or choose a different name.",
+                    propertyName, tableName, propertyName, constraint->getConstraintName()));
+            }
+        }
+    }
+}
+
 std::unique_ptr<BoundStatement> Binder::bindAddProperty(const Statement& statement) {
     auto& alter = statement.constCast<Alter>();
     auto info = alter.getInfo();
     auto extraInfo = info->extraInfo->ptrCast<ExtraAddPropertyInfo>();
     auto tableName = info->tableName;
     auto propertyName = extraInfo->propertyName;
+    validateNoEndpointNameConflict(clientContext, tableName, propertyName);
     auto type = LogicalType::convertFromString(extraInfo->dataType, clientContext);
     auto columnDefinition = ColumnDefinition(propertyName, type.copy());
     auto defaultExpr =
@@ -821,6 +1048,23 @@ std::unique_ptr<BoundStatement> Binder::bindDropProperty(const Statement& statem
     auto extraInfo = info->extraInfo->constPtrCast<ExtraDropPropertyInfo>();
     auto tableName = info->tableName;
     auto propertyName = extraInfo->propertyName;
+    auto catalog = Catalog::Get(*clientContext);
+    auto transaction = transaction::Transaction::Get(*clientContext);
+    if (catalog->containsTable(transaction, tableName)) {
+        auto* tableEntry = catalog->getTableCatalogEntry(transaction, tableName);
+        if (tableEntry->containsProperty(propertyName)) {
+            const auto propertyID = tableEntry->getPropertyID(propertyName);
+            for (auto* constraint :
+                catalog->getConstraintEntries(transaction, tableEntry->getTableID())) {
+                if (constraint->containsPropertyID(propertyID)) {
+                    throw BinderException(std::format(
+                        "Cannot drop property {} in table {} because it is used in unique "
+                        "constraint {}. Drop the constraint first.",
+                        propertyName, tableName, constraint->getConstraintName()));
+                }
+            }
+        }
+    }
     auto boundExtraInfo = std::make_unique<BoundExtraDropPropertyInfo>(propertyName);
     auto boundInfo = BoundAlterInfo(AlterType::DROP_PROPERTY, tableName, std::move(boundExtraInfo),
         info->onConflict);
@@ -834,6 +1078,7 @@ std::unique_ptr<BoundStatement> Binder::bindRenameProperty(const Statement& stat
     auto tableName = info->tableName;
     auto propertyName = extraInfo->propertyName;
     auto newName = extraInfo->newName;
+    validateNoEndpointNameConflict(clientContext, tableName, newName);
     auto boundExtraInfo = std::make_unique<BoundExtraRenamePropertyInfo>(newName, propertyName);
     auto boundInfo = BoundAlterInfo(AlterType::RENAME_PROPERTY, tableName,
         std::move(boundExtraInfo), info->onConflict);
@@ -906,6 +1151,14 @@ std::unique_ptr<BoundStatement> Binder::bindAlterFromToConnection(
     auto info = alter.getInfo();
     auto extraInfo = info->extraInfo->constPtrCast<ExtraAddFromToConnection>();
     auto tableName = info->tableName;
+    // Only a rel table has FROM/TO connections; Alter would cast any other entry to one.
+    auto catalog = Catalog::Get(*clientContext);
+    auto transaction = transaction::Transaction::Get(*clientContext);
+    if (catalog->containsTable(transaction, tableName) &&
+        catalog->getTableCatalogEntry(transaction, tableName)->getType() !=
+            CatalogEntryType::REL_GROUP_ENTRY) {
+        throw BinderException(std::format("{} is not of type REL.", tableName));
+    }
     auto [srcTableEntry, srcDbName] = bindNodeTableEntry(extraInfo->srcTableName);
     auto [dstTableEntry, dstDbName] = bindNodeTableEntry(extraInfo->dstTableName);
     auto srcTableID = srcTableEntry->getTableID();

@@ -154,7 +154,7 @@ cf5083c1-730c-4dad-be97-18f65d657420|Alice|0
 -STATEMENT MATCH (n0 {id : 6}), (n1 {id : 4}) CREATE(n0)-[r :T16{k141 : true, k140 : false, k143 : false, k142 : "pGeIzI8", k145 : "Y3BGQ", k144 : -7898518321111847146, k146 : false, id : 17}]->(n1);
 ---- ok
 -STATEMENT MATCH (n0)-[r6]-(n1)<-[r7]-(n2)<-[r8]-(n3) WHERE true WITH n2 ORDER BY (n2.k33) LIMIT 1 WHERE (((((('Ir68oUyZr'+'kNiIX0WMt')+'SlFQWOKAV')+('L2idhdx9'+'s4ATzhAQU'))+'pV4a5Sz0') STARTS WITH 'Ir68oUyZrkNiIX0WMtSlFQWOKAVL2idhdx9s') AND ('dA524yw' CONTAINS (''+''))) MATCH (n0)<-[r9]-(n1)<-[r10]-(n2)-[r11]-(n3) WHERE true RETURN 1;
----- 0
+---- ok
 
 -CASE issue4715
 -STATEMENT CREATE NODE TABLE L0 (k0 STRING, k1 INT64, k2 BOOLEAN, k3 STRING, k4 BOOLEAN, id INT64, PRIMARY KEY (id));

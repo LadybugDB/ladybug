@@ -16,6 +16,21 @@ table_id_vector_t NodeOrRelExpression::getTableIDs() const {
     return result;
 }
 
+std::string NodeOrRelExpression::getDbName(table_id_t tableID) const {
+    std::string result;
+    for (auto* entry : entries) {
+        if (entry->getTableID() != tableID) {
+            continue;
+        }
+        auto entryDbName = getDbName(entry);
+        if (!result.empty() && result != entryDbName) {
+            return "";
+        }
+        result = std::move(entryDbName);
+    }
+    return result;
+}
+
 table_id_set_t NodeOrRelExpression::getTableIDsSet() const {
     table_id_set_t result;
     for (auto& entry : entries) {

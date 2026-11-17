@@ -19,7 +19,7 @@ static ConfigurationOption options[] = { // NOLINT(cert-err58-cpp):
     GET_CONFIGURATION(DisableMapKeyCheck), GET_CONFIGURATION(EnableZoneMapSetting),
     GET_CONFIGURATION(HomeDirectorySetting), GET_CONFIGURATION(FileSearchPathSetting),
     GET_CONFIGURATION(ProgressBarSetting), GET_CONFIGURATION(RecursivePatternSemanticSetting),
-    GET_CONFIGURATION(RecursivePatternFactorSetting), GET_CONFIGURATION(EnableMVCCSetting),
+    GET_CONFIGURATION(RecursivePatternFactorSetting), GET_CONFIGURATION(EnableMultiWritesSetting),
     GET_CONFIGURATION(CheckpointThresholdSetting), GET_CONFIGURATION(AutoCheckpointSetting),
     GET_CONFIGURATION(ForceCheckpointClosingDBSetting),
     GET_CONFIGURATION(EnableDefaultHashIndexSetting), GET_CONFIGURATION(SpillToDiskSetting),

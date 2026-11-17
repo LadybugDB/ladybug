@@ -1,5 +1,7 @@
 #include "optimizer/limit_push_down_optimizer.h"
 
+#include <algorithm>
+
 #include "binder/expression/expression_util.h"
 #include "planner/operator/extend/logical_recursive_extend.h"
 #include "planner/operator/logical_distinct.h"
@@ -41,11 +43,24 @@ void LimitPushDownOptimizer::visitOperator(planner::LogicalOperator* op) {
     switch (op->getOperatorType()) {
     case LogicalOperatorType::LIMIT: {
         auto& limit = op->constCast<LogicalLimit>();
-        if (limit.hasSkipNum() && ExpressionUtil::canEvaluateAsLiteral(*limit.getSkipNum())) {
-            skipNumber = ExpressionUtil::evaluateAsSkipLimit(*limit.getSkipNum());
+        // A LIMIT seen above this one still needs skipNumber + limitNumber rows from it, so this
+        // LIMIT keeps its own skip and at most that many rows. An unknown skip leaves no cap.
+        auto demand = INVALID_LIMIT;
+        if (limitNumber != INVALID_LIMIT && skipNumber < INVALID_LIMIT - limitNumber) {
+            demand = skipNumber + limitNumber;
         }
+        skipNumber = 0;
+        limitNumber = demand;
         if (limit.hasLimitNum() && ExpressionUtil::canEvaluateAsLiteral(*limit.getLimitNum())) {
-            limitNumber = ExpressionUtil::evaluateAsSkipLimit(*limit.getLimitNum());
+            limitNumber =
+                std::min(limitNumber, ExpressionUtil::evaluateAsSkipLimit(*limit.getLimitNum()));
+        }
+        if (limit.hasSkipNum()) {
+            if (ExpressionUtil::canEvaluateAsLiteral(*limit.getSkipNum())) {
+                skipNumber = ExpressionUtil::evaluateAsSkipLimit(*limit.getSkipNum());
+            } else {
+                limitNumber = INVALID_LIMIT;
+            }
         }
         visitOperator(limit.getChild(0).get());
         return;

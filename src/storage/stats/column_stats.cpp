@@ -25,7 +25,8 @@ void ColumnStats::updateMinMax(const common::ValueVector* vector) {
         maxValue = maxValue.has_value() ? std::max(*maxValue, value) : value;
     };
     // Read each value in its physical domain and widen to double. DATE is days since
-    // epoch (INT32), timestamps are micros since epoch (INT64); both fit exactly.
+    // epoch, and each timestamp type keeps its own unit (seconds, milliseconds,
+    // microseconds or nanoseconds since epoch); the planner's getNanosPerUnit relies on it.
     switch (typeID) {
     case LogicalTypeID::INT8:
         for (auto i = 0u; i < selVector.getSelSize(); i++) {

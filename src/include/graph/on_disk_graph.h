@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <optional>
 
 #include "common/assert.h"
 #include "common/copy_constructors.h"
@@ -64,7 +65,7 @@ public:
         }
 
         bool next(evaluator::ExpressionEvaluator* predicate, common::SemiMask* nbrNodeMask,
-            storage::NodeTable* nbrNodeTable);
+            storage::NodeVisibilityCache* nbrVisibility);
         void initScan() const;
 
         common::RelDataDirection getDirection() const { return tableScanState->direction; }
@@ -84,7 +85,7 @@ private:
 
     std::unique_ptr<evaluator::ExpressionEvaluator> relPredicateEvaluator;
     common::SemiMask* nbrNodeMask = nullptr;
-    storage::NodeTable* nbrNodeTable = nullptr;
+    std::optional<storage::NodeVisibilityCache> nbrVisibility;
 
     std::vector<InnerIterator> directedIterators;
     InnerIterator* currentIter = nullptr;

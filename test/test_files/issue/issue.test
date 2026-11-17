@@ -847,6 +847,117 @@ h
 ---- 1
 1|1
 
+-CASE issue_1418
+-STATEMENT CREATE NODE TABLE Author(id INT64 PRIMARY KEY);
+---- ok
+-STATEMENT CREATE NODE TABLE Post(id SERIAL PRIMARY KEY, title STRING);
+---- ok
+-STATEMENT CREATE REL TABLE WROTE(FROM Author TO Post);
+---- ok
+-LOG ColumnPayloadNewAuthor
+-STATEMENT UNWIND [{aid: 1, title: 'A'}, {aid: 1, title: 'B'}] AS r
+           WITH r.aid AS aid, r.title AS title
+           MERGE (a:Author {id: aid})
+           CREATE (a)-[:WROTE]->(:Post {title: title});
+---- ok
+-STATEMENT MATCH (a:Author {id: 1})-[:WROTE]->(p:Post) RETURN p.title;
+---- 2
+A
+B
+-LOG ColumnPayloadExistingAuthor
+-STATEMENT UNWIND [{aid: 1, title: 'C'}, {aid: 1, title: 'D'}] AS r
+           WITH r.aid AS aid, r.title AS title
+           MERGE (a:Author {id: aid})
+           RETURN title;
+---- 2
+C
+D
+-LOG StructPayloadNewAuthor
+-STATEMENT UNWIND [{aid: 2, title: 'E'}, {aid: 2, title: 'F'}] AS r
+           MERGE (a:Author {id: r.aid})
+           CREATE (a)-[:WROTE]->(:Post {title: r.title});
+---- ok
+-STATEMENT MATCH (a:Author {id: 2})-[:WROTE]->(p:Post) RETURN p.title;
+---- 2
+E
+F
+-STATEMENT UNWIND [{aid: 3, title: 'G'}, {aid: 3, title: 'H'}] AS r
+           MERGE (a:Author {id: r.aid})
+           RETURN r.title;
+---- 2
+G
+H
+-LOG ListPayloadNewAuthor
+-STATEMENT UNWIND [[4, 10], [4, 20]] AS r MERGE (a:Author {id: r[1]}) RETURN r[2];
+---- 2
+10
+20
+-LOG ComputedKeyKeepsItsVariable
+-STATEMENT UNWIND range(1, 4) AS i MERGE (a:Author {id: i % 2 + 10}) RETURN i;
+---- 4
+1
+2
+3
+4
+-LOG KeyOnlyRowsStillCollapse
+-STATEMENT CREATE NODE TABLE Tag(id SERIAL PRIMARY KEY, v INT8);
+---- ok
+-STATEMENT UNWIND [1, 1] AS i MERGE (t:Tag {v: i}) RETURN t.v;
+---- 1
+1
+-STATEMENT MATCH (t:Tag) RETURN count(*);
+---- 1
+1
+-STATEMENT UNWIND [2, 2] AS i MERGE (t:Tag {v: CAST(CAST(i AS INT32) AS INT8)}) RETURN t.v;
+---- 1
+2
+-LOG RoundingCastKeepsItsVariable
+-STATEMENT UNWIND [3.4, 3.3] AS d MERGE (t:Tag {v: d}) RETURN d;
+---- 2
+3.300000
+3.400000
+-LOG FloatCastKeepsItsVariable
+-STATEMENT CREATE NODE TABLE Approx(id SERIAL PRIMARY KEY, v FLOAT);
+---- ok
+-STATEMENT UNWIND [16777216, 16777217] AS i MERGE (x:Approx {v: i}) RETURN i;
+---- 2
+16777216
+16777217
+-STATEMENT MATCH (x:Approx) RETURN count(*);
+---- 1
+1
+-LOG KeyOnlyStructRowsAreKept
+-STATEMENT UNWIND [{aid: 6}, {aid: 6}] AS r MERGE (a:Author {id: r.aid}) RETURN count(*);
+---- 1
+2
+-LOG MultipleKeys
+-STATEMENT CREATE NODE TABLE Pair(id SERIAL PRIMARY KEY, a INT64, b INT64);
+---- ok
+-STATEMENT UNWIND [{a: 1, b: 2, t: 'x'}, {a: 1, b: 2, t: 'y'}] AS r
+           WITH r.a AS a, r.b AS b, r.t AS t
+           MERGE (n:Pair {a: a, b: b})
+           RETURN t;
+---- 2
+x
+y
+-STATEMENT MATCH (n:Pair) RETURN count(*);
+---- 1
+1
+-LOG StructPayloadWithoutOptimizer
+-STATEMENT CALL enable_plan_optimizer=false;
+---- ok
+-STATEMENT UNWIND [{aid: 5, title: 'I'}, {aid: 5, title: 'J'}] AS r
+           MERGE (a:Author {id: r.aid})
+           CREATE (a)-[:WROTE]->(:Post {title: r.title});
+---- ok
+-STATEMENT MATCH (a:Author {id: 5})-[:WROTE]->(p:Post) RETURN p.title;
+---- 2
+I
+J
+-STATEMENT MATCH (a:Author) RETURN count(*);
+---- 1
+8
+
 -CASE 619
 -STATEMENT CREATE NODE TABLE Person(name STRING, age INT64, PRIMARY KEY (name));
 ---- ok

@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <memory>
 #include <mutex>
+#include <shared_mutex>
 
 #include "common/enums/rel_multiplicity.h"
 #include "common/types/types.h"
@@ -139,19 +140,37 @@ public:
         ResidencyState residencyState, NodeGroupDataFormat format = NodeGroupDataFormat::REGULAR);
     virtual ~ChunkedNodeGroup() = default;
 
-    common::idx_t getNumColumns() const { return chunks.size(); }
+    common::idx_t getNumColumns() const {
+        std::shared_lock lck{chunksMtx};
+        return chunks.size();
+    }
     common::row_idx_t getStartRowIdx() const { return startRowIdx; }
     common::row_idx_t getNumRows() const { return numRows; }
     bool hasRows() const { return numRows != 0; }
     const ColumnChunk& getColumnChunk(const common::column_id_t columnID) const {
-        DASSERT(columnID < chunks.size());
-        return *chunks[columnID];
+        // The ColumnChunk objects are heap-allocated and stable: ADD COLUMN only appends.
+        // Hold the shared lock only to fetch the pointer, then use it without the lock.
+        ColumnChunk* ptr = nullptr;
+        {
+            std::shared_lock lck{chunksMtx};
+            DASSERT(columnID < chunks.size());
+            ptr = chunks[columnID].get();
+        }
+        DASSERT(ptr);
+        return *ptr;
     }
     ColumnChunk& getColumnChunk(const common::column_id_t columnID) {
-        DASSERT(columnID < chunks.size());
-        return *chunks[columnID];
+        ColumnChunk* ptr = nullptr;
+        {
+            std::shared_lock lck{chunksMtx};
+            DASSERT(columnID < chunks.size());
+            ptr = chunks[columnID].get();
+        }
+        DASSERT(ptr);
+        return *ptr;
     }
     std::unique_ptr<ColumnChunk> moveColumnChunk(const common::column_id_t columnID) {
+        std::unique_lock lck{chunksMtx};
         DASSERT(columnID < chunks.size());
         return std::move(chunks[columnID]);
     }
@@ -234,6 +253,9 @@ public:
     common::row_idx_t getNumDeletions(const transaction::Transaction* transaction,
         common::row_idx_t startRow, common::length_t numRowsToCheck) const;
     common::row_idx_t getNumVisibleRows(const transaction::Transaction* transaction) const;
+    // See VersionInfo::getNumLeadingVisibleRows. The caller holds the node group's chunked-group
+    // lock.
+    common::row_idx_t getNumLeadingVisibleRows(const transaction::Transaction* transaction) const;
     bool hasVersionInfo() const { return versionInfo != nullptr; }
 
     static std::unique_ptr<ChunkedNodeGroup> flushEmpty(MemoryManager& mm,
@@ -249,6 +271,9 @@ public:
     void rollbackDelete(common::row_idx_t startRow, common::row_idx_t numRows_,
         common::transaction_t commitTS);
     virtual void reclaimStorage(PageAllocator& pageAllocator) const;
+    // Folds committed update chains below `horizon` into the in-memory bases and drops
+    // the folded nodes. Returns true when any chain data was reclaimed.
+    bool vacuumInMemoryUpdates(common::transaction_t horizon);
 
     uint64_t getEstimatedMemoryUsage() const;
 
@@ -272,6 +297,11 @@ protected:
     common::row_idx_t startRowIdx;
     uint64_t capacity;
     std::atomic<common::row_idx_t> numRows;
+    // Guards the chunks vector structure (size/reallocation) for concurrent ADD COLUMN vs
+    // scans. The ColumnChunk objects are heap-stable, so readers copy the pointer under a
+    // shared lock and use it without holding the lock; the writer holds it exclusively only
+    // for push_back. See TableColumnsConcurrencyTest.
+    mutable std::shared_mutex chunksMtx;
     std::vector<std::unique_ptr<ColumnChunk>> chunks;
     std::shared_ptr<VersionInfo> versionInfo;
 };

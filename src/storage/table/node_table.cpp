@@ -17,8 +17,10 @@
 #include "storage/local_storage/local_table.h"
 #include "storage/predicate/constant_predicate.h"
 #include "storage/storage_manager.h"
+#include "storage/unique_constraint_checker.h"
 #include "storage/wal/local_wal.h"
 #include "transaction/transaction.h"
+#include "transaction/transaction_manager.h"
 #include <format>
 
 using namespace lbug::catalog;
@@ -60,10 +62,13 @@ void NodeTableVersionRecordHandler::rollbackInsert(main::ClientContext* context,
     DASSERT(nodeGroupIdx < table->getNumNodeGroups() || startRow == 0);
     if (nodeGroupIdx < table->getNumNodeGroups()) {
         VersionRecordHandler::rollbackInsert(context, nodeGroupIdx, startRow, numRows);
-        auto* nodeGroup = table->getNodeGroupNoLock(nodeGroupIdx);
-        const auto numRowsToRollback = std::min(numRows, nodeGroup->getNumRows() - startRow);
-        nodeGroup->rollbackInsert(startRow);
-        table->rollbackGroupCollectionInsert(numRowsToRollback);
+        // An active COPY may hold a group pointer. Even as the sole writer, truncate only if
+        // the collection confirms this range is still the physical tail under its lock.
+        if (TransactionManager::Get(*context)->hasMultipleActiveWriteTransactions() ||
+            !table->rollbackGroupCollectionInsert(nodeGroupIdx, startRow, numRows)) {
+            Transaction::Get(*context)->getLocalStorage()->retainOptimisticAllocations(
+                table->getStorageManager(), *table->getNodeGroupNoLock(nodeGroupIdx));
+        }
     }
 }
 
@@ -274,8 +279,7 @@ NodeTable::NodeTable(const StorageManager* storageManager,
                                      nodeTableEntry->getOwningCatalog()) {
     auto* dataFH = storageManager->getDataFH();
     auto& pageAllocator = *dataFH->getPageManager();
-    const auto maxColumnID = nodeTableEntry->getMaxColumnID();
-    columns.resize(maxColumnID + 1);
+    columns.resize(nodeTableEntry->getNextColumnID());
     for (auto& property : nodeTableEntry->getProperties()) {
         const auto columnID = nodeTableEntry->getColumnID(property.getName());
         const auto columnName =
@@ -294,8 +298,18 @@ NodeTable::NodeTable(const StorageManager* storageManager,
         indexes.push_back(IndexHolder{PrimaryKeyIndex::createNewIndex(indexInfo,
             storageManager->isInMemory(), *mm, pageAllocator, shadowFile)});
     }
-    nodeGroups = std::make_unique<NodeGroupCollection>(*mm,
-        LocalNodeTable::getNodeTableColumnTypes(*nodeTableEntry), enableCompression,
+    // A checkpoint pinned by a reader can retain dropped column slots. Empty tables have
+    // no chunk metadata to restore their types from, so use an unused INT64 slot there.
+    std::vector<LogicalType> columnTypes;
+    for (auto columnID = 0u; columnID < columns.size(); ++columnID) {
+        if (!columns[columnID]) {
+            columns[columnID] =
+                ColumnFactory::createColumn(std::format("__retained_dropped_{}", columnID),
+                    LogicalType::INT64(), dataFH, mm, shadowFile, enableCompression);
+        }
+        columnTypes.push_back(columns[columnID]->getDataType().copy());
+    }
+    nodeGroups = std::make_unique<NodeGroupCollection>(*mm, columnTypes, enableCompression,
         storageManager->getDataFH() ? ResidencyState::ON_DISK : ResidencyState::IN_MEMORY,
         &versionRecordHandler);
 }
@@ -473,6 +487,8 @@ void NodeTable::initInsertState(main::ClientContext* context, TableInsertState& 
 
 void NodeTable::insert(Transaction* transaction, TableInsertState& insertState) {
     const auto& nodeInsertState = insertState.cast<NodeTableInsertState>();
+    UniqueConstraintChecker::checkInsert(transaction->getClientContext(), this,
+        nodeInsertState.propertyVectors, nullptr, nullptr);
     auto& nodeIDSelVector = nodeInsertState.nodeIDVector.state->getSelVector();
     DASSERT(nodeInsertState.propertyVectors[0]->state->getSelVector().getSelSize() == 1);
     DASSERT(nodeIDSelVector.getSelSize() == 1);
@@ -768,12 +784,16 @@ bool NodeTable::checkpoint(main::ClientContext* context, TableCatalogEntry* tabl
     transaction_t retentionHorizon, const std::vector<transaction_t>&) {
     const auto effectiveEpoch =
         epochWatermark > 0 ? epochWatermark : changeEpoch.load(std::memory_order_acquire);
+    const bool retainColumns = retentionHorizon != INVALID_TRANSACTION;
+    // Both dropped columns and a rolled-back ADD can leave unused physical slots.
+    const bool needsColumnCompaction =
+        !retainColumns && getNumColumns() != tableEntry->getNumProperties();
     // A group that still carries a retention horizon from an earlier pinned checkpoint is
     // re-checkpointed even when its epoch is unchanged, provided no reader is open: the
     // retained versions and update chains are then unobservable garbage and this is the
     // only reclamation pass. While readers are open the old retention still covers them
     // (the horizon never moves backward across overlapping checkpoints), so the skip stands.
-    if (effectiveEpoch <= lastCheckpointedEpoch &&
+    if (!needsColumnCompaction && effectiveEpoch <= lastCheckpointedEpoch &&
         (retentionHorizon != INVALID_TRANSACTION || !nodeGroups->hasRetainedHorizon())) {
         return false;
     }
@@ -786,10 +806,25 @@ bool NodeTable::checkpoint(main::ClientContext* context, TableCatalogEntry* tabl
     std::vector<Column*> checkpointColumnPtrs;
     {
         std::unique_lock schemaLck{schemaMtx};
-        for (auto& property : tableEntry->getProperties()) {
-            auto columnID = tableEntry->getColumnID(property.getName());
-            columnIDs.push_back(columnID);
-            checkpointColumnPtrs.push_back(columns[columnID].get());
+        const auto numColumns = tableEntry->getNextColumnID();
+        if (numColumns > columns.size()) {
+            throw RuntimeException(std::format("Cannot checkpoint node table {}: the catalog "
+                                               "requires {} column slots but storage has {}.",
+                tableEntry->getName(), numColumns, columns.size()));
+        }
+        if (retainColumns) {
+            // Keep committed slots for old catalog versions, including dropped columns.
+            // Trailing slots from rolled-back ADDs are invisible to every reader.
+            for (auto columnID = 0u; columnID < numColumns; ++columnID) {
+                columnIDs.push_back(columnID);
+                checkpointColumnPtrs.push_back(columns[columnID].get());
+            }
+        } else {
+            for (auto& property : tableEntry->getProperties()) {
+                auto columnID = tableEntry->getColumnID(property.getName());
+                columnIDs.push_back(columnID);
+                checkpointColumnPtrs.push_back(columns[columnID].get());
+            }
         }
     }
 
@@ -803,7 +838,8 @@ bool NodeTable::checkpoint(main::ClientContext* context, TableCatalogEntry* tabl
         // the full hash-index infrastructure is deferred to a follow-up.
         index.checkpoint(context, pageAllocator, *shadowFile);
     }
-    // Checkpoint succeeded. Now vacuum dropped columns and update catalog IDs.
+    // Checkpoint succeeded. Discard rolled-back additions, and vacuum dropped columns
+    // and update catalog IDs only when no reader needs the old layout.
     // Guard under schemaMtx so concurrent readers see a consistent view.
     {
         std::unique_lock schemaLck{schemaMtx};
@@ -813,8 +849,8 @@ bool NodeTable::checkpoint(main::ClientContext* context, TableCatalogEntry* tabl
             checkpointColumns.push_back(std::move(columns[columnID]));
         }
         columns = std::move(checkpointColumns);
-        if (tableEntry->vacuumColumnIDs(0 /*nextColumnID*/)) {
-            context->getDatabase()->getCatalog()->incrementColumnIDsVersion();
+        if (!retainColumns && tableEntry->vacuumColumnIDs(0 /*nextColumnID*/)) {
+            tableEntry->getOwningCatalog()->incrementColumnIDsVersion();
         }
     }
     storeCheckpointedEpoch(effectiveEpoch);
@@ -835,8 +871,9 @@ void NodeTable::rollbackPKIndexInsert(main::ClientContext* context, row_idx_t st
 }
 
 // NOLINTNEXTLINE(readability-make-member-function-const): Semantically non-const.
-void NodeTable::rollbackGroupCollectionInsert(row_idx_t numRows_) {
-    nodeGroups->rollbackInsert(numRows_);
+bool NodeTable::rollbackGroupCollectionInsert(node_group_idx_t nodeGroupIdx, row_idx_t startRow,
+    row_idx_t numRows) {
+    return nodeGroups->rollbackInsert(nodeGroupIdx, startRow, numRows);
 }
 
 void NodeTable::rollbackCheckpoint() {
@@ -864,6 +901,10 @@ void NodeTable::reclaimDroppedIndexes(PageAllocator& pageAllocator) {
     droppedIndexes.clear();
 }
 
+bool NodeTable::vacuumInMemoryUpdates(transaction_t horizon) {
+    return nodeGroups->vacuumInMemoryUpdates(horizon);
+}
+
 void NodeTable::reclaimStorage(PageAllocator& pageAllocator) const {
     nodeGroups->reclaimStorage(pageAllocator);
     for (const auto& index : indexes) {
@@ -879,8 +920,8 @@ void NodeTable::reclaimStorage(PageAllocator& pageAllocator) const {
 TableStats NodeTable::getStats(const Transaction* transaction) const {
     auto stats = nodeGroups->getStats();
     if (const auto localTable = transaction->getLocalStorage()->getLocalTable(*this)) {
-        const auto localStats = localTable->cast<LocalNodeTable>().getStats();
-        stats.merge(localStats);
+        const auto& localNodeTable = localTable->cast<LocalNodeTable>();
+        stats.merge(localNodeTable.getColumnIDs(), localNodeTable.getStats());
     }
     return stats;
 }
@@ -897,6 +938,49 @@ bool NodeTable::isVisible(const Transaction* transaction, offset_t offset) const
     }
     const auto* nodeGroup = getNodeGroup(nodeGroupIdx);
     return nodeGroup->isVisible(transaction, offsetInGroup);
+}
+
+NodeVisibilityCache::NodeVisibilityCache(const NodeTable& table, const Transaction* transaction)
+    : table{table}, transaction{transaction}, minUncommittedOffset{INVALID_OFFSET},
+      numNodeGroups{table.getNumNodeGroups()} {
+    inlineCounts.fill(INVALID_ROW_IDX);
+    const auto* localStorage = transaction->getLocalStorage();
+    if (localStorage == nullptr) {
+        return;
+    }
+    if (auto* localTable = localStorage->getLocalTable(table)) {
+        minUncommittedOffset = localTable->cast<LocalNodeTable>().getStartOffset();
+    }
+}
+
+row_idx_t& NodeVisibilityCache::getCount(node_group_idx_t nodeGroupIdx) {
+    if (nodeGroupIdx < NUM_INLINE_COUNTS) {
+        return inlineCounts[nodeGroupIdx];
+    }
+    if (otherCounts.empty()) {
+        otherCounts.assign(numNodeGroups - NUM_INLINE_COUNTS, INVALID_ROW_IDX);
+    }
+    return otherCounts[nodeGroupIdx - NUM_INLINE_COUNTS];
+}
+
+bool NodeVisibilityCache::isVisible(offset_t offset) {
+    // A transaction's own inserts can share offsets with rows other writers commit later, and
+    // isVisible looks them up in local storage first.
+    if (offset >= minUncommittedOffset) {
+        return table.isVisible(transaction, offset);
+    }
+    const auto [nodeGroupIdx, rowIdxInGroup] =
+        StorageUtils::getNodeGroupIdxAndOffsetInChunk(offset);
+    if (nodeGroupIdx >= numNodeGroups) {
+        return table.isVisible(transaction, offset);
+    }
+    auto& numVisible = getCount(nodeGroupIdx);
+    if (numVisible == INVALID_ROW_IDX) {
+        // A group that another transaction's COPY appended is gone once that COPY rolls back.
+        const auto* nodeGroup = table.getNodeGroup(nodeGroupIdx, true /* mayOutOfBound */);
+        numVisible = nodeGroup ? nodeGroup->getNumLeadingVisibleRows(transaction) : 0;
+    }
+    return rowIdxInGroup < numVisible || table.isVisible(transaction, offset);
 }
 
 bool NodeTable::isVisibleNoLock(const Transaction* transaction, offset_t offset) const {
@@ -1224,6 +1308,23 @@ void NodeTable::serialize(Serializer& serializer) const {
 void NodeTable::deserialize(main::ClientContext* context, StorageManager* storageManager,
     Deserializer& deSer) {
     nodeGroups->deserialize(deSer, *memoryManager);
+    if (nodeGroups->getNumNodeGroups() > 0) {
+        // Retained dropped columns are self-describing in the checkpoint's chunk metadata.
+        // Restore their types before an ADD or another pinned checkpoint uses the slots.
+        const auto& columnTypes = nodeGroups->getNodeGroup(0)->getDataTypes();
+        if (columnTypes.size() != columns.size()) {
+            throw RuntimeException(std::format("Cannot load node table {}: checkpoint data has "
+                                               "{} column slots but the catalog expects {}.",
+                getTableName(), columnTypes.size(), columns.size()));
+        }
+        for (auto columnID = 0u; columnID < columnTypes.size(); ++columnID) {
+            if (columns[columnID]->getDataType() != columnTypes[columnID]) {
+                columns[columnID] = ColumnFactory::createColumn(
+                    std::format("__retained_dropped_{}", columnID), columnTypes[columnID].copy(),
+                    storageManager->getDataFH(), memoryManager, shadowFile, enableCompression);
+            }
+        }
+    }
     std::vector<IndexInfo> indexInfos;
     std::vector<length_t> storageInfoBufferSizes;
     std::vector<std::unique_ptr<uint8_t[]>> storageInfoBuffers;

@@ -93,6 +93,7 @@ bool ValueVector::setNullFromBits(const uint64_t* srcNullEntries, uint64_t srcOf
 
 template<typename T>
 void ValueVector::setValue(uint32_t pos, T val) {
+    DASSERT(sizeof(T) == numBytesPerValue);
     ((T*)valueBuffer.get())[pos] = val;
 }
 
@@ -643,7 +644,7 @@ void ListVector::copyListEntryAndBufferMetaData(ValueVector& vector,
     for (auto i = 0u; i < otherSelVector.getSelSize(); ++i) {
         auto pos = selVector[i];
         auto otherPos = otherSelVector[i];
-        vector.setNull(pos, other.isNull(pos));
+        vector.setNull(pos, other.isNull(otherPos));
         if (!other.isNull(otherPos)) {
             vector.setValue(pos, other.getValue<list_entry_t>(otherPos));
         }

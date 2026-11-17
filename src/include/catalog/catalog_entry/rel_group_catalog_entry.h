@@ -52,12 +52,12 @@ public:
         common::StorageFormat storageFormat = common::StorageFormat::NONE,
         std::optional<function::TableFunction> scanFunction = std::nullopt,
         std::optional<std::shared_ptr<function::TableFuncBindData>> scanBindData = std::nullopt,
-        std::string foreignDatabaseName = "")
+        std::string foreignDatabaseName = "", std::string storageFormatName = "")
         : TableCatalogEntry{type_, std::move(tableName)}, srcMultiplicity{srcMultiplicity},
           dstMultiplicity{dstMultiplicity}, storageDirection{storageDirection},
           relTableInfos{std::move(relTableInfos)}, storage{std::move(storage)},
-          storageFormat{storageFormat}, scanFunction{std::move(scanFunction)},
-          scanBindData{std::move(scanBindData)},
+          storageFormat{storageFormat}, storageFormatName{std::move(storageFormatName)},
+          scanFunction{std::move(scanFunction)}, scanBindData{std::move(scanBindData)},
           foreignDatabaseName{std::move(foreignDatabaseName)} {
         propertyCollection =
             PropertyDefinitionCollection{1}; // Skip NBR_NODE_ID column as the first one.
@@ -86,6 +86,8 @@ public:
     common::ExtendDirection getStorageDirection() const { return storageDirection; }
     const std::string& getStorage() const { return storage; }
     common::StorageFormat getStorageFormat() const { return storageFormat; }
+    // External format name for StorageFormat::EXTERNAL (e.g. "lance"); empty otherwise.
+    const std::string& getStorageFormatName() const { return storageFormatName; }
 
     // CSR sorted-by-dest is an explicit user declaration that the rel
     // table's CSR adjacency lists are physically stored with neighbors
@@ -157,6 +159,7 @@ private:
     std::vector<RelTableCatalogInfo> relTableInfos;
     std::string storage;
     common::StorageFormat storageFormat = common::StorageFormat::NONE;
+    std::string storageFormatName;
     std::optional<function::TableFunction> scanFunction;
     std::optional<std::shared_ptr<function::TableFuncBindData>> scanBindData;
     std::string foreignDatabaseName; // Database name for foreign-backed rel tables

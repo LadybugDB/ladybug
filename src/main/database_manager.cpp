@@ -352,8 +352,9 @@ void DatabaseManager::loadGraphsFromCatalog(storage::MemoryManager* memoryManage
     // During WAL replay, a tagged record can trigger materialization of a graph whose
     // create-graph record is part of the still-uncommitted recovery transaction; enumerate
     // with that transaction so such a graph is visible to the loader. Every replayed BEGIN is
-    // guaranteed to reach its COMMIT record (dryReplay advances the replay bound only past
-    // COMMIT records), so a graph visible here can never belong to an aborted transaction.
+    // guaranteed to reach its COMMIT record (dryReplay advances the replay bound only past COMMIT,
+    // ABORT and CHECKPOINT records, and replay skips a transaction an ABORT names), so a graph
+    // visible here can never belong to an aborted transaction.
     // Outside replay there is no active transaction and DUMMY_CHECKPOINT_TRANSACTION applies.
     auto* transaction = TransactionContext::Get(*clientContext)->hasActiveTransaction() ?
                             Transaction::Get(*clientContext) :

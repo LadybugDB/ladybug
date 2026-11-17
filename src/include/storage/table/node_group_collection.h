@@ -65,14 +65,18 @@ public:
         nodeGroups.replaceGroup(lock, nodeGroupIdx, std::move(group));
     }
 
-    void rollbackInsert(common::row_idx_t numRows_, bool updateNumRows = true);
+    bool rollbackInsert(common::node_group_idx_t nodeGroupIdx, common::row_idx_t startRow,
+        common::row_idx_t numRows);
 
     void clear() {
         const auto lock = nodeGroups.lock();
         nodeGroups.clear(lock);
     }
 
-    common::column_id_t getNumColumns() const { return types.size(); }
+    common::column_id_t getNumColumns() const {
+        const auto lock = nodeGroups.lock();
+        return types.size();
+    }
 
     void addColumn(TableAddColumnState& addColumnState, PageAllocator* pageAllocator = nullptr);
 
@@ -82,6 +86,7 @@ public:
     // True when any node group still carries a retention horizon from an earlier pinned
     // checkpoint (see NodeGroup::hasRetainedHorizon).
     bool hasRetainedHorizon() const;
+    bool vacuumInMemoryUpdates(common::transaction_t horizon);
     void reclaimStorage(PageAllocator& pageAllocator) const;
 
     TableStats getStats() const {

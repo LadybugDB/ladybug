@@ -31,3 +31,26 @@ Binder exception: Cannot mix icebug-disk tables with non-icebug-disk tables in C
 -STATEMENT CREATE REL TABLE rel(FROM upperversion TO upperversion)
 ---- error
 Binder exception: Cannot mix icebug-disk tables with non-icebug-disk tables in CREATE REL TABLE.
+
+-CASE RelExternalNodeRegular
+
+-LOG CreateRegularNodeTable
+-STATEMENT CREATE NODE TABLE person(id INT64 PRIMARY KEY, name STRING)
+---- ok
+
+-LOG ExternalRelWithRegularNodeFails
+-STATEMENT CREATE REL TABLE rel(FROM person TO person) WITH (format = 'lance')
+---- error
+Binder exception: Cannot mix lance tables with non-lance tables in CREATE REL TABLE.
+
+-LOG ExternalRelFormatNameIsCaseInsensitive
+-STATEMENT CREATE REL TABLE rel2(FROM person TO person) WITH (format = 'LANCE')
+---- error
+Binder exception: Cannot mix lance tables with non-lance tables in CREATE REL TABLE.
+
+-CASE NodeUnknownExternalFormat
+
+-LOG UnknownFormatNodeTableFailsWithoutExtension
+-STATEMENT CREATE NODE TABLE ext(id INT64 PRIMARY KEY) WITH (format = 'delta')
+---- error(regex)
+Runtime exception: Unsupported storage format option for node table: delta.*load the extension.*

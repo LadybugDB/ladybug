@@ -51,6 +51,7 @@ public:
     }
 
     common::column_id_t getMaxColumnID() const;
+    common::column_id_t getNextColumnID() const { return propertyCollection.getNextColumnID(); }
     bool vacuumColumnIDs(common::column_id_t nextColumnID);
     std::vector<binder::PropertyDefinition> getProperties() const {
         return propertyCollection.getDefinitions();

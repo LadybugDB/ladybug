@@ -16,7 +16,7 @@ public:
 
 private:
     static void repeatStr(char* data, const std::string& pattern, uint64_t count) {
-        for (auto i = 0u; i < count; i++) {
+        for (uint64_t i = 0; i < count; i++) {
             memcpy(data + i * pattern.length(), pattern.c_str(), pattern.length());
         }
     }

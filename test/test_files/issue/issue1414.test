@@ -1,0 +1,12 @@
+-DATASET CSV empty
+
+--
+
+-CASE Issue1414SubstringNegativeLength
+-STATEMENT CREATE NODE TABLE Item(id INT64, key STRING, PRIMARY KEY (id));
+---- ok
+-STATEMENT CREATE (:Item {id: 9, key: 'item_0_0'});
+---- ok
+-STATEMENT MATCH (n1:Item) WITH n1, substring(n1.key, 2, -9223372036854775807) AS v1 RETURN v1;
+---- 1
+

@@ -26,6 +26,15 @@ void StatementVisitor::visit(const Statement& statement) {
     case StatementType::CREATE_INDEX: {
         visitCreateIndex(statement);
     } break;
+    case StatementType::CREATE_CONSTRAINT: {
+        visitCreateConstraint(statement);
+    } break;
+    case StatementType::DROP_CONSTRAINT: {
+        visitDropConstraint(statement);
+    } break;
+    case StatementType::SHOW_CONSTRAINTS: {
+        visitShowConstraints(statement);
+    } break;
     case StatementType::CREATE_TYPE: {
         visitCreateType(statement);
     } break;

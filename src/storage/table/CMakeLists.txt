@@ -28,6 +28,7 @@ add_library(lbug_storage_store
         node_group_collection.cpp
         node_table.cpp
         null_column.cpp
+        external_table_hooks.cpp
         ice_disk_node_table.cpp
         ice_disk_rel_table.cpp
         rel_table.cpp
