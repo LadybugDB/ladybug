@@ -101,6 +101,7 @@ private:
         }
     }
     void waitForDurabilityNoLock(uint64_t commitSequence, std::unique_lock<std::mutex>& lck);
+    void syncAppendedCommitsNoLock(std::unique_lock<std::mutex>& lck);
     void flushAndSyncNoLock();
     void writeHeader(main::ClientContext& context);
     void removePinnedCheckpointMarkerNoLock(main::ClientContext* context);
