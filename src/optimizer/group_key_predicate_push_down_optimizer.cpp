@@ -1,8 +1,10 @@
 #include "optimizer/group_key_predicate_push_down_optimizer.h"
 
+#include "binder/expression/scalar_function_expression.h"
 #include "binder/expression_visitor.h"
 #include "common/enums/accumulate_type.h"
 #include "common/enums/join_type.h"
+#include "function/arithmetic/vector_arithmetic_functions.h"
 #include "planner/operator/logical_accumulate.h"
 #include "planner/operator/logical_aggregate.h"
 #include "planner/operator/logical_filter.h"
@@ -96,7 +98,8 @@ GroupKeyPredicatePushDownOptimizer::findAggregateThroughProjections(
 
 bool GroupKeyPredicatePushDownOptimizer::isGroupKeyOnlyPredicate(const Expression& predicate,
     const std::unordered_set<std::string>& groupKeyNames) {
-    return !containsRandomFunction(predicate) && isComposedFromGroupKeys(predicate, groupKeyNames);
+    return !containsVolatileFunction(predicate) &&
+           isComposedFromGroupKeys(predicate, groupKeyNames);
 }
 
 bool GroupKeyPredicatePushDownOptimizer::isComposedFromGroupKeys(const Expression& expression,
@@ -129,12 +132,21 @@ bool GroupKeyPredicatePushDownOptimizer::isComposedFromGroupKeys(const Expressio
     return true;
 }
 
-bool GroupKeyPredicatePushDownOptimizer::containsRandomFunction(const Expression& expression) {
+// Below the aggregate a predicate runs on input rows instead of groups, so it must not be random or
+// change state: nextval and setval, and setseed, which is not marked isReadOnly == false because
+// the read/write analyzer would then treat the statement as a write.
+bool GroupKeyPredicatePushDownOptimizer::containsVolatileFunction(const Expression& expression) {
     if (ExpressionVisitor::isRandom(expression)) {
         return true;
     }
+    if (expression.expressionType == ExpressionType::FUNCTION) {
+        auto& function = expression.constCast<ScalarFunctionExpression>().getFunction();
+        if (!function.isReadOnly || function.name == function::SetSeedFunction::name) {
+            return true;
+        }
+    }
     for (auto& child : ExpressionChildrenCollector::collectChildren(expression)) {
-        if (containsRandomFunction(*child)) {
+        if (containsVolatileFunction(*child)) {
             return true;
         }
     }
