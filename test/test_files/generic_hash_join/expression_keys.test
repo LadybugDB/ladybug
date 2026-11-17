@@ -1,0 +1,140 @@
+-DATASET CSV tinysnb
+
+--
+
+-CASE ExpressionJoinKeys
+
+-STATEMENT MATCH (a:person), (b:person) WHERE b.ID = a.ID + 1 RETURN a.ID, b.ID
+---- 4
+2|3
+7|8
+8|9
+9|10
+
+-STATEMENT MATCH (a:person), (b:person) WHERE a.ID + 1 = b.ID RETURN a.ID, b.ID
+---- 4
+2|3
+7|8
+8|9
+9|10
+
+-STATEMENT MATCH (a:person), (b:person) WHERE b.ID * 2 = a.ID + 4 RETURN a.ID, b.ID
+---- 3
+0|2
+2|3
+10|7
+
+-STATEMENT MATCH (a:person), (b:person) WHERE b.age = a.age - 5 RETURN a.fName, b.fName
+---- 6
+Alice|Bob
+Bob|Farooq
+Carol|Greg
+Farooq|Dan
+Farooq|Elizabeth
+Greg|Alice
+
+-STATEMENT MATCH (a:person), (b:person) WHERE b.ID = a.ID + 1 AND b.gender = a.gender RETURN a.ID, b.ID
+---- 2
+8|9
+9|10
+
+-STATEMENT MATCH (a:person), (b:person) WHERE b.ID = a.ID + 1 AND b.ID - 0 = a.ID + 1 RETURN a.ID, b.ID
+---- 4
+2|3
+7|8
+8|9
+9|10
+
+-STATEMENT MATCH (a:person), (b:person) WHERE b.ID = CASE WHEN a.ID > 5 THEN NULL ELSE a.ID + 1 END RETURN a.ID, b.ID
+---- 1
+2|3
+
+-STATEMENT MATCH (a:person), (b:person) WHERE lower(b.fName) = lower(a.fName) RETURN count(*)
+---- 1
+8
+
+-STATEMENT MATCH (p:person), (m:movies) WHERE p.ID + 124 = m.length RETURN p.ID, m.name
+---- 1
+2|Sóló cón tu párejâ
+
+-STATEMENT MATCH (a:person), (b:person), (c:person) WHERE b.ID = a.ID + 1 AND c.ID = b.ID + 1 RETURN a.ID, b.ID, c.ID
+---- 2
+7|8|9
+8|9|10
+
+-STATEMENT MATCH (a:person), (b:person) WHERE b.ID = a.ID + b.age - b.age RETURN a.ID, b.ID
+---- 8
+0|0
+2|2
+3|3
+5|5
+7|7
+8|8
+9|9
+10|10
+
+-STATEMENT MATCH (a:person), (b:person) WHERE b.ID = a.ID + COUNT { MATCH (a)-[:knows]->(:person) } RETURN a.ID, b.ID
+---- 7
+0|3
+2|5
+5|8
+7|9
+8|8
+9|9
+10|10
+
+-STATEMENT MATCH (a:person), (b:person) WHERE b.ID = a.ID + COUNT { MATCH (o:organisation) } RETURN a.ID, b.ID
+---- 4
+0|3
+2|5
+5|8
+7|10
+
+-CASE ExpressionJoinKeyCreate
+-STATEMENT CREATE NODE TABLE N(id INT64, PRIMARY KEY(id));
+---- ok
+-STATEMENT CREATE REL TABLE E(FROM N TO N);
+---- ok
+-STATEMENT UNWIND range(0, 9) AS i CREATE (:N {id: i});
+---- ok
+-STATEMENT MATCH (a:N), (b:N) WHERE b.id = a.id + 1 CREATE (a)-[:E]->(b);
+---- ok
+-STATEMENT MATCH (a:N)-[:E]->(b:N) RETURN count(*), sum(b.id - a.id);
+---- 1
+9|9
+
+-CASE ExpressionJoinKeyChangesState
+-STATEMENT CREATE SEQUENCE keySeq;
+---- ok
+-STATEMENT MATCH (a:person), (b:person) WHERE b.ID = a.ID + nextval('keySeq') * 0 RETURN count(*)
+---- 1
+8
+-STATEMENT RETURN currval('keySeq')
+---- 1
+8
+-STATEMENT MATCH (a:person), (b:person) WHERE b.ID = a.ID + CASE WHEN a.ID >= 0 THEN nextval('keySeq') * 0 ELSE 0 END RETURN count(*)
+---- 1
+8
+-STATEMENT RETURN currval('keySeq')
+---- 1
+16
+
+-CASE ExpressionJoinKeyEvaluatedPerInputRow
+-STATEMENT MATCH (a:person), (b:person) WHERE b.ID > 100 AND b.ID = CAST(a.fName AS INT64) RETURN count(*)
+---- error(regex)
+Conversion exception: Cast failed\. Could not convert ".+" to INT64\.
+
+-CASE ExpressionJoinKeyMerge
+-STATEMENT CREATE NODE TABLE Author(id INT64, PRIMARY KEY(id));
+---- ok
+-STATEMENT CREATE (:Author {id: 6});
+---- ok
+-STATEMENT UNWIND [{aid: 6}, {aid: 7}, {aid: 7}] AS r MERGE (a:Author {id: r.aid}) RETURN a.id;
+---- 3
+6
+7
+7
+-STATEMENT MATCH (a:Author) RETURN a.id;
+---- 2
+6
+7

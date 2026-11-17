@@ -17,6 +17,7 @@
 #include "optimizer/remove_unnecessary_distinct_optimizer.h"
 #include "planner/join_order/cost_model.h"
 #include "planner/operator/logical_filter.h"
+#include "planner/operator/logical_hash_join.h"
 #include "planner/operator/logical_intersect.h"
 #include "planner/operator/logical_path_property_probe.h"
 #include "planner/operator/logical_plan_util.h"
@@ -197,6 +198,51 @@ TEST_F(OptimizerTest, CrossJoinWithFilterWithoutPushDownTest) {
               "WHERE a.fName=b.fName AND a.age > 1 + 2.0 "
               "RETURN a.fName;";
     ASSERT_STREQ(getEncodedPlan(q3).c_str(), "HJ(a.fName=b.fName){Filter()S(a)}{S(b)}");
+}
+
+TEST_F(OptimizerTest, CrossProductExpressionKeyBecomesHashJoin) {
+    auto isHashJoinPlan = [&](const std::string& query) {
+        auto plan = getRoot(query);
+        auto root = plan->getLastOperator().get();
+        auto hasHashJoin = hasOperatorType(root, planner::LogicalOperatorType::HASH_JOIN);
+        auto hasCrossProduct = hasOperatorType(root, planner::LogicalOperatorType::CROSS_PRODUCT);
+        EXPECT_NE(hasHashJoin, hasCrossProduct) << query;
+        return hasHashJoin;
+    };
+    // A key computed from one input only.
+    EXPECT_TRUE(
+        isHashJoinPlan("MATCH (a:person), (b:person) WHERE b.ID = a.ID + 1 RETURN a.ID, b.ID"));
+    EXPECT_TRUE(
+        isHashJoinPlan("MATCH (a:person), (b:person) WHERE a.ID + 1 = b.ID RETURN a.ID, b.ID"));
+    EXPECT_TRUE(
+        isHashJoinPlan("MATCH (a:person), (b:person) WHERE b.ID * 2 = a.ID + 4 RETURN a.ID, b.ID"));
+    EXPECT_TRUE(isHashJoinPlan("MATCH (a:person), (b:person) "
+                               "WHERE lower(b.fName) = lower(a.fName) RETURN a.ID, b.ID"));
+    EXPECT_TRUE(
+        isHashJoinPlan("MATCH (p:person), (m:movies) WHERE p.ID + 124 = m.length RETURN p.ID"));
+    // A side that reads both inputs, is random, changes state or is nested stays a filter.
+    EXPECT_FALSE(isHashJoinPlan(
+        "MATCH (a:person), (b:person) WHERE b.ID = a.ID + b.age - b.age RETURN a.ID, b.ID"));
+    EXPECT_FALSE(isHashJoinPlan("MATCH (a:person), (b:person) "
+                                "WHERE b.ID = a.ID + CAST(floor(random() * 0) AS INT64) "
+                                "RETURN a.ID, b.ID"));
+    ASSERT_TRUE(conn->query("CREATE SEQUENCE keySeq")->isSuccess());
+    EXPECT_FALSE(isHashJoinPlan("MATCH (a:person), (b:person) "
+                                "WHERE b.ID = a.ID + nextval('keySeq') * 0 RETURN a.ID, b.ID"));
+    EXPECT_FALSE(isHashJoinPlan(
+        "MATCH (a:person), (b:person) WHERE b.ID = a.ID + "
+        "CASE WHEN a.ID >= 0 THEN nextval('keySeq') * 0 ELSE 0 END RETURN a.ID, b.ID"));
+    EXPECT_FALSE(isHashJoinPlan("MATCH (a:person), (b:person) "
+                                "WHERE b.ID = a.ID + CAST(setseed(a.age / 100.0) AS INT64) "
+                                "RETURN a.ID"));
+    EXPECT_FALSE(
+        isHashJoinPlan("MATCH (a:person), (b:person) WHERE [b.ID] = [a.ID + 1] RETURN a.ID"));
+    // The patterns themselves may plan hash joins, so check that the cross product stays.
+    auto relKeyPlan =
+        getRoot("MATCH (a:person)-[e:knows]-(b:person), (c:person)-[f:knows]-(d:person) "
+                "WHERE e = CASE WHEN c.ID >= 0 THEN f ELSE f END RETURN a.ID");
+    EXPECT_TRUE(hasOperatorType(relKeyPlan->getLastOperator().get(),
+        planner::LogicalOperatorType::CROSS_PRODUCT));
 }
 
 TEST_F(OptimizerTest, DisableOptimizerTest) {
@@ -2332,6 +2378,28 @@ static planner::LogicalOperator* findOperator(planner::LogicalOperator* op,
     std::vector<planner::LogicalOperator*> operators;
     collectOperators(op, type, operators);
     return operators.empty() ? nullptr : operators[0];
+}
+
+TEST_F(OptimizerTest, CrossProductExpressionKeyNotAddedToColumnKeyJoin) {
+    auto plan = getRoot("MATCH (a:person), (b:person) WHERE b.gender = a.gender AND "
+                        "b.ID = a.ID + 1 RETURN a.ID, b.ID");
+    auto hashJoin =
+        findOperator(plan->getLastOperator().get(), planner::LogicalOperatorType::HASH_JOIN);
+    ASSERT_NE(hashJoin, nullptr);
+    auto& conditions = hashJoin->constCast<planner::LogicalHashJoin>().getJoinConditions();
+    ASSERT_EQ(conditions.size(), 1u);
+    EXPECT_NE(conditions[0].first->toString().find("gender"), std::string::npos);
+    EXPECT_NE(conditions[0].second->toString().find("gender"), std::string::npos);
+    EXPECT_NE(findFilter(plan->getLastOperator().get()), nullptr);
+}
+
+TEST_F(OptimizerTest, CrossProductComputedKeysJoinTogether) {
+    auto plan = getRoot("MATCH (a:person), (b:person) WHERE b.ID = a.ID + 1 AND "
+                        "b.age = a.age - 5 RETURN a.ID, b.ID");
+    auto hashJoin =
+        findOperator(plan->getLastOperator().get(), planner::LogicalOperatorType::HASH_JOIN);
+    ASSERT_NE(hashJoin, nullptr);
+    EXPECT_EQ(hashJoin->constCast<planner::LogicalHashJoin>().getJoinConditions().size(), 2u);
 }
 
 static bool hasRowReducer(planner::LogicalOperator* op) {
