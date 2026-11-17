@@ -606,6 +606,7 @@ void StorageManager::finalizeCheckpoint(main::ClientContext& context) {
 
 void StorageManager::rollbackCheckpoint(const Catalog& catalog, main::ClientContext* context) {
     std::unique_lock lck{mtx};
+    // Only node tables are partitioned, so every rel table is in this storage manager's tables.
     for (const auto entry : catalog.getRelGroupEntries(&DUMMY_CHECKPOINT_TRANSACTION)) {
         for (auto& info : entry->getRelEntryInfos()) {
             if (tables.contains(info.oid)) {

@@ -827,6 +827,8 @@ void RelTable::rollbackCheckpoint() {
     restoreCheckpointedEpoch();
 }
 
+// Rel tables have no indexes to publish, unlike NodeTable::finalizeCheckpoint, which publishes
+// the primary-key index's checkpoint; one added to rel tables must be published here.
 void RelTable::finalizeCheckpoint(main::ClientContext&) {
     commitCheckpointedEpoch();
 }
