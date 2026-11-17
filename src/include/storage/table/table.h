@@ -239,8 +239,13 @@ protected:
     // A checkpoint that rolls back restores the epoch it replaced, so the next checkpoint does not
     // skip the table as unchanged. finalizeCheckpoint drops the saved epoch (partition children
     // are not finalized, so they keep theirs).
+    // A checkpoint of a table in the main storage is always finalized or rolled back, so no save is
+    // pending when it stores. Partition children are never finalized (#1407): a child keeps the
+    // epoch from before its first checkpoint since a rollback, and the next rollback restores it.
     void storeCheckpointedEpoch(uint64_t epoch) {
-        epochBeforeCheckpoint = lastCheckpointedEpoch;
+        if (!epochBeforeCheckpoint) {
+            epochBeforeCheckpoint = lastCheckpointedEpoch;
+        }
         lastCheckpointedEpoch = epoch;
     }
     void restoreCheckpointedEpoch() {
