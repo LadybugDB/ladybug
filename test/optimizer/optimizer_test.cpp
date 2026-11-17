@@ -371,6 +371,22 @@ TEST_F(OptimizerTest, GroupKeyPredicatePushDownKeepsAggregatePredicate) {
         TestHelper::convertResultToString(*expected));
 }
 
+TEST_F(OptimizerTest, GroupKeyPredicateThatChangesStateStaysAboveAggregate) {
+    auto filterAboveAggregate = [&](const std::string& predicate) {
+        auto plan = getRoot("MATCH (a:person) WITH a.gender AS g, count(*) AS c WHERE " +
+                            predicate + " RETURN g, c");
+        auto filter = findFilter(plan->getLastOperator().get());
+        EXPECT_NE(filter, nullptr) << predicate;
+        return filter != nullptr &&
+               hasOperatorType(filter, planner::LogicalOperatorType::AGGREGATE);
+    };
+    ASSERT_TRUE(conn->query("CREATE SEQUENCE keySeq")->isSuccess());
+    EXPECT_FALSE(filterAboveAggregate("g = 1"));
+    EXPECT_TRUE(filterAboveAggregate("nextval('keySeq') = 1"));
+    EXPECT_TRUE(filterAboveAggregate("setval('keySeq', g) = g"));
+    EXPECT_TRUE(filterAboveAggregate("setseed(g / 10.0) IS NULL"));
+}
+
 static void collectOperators(planner::LogicalOperator* op, planner::LogicalOperatorType type,
     std::vector<planner::LogicalOperator*>& result) {
     if (op->getOperatorType() == type) {

@@ -33,7 +33,7 @@ private:
         const std::unordered_set<std::string>& groupKeyNames);
     static bool isComposedFromGroupKeys(const binder::Expression& expression,
         const std::unordered_set<std::string>& groupKeyNames);
-    static bool containsRandomFunction(const binder::Expression& expression);
+    static bool containsVolatileFunction(const binder::Expression& expression);
 
     std::shared_ptr<planner::LogicalOperator> pushPredicate(
         std::shared_ptr<planner::LogicalOperator> op,
