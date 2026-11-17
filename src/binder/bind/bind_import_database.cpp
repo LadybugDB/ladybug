@@ -1,3 +1,5 @@
+#include <cctype>
+
 #include "binder/binder.h"
 #include "binder/bound_import_database.h"
 #include "common/copier_config/csv_reader_config.h"
@@ -109,6 +111,60 @@ static std::string stripIcebugStorageClauses(const std::string& schema) {
     return result;
 }
 
+// Databases exported before setval existed restore a SERIAL counter by dropping the sequence that
+// CREATE TABLE just made and creating it again at the saved value:
+//     DROP SEQUENCE IF EXISTS `t_id_serial`;
+//     CREATE SEQUENCE IF NOT EXISTS `t_id_serial` START 5 INCREMENT 1 MINVALUE 0
+//         MAXVALUE 9223372036854775807 NO CYCLE;
+//     RETURN nextval('t_id_serial');
+// A sequence that belongs to a SERIAL column cannot be dropped, so the triple is rewritten to the
+// equivalent RETURN setval('t_id_serial', 5). Only the exact triple EXPORT wrote, for a name that a
+// CREATE TABLE in the same schema derives from a SERIAL column, is rewritten.
+static std::string mapLegacySerialRestore(const std::string& schema) {
+    std::vector<std::string> serialNames;
+    for (auto& parsedStatement : Parser::parseQuery(schema)) {
+        if (parsedStatement->getStatementType() != StatementType::CREATE_TABLE) {
+            continue;
+        }
+        const auto& info = *parsedStatement->constCast<CreateTable>().getInfo();
+        for (auto& property : info.propertyDefinitions) {
+            if (StringUtils::getUpper(property.getType()) == "SERIAL") {
+                serialNames.push_back(
+                    std::format("{}_{}_serial", info.tableName, property.getName()));
+            }
+        }
+    }
+    std::string result = schema;
+    for (auto& name : serialNames) {
+        const auto quoted = StringUtils::quoteIdentifier(name);
+        const auto head = std::format("DROP SEQUENCE IF EXISTS {};\n"
+                                      "CREATE SEQUENCE IF NOT EXISTS {} START ",
+            quoted, quoted);
+        const auto tail = std::format(" INCREMENT 1 MINVALUE 0 MAXVALUE 9223372036854775807 "
+                                      "NO CYCLE;\nRETURN nextval('{}');",
+            name);
+        size_t from = 0;
+        size_t pos;
+        while ((pos = result.find(head, from)) != std::string::npos) {
+            const auto valueStart = pos + head.size();
+            auto valueEnd = valueStart;
+            while (valueEnd < result.size() &&
+                   std::isdigit(static_cast<unsigned char>(result[valueEnd]))) {
+                valueEnd++;
+            }
+            if (valueEnd == valueStart || result.compare(valueEnd, tail.size(), tail) != 0) {
+                from = valueStart;
+                continue;
+            }
+            const auto replacement = std::format("RETURN setval('{}', {});", name,
+                result.substr(valueStart, valueEnd - valueStart));
+            result.replace(pos, valueEnd + tail.size() - pos, replacement);
+            from = pos + replacement.size();
+        }
+    }
+    return result;
+}
+
 // Generates COPY statements that ingest the exported parquet data files into the native
 // tables created by the (stripped) schema.cypher statements. The exported layout is
 // nodes_<table>.parquet for node tables and rels_<rel>.parquet (from/to primary-key
@@ -184,6 +240,7 @@ std::unique_ptr<BoundStatement> Binder::bindImportDatabaseClause(const Statement
     std::string finalQueryStatements;
     auto schemaQuery =
         getQueryFromFile(fs, boundFilePath, PortDBConstants::SCHEMA_FILE_NAME, clientContext);
+    schemaQuery = mapLegacySerialRestore(schemaQuery);
     if (!mountIcebug) {
         schemaQuery = stripIcebugStorageClauses(schemaQuery);
         finalQueryStatements += schemaQuery;

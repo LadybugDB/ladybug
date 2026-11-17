@@ -77,6 +77,9 @@ public:
     static std::unique_ptr<SequenceCatalogEntry> deserialize(common::Deserializer& deserializer);
 
     std::string toCypher(const ToCypherInfo& info) const override;
+    // A RETURN setval(...) statement that restores the counter of a sequence that already exists,
+    // or an empty string if the sequence was never used.
+    std::string toSetvalCypher() const;
 
     binder::BoundCreateSequenceInfo getBoundCreateSequenceInfo(bool isInternal) const;
 

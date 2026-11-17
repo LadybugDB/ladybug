@@ -261,6 +261,13 @@ std::string SequenceCatalogEntry::toCypher(const ToCypherInfo& /* info */) const
         sequenceData.maxValue, sequenceData.cycle ? "" : "NO", getName());
 }
 
+std::string SequenceCatalogEntry::toSetvalCypher() const {
+    if (sequenceData.usageCount == 0) {
+        return "";
+    }
+    return std::format("RETURN setval('{}', {});", getName(), sequenceData.currVal);
+}
+
 BoundCreateSequenceInfo SequenceCatalogEntry::getBoundCreateSequenceInfo(bool isInternal) const {
     return BoundCreateSequenceInfo(name, sequenceData.startValue, sequenceData.increment,
         sequenceData.minValue, sequenceData.maxValue, sequenceData.cycle,
