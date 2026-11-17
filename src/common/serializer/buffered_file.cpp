@@ -20,7 +20,12 @@ BufferedFileWriter::BufferedFileWriter(FileInfo& fileInfo)
       fileInfo(fileInfo) {}
 
 BufferedFileWriter::~BufferedFileWriter() {
-    flush();
+    // A destructor cannot report a failed write; writers whose bytes must reach the file flush
+    // them first.
+    try {
+        flush();
+    } catch (...) { // NOLINT(bugprone-empty-catch): see above.
+    }
 }
 
 void BufferedFileWriter::write(const uint8_t* data, uint64_t size) {
