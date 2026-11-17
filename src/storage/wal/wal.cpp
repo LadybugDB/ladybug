@@ -300,31 +300,45 @@ void WAL::waitForDurabilityNoLock(uint64_t commitSequence, std::unique_lock<std:
             continue;
         }
         syncInProgress = true;
-        // Another thread can poison the WAL while this one syncs unlocked (a failed ABORT record
-        // write, for one), which discards the buffered records; they must not count as durable.
-        while (!poisoned && durableCommitSequence < appendedCommitSequence) {
-            const auto targetSequence = appendedCommitSequence;
-            const auto syncParentDirectory = !activeWALDirectorySynced;
-            writeOrFailNoLock([&] { serializer->getWriter()->flush(); });
-            auto* fileToSync = fileInfo.get();
-            lck.unlock();
-            try {
-                fileToSync->syncFile();
-                if (syncParentDirectory) {
-                    vfs->syncParentDirectory(walPath);
-                }
-            } catch (...) {
-                lck.lock();
-                failNoLock("sync");
+        try {
+            syncAppendedCommitsNoLock(lck);
+        } catch (...) {
+            // Syncing for the group, this thread also writes the commits appended after its own.
+            // When that fails, its own commit is durable already, so it still succeeds. Every
+            // failure here has poisoned the WAL, which reset syncInProgress and woke the waiters.
+            if (durableCommitSequence >= commitSequence) {
+                return;
             }
-            lck.lock();
-            if (syncParentDirectory) {
-                activeWALDirectorySynced = true;
-            }
-            durableCommitSequence = targetSequence;
-            groupCommitCV.notify_all();
+            throw;
         }
         syncInProgress = false;
+        groupCommitCV.notify_all();
+    }
+}
+
+void WAL::syncAppendedCommitsNoLock(std::unique_lock<std::mutex>& lck) {
+    // Another thread can poison the WAL while this one syncs unlocked (a failed ABORT record write,
+    // for one), which discards the buffered records; they must not count as durable.
+    while (!poisoned && durableCommitSequence < appendedCommitSequence) {
+        const auto targetSequence = appendedCommitSequence;
+        const auto syncParentDirectory = !activeWALDirectorySynced;
+        writeOrFailNoLock([&] { serializer->getWriter()->flush(); });
+        auto* fileToSync = fileInfo.get();
+        lck.unlock();
+        try {
+            fileToSync->syncFile();
+            if (syncParentDirectory) {
+                vfs->syncParentDirectory(walPath);
+            }
+        } catch (...) {
+            lck.lock();
+            failNoLock("sync");
+        }
+        lck.lock();
+        if (syncParentDirectory) {
+            activeWALDirectorySynced = true;
+        }
+        durableCommitSequence = targetSequence;
         groupCommitCV.notify_all();
     }
 }

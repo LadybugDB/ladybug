@@ -322,6 +322,39 @@ static bool waitForWALSize(lbug::storage::WAL& wal, uint64_t size) {
     return true;
 }
 
+// The thread syncing for the group also writes the commits appended while it synced its own. When
+// that write fails, the waiting commit fails instead of waiting forever, and the syncing thread's
+// own commit, durable already, succeeds.
+TEST_F(WalTest, GroupSyncWriteFailureWakesTheWaitingCommit) {
+    VirtualFileSystem vfs;
+    auto failingFS = std::make_unique<FailingSyncFileSystem>(false /* failSync */);
+    auto* failingFSPtr = failingFS.get();
+    vfs.registerFileSystem(std::move(failingFS));
+    auto* context = conn->getClientContext();
+    lbug::storage::WAL wal("failing-sync://db", false /* readOnly */, false /* enableChecksums */,
+        &vfs);
+    auto first = committedLocalWAL(context, "first");
+    auto second = committedLocalWAL(context, "second");
+
+    failingFSPtr->blockNextSync();
+    std::string firstError;
+    std::thread firstCommit([&] { firstError = commitError(wal, *first, context); });
+    failingFSPtr->waitForBlockedSync();
+    const auto sizeBeforeSecond = wal.getFileSize();
+    std::string secondError;
+    std::thread secondCommit([&] { secondError = commitError(wal, *second, context); });
+    EXPECT_TRUE(waitForWALSize(wal, sizeBeforeSecond + second->getSize()));
+    failingFSPtr->setFailWrite(true);
+    failingFSPtr->releaseSync();
+    firstCommit.join();
+    secondCommit.join();
+    failingFSPtr->setFailWrite(false);
+
+    EXPECT_EQ(firstError, "");
+    EXPECT_NE(secondError.find("panic state"), std::string::npos) << secondError;
+    EXPECT_THROW(wal.throwIfPoisoned(), RuntimeException);
+}
+
 // A commit appended while another one syncs waits for that sync. When the sync fails, the waiting
 // commit fails too, so its buffered records must not reach the file later, when closing.
 TEST_F(WalTest, FailedGroupSyncDropsTheRecordsOfTheWaitingCommit) {
