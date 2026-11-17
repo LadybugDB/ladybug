@@ -300,7 +300,9 @@ void WAL::waitForDurabilityNoLock(uint64_t commitSequence, std::unique_lock<std:
             continue;
         }
         syncInProgress = true;
-        while (durableCommitSequence < appendedCommitSequence) {
+        // Another thread can poison the WAL while this one syncs unlocked (a failed ABORT record
+        // write, for one), which discards the buffered records; they must not count as durable.
+        while (!poisoned && durableCommitSequence < appendedCommitSequence) {
             const auto targetSequence = appendedCommitSequence;
             const auto syncParentDirectory = !activeWALDirectorySynced;
             writeOrFailNoLock([&] { serializer->getWriter()->flush(); });
@@ -434,6 +436,11 @@ void WAL::poisonNoLock(const std::string& reason) {
     }
     poisoned = true;
     poisonReason = reason;
+    // The records still buffered belong to commits that now fail (each waiting commit throws once
+    // the WAL is poisoned), so they must not reach the file later, e.g. when the WAL is closed.
+    if (const auto writer = fileWriter.lock()) {
+        writer->discardBuffer();
+    }
     syncInProgress = false;
     groupCommitCV.notify_all();
 }
@@ -455,8 +462,9 @@ void WAL::initWriter(main::ClientContext* context) {
         FileOpenFlags(FileFlags::CREATE_IF_NOT_EXISTS | FileFlags::READ_ONLY | FileFlags::WRITE),
         context);
 
-    std::shared_ptr<Writer> writer = std::make_shared<BufferedFileWriter>(*fileInfo);
-    auto& bufferedWriter = writer->cast<BufferedFileWriter>();
+    auto bufferedWriter = std::make_shared<BufferedFileWriter>(*fileInfo);
+    fileWriter = bufferedWriter;
+    std::shared_ptr<Writer> writer = bufferedWriter;
     if (enableChecksums) {
         writer = std::make_shared<ChecksumWriter>(std::move(writer), *MemoryManager::Get(*context));
     }
@@ -472,7 +480,7 @@ void WAL::initWriter(main::ClientContext* context) {
     // WAL should always be APPEND only. We don't want to overwrite the file as it may still
     // contain records not replayed. This can happen if checkpoint is not triggered before the
     // Database is closed last time.
-    bufferedWriter.setFileOffset(fileInfo->getFileSize());
+    bufferedWriter->setFileOffset(fileInfo->getFileSize());
 }
 
 // NOLINTNEXTLINE(readability-make-member-function-const): semantically non-const function.
