@@ -128,7 +128,7 @@ iC_PartitionHash
     : HASH SP? '(' SP? oC_PropertyKeyName SP? ')' SP PARTITIONS SP oC_IntegerLiteral ;
 
 iC_PartitionRange
-    : RANGE SP? '(' SP? oC_PropertyKeyName SP? ')' SP PARTITIONS SP oC_IntegerLiteral ;
+    : RANGE SP? '(' SP? oC_PropertyKeyName SP? ')' SP ( PARTITIONS SP oC_IntegerLiteral | INTERVAL SP StringLiteral ) ;
 
 // List partitioning: one partition per distinct partition-key value, created on demand.
 iC_PartitionList
@@ -889,6 +889,7 @@ iC_NonReservedKeywords
         | USER
         | PARTITION
         | PARTITIONS
+        | INTERVAL
         | PASSWORD
         | MAP
         ;

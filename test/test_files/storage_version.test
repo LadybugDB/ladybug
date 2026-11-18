@@ -5,8 +5,8 @@
 -CASE StorageVersionFunctionAndUpgrade
 -STATEMENT CALL storage_version() RETURN *;
 ---- 1
-52
--CHECK_STORAGE_VERSION 52
+53
+-CHECK_STORAGE_VERSION 53
 -SET_STORAGE_VERSION 40
 -STATEMENT CALL storage_version() RETURN *;
 ---- 1
@@ -17,11 +17,37 @@
 ---- ok
 -STATEMENT CHECKPOINT;
 ---- ok
--CHECK_STORAGE_VERSION 52
+-CHECK_STORAGE_VERSION 53
 -RELOADDB
 -STATEMENT CALL storage_version() RETURN *;
 ---- 1
-52
+53
 -STATEMENT MATCH (u:users) RETURN u.id, u.name;
 ---- 1
 1|Alice
+
+-CASE OpenVersion52WithListPartition
+# The catalog layout for legacy methods is identical in versions 52 and 53.
+-STATEMENT CREATE NODE TABLE L(id INT64 PRIMARY KEY, k STRING) PARTITION BY LIST(k);
+---- ok
+-STATEMENT CREATE (:L {id:1, k:'east'});
+---- ok
+-STATEMENT CHECKPOINT;
+---- ok
+-SET_STORAGE_VERSION 52
+-STATEMENT CALL storage_version() RETURN *;
+---- 1
+52
+-STATEMENT MATCH (n:L) WHERE n.k='east' RETURN n.id;
+---- 1
+1
+-STATEMENT CREATE NODE TABLE D(id INT64 PRIMARY KEY, k DATE) PARTITION BY RANGE(k) INTERVAL '1 day';
+---- ok
+-STATEMENT CHECKPOINT;
+---- ok
+-CHECK_STORAGE_VERSION 53
+-STATEMENT MATCH (n:L) RETURN n.id;
+---- 1
+1
+-STATEMENT DROP TABLE L;
+---- ok

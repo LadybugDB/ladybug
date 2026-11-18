@@ -794,7 +794,7 @@ CatalogEntry* Catalog::createNodeTableEntry(Transaction* transaction,
         entry->addProperty(definition);
     }
     if (extraInfo->partitionParentTableID != common::INVALID_TABLE_ID) {
-        // Dynamically created LIST partition child: register the parent link so reads expand
+        // Dynamically created partition child: register the parent link so reads expand
         // to it and writes can resolve it.
         entry->setParentInfo(extraInfo->partitionParentTableID, extraInfo->partitionChildIndex);
         entry->setListPartitionKey(extraInfo->listPartitionKey);
@@ -824,10 +824,8 @@ CatalogEntry* Catalog::createNodeTableEntry(Transaction* transaction,
     if (extraInfo->partitionInfo.has_value() && !extraInfo->skipInitialPartitionCreation) {
         auto* parent = parentEntry->ptrCast<NodeTableCatalogEntry>();
         const auto& partitionInfo = *extraInfo->partitionInfo;
-        // LIST starts with one partition and grows on demand; HASH creates its full set here.
-        // LIST's initial partition keeps the >=1-partition invariant that reads and writes rely
-        // on (partition expansion never yields an empty child set). It stays unkeyed and empty:
-        // rows always route to the partition created for their own key value.
+        // HASH creates its full set here. LIST preserves its initial empty, unkeyed child.
+        // Daily RANGE starts with zero children; only writes materialize a calendar day.
         const auto numInitialPartitions =
             partitionInfo.method == binder::BoundPartitionMethod::LIST ?
                 1 :

@@ -106,8 +106,8 @@ void NodeTableCatalogEntry::serialize(common::Serializer& serializer) const {
         serializer.write(partitionColumnID);
         serializer.write(numPartitions);
         serializer.serializeVector(childTableIDs);
-        // LIST-only: encoded key -> child table id, in creation order. Readers gate on the
-        // storage version; writers always emit the current format.
+        // Dynamic LIST and daily RANGE partitions share the encoded key -> child table id map.
+        // Readers gate on the storage version; writers always emit the current format.
         serializer.write<uint64_t>(listPartitionKeys.size());
         for (const auto& [encodedKey, tableID] : listPartitionKeys) {
             serializer.write(encodedKey);
@@ -119,7 +119,7 @@ void NodeTableCatalogEntry::serialize(common::Serializer& serializer) const {
     if (isPartitionChild()) {
         serializer.write(parentTableID);
         serializer.write(partitionIndex);
-        // Child-side copy of the parent's encoded LIST key (empty for HASH children and
+        // Child-side copy of the parent's encoded key (empty for HASH children and
         // the initial unkeyed LIST partition). Lets WAL replay restore the parent's
         // key -> child map.
         serializer.write(listPartitionKey);
@@ -229,9 +229,21 @@ std::string NodeTableCatalogEntry::toCypher(const ToCypherInfo& /*info*/) const 
         common::StringUtils::quoteIdentifier(getName()), propertyCollection.toCypher(),
         common::StringUtils::quoteIdentifier(primaryKeyName));
     if (isPartitioned()) {
-        auto method = *partitionMethod == binder::BoundPartitionMethod::HASH ? "HASH" : "RANGE";
-        base += std::format(" PARTITION BY {}({}) PARTITIONS {}", method,
-            common::StringUtils::quoteIdentifier(partitionColumnName), numPartitions);
+        auto column = common::StringUtils::quoteIdentifier(partitionColumnName);
+        switch (*partitionMethod) {
+        case binder::BoundPartitionMethod::HASH:
+            base += std::format(" PARTITION BY HASH({}) PARTITIONS {}", column, numPartitions);
+            break;
+        case binder::BoundPartitionMethod::LIST:
+            base += std::format(" PARTITION BY LIST({})", column);
+            break;
+        case binder::BoundPartitionMethod::RANGE:
+            base += std::format(" PARTITION BY RANGE({}) PARTITIONS {}", column, numPartitions);
+            break;
+        case binder::BoundPartitionMethod::RANGE_DAY:
+            base += std::format(" PARTITION BY RANGE({}) INTERVAL '1 day'", column);
+            break;
+        }
     }
     if (storageFormat == common::StorageFormat::ICEBUG_DISK) {
         base += std::format(" WITH (storage = '{}', format = 'icebug-disk')", storage);

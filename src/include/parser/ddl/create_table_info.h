@@ -24,7 +24,7 @@ struct ExtraCreateTableInfo {
 
 // PostgreSQL-style partitioning method applied to a node table. LIST partitions dynamically: one
 // partition per distinct partition-key value, created on demand (numPartitions is unused).
-enum class ParsedPartitionMethod : uint8_t { HASH = 0, RANGE = 1, LIST = 2 };
+enum class ParsedPartitionMethod : uint8_t { HASH = 0, RANGE = 1, LIST = 2, RANGE_DAY = 3 };
 
 struct ParsedPartitionInfo {
     ParsedPartitionMethod method;

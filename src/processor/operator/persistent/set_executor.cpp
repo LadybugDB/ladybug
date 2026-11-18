@@ -1,5 +1,6 @@
 #include "processor/operator/persistent/set_executor.h"
 
+#include "storage/partition_storage_registry.h"
 #include "transaction/transaction.h"
 
 using namespace lbug::common;
@@ -50,11 +51,21 @@ void SingleLabelNodeSetExecutor::set(ExecutionContext* context) {
         }
         return;
     }
+    auto* table = tableInfo.table;
+    if (!table) {
+        auto pos = info.nodeIDVector->state->getSelVector()[0];
+        if (info.nodeIDVector->isNull(pos)) {
+            return;
+        }
+        auto tableID = info.nodeIDVector->getValue<internalID_t>(pos).tableID;
+        table = storage::PartitionStorageRegistry::resolveNodeTableByID(context->clientContext,
+            tableID);
+    }
     info.evaluator->evaluate();
     auto updateState = std::make_unique<storage::NodeTableUpdateState>(tableInfo.columnID,
         *info.nodeIDVector, *info.columnDataVector);
-    tableInfo.table->initUpdateState(context->clientContext, *updateState);
-    tableInfo.table->update(transaction::Transaction::Get(*context->clientContext), *updateState);
+    table->initUpdateState(context->clientContext, *updateState);
+    table->update(transaction::Transaction::Get(*context->clientContext), *updateState);
     if (info.columnVectorPos.isValid()) {
         writeColumnUpdateResult(info.nodeIDVector, info.columnVector, info.columnDataVector);
     }

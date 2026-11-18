@@ -33,6 +33,7 @@ bool LocalCacheManager::put(std::unique_ptr<LocalCacheObject> object) {
 Transaction::Transaction(main::ClientContext& clientContext, TransactionType transactionType,
     common::transaction_t transactionID, common::transaction_t startTS)
     : type{transactionType}, ID{transactionID}, startTS{startTS},
+      catalogPlanVersion{clientContext.getDatabase()->getCatalog()->getPlanVersion()},
       commitTS{common::INVALID_TRANSACTION}, forceCheckpoint{false} {
     this->clientContext = &clientContext;
     localStorage = std::make_unique<storage::LocalStorage>(clientContext);

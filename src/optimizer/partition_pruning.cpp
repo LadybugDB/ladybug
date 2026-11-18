@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <limits>
 #include <unordered_set>
 
 #include "binder/expression/parameter_expression.h"
@@ -19,88 +20,161 @@ using namespace lbug::planner;
 namespace lbug {
 namespace optimizer {
 
+// Intersect comparisons at the key's native precision before projecting onto days. Thus two
+// contradictory bounds within one day select no child, and sub-day filters stay on the scan.
+struct DayRangePredicate {
+    int64_t lower = std::numeric_limits<int64_t>::min();
+    int64_t upper = std::numeric_limits<int64_t>::max();
+
+    void intersect(ExpressionType comparison, const Value& value) {
+        if (value.isNull()) {
+            lower = 1;
+            upper = 0;
+            return;
+        }
+        const int64_t tick = value.getDataType().getLogicalTypeID() == LogicalTypeID::DATE ?
+                                 value.getValue<int32_t>() :
+                                 value.getValue<int64_t>();
+        switch (comparison) {
+        case ExpressionType::EQUALS:
+            lower = std::max(lower, tick);
+            upper = std::min(upper, tick);
+            break;
+        case ExpressionType::LESS_THAN:
+            if (tick == std::numeric_limits<int64_t>::min()) {
+                lower = 1;
+                upper = 0;
+            } else {
+                upper = std::min(upper, tick - 1);
+            }
+            break;
+        case ExpressionType::LESS_THAN_EQUALS:
+            upper = std::min(upper, tick);
+            break;
+        case ExpressionType::GREATER_THAN:
+            if (tick == std::numeric_limits<int64_t>::max()) {
+                lower = 1;
+                upper = 0;
+            } else {
+                lower = std::max(lower, tick + 1);
+            }
+            break;
+        case ExpressionType::GREATER_THAN_EQUALS:
+            lower = std::max(lower, tick);
+            break;
+        default:
+            UNREACHABLE_CODE;
+        }
+    }
+};
+
+static std::optional<table_id_t> equalityRoute(const NodeTableCatalogEntry& parent,
+    const Value& value, main::ClientContext& context) {
+    if (value.isNull()) {
+        return std::nullopt;
+    }
+    ValueVector key{value.getDataType().copy(), storage::MemoryManager::Get(context),
+        DataChunkState::getSingleValueDataChunkState()};
+    key.copyFromValue(0, value);
+    if (parent.getPartitionMethod() == BoundPartitionMethod::HASH) {
+        std::vector<uint64_t> indexes;
+        processor::computePartitionIndexes(key, parent.getNumPartitions(), indexes);
+        return parent.getChildTableIDs()[indexes[0]];
+    }
+    return parent.findListPartition(processor::encodeListPartitionKey(key, 0));
+}
+
 void FilterPushDownOptimizer::prunePartitions(LogicalScanNodeTable& scan) {
-    if (scan.getPartitionEntries().empty()) {
+    if (scan.getPartitionEntries().empty() || predicateSet.isEmpty()) {
         return;
     }
-    auto tableIDs = scan.getTableIDs();
     const auto& nodeID = scan.getNodeID()->constCast<PropertyExpression>();
     auto* transaction = transaction::Transaction::Get(*context);
+    std::unordered_map<const NodeTableCatalogEntry*, std::vector<const NodeTableCatalogEntry*>>
+        childrenByParent;
+    for (const auto* child : scan.getPartitionEntries()) {
+        const auto* parent = child->getOwningCatalog()
+                                 ->getTableCatalogEntry(transaction, child->getParentTableID())
+                                 ->ptrCast<NodeTableCatalogEntry>();
+        if (parent->isPartitionPruningSafe()) {
+            childrenByParent[parent].push_back(child);
+        }
+    }
+
     std::unordered_set<table_id_t> excluded;
-    for (const auto& predicate : predicateSet.equalityPredicates) {
-        // Accept either orientation, but leave casts/functions of the property alone. In
-        // particular, a lossy numeric comparison cannot safely determine a routing key.
-        for (auto side = 0u; side < 2; ++side) {
-            const auto& lhs = *predicate->getChild(side);
-            const auto& rhs = *predicate->getChild(1 - side);
-            if (lhs.expressionType != ExpressionType::PROPERTY ||
-                !ExpressionUtil::canEvaluateAsLiteral(rhs)) {
+    const auto predicates = predicateSet.getAllPredicates();
+    for (const auto& [parent, children] : childrenByParent) {
+        const auto method = parent->getPartitionMethod();
+        const bool daily = method == BoundPartitionMethod::RANGE_DAY;
+        if (!daily && method != BoundPartitionMethod::HASH &&
+            method != BoundPartitionMethod::LIST) {
+            continue;
+        }
+        const auto& keyName = parent->getPartitionColumnName();
+        const auto& keyType = parent->getProperty(keyName).getType();
+        const auto typeID = keyType.getLogicalTypeID();
+        // Floating equality (NaNs and signed zero) need not imply identical hashes.
+        if (typeID == LogicalTypeID::FLOAT || typeID == LogicalTypeID::DOUBLE ||
+            (method == BoundPartitionMethod::HASH &&
+                (parent->getNumPartitions() == 0 ||
+                    parent->getChildTableIDs().size() != parent->getNumPartitions()))) {
+            continue;
+        }
+        std::optional<DayRangePredicate> dayRange;
+        for (const auto& predicate : predicates) {
+            auto comparison = predicate->expressionType;
+            if (!ExpressionTypeUtil::isComparison(comparison) ||
+                comparison == ExpressionType::NOT_EQUALS ||
+                (!daily && comparison != ExpressionType::EQUALS)) {
                 continue;
             }
-            const auto& property = lhs.constCast<PropertyExpression>();
-            if (property.getVariableName() != nodeID.getVariableName()) {
+            const Expression* lhs = predicate->getChild(0).get();
+            const Expression* rhs = predicate->getChild(1).get();
+            if (rhs->expressionType == ExpressionType::PROPERTY) {
+                std::swap(lhs, rhs);
+                comparison = ExpressionTypeUtil::reverseComparisonDirection(comparison);
+            }
+            // A cast or function of the property may not preserve its ordering or its routing key.
+            if (lhs->expressionType != ExpressionType::PROPERTY ||
+                !ExpressionUtil::canEvaluateAsLiteral(*rhs) || rhs->getDataType() != keyType ||
+                lhs->getDataType() != keyType) {
                 continue;
             }
-            // Compute the route once per parent, even when it has many children.
-            std::unordered_map<const NodeTableCatalogEntry*, std::optional<table_id_t>> routes;
-            for (const auto* child : scan.getPartitionEntries()) {
-                auto* parent = child->getOwningCatalog()
-                                   ->getTableCatalogEntry(transaction, child->getParentTableID())
-                                   ->ptrCast<NodeTableCatalogEntry>();
-                if (!parent->isPartitionPruningSafe() ||
-                    property.getPropertyName() != parent->getPartitionColumnName()) {
-                    continue;
+            const auto& property = lhs->constCast<PropertyExpression>();
+            if (property.getVariableName() != nodeID.getVariableName() ||
+                property.getPropertyName() != keyName) {
+                continue;
+            }
+            if (rhs->expressionType == ExpressionType::PARAMETER) {
+                rhs->constCast<ParameterExpression>().markBakedIntoPlan();
+            }
+            const auto value = ExpressionUtil::evaluateAsLiteralValue(*rhs);
+            if (daily) {
+                if (!dayRange) {
+                    dayRange.emplace();
                 }
-                const auto& keyType =
-                    parent->getProperty(parent->getPartitionColumnName()).getType();
-                if (lhs.getDataType() != keyType || rhs.getDataType() != keyType) {
-                    continue;
-                }
-                const auto typeID = keyType.getLogicalTypeID();
-                // Floating equality (NaNs and signed zero) need not imply identical hashes.
-                if (typeID == LogicalTypeID::FLOAT || typeID == LogicalTypeID::DOUBLE) {
-                    continue;
-                }
-                if (parent->getPartitionMethod() != BoundPartitionMethod::HASH &&
-                    parent->getPartitionMethod() != BoundPartitionMethod::LIST) {
-                    continue;
-                }
-                if (parent->getPartitionMethod() == BoundPartitionMethod::HASH &&
-                    (parent->getNumPartitions() == 0 ||
-                        parent->getChildTableIDs().size() != parent->getNumPartitions())) {
-                    continue;
-                }
-                auto route = routes.find(parent);
-                if (route == routes.end()) {
-                    if (rhs.expressionType == ExpressionType::PARAMETER) {
-                        // This value changes the set of physical tables. Replan on execution
-                        // with new parameter values, just like parameterized SKIP/LIMIT.
-                        rhs.constCast<ParameterExpression>().markBakedIntoPlan();
+                dayRange->intersect(comparison, value);
+            } else {
+                const auto target = equalityRoute(*parent, value, *context);
+                for (const auto* child : children) {
+                    if (target != child->getTableID()) {
+                        excluded.insert(child->getTableID());
                     }
-                    auto value = ExpressionUtil::evaluateAsLiteralValue(rhs);
-                    std::optional<table_id_t> target;
-                    if (!value.isNull()) {
-                        ValueVector key{keyType.copy(), storage::MemoryManager::Get(*context),
-                            DataChunkState::getSingleValueDataChunkState()};
-                        key.copyFromValue(0, value);
-                        if (parent->getPartitionMethod() == BoundPartitionMethod::HASH) {
-                            std::vector<uint64_t> indexes;
-                            processor::computePartitionIndexes(key, parent->getNumPartitions(),
-                                indexes);
-                            target = parent->getChildTableIDs()[indexes[0]];
-                        } else {
-                            target = parent->findListPartition(
-                                processor::encodeListPartitionKey(key, 0));
-                        }
-                    }
-                    route = routes.emplace(parent, target).first;
                 }
-                if (route->second != child->getTableID()) {
+            }
+        }
+        if (dayRange) {
+            const auto firstDay = processor::getPartitionDay(dayRange->lower, typeID);
+            const auto lastDay = processor::getPartitionDay(dayRange->upper, typeID);
+            for (const auto* child : children) {
+                const auto day = processor::decodeDayPartitionKey(child->getListPartitionKey());
+                if (dayRange->lower > dayRange->upper || day < firstDay || day > lastDay) {
                     excluded.insert(child->getTableID());
                 }
             }
         }
     }
+    auto tableIDs = scan.getTableIDs();
     std::erase_if(tableIDs, [&](auto id) { return excluded.contains(id); });
     scan.setTableIDs(std::move(tableIDs));
 }

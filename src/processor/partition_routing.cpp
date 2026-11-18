@@ -1,11 +1,14 @@
 #include "processor/partition_routing.h"
 
+#include <charconv>
+
 #include "binder/ddl/bound_create_table_info.h"
 #include "catalog/catalog.h"
 #include "catalog/catalog_entry/node_table_catalog_entry.h"
 #include "common/exception/runtime.h"
 #include "common/types/date_t.h"
 #include "common/types/int128_t.h"
+#include "common/types/interval_t.h"
 #include "common/types/timestamp_t.h"
 #include "common/types/types.h"
 #include "function/hash/vector_hash_functions.h"
@@ -130,6 +133,57 @@ std::string encodeListPartitionKey(const common::ValueVector& keyVector, uint32_
     }
 }
 
+int64_t getPartitionDay(int64_t rawTicks, LogicalTypeID type) {
+    int64_t ticksPerDay;
+    switch (type) {
+    case LogicalTypeID::DATE:
+        return rawTicks;
+    case LogicalTypeID::TIMESTAMP_SEC:
+        ticksPerDay = Interval::SECS_PER_DAY;
+        break;
+    case LogicalTypeID::TIMESTAMP_MS:
+        ticksPerDay = Interval::MICROS_PER_DAY / Interval::MICROS_PER_MSEC;
+        break;
+    case LogicalTypeID::TIMESTAMP:
+    case LogicalTypeID::TIMESTAMP_TZ:
+        ticksPerDay = Interval::MICROS_PER_DAY;
+        break;
+    case LogicalTypeID::TIMESTAMP_NS:
+        ticksPerDay = Interval::NANOS_PER_DAY;
+        break;
+    default:
+        throw RuntimeException("Daily partitioning requires a DATE or TIMESTAMP key.");
+    }
+    // C++ division truncates toward zero. Floor negative ticks without negating INT64_MIN
+    // or converting seconds to a finer unit that could overflow.
+    return rawTicks / ticksPerDay - (rawTicks % ticksPerDay < 0);
+}
+
+std::string encodeDayPartitionKey(int64_t day) {
+    return std::to_string(day);
+}
+
+int64_t decodeDayPartitionKey(std::string_view encodedKey) {
+    int64_t day;
+    const auto* end = encodedKey.data() + encodedKey.size();
+    auto [ptr, error] = std::from_chars(encodedKey.data(), end, day);
+    if (error != std::errc{} || ptr != end) {
+        throw RuntimeException("Invalid day in partition catalog.");
+    }
+    return day;
+}
+
+static std::string encodeRoutingKey(const NodeTableCatalogEntry& parent, const ValueVector& key,
+    uint32_t pos) {
+    if (parent.getPartitionMethod() == binder::BoundPartitionMethod::RANGE_DAY) {
+        const auto type = key.dataType.getLogicalTypeID();
+        const auto ticks = type == LogicalTypeID::DATE ? key.getValue<date_t>(pos).days :
+                                                         key.getValue<int64_t>(pos);
+        return encodeDayPartitionKey(getPartitionDay(ticks, type));
+    }
+    return encodeListPartitionKey(key, pos);
+}
+
 void validatePartitionKey(main::ClientContext* context, const NodeTableCatalogEntry& child,
     const ValueVector& keyVector) {
     auto* catalog = child.getOwningCatalog();
@@ -150,8 +204,8 @@ void validatePartitionKey(main::ClientContext* context, const NodeTableCatalogEn
         const auto matches =
             parent.getPartitionMethod() == binder::BoundPartitionMethod::HASH ?
                 indexes[i] == child.getPartitionIndex() :
-                !keyVector.isNull(pos) && parent.findListPartition(encodeListPartitionKey(keyVector,
-                                              pos)) == child.getTableID();
+                !keyVector.isNull(pos) && parent.findListPartition(encodeRoutingKey(parent,
+                                              keyVector, pos)) == child.getTableID();
         if (!matches) {
             throw RuntimeException(std::format(
                 "Partition key violates the constraint of partition {}. Insert into {} to route "
@@ -161,24 +215,31 @@ void validatePartitionKey(main::ClientContext* context, const NodeTableCatalogEn
     }
 }
 
-// ---- ListPartitionRouter ----
+// ---- DynamicPartitionRouter ----
 
-ListPartitionRouter::ListPartitionRouter(main::ClientContext* context_,
+DynamicPartitionRouter::DynamicPartitionRouter(main::ClientContext* context_,
     catalog::NodeTableCatalogEntry* parent_)
     : context{context_}, parent{parent_} {}
 
-ListPartitionRouter::Route ListPartitionRouter::route(const common::ValueVector& keyVector,
+DynamicPartitionRouter::Route DynamicPartitionRouter::route(const common::ValueVector& keyVector,
     uint32_t pos) {
-    return getOrCreatePartition(encodeListPartitionKey(keyVector, pos));
-}
-
-ListPartitionRouter::Route ListPartitionRouter::getOrCreatePartition(
-    const std::string& encodedKey) {
     std::lock_guard lck{mtx};
-    return getOrCreatePartitionLocked(encodedKey);
+    return routeLocked(keyVector, pos);
 }
 
-ListPartitionRouter::Route ListPartitionRouter::getOrCreatePartitionLocked(
+DynamicPartitionRouter::Route DynamicPartitionRouter::routeLocked(
+    const common::ValueVector& keyVector, uint32_t pos) {
+    if (keyVector.isNull(pos)) {
+        const auto method =
+            parent->getPartitionMethod() == binder::BoundPartitionMethod::RANGE_DAY ? "daily" :
+                                                                                      "LIST";
+        throw RuntimeException(std::format(
+            "Cannot insert into a {}-partitioned table with a NULL partition-key value.", method));
+    }
+    return getOrCreatePartitionLocked(encodeRoutingKey(*parent, keyVector, pos));
+}
+
+DynamicPartitionRouter::Route DynamicPartitionRouter::getOrCreatePartitionLocked(
     const std::string& encodedKey) {
     if (auto it = routesByKey.find(encodedKey); it != routesByKey.end()) {
         return it->second;
@@ -187,15 +248,15 @@ ListPartitionRouter::Route ListPartitionRouter::getOrCreatePartitionLocked(
     // by a previous query after reopen).
     auto* catalog = Catalog::Get(*context);
     auto* transaction = transaction::Transaction::Get(*context);
-    const auto& existingKeys = parent->getListPartitionKeys();
-    for (auto i = 0u; i < existingKeys.size(); i++) {
-        if (existingKeys[i].first == encodedKey) {
-            auto* childEntry = catalog->getTableCatalogEntry(transaction, existingKeys[i].second);
-            auto* table = storage::PartitionStorageRegistry::resolveNodeTable(context, *childEntry);
-            Route route{table, childEntry->constCast<NodeTableCatalogEntry>().getPartitionIndex()};
-            routesByKey.emplace(encodedKey, route);
-            return route;
-        }
+    // Another operator in this transaction may already have replaced the parent catalog entry.
+    parent = catalog->getTableCatalogEntry(transaction, parent->getTableID())
+                 ->ptrCast<NodeTableCatalogEntry>();
+    if (auto childID = parent->findListPartition(encodedKey)) {
+        auto* childEntry = catalog->getTableCatalogEntry(transaction, *childID);
+        auto* table = storage::PartitionStorageRegistry::resolveNodeTable(context, *childEntry);
+        Route route{table, childEntry->constCast<NodeTableCatalogEntry>().getPartitionIndex()};
+        routesByKey.emplace(encodedKey, route);
+        return route;
     }
     // Create the partition: an ordinary node table with the parent's schema, via the same
     // catalog + storage machinery as CREATE NODE TABLE.
@@ -203,6 +264,10 @@ ListPartitionRouter::Route ListPartitionRouter::getOrCreatePartitionLocked(
     // in place leaks new children to other snapshots and leaves dangling IDs on rollback.
     parent = catalog->getPartitionParentForWrite(transaction, parent->getTableID());
     const auto ordinal = parent->getChildTableIDs().size();
+    if (parent->getPartitionMethod() == binder::BoundPartitionMethod::RANGE_DAY &&
+        storage::PartitionStorageRegistry::isRemotelyRouted(parent->getTableID(), ordinal)) {
+        throw RuntimeException("Remote daily partition creation is not supported.");
+    }
     auto childName = std::format("{}_p{}", parent->getName(), ordinal);
     std::vector<binder::PropertyDefinition> propertyDefinitions;
     propertyDefinitions.reserve(parent->getProperties().size());
@@ -224,19 +289,15 @@ ListPartitionRouter::Route ListPartitionRouter::getOrCreatePartitionLocked(
         catalog->createTableEntry(transaction, childInfo)->ptrCast<TableCatalogEntry>();
     const auto tableID = childEntry->getTableID();
     // Own data file per partition (phase-B); see docs/partitioning.md 6b.
-    storage::PartitionStorageRegistry::Get(context)
-        ->getOrCreate(context, tableID, childName)
-        .createTable(childEntry, context);
+    auto& childStorage =
+        storage::PartitionStorageRegistry::Get(context)->getOrCreate(context, tableID, childName);
     transaction->pushRollbackCallback([context = context, tableID](auto&) {
         storage::PartitionStorageRegistry::Get(context)->dropAll(context, {tableID});
     });
+    childStorage.createTable(childEntry, context);
     parent->addChildTableID(tableID);
     parent->addListPartition(encodedKey, tableID);
-    Route route{storage::PartitionStorageRegistry::Get(context)
-                    ->getOrCreate(context, tableID, childName)
-                    .getTable(tableID)
-                    ->ptrCast<storage::NodeTable>(),
-        ordinal};
+    Route route{childStorage.getTable(tableID)->ptrCast<storage::NodeTable>(), ordinal};
     routesByKey.emplace(encodedKey, route);
     return route;
 }

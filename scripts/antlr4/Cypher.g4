@@ -56,6 +56,10 @@ COMMIT : ( 'C' | 'c' ) ( 'O' | 'o' ) ( 'M' | 'm' ) ( 'M' | 'm' ) ( 'I' | 'i' ) (
 
 COMMIT_SKIP_CHECKPOINT : ( 'C' | 'c' ) ( 'O' | 'o' ) ( 'M' | 'm' ) ( 'M' | 'm' ) ( 'I' | 'i' ) ( 'T' | 't' ) '_' ( 'S' | 's' ) ( 'K' | 'k' ) ( 'I' | 'i' ) ( 'P' | 'p' ) '_' ( 'C' | 'c' ) ( 'H' | 'h' ) ( 'E' | 'e' ) ( 'C' | 'c' ) ( 'K' | 'k' ) ( 'P' | 'p' ) ( 'O' | 'o' ) ( 'I' | 'i' ) ( 'N' | 'n' ) ( 'T' | 't' ) ;
 
+CONSTRAINT : ( 'C' | 'c' ) ( 'O' | 'o' ) ( 'N' | 'n' ) ( 'S' | 's' ) ( 'T' | 't' ) ( 'R' | 'r' ) ( 'A' | 'a' ) ( 'I' | 'i' ) ( 'N' | 'n' ) ( 'T' | 't' ) ;
+
+CONSTRAINTS : ( 'C' | 'c' ) ( 'O' | 'o' ) ( 'N' | 'n' ) ( 'S' | 's' ) ( 'T' | 't' ) ( 'R' | 'r' ) ( 'A' | 'a' ) ( 'I' | 'i' ) ( 'N' | 'n' ) ( 'T' | 't' ) ( 'S' | 's' ) ;
+
 CONTAINS : ( 'C' | 'c' ) ( 'O' | 'o' ) ( 'N' | 'n' ) ( 'T' | 't' ) ( 'A' | 'a' ) ( 'I' | 'i' ) ( 'N' | 'n' ) ( 'S' | 's' ) ;
 
 COPY : ( 'C' | 'c' ) ( 'O' | 'o' ) ( 'P' | 'p' ) ( 'Y' | 'y' ) ;
@@ -194,6 +198,8 @@ REL : ( 'R' | 'r' ) ( 'E' | 'e' ) ( 'L' | 'l' ) ;
 
 RENAME : ( 'R' | 'r' ) ( 'E' | 'e' ) ( 'N' | 'n' ) ( 'A' | 'a' ) ( 'M' | 'm' ) ( 'E' | 'e' ) ;
 
+REQUIRE : ( 'R' | 'r' ) ( 'E' | 'e' ) ( 'Q' | 'q' ) ( 'U' | 'u' ) ( 'I' | 'i' ) ( 'R' | 'r' ) ( 'E' | 'e' ) ;
+
 RETURN : ( 'R' | 'r' ) ( 'E' | 'e' ) ( 'T' | 't' ) ( 'U' | 'u' ) ( 'R' | 'r' ) ( 'N' | 'n' ) ;
 
 ROLLBACK : ( 'R' | 'r' ) ( 'O' | 'o' ) ( 'L' | 'l' ) ( 'L' | 'l' ) ( 'B' | 'b' ) ( 'A' | 'a' ) ( 'C' | 'c' ) ( 'K' | 'k' ) ;
@@ -203,6 +209,8 @@ ROLLBACK_SKIP_CHECKPOINT : ( 'R' | 'r' ) ( 'O' | 'o' ) ( 'L' | 'l' ) ( 'L' | 'l'
 SEQUENCE : ( 'S' | 's' ) ( 'E' | 'e' ) ( 'Q' | 'q' ) ( 'U' | 'u' ) ( 'E' | 'e' ) ( 'N' | 'n' ) ( 'C' | 'c' ) ( 'E' | 'e' ) ;
 
 SET : ( 'S' | 's' ) ( 'E' | 'e' ) ( 'T' | 't' ) ;
+
+SHOW : ( 'S' | 's' ) ( 'H' | 'h' ) ( 'O' | 'o' ) ( 'W' | 'w' ) ;
 
 SORTED : ( 'S' | 's' ) ( 'O' | 'o' ) ( 'R' | 'r' ) ( 'T' | 't' ) ( 'E' | 'e' ) ( 'D' | 'd' ) ;
 
@@ -229,6 +237,8 @@ TRUE : ( 'T' | 't' ) ( 'R' | 'r' ) ( 'U' | 'u' ) ( 'E' | 'e' ) ;
 TYPE : ( 'T' | 't' ) ( 'Y' | 'y' ) ( 'P' | 'p' ) ( 'E' | 'e' ) ;
 
 UNION : ( 'U' | 'u' ) ( 'N' | 'n' ) ( 'I' | 'i' ) ( 'O' | 'o' ) ( 'N' | 'n' ) ;
+
+UNIQUE : ( 'U' | 'u' ) ( 'N' | 'n' ) ( 'I' | 'i' ) ( 'Q' | 'q' ) ( 'U' | 'u' ) ( 'E' | 'e' ) ;
 
 UNWIND : ( 'U' | 'u' ) ( 'N' | 'n' ) ( 'W' | 'w' ) ( 'I' | 'i' ) ( 'N' | 'n' ) ( 'D' | 'd' ) ;
 
@@ -266,6 +276,8 @@ ROLE : ( 'R' | 'r' ) ( 'O' | 'o' ) ( 'L' | 'l' ) ( 'E' | 'e' ) ;
 
 MAP : ( 'M' | 'm' ) ( 'A' | 'a' ) ( 'P' | 'p' ) ;
 
+INTERVAL : ( 'I' | 'i' ) ( 'N' | 'n' ) ( 'T' | 't' ) ( 'E' | 'e' ) ( 'R' | 'r' ) ( 'V' | 'v' ) ( 'A' | 'a' ) ( 'L' | 'l' ) ;
+
 
 
 iC_Statements
@@ -282,6 +294,9 @@ oC_Statement
         | iC_CreateNodeTable
         | iC_CreateRelTable
         | iC_CreateIndex
+        | iC_CreateConstraint
+        | iC_DropConstraint
+        | iC_ShowConstraints
         | iC_CreateSequence
         | iC_CreateType
         | iC_Drop
@@ -394,7 +409,7 @@ iC_PartitionHash
     : HASH SP? '(' SP? oC_PropertyKeyName SP? ')' SP PARTITIONS SP oC_IntegerLiteral ;
 
 iC_PartitionRange
-    : RANGE SP? '(' SP? oC_PropertyKeyName SP? ')' SP PARTITIONS SP oC_IntegerLiteral ;
+    : RANGE SP? '(' SP? oC_PropertyKeyName SP? ')' SP ( PARTITIONS SP oC_IntegerLiteral | INTERVAL SP StringLiteral ) ;
 
 // List partitioning: one partition per distinct partition-key value, created on demand.
 iC_PartitionList
@@ -425,6 +440,32 @@ iC_IndexRelationshipPattern
 
 iC_IndexPropertyPattern
     : '(' SP? oC_Variable SP? '.' SP? oC_PropertyKeyName SP? ')' ;
+
+iC_CreateConstraint
+    : CREATE SP CONSTRAINT SP oC_SchemaName (SP iC_IfNotExists)? SP FOR SP iC_ConstraintPattern SP REQUIRE SP iC_ConstraintRequire SP IS SP UNIQUE ;
+
+iC_ConstraintPattern
+    : iC_ConstraintNodePattern
+        | iC_ConstraintRelPattern ;
+
+iC_ConstraintNodePattern
+    : '(' SP? oC_Variable? SP? ':' SP? oC_LabelName SP? ')' ;
+
+iC_ConstraintRelPattern
+    : '(' SP? ')' SP? oC_RelationshipPattern SP? '(' SP? ')' ;
+
+iC_ConstraintRequire
+    : '(' SP? iC_ConstraintProperty ( SP? ',' SP? iC_ConstraintProperty )* SP? ')'
+        | iC_ConstraintProperty ;
+
+iC_ConstraintProperty
+    : oC_Variable SP? '.' SP? oC_PropertyKeyName ;
+
+iC_DropConstraint
+    : DROP SP CONSTRAINT SP oC_SchemaName (SP iC_IfExists)? ;
+
+iC_ShowConstraints
+    : SHOW SP CONSTRAINTS ;
 
 iC_CreateFromToConnections
     : iC_CreateFromToConnection ( SP? ',' SP? iC_CreateFromToConnection )* ;
@@ -1069,6 +1110,8 @@ iC_NonReservedKeywords
         | CHECKPOINT
         | COMMENT
         | COMMIT
+        | CONSTRAINT
+        | CONSTRAINTS
         | CONTAINS
         | COPY
         | COUNT
@@ -1102,11 +1145,13 @@ iC_NonReservedKeywords
         | REL
         | RANGE
         | RENAME
+        | REQUIRE
         | RETURN
         | ROLLBACK
         | ROLE
         | SEQUENCE
         | SET
+        | SHOW
         | START
         | STRUCT
         | L_SKIP
@@ -1114,6 +1159,7 @@ iC_NonReservedKeywords
         | LIST
         | TRANSACTION
         | TYPE
+        | UNIQUE
         | USE
         | UNINSTALL
         | UPDATE
@@ -1124,6 +1170,7 @@ iC_NonReservedKeywords
         | USER
         | PARTITION
         | PARTITIONS
+        | INTERVAL
         | PASSWORD
         | MAP
         ;

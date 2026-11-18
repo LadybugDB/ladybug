@@ -1068,14 +1068,8 @@ bool Planner::tryPlanLookupJoin(const SubqueryGraph& innerSubgraph, const Logica
     if (outerCard > PlannerKnobs::LOOKUP_JOIN_MAX_OUTER_CARDINALITY) {
         return false;
     }
-    storage::NodeTable* table = nullptr;
-    try {
-        table = storage::StorageManager::Get(*clientContext)
-                    ->getTable(tableID)
-                    ->ptrCast<storage::NodeTable>();
-    } catch (const std::exception&) {
-        return false;
-    }
+    auto* table =
+        storage::StorageManager::tryGetNativeNodeTable(*clientContext, *joinNode->getEntry(0));
     if (table == nullptr || table->tryGetPrimaryKeyIndex() == nullptr) {
         return false;
     }

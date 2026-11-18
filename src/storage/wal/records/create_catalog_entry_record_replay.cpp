@@ -8,7 +8,6 @@
 #include "catalog/catalog_entry/sequence_catalog_entry.h"
 #include "catalog/catalog_entry/table_catalog_entry.h"
 #include "catalog/catalog_entry/type_catalog_entry.h"
-#include "common/partition_routing.h"
 #include "storage/index/art_index.h"
 #include "storage/partition_storage_registry.h"
 #include "storage/storage_manager.h"
@@ -107,14 +106,14 @@ void WALReplayer::replayCreateCatalogEntryRecord(WALRecord& walRecord) const {
         }
         if (isPartitionChild) {
             // Re-attach the child to the replayed parent: the child's own record is the
-            // only WAL trace of the parent's child set and LIST key map, both of which
+            // only WAL trace of the parent's child set and dynamic partition key map, both of which
             // mutated after the parent's create record was logged.
             auto* replayedParent = catalog->getTableCatalogEntry(transaction, replayedParentID)
                                        ->ptrCast<NodeTableCatalogEntry>();
             replayedParent->addChildTableID(newTableEntry->getTableID());
-            if (replayedParent->isPartitioned() &&
-                static_cast<common::PartitionMethod>(*replayedParent->getPartitionMethod()) ==
-                    common::PartitionMethod::LIST &&
+            const auto method = replayedParent->getPartitionMethod();
+            if ((method == binder::BoundPartitionMethod::LIST ||
+                    method == binder::BoundPartitionMethod::RANGE_DAY) &&
                 !recordedNodeEntry->getListPartitionKey().empty()) {
                 replayedParent->addListPartition(recordedNodeEntry->getListPartitionKey(),
                     newTableEntry->getTableID());

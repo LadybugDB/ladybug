@@ -1,5 +1,6 @@
 #include "common/enums/query_rel_type.h"
 #include "common/exception/parser.h"
+#include "common/string_utils.h"
 #include "parser/ddl/alter.h"
 #include "parser/ddl/create_constraint.h"
 #include "parser/ddl/create_index.h"
@@ -101,6 +102,13 @@ std::optional<ParsedPartitionInfo> Transformer::transformPartitionInfo(
         method = ParsedPartitionMethod::RANGE;
         auto& rangeCtx = *ctx->iC_PartitionRange();
         columnName = transformPropertyKeyName(*rangeCtx.oC_PropertyKeyName());
+        if (rangeCtx.INTERVAL()) {
+            if (!StringUtils::caseInsensitiveEquals(
+                    transformStringLiteral(*rangeCtx.StringLiteral()), "1 day")) {
+                throw ParserException("Only INTERVAL '1 day' is supported for RANGE partitioning.");
+            }
+            return ParsedPartitionInfo(ParsedPartitionMethod::RANGE_DAY, std::move(columnName), 0);
+        }
         numPartitions = getPartitionCount(*rangeCtx.oC_IntegerLiteral());
         return ParsedPartitionInfo(method, std::move(columnName), numPartitions);
     }

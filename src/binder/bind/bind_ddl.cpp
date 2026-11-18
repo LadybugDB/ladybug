@@ -245,7 +245,7 @@ static ParsedStorageFormat getStorageFormat(const case_insensitive_map_t<Value>&
 }
 
 static void validatePartitionColumn(const std::vector<PropertyDefinition>& propertyDefinitions,
-    const std::string& columnName) {
+    const std::string& columnName, BoundPartitionMethod method) {
     auto propertyIt = std::find_if(propertyDefinitions.begin(), propertyDefinitions.end(),
         [&](const PropertyDefinition& def) { return def.getName() == columnName; });
     if (propertyIt == propertyDefinitions.end()) {
@@ -254,11 +254,31 @@ static void validatePartitionColumn(const std::vector<PropertyDefinition>& prope
             "of the table.",
             columnName));
     }
-    if (!LogicalTypeUtils::isPartitionable(propertyIt->getType())) {
+    const auto type = propertyIt->getType().getLogicalTypeID();
+    if (method == BoundPartitionMethod::RANGE_DAY) {
+        if (type != LogicalTypeID::DATE && type != LogicalTypeID::TIMESTAMP_TZ &&
+            !LogicalTypeUtils::isTimestamp(type)) {
+            throw BinderException(std::format(
+                "Daily RANGE partition column {} must have a DATE or TIMESTAMP type.", columnName));
+        }
+        return;
+    }
+    if (!LogicalTypeUtils::isPartitionable(type)) {
         throw BinderException(std::format(
             "Partition column {} has type {} which is not eligible for partitioning. Partition "
             "columns must be an integral, temporal or textual type.",
             columnName, propertyIt->getType().toString()));
+    }
+}
+
+static void validateDailyRangeRelEndpoint(TableCatalogEntry* entry) {
+    if (entry->getType() == CatalogEntryType::NODE_TABLE_ENTRY &&
+        entry->constCast<NodeTableCatalogEntry>().getPartitionMethod() ==
+            BoundPartitionMethod::RANGE_DAY) {
+        throw BinderException(
+            std::format("Daily RANGE parent {} cannot be a relationship endpoint yet. "
+                        "Use a materialized child table as the endpoint.",
+                entry->getName()));
     }
 }
 
@@ -297,33 +317,30 @@ BoundCreateTableInfo Binder::bindCreateNodeTableInfo(const CreateTableInfo* info
         BoundPartitionMethod method;
         switch (parsed.method) {
         case ParsedPartitionMethod::HASH:
-            method = BoundPartitionMethod::HASH;
-            break;
-        case ParsedPartitionMethod::LIST:
-            // LIST partitions dynamically: one partition per distinct key value, created on
-            // demand. It takes no PARTITIONS clause.
-            method = BoundPartitionMethod::LIST;
-            validatePartitionColumn(propertyDefinitions, parsed.columnName);
-            partitionInfo = BoundPartitionInfo(method, parsed.columnName, 0 /* numPartitions */);
-            break;
-            // Real range partitioning must split on the actual distribution of values (equal
-            // domain splits would dump all real-world data into one bucket). Until that dynamic
-            // splitting exists, refuse the DDL rather than silently falling back to hash routing.
-        case ParsedPartitionMethod::RANGE:
-            throw BinderException(
-                "RANGE partitioning is not implemented yet. RANGE requires partition bounds "
-                "derived from the actual value distribution, which is future work. Use PARTITION "
-                "BY HASH instead.");
-        default:
-            UNREACHABLE_CODE;
-        }
-        if (method == BoundPartitionMethod::HASH) {
             if (parsed.numPartitions == 0) {
                 throw BinderException("Number of partitions must be greater than 0.");
             }
-            validatePartitionColumn(propertyDefinitions, parsed.columnName);
-            partitionInfo = BoundPartitionInfo(method, parsed.columnName, parsed.numPartitions);
+            method = BoundPartitionMethod::HASH;
+            break;
+        case ParsedPartitionMethod::LIST:
+            method = BoundPartitionMethod::LIST;
+            break;
+        case ParsedPartitionMethod::RANGE_DAY:
+            if (!storage.empty() || storageFormat != StorageFormat::NONE) {
+                throw BinderException(
+                    "Daily RANGE partitioning requires native node table storage.");
+            }
+            method = BoundPartitionMethod::RANGE_DAY;
+            break;
+        case ParsedPartitionMethod::RANGE:
+            throw BinderException(
+                "RANGE with PARTITIONS does not define partition bounds. "
+                "Use PARTITION BY RANGE (column) INTERVAL '1 day' for daily partitions.");
+        default:
+            UNREACHABLE_CODE;
         }
+        validatePartitionColumn(propertyDefinitions, parsed.columnName, method);
+        partitionInfo.emplace(method, parsed.columnName, parsed.numPartitions);
     }
     auto boundExtraInfo = std::make_unique<BoundExtraCreateNodeTableInfo>(extraInfo.pKName,
         std::move(propertyDefinitions), std::move(storage), std::move(storageFormat),
@@ -432,6 +449,8 @@ BoundCreateTableInfo Binder::bindCreateRelTableGroupInfo(const CreateTableInfo* 
         validateNodeTableType(srcEntry);
         auto [dstEntry, dstDbName] = bindNodeTableEntry(dstTableName);
         validateNodeTableType(dstEntry);
+        validateDailyRangeRelEndpoint(srcEntry);
+        validateDailyRangeRelEndpoint(dstEntry);
 
         // For foreign-backed rel tables, validate that FROM and TO are foreign tables
         if (scanFunction.has_value()) {
@@ -1161,6 +1180,8 @@ std::unique_ptr<BoundStatement> Binder::bindAlterFromToConnection(
     }
     auto [srcTableEntry, srcDbName] = bindNodeTableEntry(extraInfo->srcTableName);
     auto [dstTableEntry, dstDbName] = bindNodeTableEntry(extraInfo->dstTableName);
+    validateDailyRangeRelEndpoint(srcTableEntry);
+    validateDailyRangeRelEndpoint(dstTableEntry);
     auto srcTableID = srcTableEntry->getTableID();
     auto dstTableID = dstTableEntry->getTableID();
     auto boundExtraInfo = std::make_unique<BoundExtraAlterFromToConnection>(srcTableID, dstTableID);
