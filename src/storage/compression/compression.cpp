@@ -504,9 +504,12 @@ std::string CompressionMetadata::toString(const PhysicalTypeID physicalType) con
         return "UNCOMPRESSED";
     }
     case CompressionType::ALP: {
+        // NOTE: lambdas need explicit `-> uint8_t` return types. MSVC (C3779)
+        // cannot form `overload`'s `using Funcs::operator()...` when a generic
+        // lambda's `auto` return still has to be deduced from its body.
         uint8_t bitWidth = TypeUtils::visit(
             physicalType,
-            [&]<std::floating_point T>(T) {
+            [&]<std::floating_point T>(T) -> uint8_t {
                 static constexpr common::idx_t BITPACKING_CHILD_IDX = 0;
                 return IntegerBitpacking<typename FloatCompression<T>::EncodedType>::getPackingInfo(
                     getChild(BITPACKING_CHILD_IDX))
@@ -519,12 +522,12 @@ std::string CompressionMetadata::toString(const PhysicalTypeID physicalType) con
     case CompressionType::INTEGER_BITPACKING: {
         uint8_t bitWidth = TypeUtils::visit(
             physicalType,
-            [&](common::internalID_t) {
+            [&](common::internalID_t) -> uint8_t {
                 return IntegerBitpacking<uint64_t>::getPackingInfo(*this).bitWidth;
             },
             [](bool) -> uint8_t { UNREACHABLE_CODE; },
             [&]<numeric_utils::IsIntegral T>(
-                T) { return IntegerBitpacking<T>::getPackingInfo(*this).bitWidth; },
+                T) -> uint8_t { return IntegerBitpacking<T>::getPackingInfo(*this).bitWidth; },
             [](auto) -> uint8_t { UNREACHABLE_CODE; });
         return std::format("INTEGER_BITPACKING[{}]", bitWidth);
     }
