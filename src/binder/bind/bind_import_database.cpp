@@ -119,13 +119,24 @@ static std::string stripIcebugStorageClauses(const std::string& schema) {
 //     RETURN nextval('t_id_serial');
 // A sequence that belongs to a SERIAL column cannot be dropped, so the triple is rewritten to the
 // equivalent RETURN setval('t_id_serial', 5). Only the exact triple EXPORT wrote, for a name that a
-// CREATE TABLE in the same schema derives from a SERIAL column, is rewritten.
+// CREATE TABLE in the same schema derives from a SERIAL column, is rewritten. Windows line endings
+// are normalized to "\n" first, so a schema.cypher that went through a CRLF checkout still matches.
+// (This parses the schema once more than getNativeCopyStatements does; schemas are small, so the
+// parsed statements are not shared between the two.)
 static std::string mapLegacySerialRestore(const std::string& schema) {
     if (schema.empty()) {
         return schema;
     }
+    std::string result;
+    result.reserve(schema.size());
+    for (size_t i = 0; i < schema.size(); i++) {
+        if (schema[i] == '\r' && i + 1 < schema.size() && schema[i + 1] == '\n') {
+            continue;
+        }
+        result += schema[i];
+    }
     std::vector<std::string> serialNames;
-    for (auto& parsedStatement : Parser::parseQuery(schema)) {
+    for (auto& parsedStatement : Parser::parseQuery(result)) {
         if (parsedStatement->getStatementType() != StatementType::CREATE_TABLE) {
             continue;
         }
@@ -137,15 +148,17 @@ static std::string mapLegacySerialRestore(const std::string& schema) {
             }
         }
     }
-    std::string result = schema;
     for (auto& name : serialNames) {
         const auto quoted = StringUtils::quoteIdentifier(name);
         const auto head = std::format("DROP SEQUENCE IF EXISTS {};\n"
                                       "CREATE SEQUENCE IF NOT EXISTS {} START ",
             quoted, quoted);
-        const auto tail = std::format(" INCREMENT 1 MINVALUE 0 MAXVALUE 9223372036854775807 "
-                                      "NO CYCLE;\nRETURN nextval('{}');",
-            name);
+        // Older exports wrote the name into the string literal as is; escape it the way the
+        // current exporter does as well.
+        const auto tailStart = std::string(" INCREMENT 1 MINVALUE 0 MAXVALUE 9223372036854775807 "
+                                           "NO CYCLE;\nRETURN nextval(");
+        const std::string tails[] = {tailStart + "'" + name + "');",
+            tailStart + StringUtils::quoteStringLiteral(name) + ");"};
         size_t from = 0;
         size_t pos;
         while ((pos = result.find(head, from)) != std::string::npos) {
@@ -155,13 +168,22 @@ static std::string mapLegacySerialRestore(const std::string& schema) {
                    std::isdigit(static_cast<unsigned char>(result[valueEnd]))) {
                 valueEnd++;
             }
-            if (valueEnd == valueStart || result.compare(valueEnd, tail.size(), tail) != 0) {
+            const std::string* tail = nullptr;
+            for (auto& candidate : tails) {
+                if (valueEnd != valueStart &&
+                    result.compare(valueEnd, candidate.size(), candidate) == 0) {
+                    tail = &candidate;
+                    break;
+                }
+            }
+            if (tail == nullptr) {
                 from = valueStart;
                 continue;
             }
-            const auto replacement = std::format("RETURN setval('{}', {});", name,
-                result.substr(valueStart, valueEnd - valueStart));
-            result.replace(pos, valueEnd + tail.size() - pos, replacement);
+            const auto replacement =
+                std::format("RETURN setval({}, {});", StringUtils::quoteStringLiteral(name),
+                    result.substr(valueStart, valueEnd - valueStart));
+            result.replace(pos, valueEnd + tail->size() - pos, replacement);
             from = pos + replacement.size();
         }
     }
