@@ -47,6 +47,22 @@ public:
         return quoted;
     }
 
+    // Wrap a value as a single-quoted string literal in generated Cypher. The lexer reads a
+    // backslash followed by a quote or another backslash as that character.
+    static std::string quoteStringLiteral(std::string_view value) {
+        std::string quoted;
+        quoted.reserve(value.size() + 2);
+        quoted += '\'';
+        for (const char c : value) {
+            if (c == '\'' || c == '\\') {
+                quoted += '\\';
+            }
+            quoted += c;
+        }
+        quoted += '\'';
+        return quoted;
+    }
+
     static bool isSpace(char c) {
         return c == ' ' || c == '\t' || c == '\n' || c == '\v' || c == '\f' || c == '\r';
     }
