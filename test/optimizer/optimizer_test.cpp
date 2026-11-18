@@ -2423,5 +2423,38 @@ TEST_F(OptimizerTest, LatePropertiesAfterTopKUseLookup) {
     }
 }
 
+TEST_F(OptimizerTest, EagerCountPreAggregatesBuildSide) {
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE EagerP(id INT64, PRIMARY KEY(id));"
+                            "CREATE NODE TABLE EagerT(id INT64, PRIMARY KEY(id));"
+                            "CREATE REL TABLE EagerK(FROM EagerP TO EagerP);"
+                            "CREATE REL TABLE EagerI(FROM EagerP TO EagerT);"
+                            "UNWIND range(0, 199) AS i CREATE (:EagerP {id: i});"
+                            "UNWIND range(0, 29) AS i CREATE (:EagerT {id: i});"
+                            "MATCH (a:EagerP), (b:EagerP) WHERE b.id = (a.id * 7 + 3) % 200 "
+                            "CREATE (a)-[:EagerK]->(b);"
+                            "MATCH (a:EagerP), (b:EagerP) WHERE a.id < 150 AND "
+                            "b.id = (a.id * 13 + 5) % 200 CREATE (a)-[:EagerK]->(b);"
+                            "MATCH (a:EagerP) WHERE a.id < 5 CREATE (a)-[:EagerK]->(a);"
+                            "MATCH (a:EagerP), (t:EagerT) WHERE a.id < 180 AND t.id = a.id % 30 "
+                            "CREATE (a)-[:EagerI]->(t);"
+                            "MATCH (a:EagerP), (t:EagerT) WHERE a.id < 90 AND "
+                            "t.id = (a.id * 3 + 1) % 30 CREATE (a)-[:EagerI]->(t);"
+                            "MATCH (a:EagerP), (t:EagerT) WHERE a.id < 20 AND t.id = a.id % 30 "
+                            "CREATE (a)-[:EagerI]->(t);")
+                    ->isSuccess());
+    const std::string query = "MATCH (a:EagerP)-[:EagerK]-(b:EagerP)-[:EagerK]-(c:EagerP)"
+                              "-[:EagerI]->(t:EagerT) WHERE id(a) <> id(c) RETURN count(*)";
+    auto plan = TestRunner::getLogicalPlan(query, *conn);
+    std::vector<planner::LogicalOperator*> aggregates;
+    collectOperators(plan->getLastOperator().get(), planner::LogicalOperatorType::AGGREGATE,
+        aggregates);
+    // One aggregate sums the multiplicities, the other computes them on the build side.
+    EXPECT_EQ(aggregates.size(), 2u);
+    // Nothing narrows the probe side, so it is not materialized to mask the build side.
+    EXPECT_FALSE(
+        hasOperatorType(plan->getLastOperator().get(), planner::LogicalOperatorType::ACCUMULATE));
+    EXPECT_EQ(getCount(*conn->query(query)), 2957);
+}
+
 } // namespace testing
 } // namespace lbug

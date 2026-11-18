@@ -14,6 +14,7 @@
 #include "optimizer/cardinality_updater.h"
 #include "optimizer/correlated_subquery_unnest_solver.h"
 #include "optimizer/count_rel_table_optimizer.h"
+#include "optimizer/eager_count_optimizer.h"
 #include "optimizer/factorization_rewriter.h"
 #include "optimizer/filter_push_down_optimizer.h"
 #include "optimizer/foreign_join_push_down_optimizer.h"
@@ -350,6 +351,11 @@ void Optimizer::optimize(planner::LogicalPlan* plan, main::ClientContext* contex
 
         auto limitPushDownOptimizer = LimitPushDownOptimizer();
         limitPushDownOptimizer.rewrite(plan);
+
+        // EagerCountOptimizer relies on projection push down having reduced build sides to the
+        // columns read above them, and should run before semi masks are attached to hash joins.
+        auto eagerCountOptimizer = EagerCountOptimizer(context);
+        eagerCountOptimizer.rewrite(plan);
 
         if (context->getClientConfig()->enableSemiMask) {
             // HashJoinSIPOptimizer should be applied after optimizers that manipulate hash join.

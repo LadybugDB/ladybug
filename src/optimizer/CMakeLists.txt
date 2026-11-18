@@ -6,6 +6,7 @@ add_library(lbug_optimizer
         cardinality_updater.cpp
         correlated_subquery_unnest_solver.cpp
         count_rel_table_optimizer.cpp
+        eager_count_optimizer.cpp
         factorization_rewriter.cpp
         filter_push_down_optimizer.cpp
         partition_pruning.cpp

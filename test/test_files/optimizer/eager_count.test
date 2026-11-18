@@ -1,0 +1,168 @@
+-DATASET CSV empty
+
+--
+
+-DEFINE_STATEMENT_BLOCK EAGER_COUNT_GRAPH [
+-STATEMENT CREATE NODE TABLE P(id INT64, age INT64, PRIMARY KEY(id));
+---- ok
+-STATEMENT CREATE NODE TABLE T(id INT64, PRIMARY KEY(id));
+---- ok
+-STATEMENT CREATE NODE TABLE C(id INT64, PRIMARY KEY(id));
+---- ok
+-STATEMENT CREATE REL TABLE K(FROM P TO P);
+---- ok
+-STATEMENT CREATE REL TABLE I(FROM P TO T);
+---- ok
+-STATEMENT CREATE REL TABLE L(FROM P TO T, FROM C TO T);
+---- ok
+-STATEMENT CREATE REL TABLE E(FROM P TO T);
+---- ok
+-STATEMENT UNWIND range(0, 199) AS i CREATE (:P {id: i, age: i % 40});
+---- ok
+-STATEMENT UNWIND range(0, 29) AS i CREATE (:T {id: i});
+---- ok
+-STATEMENT UNWIND range(0, 49) AS i CREATE (:C {id: i});
+---- ok
+-STATEMENT MATCH (a:P), (b:P) WHERE b.id = (a.id * 7 + 3) % 200 CREATE (a)-[:K]->(b);
+---- ok
+-STATEMENT MATCH (a:P), (b:P) WHERE a.id < 150 AND b.id = (a.id * 13 + 5) % 200 CREATE (a)-[:K]->(b);
+---- ok
+-STATEMENT MATCH (a:P) WHERE a.id < 5 CREATE (a)-[:K]->(a);
+---- ok
+-STATEMENT MATCH (a:P), (t:T) WHERE a.id < 180 AND t.id = a.id % 30 CREATE (a)-[:I]->(t);
+---- ok
+-STATEMENT MATCH (a:P), (t:T) WHERE a.id < 90 AND t.id = (a.id * 3 + 1) % 30 CREATE (a)-[:I]->(t);
+---- ok
+-STATEMENT MATCH (a:P), (t:T) WHERE a.id < 20 AND t.id = a.id % 30 CREATE (a)-[:I]->(t);
+---- ok
+-STATEMENT MATCH (a:P), (t:T) WHERE a.id < 60 AND t.id = a.id % 7 CREATE (a)-[:L]->(t);
+---- ok
+-STATEMENT MATCH (c:C), (t:T) WHERE t.id = c.id % 11 CREATE (c)-[:L]->(t);
+---- ok
+]
+
+-CASE LeafOnBuildSide
+-INSERT_STATEMENT_BLOCK EAGER_COUNT_GRAPH
+-STATEMENT MATCH (a:P)-[:K]->(b:P)-[:K]->(c:P)-[:I]->(t:T) RETURN count(*);
+---- 1
+964
+
+-CASE UndirectedWithNodeIDFilter
+-INSERT_STATEMENT_BLOCK EAGER_COUNT_GRAPH
+-STATEMENT MATCH (a:P)-[:K]-(b:P)-[:K]-(c:P)-[:I]->(t:T) WHERE id(a) <> id(c) RETURN count(*);
+---- 1
+2957
+
+-CASE TwoLeavesOnOneNode
+-INSERT_STATEMENT_BLOCK EAGER_COUNT_GRAPH
+-STATEMENT MATCH (t:T)<-[:I]-(a:P)-[:K]-(b:P)-[:I]->(u:T) RETURN count(*);
+---- 1
+1748
+
+-CASE NestedBuildSides
+-INSERT_STATEMENT_BLOCK EAGER_COUNT_GRAPH
+-STATEMENT MATCH (t:T)<-[:I]-(a:P)-[:K]->(b:P), (a)<-[:K]-(c:P), (a)-[:L]->(u:T) RETURN count(*);
+---- 1
+568
+
+-CASE MultiLabelNode
+-INSERT_STATEMENT_BLOCK EAGER_COUNT_GRAPH
+-STATEMENT MATCH (t:T)<-[:L]-(x:P:C) RETURN count(*);
+---- 1
+110
+
+-CASE MultiLabelStar
+-INSERT_STATEMENT_BLOCK EAGER_COUNT_GRAPH
+-STATEMENT MATCH (u:T)<-[:L]-(x:P:C)-[:L]->(v:T), (u)<-[:I]-(p:P) RETURN count(*);
+---- 1
+1085
+
+-CASE ParallelEdgesAndSelfLoops
+-INSERT_STATEMENT_BLOCK EAGER_COUNT_GRAPH
+-STATEMENT MATCH (a:P)-[:K]->(a)-[:I]->(t:T) RETURN count(*);
+---- 1
+15
+
+-CASE NoMatchingProbeRows
+-INSERT_STATEMENT_BLOCK EAGER_COUNT_GRAPH
+-STATEMENT MATCH (a:P)-[:K]->(b:P)-[:K]->(c:P)-[:I]->(t:T) WHERE a.id > 1000 RETURN count(*);
+---- 1
+0
+
+-CASE EmptyRelTable
+-INSERT_STATEMENT_BLOCK EAGER_COUNT_GRAPH
+-STATEMENT MATCH (a:P)-[:K]->(b:P)-[:K]->(c:P)-[:E]->(t:T) RETURN count(*);
+---- 1
+0
+
+-CASE CountInExpression
+-INSERT_STATEMENT_BLOCK EAGER_COUNT_GRAPH
+-STATEMENT MATCH (a:P)-[:K]->(b:P)-[:K]->(c:P)-[:I]->(t:T) RETURN count(*) + 1, count(*) * 2;
+---- 1
+965|1928
+
+-CASE PrimaryKeyAnchor
+-INSERT_STATEMENT_BLOCK EAGER_COUNT_GRAPH
+-STATEMENT MATCH (a:P {id: 3})-[:K]-(b:P)-[:K]-(c:P)-[:I]->(t:T) RETURN count(*);
+---- 1
+65
+
+-CASE PropertyFilterOnProbe
+-INSERT_STATEMENT_BLOCK EAGER_COUNT_GRAPH
+-STATEMENT MATCH (a:P)-[:K]->(b:P)-[:I]->(t:T) WHERE a.age < 10 RETURN count(*);
+---- 1
+155
+
+-CASE PropertyFilterOnBuild
+-INSERT_STATEMENT_BLOCK EAGER_COUNT_GRAPH
+-STATEMENT MATCH (a:P)-[:K]->(b:P)-[:K]->(c:P)-[:I]->(t:T) WHERE c.age < 10 RETURN count(*);
+---- 1
+329
+
+-CASE LeafPropertyIsRead
+-INSERT_STATEMENT_BLOCK EAGER_COUNT_GRAPH
+-STATEMENT MATCH (a:P)-[:K]->(b:P)-[:I]->(t:T) WHERE t.id <> a.id RETURN count(*);
+---- 1
+512
+
+-CASE GroupedCount
+-INSERT_STATEMENT_BLOCK EAGER_COUNT_GRAPH
+-STATEMENT MATCH (a:P)-[:K]->(b:P)-[:I]->(t:T) WHERE a.id < 3 RETURN a.id, count(*) ORDER BY a.id;
+---- 3
+0|9
+1|9
+2|8
+
+-CASE CountDistinct
+-INSERT_STATEMENT_BLOCK EAGER_COUNT_GRAPH
+-STATEMENT MATCH (a:P)-[:K]->(b:P)-[:K]->(c:P)-[:I]->(t:T) RETURN count(DISTINCT c.id);
+---- 1
+180
+
+-CASE OptionalMatch
+-INSERT_STATEMENT_BLOCK EAGER_COUNT_GRAPH
+-STATEMENT MATCH (a:P)-[:K]->(b:P) OPTIONAL MATCH (b)-[:I]->(t:T) RETURN count(*);
+---- 1
+560
+
+-CASE ExistsSubquery
+-INSERT_STATEMENT_BLOCK EAGER_COUNT_GRAPH
+-STATEMENT MATCH (a:P)-[:K]->(b:P)-[:I]->(t:T) WHERE NOT EXISTS {MATCH (a)-[:I]->(t)} RETURN count(*);
+---- 1
+479
+
+-CASE CountSubquery
+-INSERT_STATEMENT_BLOCK EAGER_COUNT_GRAPH
+-STATEMENT MATCH (a:P) WHERE a.id < 5 RETURN a.id, COUNT {MATCH (a)-[:K]->(b:P)-[:K]->(c:P)-[:I]->(t:T)} ORDER BY a.id;
+---- 5
+0|20
+1|15
+2|16
+3|11
+4|16
+
+-CASE CountAfterWith
+-INSERT_STATEMENT_BLOCK EAGER_COUNT_GRAPH
+-STATEMENT MATCH (a:P) WITH a ORDER BY a.id LIMIT 20 MATCH (a)-[:K]->(b:P)-[:I]->(t:T) RETURN count(*);
+---- 1
+86
