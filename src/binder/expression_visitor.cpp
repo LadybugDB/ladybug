@@ -9,6 +9,7 @@
 #include "binder/expression/subquery_expression.h"
 #include "common/exception/not_implemented.h"
 #include "function/arithmetic/vector_arithmetic_functions.h"
+#include "function/sequence/sequence_functions.h"
 #include "function/uuid/vector_uuid_functions.h"
 
 using namespace lbug::common;
@@ -181,18 +182,48 @@ expression_vector ExpressionChildrenCollector::collectRelChildren(const Expressi
     return result;
 }
 
+static bool isRandomFunction(const std::string& name) {
+    return name == function::GenRandomUUIDFunction::name || name == function::RandFunction::name;
+}
+
 bool ExpressionVisitor::isRandom(const Expression& expression) {
     if (expression.expressionType != ExpressionType::FUNCTION) {
         return false;
     }
-    auto& funcExpr = expression.constCast<ScalarFunctionExpression>();
-    auto funcName = funcExpr.getFunction().name;
-    if (funcName == function::GenRandomUUIDFunction::name ||
-        funcName == function::RandFunction::name) {
+    if (isRandomFunction(expression.constCast<ScalarFunctionExpression>().getFunction().name)) {
         return true;
     }
     for (auto& child : ExpressionChildrenCollector::collectChildren(expression)) {
         if (isRandom(*child)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Volatile: random functions; functions that change state, which are nextval and setval
+// (isReadOnly == false) and setseed, which stays read-only because the read/write analyzer would
+// count it as a write; and currval, which reads the state nextval and setval change. A lambda's
+// body is checked too, although collectChildren does not return it. A subquery is planned on its
+// own and joined in as a column, so moving an expression that uses it never re-evaluates its body;
+// checking its WHERE is only conservative.
+bool ExpressionVisitor::isVolatile(const Expression& expression) {
+    if (expression.expressionType == ExpressionType::LAMBDA) {
+        auto body = expression.constCast<LambdaExpression>().getFunctionExpr();
+        if (body != nullptr && isVolatile(*body)) {
+            return true;
+        }
+    }
+    if (expression.expressionType == ExpressionType::FUNCTION) {
+        auto& function = expression.constCast<ScalarFunctionExpression>().getFunction();
+        if (isRandomFunction(function.name) || !function.isReadOnly ||
+            function.name == function::SetSeedFunction::name ||
+            function.name == function::CurrValFunction::name) {
+            return true;
+        }
+    }
+    for (auto& child : ExpressionChildrenCollector::collectChildren(expression)) {
+        if (isVolatile(*child)) {
             return true;
         }
     }

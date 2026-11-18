@@ -235,6 +235,8 @@ TEST_F(OptimizerTest, CrossProductExpressionKeyBecomesHashJoin) {
     EXPECT_FALSE(isHashJoinPlan("MATCH (a:person), (b:person) "
                                 "WHERE b.ID = a.ID + CAST(setseed(a.age / 100.0) AS INT64) "
                                 "RETURN a.ID"));
+    EXPECT_FALSE(isHashJoinPlan("MATCH (a:person), (b:person) "
+                                "WHERE b.ID = a.ID + currval(a.fName) * 0 RETURN a.ID"));
     EXPECT_FALSE(
         isHashJoinPlan("MATCH (a:person), (b:person) WHERE [b.ID] = [a.ID + 1] RETURN a.ID"));
     // The patterns themselves may plan hash joins, so check that the cross product stays.
@@ -389,6 +391,7 @@ TEST_F(OptimizerTest, GroupKeyPredicateThatChangesStateStaysAboveAggregate) {
     EXPECT_TRUE(filterAboveAggregate("currval(CAST(g AS STRING)) = 1"));
     EXPECT_TRUE(filterAboveAggregate("g = 1 AND nextval('keySeq') = 1"));
     EXPECT_TRUE(filterAboveAggregate("g = 1 AND random() < 0.5"));
+    EXPECT_TRUE(filterAboveAggregate("g = 1 AND any(x IN [1] WHERE nextval('keySeq') > 0)"));
 }
 
 static void collectOperators(planner::LogicalOperator* op, planner::LogicalOperatorType type,

@@ -31,7 +31,6 @@ private:
         const std::shared_ptr<planner::LogicalOperator>& op);
     static bool isComposedFromGroupKeys(const binder::Expression& expression,
         const std::unordered_set<std::string>& groupKeyNames);
-    static bool containsVolatileFunction(const binder::Expression& expression);
 
     std::shared_ptr<planner::LogicalOperator> pushPredicate(
         std::shared_ptr<planner::LogicalOperator> op,
