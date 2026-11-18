@@ -1337,5 +1337,18 @@ TEST_F(CopyTest, CopyIntervalOverflowIgnoreErrors) {
     ASSERT_EQ(result->getNumTuples(), 2u);
 }
 
+TEST_F(CopyTest, CopyIntervalOverflowWithoutIgnoreErrors) {
+    createDBAndConn();
+    auto result =
+        conn->query("CREATE NODE TABLE intervalTable(id INT64, it INTERVAL, PRIMARY KEY(id))");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    const auto filePath =
+        writeCSV("interval_overflow.csv", {"1,1 year", "2,9223372036854775807 years", "3,2 days"});
+    result = conn->query(std::format("COPY intervalTable FROM '{}' (HEADER=false)", filePath));
+    ASSERT_FALSE(result->isSuccess());
+    EXPECT_NE(result->getErrorMessage().find("Interval value is out of range"), std::string::npos)
+        << result->getErrorMessage();
+}
+
 } // namespace testing
 } // namespace lbug
