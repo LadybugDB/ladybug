@@ -45,10 +45,10 @@ bool ParsingDriver::addValue(uint64_t rowNum, common::column_id_t columnIdx, std
     try {
         function::CastString::copyStringToVector(&chunk.getValueVectorMutable(columnIdx), rowNum,
             value, &reader->option, valueWasQuoted);
-    } catch (ConversionException& e) {
+    } catch (const ConversionException& e) {
         reader->handleCopyException(e.what());
         return false;
-    } catch (OverflowException& e) {
+    } catch (const OverflowException& e) {
         reader->handleCopyException(e.what());
         return false;
     }
