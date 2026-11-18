@@ -2,10 +2,12 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <new>
+#include <optional>
 #include <type_traits>
 
 #include "common/exception/message.h"
@@ -17,6 +19,7 @@
 #include "common/types/value/value.h"
 #include "common/vector/value_vector.h"
 #include "storage/index/art_index_disk_utils.h"
+#include "transaction/transaction.h"
 #include <concepts>
 
 using namespace lbug::common;
@@ -54,6 +57,31 @@ void appendFloat(std::vector<uint8_t>& bytes, T value) {
     const auto signBit = U{1} << (sizeof(T) * 8 - 1);
     encoded = (encoded & signBit) != 0 ? ~encoded : encoded ^ signBit;
     appendBigEndian(bytes, encoded);
+}
+
+template<typename T>
+ArtKey encodeFloatKey(T value) {
+    std::vector<uint8_t> bytes;
+    appendFloat(bytes, value);
+    return ArtKey{std::move(bytes)};
+}
+
+// appendFloat sorts -0.0 before +0.0, but comparisons treat the two zeros as equal, so a lookup of
+// either zero also looks up the other.
+template<typename T>
+void setOtherZeroKey(T value, ArtKey& otherZero) {
+    if (value == 0) {
+        otherZero = encodeFloatKey(static_cast<T>(std::signbit(value) ? 0.0 : -0.0));
+    }
+}
+
+// A range bound of zero takes the side of -0.0 or +0.0 that the comparison includes: x >= 0 and
+// x < 0 are bounded at -0.0, x > 0 and x <= 0 at +0.0.
+template<typename T>
+void setZeroBoundKey(T value, bool inclusive, bool isLowerBound, ArtKey& bound) {
+    if (value == 0) {
+        bound = encodeFloatKey(static_cast<T>(isLowerBound == inclusive ? -0.0 : 0.0));
+    }
 }
 
 void appendUInt128(std::vector<uint8_t>& bytes, uint64_t high, uint64_t low) {
@@ -283,6 +311,34 @@ ArtKey ArtKey::encode(ValueVector* vector, uint64_t vectorPos) {
         }
     });
     return ArtKey{std::move(bytes)};
+}
+
+// For a FLOAT or DOUBLE zero at vectorPos, the other zero's key (see setOtherZeroKey); other values
+// have no second key.
+static ArtKey getOtherZeroKey(ValueVector* vector, uint64_t vectorPos) {
+    ArtKey otherZero;
+    if (!vector->isNull(vectorPos)) {
+        TypeUtils::visit(vector->dataType.getPhysicalType(), [&]<typename T>(T) {
+            if constexpr (std::floating_point<T>) {
+                setOtherZeroKey(vector->getValue<T>(vectorPos), otherZero);
+            }
+        });
+    }
+    return otherZero;
+}
+
+// The key of a range bound, moved to the right side of the two zeros (see setZeroBoundKey).
+static ArtKey getBoundKey(ValueVector* vector, uint64_t vectorPos, bool inclusive,
+    bool isLowerBound) {
+    auto bound = ArtKey::encode(vector, vectorPos);
+    if (!vector->isNull(vectorPos)) {
+        TypeUtils::visit(vector->dataType.getPhysicalType(), [&]<typename T>(T) {
+            if constexpr (std::floating_point<T>) {
+                setZeroBoundKey(vector->getValue<T>(vectorPos), inclusive, isLowerBound, bound);
+            }
+        });
+    }
+    return bound;
 }
 
 std::shared_ptr<BufferWriter> ArtPrimaryKeyIndexStorageInfo::serialize() const {
@@ -585,7 +641,8 @@ void ArtPrimaryKeyIndex::insertSecondaryInternal(const ArtKey& key, offset_t off
     node->overflowOffsets->push_back(offset);
 }
 
-bool ArtPrimaryKeyIndex::lookup(const ArtKey& key, offset_t& result, visible_func isVisible) const {
+bool ArtPrimaryKeyIndex::lookup(const ArtKey& key, offset_t& result,
+    const visible_func& isVisible) const {
     const auto* node = findLeaf(key);
     if (node == nullptr) {
         return false;
@@ -605,39 +662,23 @@ bool ArtPrimaryKeyIndex::lookup(const ArtKey& key, offset_t& result, visible_fun
     return false;
 }
 
-bool ArtPrimaryKeyIndex::lookupPrimaryKey(const transaction::Transaction*, ValueVector* keyVector,
-    uint64_t vectorPos, offset_t& result, visible_func isVisible) {
-    std::lock_guard lck{mutex};
-    const auto key = ArtKey::encode(keyVector, vectorPos);
-    if (!diskBacked) {
-        return lookup(key, result, std::move(isVisible));
-    }
-    if (key.empty()) {
-        return false;
-    }
-    DASSERT(diskFileHandle != nullptr);
-    ArtPageRangeReader reader{*diskFileHandle, diskTreePageRange, diskTreeSize};
+// The offsets stored under the key in the serialized tree, or nullopt if the key is absent.
+static std::optional<std::vector<offset_t>> findDiskOffsets(ArtPageRangeReader& reader,
+    const std::vector<uint8_t>& bytes) {
     auto depth = 0u;
-    const auto& bytes = key.getBytes();
     while (true) {
-        const auto header = readArtDiskNodeHeader(reader);
+        auto header = readArtDiskNodeHeader(reader);
         const auto prefixMatch = matchPrefix(header.prefix, bytes, depth);
         if (prefixMatch != header.prefix.size()) {
-            return false;
+            return std::nullopt;
         }
         depth += header.prefix.size();
         if (depth == bytes.size()) {
-            for (const auto offset : header.offsets) {
-                if (isVisible(offset)) {
-                    result = offset;
-                    return true;
-                }
-            }
-            return false;
+            return std::move(header.offsets);
         }
         const auto edge = bytes[depth++];
         auto found = false;
-        for (auto i = 0u; i < header.numChildren; ++i) {
+        for (uint64_t i = 0; i < header.numChildren; ++i) {
             uint8_t byte = 0;
             reader.read(&byte, 1);
             uint64_t childSize = 0;
@@ -649,9 +690,39 @@ bool ArtPrimaryKeyIndex::lookupPrimaryKey(const transaction::Transaction*, Value
             reader.skip(childSize);
         }
         if (!found) {
-            return false;
+            return std::nullopt;
         }
     }
+}
+
+bool ArtPrimaryKeyIndex::lookupPrimaryKey(const transaction::Transaction* transaction,
+    ValueVector* keyVector, uint64_t vectorPos, offset_t& result, visible_func isVisible) {
+    std::lock_guard lck{mutex};
+    // WAL replay re-applies inserts that were accepted when committed; a WAL written before zeros
+    // were checked against each other may hold both.
+    const auto isReplay = transaction != nullptr && transaction->isRecovery();
+    const auto otherKey = isReplay ? ArtKey{} : getOtherZeroKey(keyVector, vectorPos);
+    auto lookupKey = [&](const ArtKey& key) {
+        if (!diskBacked) {
+            return lookup(key, result, isVisible);
+        }
+        if (key.empty()) {
+            return false;
+        }
+        DASSERT(diskFileHandle != nullptr);
+        ArtPageRangeReader reader{*diskFileHandle, diskTreePageRange, diskTreeSize};
+        if (const auto offsets = findDiskOffsets(reader, key.getBytes())) {
+            for (const auto offset : *offsets) {
+                if (isVisible(offset)) {
+                    result = offset;
+                    return true;
+                }
+            }
+        }
+        return false;
+    };
+    return lookupKey(ArtKey::encode(keyVector, vectorPos)) ||
+           (!otherKey.empty() && lookupKey(otherKey));
 }
 
 const ArtPrimaryKeyIndex::Node* ArtPrimaryKeyIndex::findLeaf(const ArtKey& key) const {
@@ -679,7 +750,7 @@ const ArtPrimaryKeyIndex::Node* ArtPrimaryKeyIndex::findLeaf(const ArtKey& key) 
 }
 
 void ArtPrimaryKeyIndex::appendVisibleOffsets(const Node& node, std::vector<offset_t>& results,
-    visible_func isVisible) const {
+    const visible_func& isVisible) const {
     if (node.offset.has_value() && isVisible(node.offset.value())) {
         results.push_back(node.offset.value());
     }
@@ -788,13 +859,15 @@ bool ArtPrimaryKeyIndex::eraseOffsetInternal(Node& node, offset_t offset) {
     return node.empty();
 }
 
-void ArtPrimaryKeyIndex::commitInsert(transaction::Transaction*, const ValueVector& nodeIDVector,
-    const std::vector<ValueVector*>& indexVectors, Index::InsertState& insertState) {
+void ArtPrimaryKeyIndex::commitInsert(transaction::Transaction* transaction,
+    const ValueVector& nodeIDVector, const std::vector<ValueVector*>& indexVectors,
+    Index::InsertState& insertState) {
     DASSERT(indexVectors.size() == 1);
     std::lock_guard lck{mutex};
     materializeDiskTree();
     auto& keyVector = *indexVectors[0];
     const auto& artInsertState = insertState.cast<InsertState>();
+    const auto isReplay = transaction != nullptr && transaction->isRecovery();
     for (auto i = 0u; i < nodeIDVector.state->getSelSize(); i++) {
         const auto nodeIDPos = nodeIDVector.state->getSelVector()[i];
         const auto offset = nodeIDVector.readNodeOffset(nodeIDPos);
@@ -810,7 +883,12 @@ void ArtPrimaryKeyIndex::commitInsert(transaction::Transaction*, const ValueVect
             insertSecondaryInternal(key, offset);
             continue;
         }
-        if (!insertInternal(key, offset, artInsertState.isVisible)) {
+        // A FLOAT or DOUBLE zero also clashes with the other zero (see setOtherZeroKey), except in
+        // WAL replay (see lookupPrimaryKey).
+        const auto otherKey = isReplay ? ArtKey{} : getOtherZeroKey(&keyVector, keyPos);
+        offset_t existingOffset = INVALID_OFFSET;
+        if ((!otherKey.empty() && lookup(otherKey, existingOffset, artInsertState.isVisible)) ||
+            !insertInternal(key, offset, artInsertState.isVisible)) {
             throw RuntimeException(
                 ExceptionMessage::duplicatePKException(keyVector.getAsValue(keyPos)->toString()));
         }
@@ -857,53 +935,29 @@ void ArtPrimaryKeyIndex::delete_(transaction::Transaction*, const ValueVector& n
 bool ArtPrimaryKeyIndex::lookupAll(const transaction::Transaction*, ValueVector* keyVector,
     uint64_t vectorPos, std::vector<offset_t>& results, visible_func isVisible) {
     std::lock_guard lck{mutex};
-    const auto key = ArtKey::encode(keyVector, vectorPos);
-    if (diskBacked) {
+    const auto otherKey = getOtherZeroKey(keyVector, vectorPos);
+    auto appendKeyOffsets = [&](const ArtKey& key) {
         if (key.empty()) {
-            return false;
+            return;
+        }
+        if (!diskBacked) {
+            if (const auto* node = findLeaf(key)) {
+                appendVisibleOffsets(*node, results, isVisible);
+            }
+            return;
         }
         DASSERT(diskFileHandle != nullptr);
         ArtPageRangeReader reader{*diskFileHandle, diskTreePageRange, diskTreeSize};
-        auto depth = 0u;
-        const auto& bytes = key.getBytes();
-        while (true) {
-            const auto header = readArtDiskNodeHeader(reader);
-            const auto prefixMatch = matchPrefix(header.prefix, bytes, depth);
-            if (prefixMatch != header.prefix.size()) {
-                return false;
-            }
-            depth += header.prefix.size();
-            if (depth == bytes.size()) {
-                for (const auto offset : header.offsets) {
-                    if (isVisible(offset)) {
-                        results.push_back(offset);
-                    }
+        if (const auto offsets = findDiskOffsets(reader, key.getBytes())) {
+            for (const auto offset : *offsets) {
+                if (isVisible(offset)) {
+                    results.push_back(offset);
                 }
-                return !results.empty();
-            }
-            const auto edge = bytes[depth++];
-            auto found = false;
-            for (auto i = 0u; i < header.numChildren; ++i) {
-                uint8_t byte = 0;
-                reader.read(&byte, 1);
-                uint64_t childSize = 0;
-                reader.read(reinterpret_cast<uint8_t*>(&childSize), sizeof(childSize));
-                if (byte == edge) {
-                    found = true;
-                    break;
-                }
-                reader.skip(childSize);
-            }
-            if (!found) {
-                return false;
             }
         }
-    }
-    const auto* node = findLeaf(key);
-    if (node == nullptr) {
-        return false;
-    }
-    appendVisibleOffsets(*node, results, std::move(isVisible));
+    };
+    appendKeyOffsets(ArtKey::encode(keyVector, vectorPos));
+    appendKeyOffsets(otherKey);
     return !results.empty();
 }
 
@@ -1091,10 +1145,12 @@ bool ArtPrimaryKeyIndex::scanPrimaryKeyRange(ValueVector* lowerBoundVector, uint
     bool lowerInclusive, ValueVector* upperBoundVector, uint64_t upperBoundPos, bool upperInclusive,
     idx_t maxResults, std::vector<offset_t>& results, visible_func isVisible) {
     std::lock_guard lck{mutex};
-    auto lowerBound =
-        lowerBoundVector == nullptr ? ArtKey{} : ArtKey::encode(lowerBoundVector, lowerBoundPos);
-    auto upperBound =
-        upperBoundVector == nullptr ? ArtKey{} : ArtKey::encode(upperBoundVector, upperBoundPos);
+    auto lowerBound = lowerBoundVector == nullptr ? ArtKey{} :
+                                                    getBoundKey(lowerBoundVector, lowerBoundPos,
+                                                        lowerInclusive, true /* isLowerBound */);
+    auto upperBound = upperBoundVector == nullptr ? ArtKey{} :
+                                                    getBoundKey(upperBoundVector, upperBoundPos,
+                                                        upperInclusive, false /* isLowerBound */);
     const auto* lowerBoundPtr = lowerBoundVector == nullptr ? nullptr : &lowerBound;
     const auto* upperBoundPtr = upperBoundVector == nullptr ? nullptr : &upperBound;
     if ((lowerBoundVector != nullptr && lowerBound.empty()) ||

@@ -1,0 +1,167 @@
+-DATASET CSV empty
+
+--
+
+-CASE ArtSignedZerosMatchTheScan
+-STATEMENT CALL enable_default_hash_index=false;
+---- ok
+-STATEMENT CREATE NODE TABLE D (ID DOUBLE, v DOUBLE, f FLOAT, w DOUBLE, PRIMARY KEY(ID));
+---- ok
+-STATEMENT UNWIND [-0.0, 0.5, 1.5, -2.0] AS x CREATE (:D {ID: x, v: x, f: cast(x AS FLOAT), w: x});
+---- ok
+-STATEMENT CREATE ART INDEX d_pk FOR (d:D) ON (d.ID);
+---- ok
+-STATEMENT CREATE ART INDEX d_v FOR (d:D) ON (d.v);
+---- ok
+-STATEMENT CREATE ART INDEX d_f FOR (d:D) ON (d.f);
+---- ok
+-LOG EqualityOnAZeroFindsTheOtherZero
+-STATEMENT MATCH (d:D) WHERE d.ID = 0.0 RETURN d.ID;
+---- 1
+-0.000000
+-STATEMENT MATCH (d:D) WHERE d.w = 0.0 RETURN d.w;
+---- 1
+-0.000000
+-STATEMENT MATCH (d:D) WHERE d.ID = -0.0 RETURN d.ID;
+---- 1
+-0.000000
+-STATEMENT MATCH (d:D) WHERE d.v = 0.0 RETURN d.v;
+---- 1
+-0.000000
+-STATEMENT MATCH (d:D) WHERE d.f = cast(0.0 AS FLOAT) RETURN d.f;
+---- 1
+-0.000000
+-LOG RangesWithAZeroBound
+-STATEMENT MATCH (d:D) WHERE d.ID >= 0.0 RETURN d.ID ORDER BY d.ID;
+---- 3
+-0.000000
+0.500000
+1.500000
+-STATEMENT MATCH (d:D) WHERE d.w >= 0.0 RETURN d.w ORDER BY d.w;
+---- 3
+-0.000000
+0.500000
+1.500000
+-STATEMENT MATCH (d:D) WHERE d.ID > 0.0 RETURN d.ID ORDER BY d.ID;
+---- 2
+0.500000
+1.500000
+-STATEMENT MATCH (d:D) WHERE d.w > 0.0 RETURN d.w ORDER BY d.w;
+---- 2
+0.500000
+1.500000
+-STATEMENT MATCH (d:D) WHERE d.ID <= 0.0 RETURN d.ID ORDER BY d.ID;
+---- 2
+-2.000000
+-0.000000
+-STATEMENT MATCH (d:D) WHERE d.w <= 0.0 RETURN d.w ORDER BY d.w;
+---- 2
+-2.000000
+-0.000000
+-STATEMENT MATCH (d:D) WHERE d.ID < 0.0 RETURN d.ID;
+---- 1
+-2.000000
+-STATEMENT MATCH (d:D) WHERE d.w < 0.0 RETURN d.w;
+---- 1
+-2.000000
+-LOG FromDisk
+-STATEMENT CHECKPOINT;
+---- ok
+-RELOADDB
+-STATEMENT MATCH (d:D) WHERE d.ID = 0.0 RETURN d.ID;
+---- 1
+-0.000000
+-STATEMENT MATCH (d:D) WHERE d.ID >= 0.0 RETURN d.ID ORDER BY d.ID;
+---- 3
+-0.000000
+0.500000
+1.500000
+-STATEMENT MATCH (d:D) WHERE d.v = 0.0 RETURN d.v;
+---- 1
+-0.000000
+-LOG PositiveZeroStored
+-STATEMENT CALL enable_default_hash_index=false;
+---- ok
+-STATEMENT CREATE NODE TABLE Z (ID DOUBLE, PRIMARY KEY(ID));
+---- ok
+-STATEMENT UNWIND [0.0, 1.0, -1.0] AS x CREATE (:Z {ID: x});
+---- ok
+-STATEMENT CREATE ART INDEX z_pk FOR (z:Z) ON (z.ID);
+---- ok
+-STATEMENT MATCH (z:Z) WHERE z.ID = -0.0 RETURN z.ID;
+---- 1
+0.000000
+-STATEMENT MATCH (z:Z) WHERE z.ID > -0.0 RETURN z.ID;
+---- 1
+1.000000
+-STATEMENT MATCH (z:Z) WHERE z.ID <= -0.0 RETURN z.ID ORDER BY z.ID;
+---- 2
+-1.000000
+0.000000
+-STATEMENT MATCH (z:Z) WHERE z.ID >= -0.0 RETURN z.ID ORDER BY z.ID;
+---- 2
+0.000000
+1.000000
+-STATEMENT MATCH (z:Z) WHERE z.ID < -0.0 RETURN z.ID;
+---- 1
+-1.000000
+-LOG FloatPrimaryKey
+-STATEMENT CREATE NODE TABLE F (ID FLOAT, PRIMARY KEY(ID));
+---- ok
+-STATEMENT UNWIND [-0.0, 2.5, -1.5] AS x CREATE (:F {ID: cast(x AS FLOAT)});
+---- ok
+-STATEMENT CREATE ART INDEX f_pk FOR (f:F) ON (f.ID);
+---- ok
+-STATEMENT MATCH (f:F) WHERE f.ID >= cast(0.0 AS FLOAT) RETURN f.ID ORDER BY f.ID;
+---- 2
+-0.000000
+2.500000
+-STATEMENT MATCH (f:F) WHERE f.ID < cast(0.0 AS FLOAT) RETURN f.ID;
+---- 1
+-1.500000
+
+-CASE ArtPrimaryKeyZerosAreOneKey
+-STATEMENT CALL enable_default_hash_index=false;
+---- ok
+-STATEMENT CREATE NODE TABLE D (ID DOUBLE, PRIMARY KEY(ID));
+---- ok
+-STATEMENT CREATE ART INDEX d_pk FOR (d:D) ON (d.ID);
+---- ok
+-STATEMENT CREATE (:D {ID: -0.0});
+---- ok
+-STATEMENT CREATE (:D {ID: 0.0});
+---- error
+Runtime exception: Found duplicated primary key value 0.000000, which violates the uniqueness constraint of the primary key column.
+-STATEMENT MERGE (:D {ID: 0.0});
+---- ok
+-STATEMENT MATCH (d:D) RETURN count(*);
+---- 1
+1
+-LOG NaNKeysAsBefore
+-STATEMENT CREATE (:D {ID: cast('nan' AS DOUBLE)});
+---- ok
+-STATEMENT CREATE (:D {ID: cast('nan' AS DOUBLE)});
+---- error(regex)
+^Runtime exception: Found duplicated primary key value .*
+-STATEMENT CHECKPOINT;
+---- ok
+-RELOADDB
+-STATEMENT CREATE (:D {ID: 0.0});
+---- error
+Runtime exception: Found duplicated primary key value 0.000000, which violates the uniqueness constraint of the primary key column.
+-STATEMENT MATCH (d:D) RETURN count(*);
+---- 1
+2
+-LOG CopyRejectsBothZerosAsAHashKeyDoes
+-STATEMENT CALL enable_default_hash_index=false;
+---- ok
+-STATEMENT CREATE NODE TABLE C (ID DOUBLE, PRIMARY KEY(ID));
+---- ok
+-STATEMENT CREATE ART INDEX c_pk FOR (c:C) ON (c.ID);
+---- ok
+-STATEMENT COPY C FROM (UNWIND [-0.0, 0.0] AS x RETURN x);
+---- error
+Runtime exception: Found duplicated primary key value 0.000000, which violates the uniqueness constraint of the primary key column.
+-STATEMENT MATCH (c:C) RETURN count(*);
+---- 1
+0

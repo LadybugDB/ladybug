@@ -177,10 +177,10 @@ private:
     void insertSecondaryInternal(const ArtKey& key, common::offset_t offset);
     static void validateIndexInfo(const IndexInfo& indexInfo);
     Node* findOrCreateLeaf(const std::vector<uint8_t>& key);
-    bool lookup(const ArtKey& key, common::offset_t& result, visible_func isVisible) const;
+    bool lookup(const ArtKey& key, common::offset_t& result, const visible_func& isVisible) const;
     const Node* findLeaf(const ArtKey& key) const;
     void appendVisibleOffsets(const Node& node, std::vector<common::offset_t>& results,
-        visible_func isVisible) const;
+        const visible_func& isVisible) const;
     bool eraseInternal(Node& node, const std::vector<uint8_t>& key, uint64_t depth);
     void erase(const ArtKey& key);
     static void eraseOffsetFromLeaf(Node& node, common::offset_t offset);
