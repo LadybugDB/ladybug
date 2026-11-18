@@ -14,7 +14,6 @@
 #include "catalog/catalog_entry/index_catalog_entry.h"
 #include "catalog/catalog_entry/table_catalog_entry.h"
 #include "common/string_utils.h"
-#include "function/arithmetic/vector_arithmetic_functions.h"
 #include "main/attached_database.h"
 #include "main/client_context.h"
 #include "main/database_manager.h"
@@ -100,27 +99,9 @@ std::shared_ptr<LogicalOperator> FilterPushDownOptimizer::visitFilterReplace(
     return visitOperator(filter.getChild(0));
 }
 
-// A computed key runs once per row of its input, while a filter over two flat inputs runs once per
-// pair. That rules out functions that change state: nextval and setval, and setseed, which is not
-// marked so because the read/write analyzer would then count it as a write (a constant setseed is
-// folded at bind). random() and gen_random_uuid() read no column, so no input can evaluate them.
-static bool changesState(const Expression& expression) {
-    if (expression.expressionType == ExpressionType::FUNCTION) {
-        auto& function = expression.constCast<ScalarFunctionExpression>().getFunction();
-        if (!function.isReadOnly || function.name == function::SetSeedFunction::name) {
-            return true;
-        }
-    }
-    for (auto& child : ExpressionChildrenCollector::collectChildren(expression)) {
-        if (changesState(*child)) {
-            return true;
-        }
-    }
-    return false;
-}
-
 // A join key is a column of its own input, or an expression that only its own input can evaluate
-// and that does not change state. A computed key must not be nested: the hash table compares NODE
+// and that is not volatile: a computed key runs once per row of its input, while a filter over two
+// flat inputs runs once per pair. A computed key must not be nested: the hash table compares NODE
 // and REL values by internal ID, while `=` compares all their fields.
 static bool isJoinKeyOf(const std::shared_ptr<Expression>& key, const Schema& own,
     const Schema& other) {
@@ -128,7 +109,7 @@ static bool isJoinKeyOf(const std::shared_ptr<Expression>& key, const Schema& ow
         return true;
     }
     return !LogicalTypeUtils::isNested(key->dataType) && own.evaluable(*key) &&
-           !other.evaluable(*key) && !changesState(*key);
+           !other.evaluable(*key) && !ExpressionVisitor::isVolatile(*key);
 }
 
 // Computes the keys that are not columns of the child yet, keeping the child's columns.

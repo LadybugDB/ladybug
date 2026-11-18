@@ -1,11 +1,8 @@
 #include "optimizer/group_key_predicate_push_down_optimizer.h"
 
-#include "binder/expression/scalar_function_expression.h"
 #include "binder/expression_visitor.h"
 #include "common/enums/accumulate_type.h"
 #include "common/enums/join_type.h"
-#include "function/arithmetic/vector_arithmetic_functions.h"
-#include "function/sequence/sequence_functions.h"
 #include "planner/operator/logical_accumulate.h"
 #include "planner/operator/logical_aggregate.h"
 #include "planner/operator/logical_filter.h"
@@ -38,9 +35,10 @@ std::shared_ptr<LogicalOperator> GroupKeyPredicatePushDownOptimizer::visitOperat
 std::shared_ptr<LogicalOperator> GroupKeyPredicatePushDownOptimizer::tryRewriteFilter(
     std::shared_ptr<LogicalOperator> op) {
     auto& filter = op->cast<LogicalFilter>();
-    // Pushing only some conjuncts would change which groups a volatile conjunct sees, and the kept
-    // conjuncts would become separate filters that later optimizers may reorder.
-    if (containsVolatileFunction(*filter.getPredicate())) {
+    // Below the aggregate a predicate runs on input rows instead of groups. Pushing only some
+    // conjuncts would change which groups a volatile conjunct sees, and the kept conjuncts would
+    // become separate filters that later optimizers may reorder.
+    if (ExpressionVisitor::isVolatile(*filter.getPredicate())) {
         return op;
     }
     auto aggregateOp = findAggregateThroughProjections(filter.getChild(0));
@@ -130,29 +128,6 @@ bool GroupKeyPredicatePushDownOptimizer::isComposedFromGroupKeys(const Expressio
         }
     }
     return true;
-}
-
-// Below the aggregate a predicate runs on input rows instead of groups, so it must not be random or
-// change state: nextval and setval, and setseed, which is not marked isReadOnly == false because
-// the read/write analyzer would then treat the statement as a write. currval reads the sequence
-// state that nextval and setval change, so it must see the same rows they do.
-bool GroupKeyPredicatePushDownOptimizer::containsVolatileFunction(const Expression& expression) {
-    if (ExpressionVisitor::isRandom(expression)) {
-        return true;
-    }
-    if (expression.expressionType == ExpressionType::FUNCTION) {
-        auto& function = expression.constCast<ScalarFunctionExpression>().getFunction();
-        if (!function.isReadOnly || function.name == function::SetSeedFunction::name ||
-            function.name == function::CurrValFunction::name) {
-            return true;
-        }
-    }
-    for (auto& child : ExpressionChildrenCollector::collectChildren(expression)) {
-        if (containsVolatileFunction(*child)) {
-            return true;
-        }
-    }
-    return false;
 }
 
 std::shared_ptr<LogicalOperator> GroupKeyPredicatePushDownOptimizer::pushPredicate(

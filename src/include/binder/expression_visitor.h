@@ -26,6 +26,9 @@ public:
     void visit(std::shared_ptr<Expression> expr);
 
     static bool isRandom(const Expression& expression);
+    // Whether the result or the side effects depend on how often and on which rows the expression
+    // is evaluated, so an optimizer must not move it.
+    static bool isVolatile(const Expression& expression);
 
 protected:
     void visitSwitch(std::shared_ptr<Expression> expr);
