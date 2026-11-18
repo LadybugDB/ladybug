@@ -9788,6 +9788,28 @@ TEST_F(PartitionCrashRecoveryTest, UUIDListKeysSurviveWALReplay) {
     EXPECT_EQ(newPlan->toString().find("U_p1"), std::string::npos);
 }
 
+TEST_F(PartitionCrashRecoveryTest, DayRangeSurvivesWALReplay) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    runQuery("CREATE NODE TABLE D(id INT64 PRIMARY KEY, k DATE) "
+             "PARTITION BY RANGE(k) INTERVAL '1 day'");
+    runQuery("CREATE (:D {id:1,k:DATE('2026-11-22')})");
+    runQuery("CREATE (:D {id:2,k:DATE('1969-12-31')})");
+    crashAndReopen();
+    EXPECT_EQ(scanIDs("MATCH(n:D) WHERE n.k<DATE('1970-01-01') RETURN n.id"),
+        std::vector<int64_t>{2});
+    runQuery("CREATE (:D {id:3,k:DATE('1969-12-31')})");
+    runQuery("CREATE (:D {id:4,k:DATE('2026-11-23')})");
+    EXPECT_EQ(scanIDs("MATCH(n:D_p1) RETURN n.id ORDER BY n.id"), (std::vector<int64_t>{2, 3}));
+    EXPECT_EQ(scanIDs("MATCH(n:D_p2) RETURN n.id"), std::vector<int64_t>{4});
+    auto plan = conn->query("EXPLAIN MATCH(n:D) WHERE n.k<DATE('1970-01-01') RETURN n.id");
+    ASSERT_TRUE(plan->isSuccess()) << plan->getErrorMessage();
+    EXPECT_NE(plan->toString().find("Tables: D_p1"), std::string::npos);
+    EXPECT_EQ(plan->toString().find("D_p0"), std::string::npos);
+    EXPECT_EQ(plan->toString().find("D_p2"), std::string::npos);
+}
+
 TEST_F(PartitionCrashRecoveryTest, HashParentSurvivesCrashRecovery) {
     if (inMemMode || systemConfig->checkpointThreshold == 0) {
         GTEST_SKIP();

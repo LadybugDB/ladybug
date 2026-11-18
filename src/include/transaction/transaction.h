@@ -105,6 +105,7 @@ public:
     bool isRecovery() const { return TransactionType::RECOVERY == type; }
     common::transaction_t getID() const { return ID; }
     common::transaction_t getStartTS() const { return startTS; }
+    uint64_t getCatalogPlanVersion() const { return catalogPlanVersion; }
     common::transaction_t getCommitTS() const { return commitTS; }
     int64_t getCurrentTS() const { return currentTS; }
 
@@ -178,6 +179,8 @@ private:
     TransactionType type;
     common::transaction_t ID;
     common::transaction_t startTS;
+    // Captured with startTS under the transaction manager's commit publication lock.
+    uint64_t catalogPlanVersion = 0;
     common::transaction_t commitTS;
     int64_t currentTS;
     main::ClientContext* clientContext;

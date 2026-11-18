@@ -1,3 +1,4 @@
+#include "binder/ddl/bound_create_table_info.h"
 #include "binder/expression/node_expression.h"
 #include "binder/expression/rel_expression.h"
 #include "catalog/catalog.h"
@@ -17,55 +18,6 @@ using namespace lbug::storage;
 namespace lbug {
 namespace processor {
 
-std::vector<RelTable*> getFwdRelTables(table_id_t nodeTableID, const main::ClientContext* context) {
-    std::vector<RelTable*> result;
-    auto transaction = transaction::Transaction::Get(*context);
-    for (const auto entry : Catalog::Get(*context)->getRelGroupEntries(transaction, false)) {
-        auto& relGroupEntry = entry->constCast<RelGroupCatalogEntry>();
-        for (auto& relEntryInfo : relGroupEntry.getRelEntryInfos()) {
-            const auto srcTableID = relEntryInfo.nodePair.srcTableID;
-            if (srcTableID == nodeTableID) {
-                const auto relTable = StorageManager::Get(*context)->getTable(relEntryInfo.oid);
-                result.push_back(relTable->ptrCast<RelTable>());
-            }
-        }
-    }
-    return result;
-}
-
-std::vector<RelTable*> getBwdRelTables(table_id_t nodeTableID, const main::ClientContext* context) {
-    std::vector<RelTable*> result;
-    auto transaction = transaction::Transaction::Get(*context);
-    for (const auto entry : Catalog::Get(*context)->getRelGroupEntries(transaction, false)) {
-        auto& relGroupEntry = entry->constCast<RelGroupCatalogEntry>();
-        for (auto& relEntryInfo : relGroupEntry.getRelEntryInfos()) {
-            const auto dstTableID = relEntryInfo.nodePair.dstTableID;
-            if (dstTableID == nodeTableID) {
-                const auto relTable = StorageManager::Get(*context)->getTable(relEntryInfo.oid);
-                result.push_back(relTable->ptrCast<RelTable>());
-            }
-        }
-    }
-    return result;
-}
-
-NodeTableDeleteInfo PlanMapper::getNodeTableDeleteInfo(const TableCatalogEntry& entry,
-    DataPos pkPos) const {
-    auto tableID = entry.getTableID();
-    auto table = storage::PartitionStorageRegistry::resolveNodeTableByID(clientContext, tableID)
-                     ->ptrCast<NodeTable>();
-    std::unordered_set<RelTable*> fwdRelTables;
-    std::unordered_set<RelTable*> bwdRelTables;
-    auto& nodeEntry = entry.constCast<NodeTableCatalogEntry>();
-    for (auto relTable : getFwdRelTables(nodeEntry.getTableID(), clientContext)) {
-        fwdRelTables.insert(relTable);
-    }
-    for (auto relTable : getBwdRelTables(nodeEntry.getTableID(), clientContext)) {
-        bwdRelTables.insert(relTable);
-    }
-    return NodeTableDeleteInfo(table, std::move(fwdRelTables), std::move(bwdRelTables), pkPos);
-}
-
 std::unique_ptr<NodeDeleteExecutor> PlanMapper::getNodeDeleteExecutor(
     const BoundDeleteInfo& boundInfo, const Schema& schema) const {
     DASSERT(boundInfo.tableType == TableType::NODE);
@@ -75,21 +27,36 @@ std::unique_ptr<NodeDeleteExecutor> PlanMapper::getNodeDeleteExecutor(
     if (node.isEmpty()) {
         return std::make_unique<EmptyNodeDeleteExecutor>(std::move(info));
     }
-    if (node.isMultiLabeled()) {
-        table_id_map_t<NodeTableDeleteInfo> tableInfos;
-        for (auto entry : node.getEntries()) {
-            auto tableID = entry->getTableID();
-            auto pkPos = getDataPos(*node.getPrimaryKey(tableID), schema);
-            tableInfos.insert({tableID, getNodeTableDeleteInfo(*entry, pkPos)});
+    table_id_map_t<NodeTableDeleteInfo> tableInfos;
+    table_id_map_t<DataPos> parentPKPositions;
+    auto* catalog = Catalog::Get(*clientContext);
+    auto* transaction = transaction::Transaction::Get(*clientContext);
+    for (auto* entry : node.getEntries()) {
+        const auto& nodeEntry = entry->constCast<NodeTableCatalogEntry>();
+        const auto tableID = nodeEntry.getTableID();
+        const auto pkPos = getDataPos(*node.getPrimaryKey(tableID), schema);
+        if (nodeEntry.isPartitioned()) {
+            // An empty daily parent supplies its schema but has no storage.
+            parentPKPositions.emplace(tableID, pkPos);
+            continue;
         }
-        return std::make_unique<MultiLabelNodeDeleteExecutor>(std::move(info),
-            std::move(tableInfos));
+        tableInfos.emplace(tableID, NodeTableDeleteInfo::forTable(clientContext, tableID, pkPos));
+        if (nodeEntry.isPartitionChild()) {
+            const auto parentID = nodeEntry.getParentTableID();
+            const auto& parent = catalog->getTableCatalogEntry(transaction, parentID)
+                                     ->constCast<NodeTableCatalogEntry>();
+            if (parent.getPartitionMethod() == BoundPartitionMethod::RANGE_DAY) {
+                // CREATE may materialize a different day between planning and DELETE.
+                parentPKPositions.emplace(parentID, pkPos);
+            }
+        }
     }
-    DASSERT(node.getNumEntries() == 1);
-    auto entry = node.getEntry(0);
-    auto pkPos = getDataPos(*node.getPrimaryKey(entry->getTableID()), schema);
-    auto extraInfo = getNodeTableDeleteInfo(*entry, pkPos);
-    return std::make_unique<SingleLabelNodeDeleteExecutor>(std::move(info), std::move(extraInfo));
+    if (tableInfos.size() == 1 && parentPKPositions.empty()) {
+        return std::make_unique<SingleLabelNodeDeleteExecutor>(std::move(info),
+            std::move(tableInfos.begin()->second));
+    }
+    return std::make_unique<MultiLabelNodeDeleteExecutor>(std::move(info), std::move(tableInfos),
+        std::move(parentPKPositions));
 }
 
 std::unique_ptr<PhysicalOperator> PlanMapper::mapDelete(const LogicalOperator* logicalOperator) {

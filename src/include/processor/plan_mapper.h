@@ -22,14 +22,16 @@ class MapperExtension;
 }
 
 namespace binder {
+class NodeExpression;
 struct BoundCopyFromInfo;
 struct BoundDeleteInfo;
 struct BoundSetPropertyInfo;
 } // namespace binder
 
 namespace catalog {
+class NodeTableCatalogEntry;
 class TableCatalogEntry;
-}
+} // namespace catalog
 
 namespace planner {
 class LogicalSemiMasker;
@@ -238,6 +240,8 @@ public:
         planner::Schema* inSchema, planner::Schema* outSchema,
         std::unique_ptr<PhysicalOperator> prevOperator);
 
+    const catalog::NodeTableCatalogEntry* getPartitionParent(
+        const binder::NodeExpression& node) const;
     NodeInsertExecutor getNodeInsertExecutor(const planner::LogicalInsertInfo* boundInfo,
         const planner::Schema& inSchema, const planner::Schema& outSchema) const;
     RelInsertExecutor getRelInsertExecutor(const planner::LogicalInsertInfo* boundInfo,
@@ -250,8 +254,6 @@ public:
         const binder::BoundDeleteInfo& boundInfo, const planner::Schema& schema) const;
     std::unique_ptr<RelDeleteExecutor> getRelDeleteExecutor(
         const binder::BoundDeleteInfo& boundInfo, const planner::Schema& schema) const;
-    NodeTableDeleteInfo getNodeTableDeleteInfo(const catalog::TableCatalogEntry& entry,
-        DataPos pkPos) const;
 
     static void mapSIPJoin(PhysicalOperator* joinRoot);
 

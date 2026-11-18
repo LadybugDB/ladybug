@@ -1,5 +1,6 @@
 #include "binder/expression/property_expression.h"
 #include "binder/expression/rel_expression.h"
+#include "catalog/catalog_entry/node_table_catalog_entry.h"
 #include "main/client_context.h"
 #include "planner/operator/persistent/logical_set.h"
 #include "processor/expression_mapper.h"
@@ -58,9 +59,19 @@ std::unique_ptr<NodeSetExecutor> PlanMapper::getNodeSetExecutor(
     auto exprMapper = ExpressionMapper(&schema);
     auto evaluator = exprMapper.getEvaluator(boundInfo.columnData);
     auto setInfo = NodeSetInfo(nodeIDPos, columnVectorPos, std::move(evaluator));
+    if (const auto* parent = getPartitionParent(node);
+        parent && parent->getPartitionMethod() == BoundPartitionMethod::RANGE_DAY) {
+        // MERGE ... ON CREATE SET may update a child first materialized by this very row.
+        return std::make_unique<SingleLabelNodeSetExecutor>(std::move(setInfo),
+            NodeTableSetInfo(nullptr, parent->getColumnID(property.getPropertyName())));
+    }
     if (node.isMultiLabeled()) {
         table_id_map_t<NodeTableSetInfo> tableInfos;
         for (auto entry : node.getEntries()) {
+            if (entry->getType() == CatalogEntryType::NODE_TABLE_ENTRY &&
+                entry->ptrCast<NodeTableCatalogEntry>()->isPartitioned()) {
+                continue;
+            }
             auto tableID = entry->getTableID();
             auto tableInfo = getNodeTableSetInfo(*entry, property, clientContext);
             if (tableInfo.columnID == INVALID_COLUMN_ID) {

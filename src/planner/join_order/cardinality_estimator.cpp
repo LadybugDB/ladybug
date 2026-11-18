@@ -82,7 +82,8 @@ void CardinalityEstimator::init(const NodeExpression& node) {
         // partition substitutes) - they don't have storage in the local database.
         if (entry->getType() == catalog::CatalogEntryType::FOREIGN_TABLE_ENTRY ||
             (entry->getType() == catalog::CatalogEntryType::NODE_TABLE_ENTRY &&
-                entry->ptrCast<catalog::NodeTableCatalogEntry>()->getScanFunction().has_value())) {
+                (entry->ptrCast<catalog::NodeTableCatalogEntry>()->isPartitioned() ||
+                    entry->getScanFunction().has_value()))) {
             continue;
         }
         auto tableID = entry->getTableID();

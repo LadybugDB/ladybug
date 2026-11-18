@@ -418,7 +418,9 @@ std::unique_ptr<QueryResult> ClientContext::executeWithParams(PreparedStatement*
     const bool planStale =
         cachedStatement->planVersion != localDatabase->getCatalog()->getPlanVersion() ||
         cachedStatement->hasUncommittedCatalogChanges ||
-        (activeTransaction != nullptr && activeTransaction->hasCatalogChanges());
+        (activeTransaction != nullptr &&
+            (activeTransaction->hasCatalogChanges() ||
+                cachedStatement->planVersion != activeTransaction->getCatalogPlanVersion()));
     // Statements with parameters baked into a plan (e.g. parameter-valued SKIP/LIMIT
     // frozen to uint64_t) must rebind/replan on every execution instead of reusing any
     // cached plan (https://github.com/LadybugDB/ladybug/issues/985).
@@ -621,6 +623,11 @@ ClientContext::PrepareResult ClientContext::prepareNoLock(
                 cachedStatement->hasBakedParameters =
                     hasBakedParameters(cachedStatement->boundParameters);
                 auto* activeTransaction = transactionContext->getActiveTransaction();
+                // A concurrent DDL commit can advance the global version while this snapshot
+                // still binds to its old schema (including its old set of partitions).
+                cachedStatement->planVersion = activeTransaction ?
+                                                   activeTransaction->getCatalogPlanVersion() :
+                                                   localDatabase->getCatalog()->getPlanVersion();
                 cachedStatement->hasUncommittedCatalogChanges =
                     activeTransaction != nullptr && activeTransaction->hasCatalogChanges();
             },
@@ -632,7 +639,6 @@ ClientContext::PrepareResult ClientContext::prepareNoLock(
         preparedStatement->success = false;
         preparedStatement->errMsg = exception.what();
     }
-    cachedStatement->planVersion = localDatabase->getCatalog()->getPlanVersion();
     prepareTimer.stop();
     preparedStatement->preparedSummary.compilingTime =
         parsedStatement->getParsingTime() + prepareTimer.getElapsedTimeMS();

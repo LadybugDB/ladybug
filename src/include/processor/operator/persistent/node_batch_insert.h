@@ -1,5 +1,7 @@
 #pragma once
 
+#include <deque>
+
 #include "common/enums/column_evaluate_type.h"
 #include "common/partition_routing.h"
 #include "common/partition_routing_hook.h"
@@ -104,9 +106,10 @@ struct NodeBatchInsertSharedState final : BatchInsertSharedState {
     // Targets whose storage is routed remotely (see common/partition_routing_hook.h) carry a
     // null table pointer; their aligned entries below describe how to route rows through the
     // hooks instead.
-    // LIST parents append to this vector as new partitions are discovered mid-COPY (under the
+    // Dynamic parents append to this deque as new partitions are discovered mid-COPY (under the
     // router lock); workers mirror the growth in their own `NodeBatchInsertLocalState`.
-    std::vector<NodeBatchInsertTarget> targets;
+    // Workers retain pointers to individual targets while other workers append new days.
+    std::deque<NodeBatchInsertTarget> targets;
     // Aligned with `targets`; meaningful only when the write goes into a partitioned parent.
     std::vector<common::PartitionRef> partitionRefs;
     std::vector<common::PartitionHandle> partitionHandles;
@@ -114,9 +117,9 @@ struct NodeBatchInsertSharedState final : BatchInsertSharedState {
     // write is not into a partitioned parent.
     common::column_id_t partitionKeyColumnIdx = common::INVALID_COLUMN_ID;
     const catalog::NodeTableCatalogEntry* partitionConstraint = nullptr;
-    // Set only for LIST-partitioned parents: creates partitions on first sight of a new key
+    // For LIST and daily parents: creates partitions on first sight of a new key
     // value and serializes discovery across COPY workers.
-    std::unique_ptr<ListPartitionRouter> listRouter;
+    std::unique_ptr<DynamicPartitionRouter> partitionRouter;
 
     std::shared_ptr<DuplicatePKSkipResult> duplicatePKSkipResult;
 
@@ -129,6 +132,7 @@ struct NodeBatchInsertSharedState final : BatchInsertSharedState {
 };
 
 struct NodeBatchInsertLocalTarget {
+    NodeBatchInsertTarget* sharedTarget = nullptr;
     std::unique_ptr<storage::InMemChunkedNodeGroup> chunkedGroup;
     std::optional<IndexBuilder> localIndexBuilder;
     std::optional<NodeBatchInsertErrorHandler> errorHandler;
@@ -144,7 +148,7 @@ struct NodeBatchInsertLocalState final : BatchInsertLocalState {
     // Scratch buffer reused to hold the partition index of every row in the current chunk.
     std::vector<uint64_t> partitionIdxes;
 
-    // Producer tokens for each target's local index builder. LIST COPYs grow this alongside
+    // Producer tokens for each target's local index builder. Dynamic COPYs grow this alongside
     // `targets` when a new partition is created mid-copy, so its builder joins the producer
     // count like any pre-existing partition's.
     std::vector<std::optional<ProducerToken>> indexProducerTokens;
@@ -185,8 +189,7 @@ public:
     // not written.
     void writeAndResetNodeGroup(transaction::Transaction* transaction, common::idx_t targetIdx,
         std::unique_ptr<storage::InMemChunkedNodeGroup>& nodeGroup,
-        std::optional<IndexBuilder>& indexBuilder, storage::MemoryManager* mm,
-        storage::PageAllocator& pageAllocator) const;
+        std::optional<IndexBuilder>& indexBuilder, storage::MemoryManager* mm) const;
 
 private:
     void evaluateExpressions(uint64_t numTuples) const;
@@ -200,20 +203,19 @@ private:
     void copyToNodeGroup(transaction::Transaction* transaction, storage::MemoryManager* mm,
         ExecutionContext* context) const;
 
-    // LIST-only: appends shared + local targets for partitions created mid-copy. `freshTables`
-    // maps the ordinal of every newly discovered partition to its table. Called under the router
-    // lock.
-    void growListTargets(ExecutionContext* context, NodeBatchInsertSharedState* nodeSharedState,
-        NodeBatchInsertLocalState* nodeLocalState,
-        const std::unordered_map<uint64_t, storage::NodeTable*>& freshTables) const;
+    // Attach this worker to partitions discovered during COPY, under the router lock.
+    void attachDynamicTargets(ExecutionContext* context,
+        NodeBatchInsertSharedState* nodeSharedState, NodeBatchInsertLocalState* nodeLocalState,
+        const DynamicPartitionRouter::Route& route) const;
 
     NodeBatchInsertErrorHandler createErrorHandler(ExecutionContext* context,
         storage::NodeTable* nodeTable, DuplicatePKSkipResult* duplicatePKSkipResult) const;
 
-    void writeAndResetNodeGroup(transaction::Transaction* transaction, common::idx_t targetIdx,
+    void writeAndResetNodeGroup(transaction::Transaction* transaction,
+        NodeBatchInsertTarget& sharedTarget,
         std::unique_ptr<storage::InMemChunkedNodeGroup>& nodeGroup,
         std::optional<IndexBuilder>& indexBuilder, storage::MemoryManager* mm,
-        NodeBatchInsertErrorHandler& errorHandler, storage::PageAllocator& pageAllocator) const;
+        NodeBatchInsertErrorHandler& errorHandler) const;
 };
 
 } // namespace processor

@@ -2,10 +2,14 @@
 
 #include <memory>
 
+#include "catalog/catalog.h"
+#include "catalog/catalog_entry/node_table_catalog_entry.h"
+#include "catalog/catalog_entry/rel_group_catalog_entry.h"
 #include "common/assert.h"
 #include "common/exception/message.h"
 #include "common/vector/value_vector.h"
 #include "processor/execution_context.h"
+#include "storage/partition_storage_registry.h"
 #include "storage/table/rel_table.h"
 
 using namespace lbug::common;
@@ -17,6 +21,27 @@ namespace processor {
 
 void NodeDeleteInfo::init(const ResultSet& resultSet) {
     nodeIDVector = resultSet.getValueVector(nodeIDPos).get();
+}
+
+NodeTableDeleteInfo NodeTableDeleteInfo::forTable(main::ClientContext* context, table_id_t tableID,
+    DataPos pkPos) {
+    auto* table = PartitionStorageRegistry::resolveNodeTableByID(context, tableID);
+    NodeTableDeleteInfo info{table, {}, {}, pkPos};
+    auto* transaction = Transaction::Get(*context);
+    for (const auto* entry :
+        catalog::Catalog::Get(*context)->getRelGroupEntries(transaction, false)) {
+        for (const auto& rel : entry->getRelEntryInfos()) {
+            if (rel.nodePair.srcTableID == tableID) {
+                info.fwdRelTables.insert(
+                    StorageManager::Get(*context)->getTable(rel.oid)->ptrCast<RelTable>());
+            }
+            if (rel.nodePair.dstTableID == tableID) {
+                info.bwdRelTables.insert(
+                    StorageManager::Get(*context)->getTable(rel.oid)->ptrCast<RelTable>());
+            }
+        }
+    }
+    return info;
 }
 
 void NodeTableDeleteInfo::init(const ResultSet& resultSet) {
@@ -147,8 +172,9 @@ void SingleLabelNodeDeleteExecutor::delete_(ExecutionContext* context) {
     }
 }
 
-void MultiLabelNodeDeleteExecutor::init(ResultSet* resultSet, ExecutionContext* context) {
-    NodeDeleteExecutor::init(resultSet, context);
+void MultiLabelNodeDeleteExecutor::init(ResultSet* resultSet_, ExecutionContext* context) {
+    NodeDeleteExecutor::init(resultSet_, context);
+    resultSet = resultSet_;
     for (auto& [_, tableInfo] : tableInfos) {
         tableInfo.init(*resultSet);
     }
@@ -173,6 +199,24 @@ void MultiLabelNodeDeleteExecutor::finalize(ExecutionContext* context) {
     batchNodeIDs.clear();
 }
 
+const NodeTableDeleteInfo& MultiLabelNodeDeleteExecutor::resolveTable(ExecutionContext* context,
+    table_id_t tableID) {
+    if (auto it = tableInfos.find(tableID); it != tableInfos.end()) {
+        return it->second;
+    }
+    auto* client = context->clientContext;
+    const auto& child = catalog::Catalog::Get(*client)
+                            ->getTableCatalogEntry(Transaction::Get(*client), tableID)
+                            ->constCast<catalog::NodeTableCatalogEntry>();
+    auto parent = parentPKPositions.find(child.getParentTableID());
+    if (!child.isPartitionChild() || parent == parentPKPositions.end()) {
+        throw RuntimeException("DELETE encountered a node outside the bound table labels.");
+    }
+    auto tableInfo = NodeTableDeleteInfo::forTable(client, tableID, parent->second);
+    tableInfo.init(*resultSet);
+    return tableInfos.emplace(tableID, std::move(tableInfo)).first->second;
+}
+
 void MultiLabelNodeDeleteExecutor::delete_(ExecutionContext* context) {
     auto& nodeIDSelVector = info.nodeIDVector->state->getSelVector();
     DASSERT(nodeIDSelVector.getSelSize() == 1);
@@ -181,7 +225,7 @@ void MultiLabelNodeDeleteExecutor::delete_(ExecutionContext* context) {
         return;
     }
     const auto nodeID = info.nodeIDVector->getValue<internalID_t>(pos);
-    const auto& tableInfo = tableInfos.at(nodeID.tableID);
+    const auto& tableInfo = resolveTable(context, nodeID.tableID);
     auto deleteState =
         std::make_unique<NodeTableDeleteState>(*info.nodeIDVector, *tableInfo.pkVector);
     auto transaction = Transaction::Get(*context->clientContext);

@@ -44,6 +44,9 @@ struct NodeTableDeleteInfo {
           bwdRelTables{std::move(bwdRelTables)}, pkPos{pkPos}, pkVector{nullptr} {};
     EXPLICIT_COPY_DEFAULT_MOVE(NodeTableDeleteInfo);
 
+    static NodeTableDeleteInfo forTable(main::ClientContext* context, common::table_id_t tableID,
+        DataPos pkPos);
+
     void init(const ResultSet& resultSet);
 
     void deleteFromRelTable(transaction::Transaction* transaction,
@@ -127,10 +130,13 @@ private:
 class MultiLabelNodeDeleteExecutor final : public NodeDeleteExecutor {
 public:
     MultiLabelNodeDeleteExecutor(NodeDeleteInfo info,
-        common::table_id_map_t<NodeTableDeleteInfo> tableInfos)
-        : NodeDeleteExecutor(std::move(info)), tableInfos{std::move(tableInfos)} {}
+        common::table_id_map_t<NodeTableDeleteInfo> tableInfos,
+        common::table_id_map_t<DataPos> parentPKPositions)
+        : NodeDeleteExecutor(std::move(info)), tableInfos{std::move(tableInfos)},
+          parentPKPositions{std::move(parentPKPositions)} {}
     MultiLabelNodeDeleteExecutor(const MultiLabelNodeDeleteExecutor& other)
-        : NodeDeleteExecutor(other), tableInfos{copyUnorderedMap(other.tableInfos)} {}
+        : NodeDeleteExecutor(other), tableInfos{copyUnorderedMap(other.tableInfos)},
+          parentPKPositions{other.parentPKPositions} {}
 
     void init(ResultSet* resultSet, ExecutionContext*) override;
     void delete_(ExecutionContext* context) override;
@@ -141,7 +147,11 @@ public:
     }
 
 private:
+    const NodeTableDeleteInfo& resolveTable(ExecutionContext* context, common::table_id_t tableID);
+
     common::table_id_map_t<NodeTableDeleteInfo> tableInfos;
+    common::table_id_map_t<DataPos> parentPKPositions;
+    const ResultSet* resultSet = nullptr;
 };
 
 struct RelDeleteInfo {

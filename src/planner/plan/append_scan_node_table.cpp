@@ -2,6 +2,7 @@
 #include "binder/expression/property_expression.h"
 #include "catalog/catalog.h"
 #include "catalog/catalog_entry/node_table_catalog_entry.h"
+#include "planner/operator/logical_empty_result.h"
 #include "planner/operator/scan/logical_scan_node_table.h"
 #include "planner/planner.h"
 
@@ -26,7 +27,7 @@ void Planner::appendScanNodeTable(std::shared_ptr<Expression> nodeID,
     std::vector<table_id_t> tableIDs, const expression_vector& properties, LogicalPlan& plan,
     const NodeOrRelExpression* nodeOrRel) {
     auto propertiesToScan_ = removeInternalIDProperty(properties);
-    auto scan = make_shared<LogicalScanNodeTable>(std::move(nodeID), std::move(tableIDs),
+    auto scan = make_shared<LogicalScanNodeTable>(std::move(nodeID), std::vector<table_id_t>{},
         propertiesToScan_);
     // Build tableDBMap from node/rel expression if available.
     // When entries from different databases share a table ID (both number from 0),
@@ -38,6 +39,15 @@ void Planner::appendScanNodeTable(std::shared_ptr<Expression> nodeID,
         bool ambiguousIDs = false;
         std::unordered_map<common::table_id_t, std::string> dbMap;
         for (auto* entry : nodeOrRel->getEntries()) {
+            // A daily parent can supply the schema before its first physical partition exists.
+            if (entry->getType() == catalog::CatalogEntryType::NODE_TABLE_ENTRY &&
+                entry->ptrCast<catalog::NodeTableCatalogEntry>()->isPartitioned()) {
+                auto id = std::ranges::find(tableIDs, entry->getTableID());
+                if (id != tableIDs.end()) {
+                    tableIDs.erase(id);
+                }
+                continue;
+            }
             ambiguousIDs |= !seenIDs.insert(entry->getTableID()).second;
             // Prune only native children in the active catalog. Foreign and remotely routed
             // scans keep their original behavior until their wrappers support pruning.
@@ -67,6 +77,12 @@ void Planner::appendScanNodeTable(std::shared_ptr<Expression> nodeID,
         }
     }
     scan->computeFactorizedSchema();
+    if (tableIDs.empty()) {
+        // A physical scan requires a table even when optimizations are disabled.
+        plan.setLastOperator(std::make_shared<LogicalEmptyResult>(*scan->getSchema()));
+        return;
+    }
+    scan->setTableIDs(std::move(tableIDs));
     scan->setCardinality(cardinalityEstimator.estimateScanNode(*scan));
     plan.setLastOperator(std::move(scan));
 }

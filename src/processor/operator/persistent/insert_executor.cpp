@@ -46,8 +46,8 @@ void NodeTableInsertInfo::init(const ResultSet& resultSet, main::ClientContext* 
         columnDataVectors.push_back(evaluator->resultVector.get());
         columnIDs.push_back(columnIDs.size());
     }
-    // Null table means every partition is routed remotely; PK validation is the wrapper's job.
-    pkVector = table == nullptr ? nullptr : columnDataVectors[table->getPKColumnID()];
+    const auto pkColumnID = table != nullptr ? table->getPKColumnID() : partitionPKColumnID;
+    pkVector = pkColumnID == INVALID_COLUMN_ID ? nullptr : columnDataVectors[pkColumnID];
 }
 
 void NodeInsertExecutor::init(ResultSet* resultSet, const ExecutionContext* context) {
@@ -106,29 +106,26 @@ uint64_t NodeInsertExecutor::currentPartitionIndex() const {
 }
 
 // Resolves the target partition subgraph for the current row.
-// - LIST parents route through `listRouter`, creating a new partition on first sight of a value.
+// - Dynamic parents route through `partitionRouter`, creating a new partition on first sight of a
+// value.
 // - Empty `partitionTables` means a plain single-table write -> the table itself.
 // - Returns nullptr when the selected partition is routed remotely through the hooks;
 //   callers must branch on that (insertRemotely / hook lookup).
 storage::NodeTable* NodeInsertExecutor::resolveTargetTable(main::ClientContext* context) {
-    if (tableInfo.partitionMethod == common::PartitionMethod::LIST &&
+    if (usesDynamicPartitionRouting(tableInfo.partitionMethod) &&
         tableInfo.parentTableID != common::INVALID_TABLE_ID) {
-        // LIST parents grow their partition set on first sight of a new key value.
+        // Dynamic parents grow their partition set on first sight of a new key value.
         auto* keyVector = tableInfo.columnDataVectors[tableInfo.partitionKeyColumnID];
         DASSERT(keyVector->state->getSelVector().getSelSize() == 1);
-        if (tableInfo.listRouter == nullptr) {
+        if (tableInfo.partitionRouter == nullptr) {
             auto* transaction = Transaction::Get(*context);
             auto* parent = catalog::Catalog::Get(*context)
                                ->getTableCatalogEntry(transaction, tableInfo.parentTableID)
                                ->ptrCast<catalog::NodeTableCatalogEntry>();
-            tableInfo.listRouter = std::make_unique<ListPartitionRouter>(context, parent);
+            tableInfo.partitionRouter = std::make_unique<DynamicPartitionRouter>(context, parent);
         }
         const auto pos = keyVector->state->getSelVector()[0];
-        if (keyVector->isNull(pos)) {
-            throw RuntimeException("Cannot insert into a LIST-partitioned table with a NULL "
-                                   "partition-key value.");
-        }
-        return tableInfo.listRouter->route(*keyVector, pos).table;
+        return tableInfo.partitionRouter->route(*keyVector, pos).table;
     }
     if (tableInfo.partitionTables.empty()) {
         return tableInfo.table;
@@ -152,7 +149,7 @@ nodeID_t NodeInsertExecutor::insertRemotely(uint64_t index,
 storage::NodeTable* NodeInsertExecutor::resolveTableForNodeID(common::nodeID_t nodeID,
     main::ClientContext* context) const {
     if (tableInfo.partitionTables.empty()) {
-        if (tableInfo.partitionMethod == common::PartitionMethod::LIST &&
+        if (usesDynamicPartitionRouting(tableInfo.partitionMethod) &&
             tableInfo.parentTableID != common::INVALID_TABLE_ID) {
             // LIST: the node may live in a partition created after this executor was cloned;
             // resolve by the table ID recorded in the node ID itself (own data file).

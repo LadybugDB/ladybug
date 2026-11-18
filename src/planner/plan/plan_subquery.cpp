@@ -80,10 +80,9 @@ bool Planner::findCorrelatedPrimaryKeyLookupKey(const QueryGraphCollection& quer
         return false;
     }
     auto tableID = tableIDs[0];
-    auto table = storage::StorageManager::Get(*clientContext)
-                     ->getTable(tableID)
-                     ->ptrCast<storage::NodeTable>();
-    if (table->tryGetPrimaryKeyIndex() == nullptr) {
+    auto* table =
+        storage::StorageManager::tryGetNativeNodeTable(*clientContext, *node->getEntry(0));
+    if (!table || !table->tryGetPrimaryKeyIndex()) {
         return false;
     }
     std::unordered_set<std::string> corrNames;
@@ -185,10 +184,9 @@ bool Planner::tryPlanQueryPrimaryKeyLookup(const QueryGraphCollection& queryGrap
         return false;
     }
     auto tableID = tableIDs[0];
-    auto table = storage::StorageManager::Get(*clientContext)
-                     ->getTable(tableID)
-                     ->ptrCast<storage::NodeTable>();
-    if (table->tryGetPrimaryKeyIndex() == nullptr) {
+    auto* table =
+        storage::StorageManager::tryGetNativeNodeTable(*clientContext, *node->getEntry(0));
+    if (!table || !table->tryGetPrimaryKeyIndex()) {
         return false;
     }
 
@@ -1015,10 +1013,9 @@ bool Planner::tryPlanPropertySeededChain(const QueryGraphCollection& queryGraphC
     if (!elemPropRef.isPrimaryKey(seedTableID)) {
         return false;
     }
-    auto seedTable = storage::StorageManager::Get(*clientContext)
-                         ->getTable(seedTableID)
-                         ->ptrCast<storage::NodeTable>();
-    if (seedTable->tryGetPrimaryKeyIndex() == nullptr) {
+    auto* seedTable =
+        storage::StorageManager::tryGetNativeNodeTable(*clientContext, *seedNode->getEntry(0));
+    if (!seedTable || !seedTable->tryGetPrimaryKeyIndex()) {
         return false;
     }
     // Anchor: a constant PK equality on another single-table node (at most one), and no
@@ -1336,10 +1333,9 @@ bool Planner::tryPlanScalarSeededChain(const QueryGraphCollection& queryGraphCol
         return false;
     }
     auto seedTableID = seedNode->getTableIDs()[0];
-    auto seedTable = storage::StorageManager::Get(*clientContext)
-                         ->getTable(seedTableID)
-                         ->ptrCast<storage::NodeTable>();
-    if (seedTable->tryGetPrimaryKeyIndex() == nullptr) {
+    auto* seedTable =
+        storage::StorageManager::tryGetNativeNodeTable(*clientContext, *seedNode->getEntry(0));
+    if (!seedTable || !seedTable->tryGetPrimaryKeyIndex()) {
         return false;
     }
     // Every other predicate must be a (possibly deferred) filter: no hidden constructs,

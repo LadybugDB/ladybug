@@ -42,14 +42,14 @@ public:
     UNIQUE = 157, UNWIND = 158, UNINSTALL = 159, UPDATE = 160, USE = 161, 
     WHEN = 162, WHERE = 163, WITH = 164, WRITE = 165, WSHORTEST = 166, XOR = 167, 
     SINGLE = 168, YIELD = 169, USER = 170, PARTITION = 171, PARTITIONS = 172, 
-    PASSWORD = 173, ROLE = 174, MAP = 175, DECIMAL = 176, STAR = 177, L_SKIP = 178, 
-    INVALID_NOT_EQUAL = 179, COLON = 180, DOTDOT = 181, MINUS = 182, FACTORIAL = 183, 
-    StringLiteral = 184, EscapedChar = 185, DecimalInteger = 186, HexLetter = 187, 
-    HexDigit = 188, Digit = 189, NonZeroDigit = 190, NonZeroOctDigit = 191, 
-    ZeroDigit = 192, ExponentDecimalReal = 193, RegularDecimalReal = 194, 
-    UnescapedSymbolicName = 195, IdentifierStart = 196, IdentifierPart = 197, 
-    EscapedSymbolicName = 198, SP = 199, WHITESPACE = 200, CypherComment = 201, 
-    Unknown = 202
+    PASSWORD = 173, ROLE = 174, MAP = 175, INTERVAL = 176, DECIMAL = 177, 
+    STAR = 178, L_SKIP = 179, INVALID_NOT_EQUAL = 180, COLON = 181, DOTDOT = 182, 
+    MINUS = 183, FACTORIAL = 184, StringLiteral = 185, EscapedChar = 186, 
+    DecimalInteger = 187, HexLetter = 188, HexDigit = 189, Digit = 190, 
+    NonZeroDigit = 191, NonZeroOctDigit = 192, ZeroDigit = 193, ExponentDecimalReal = 194, 
+    RegularDecimalReal = 195, UnescapedSymbolicName = 196, IdentifierStart = 197, 
+    IdentifierPart = 198, EscapedSymbolicName = 199, SP = 200, WHITESPACE = 201, 
+    CypherComment = 202, Unknown = 203
   };
 
   explicit CypherLexer(antlr4::CharStream *input);

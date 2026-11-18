@@ -74,9 +74,8 @@ struct LBUG_API BoundExtraCreateTableInfo : BoundExtraCreateCatalogEntryInfo {
     }
 };
 
-// PostgreSQL-style partitioning method applied to a node table. LIST partitions dynamically: one
-// partition per distinct partition-key value, created on demand (numPartitions is unused).
-enum class BoundPartitionMethod : uint8_t { HASH = 0, RANGE = 1, LIST = 2 };
+// Persisted method values must remain stable. LIST and RANGE_DAY grow on demand.
+enum class BoundPartitionMethod : uint8_t { HASH = 0, RANGE = 1, LIST = 2, RANGE_DAY = 3 };
 
 struct BoundPartitionInfo {
     BoundPartitionMethod method;
@@ -108,7 +107,7 @@ struct BoundExtraCreateNodeTableInfo final : BoundExtraCreateTableInfo {
         partitionChildIndex = index;
     }
 
-    // Encoded LIST key for a dynamically created LIST partition (empty otherwise). Carried
+    // Encoded value or day for a dynamically created partition (empty otherwise). Carried
     // into the child entry so WAL replay can restore the parent's key -> child map.
     std::string listPartitionKey;
     // WAL replay only: the recorded parent's children each carry their own create record,

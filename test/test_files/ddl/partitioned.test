@@ -38,11 +38,55 @@ Orders_p3
 2
 
 -CASE PartitionedCreateRange
-# RANGE partitioning is blocked until dynamic, distribution-aware splitting exists: refuse the
-# DDL instead of silently falling back to hash routing.
+# A partition count alone does not specify how to split the key domain.
 -STATEMENT CREATE NODE TABLE Events (id INT64 PRIMARY KEY, ts TIMESTAMP, value DOUBLE) PARTITION BY RANGE (ts) PARTITIONS 5;
 ---- error
-Binder exception: RANGE partitioning is not implemented yet. RANGE requires partition bounds derived from the actual value distribution, which is future work. Use PARTITION BY HASH instead.
+Binder exception: RANGE with PARTITIONS does not define partition bounds. Use PARTITION BY RANGE (column) INTERVAL '1 day' for daily partitions.
+
+-CASE DailyRangeDDL
+-STATEMENT CREATE NODE TABLE D(id INT64 PRIMARY KEY, ts TIMESTAMP_TZ) PARTITION BY RANGE(ts) INTERVAL '1 DAY';
+---- ok
+-STATEMENT CALL show_tables() RETURN name;
+---- 1
+D
+-STATEMENT CREATE NODE TABLE Bad(id INT64 PRIMARY KEY) PARTITION BY RANGE(id) INTERVAL '1 day';
+---- error
+Binder exception: Daily RANGE partition column id must have a DATE or TIMESTAMP type.
+-STATEMENT CREATE NODE TABLE Bad(id INT64 PRIMARY KEY) PARTITION BY RANGE(missing) INTERVAL '1 day';
+---- error
+Binder exception: Partition column missing does not exist. A partition column must be an existing column of the table.
+-STATEMENT CREATE NODE TABLE Bad(id INT64 PRIMARY KEY, ts DATE) WITH (format='icebug-disk') PARTITION BY RANGE(ts) INTERVAL '1 day';
+---- error
+Binder exception: Daily RANGE partitioning requires native node table storage.
+-STATEMENT CREATE NODE TABLE Bad(id INT64 PRIMARY KEY, ts DATE) PARTITION BY RANGE(ts) INTERVAL '1 month';
+---- error
+Parser exception: Only INTERVAL '1 day' is supported for RANGE partitioning.
+-STATEMENT CREATE NODE TABLE N(id INT64 PRIMARY KEY);
+---- ok
+-STATEMENT CREATE REL TABLE Edge(FROM N TO D);
+---- error
+Binder exception: Daily RANGE parent D cannot be a relationship endpoint yet. Use a materialized child table as the endpoint.
+-STATEMENT CREATE REL TABLE Edge(FROM N TO N);
+---- ok
+-STATEMENT ALTER TABLE Edge ADD FROM D TO N;
+---- error
+Binder exception: Daily RANGE parent D cannot be a relationship endpoint yet. Use a materialized child table as the endpoint.
+# Physical children remain ordinary native node endpoints.
+-STATEMENT CREATE (:D {id:1, ts:CAST('2026-11-22 00:00:00' AS TIMESTAMP_TZ)});
+---- ok
+-STATEMENT CREATE (:N {id:2});
+---- ok
+-STATEMENT ALTER TABLE Edge ADD FROM N TO D_p0;
+---- ok
+-STATEMENT MATCH (a:N {id:2}), (b:D_p0 {id:1}) CREATE (a)-[:Edge]->(b);
+---- ok
+-STATEMENT MATCH (a:N)-[:Edge]->(b:D_p0) RETURN a.id, b.id;
+---- 1
+2|1
+-STATEMENT DROP TABLE Edge;
+---- ok
+-STATEMENT DROP TABLE D;
+---- ok
 
 -CASE PartitionedWriteRouting
 -STATEMENT CREATE NODE TABLE T (id INT64 PRIMARY KEY, k STRING) PARTITION BY HASH (k) PARTITIONS 3;

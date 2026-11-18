@@ -9,10 +9,9 @@ protocol such as ADBC).
 
 > Status: **v1 (foundational).** DDL, catalog, storage, persistence, drop-cascade and query
 > (read over all partitions) are implemented. Write-routing (COPY / CREATE / MERGE into the
-> parent) is implemented for HASH and LIST partitioning. New native partitioned tables support
-> pruning for equality predicates on their partition key. **`PARTITION BY RANGE` is refused at DDL time**:
-> real range partitioning must derive partition bounds from the actual value distribution, which
-> is not implemented yet.
+> parent) supports HASH, LIST and daily RANGE. Daily RANGE creates a child on the first write
+> for each calendar day. Native HASH and LIST support equality pruning. Daily RANGE also prunes
+> on inequalities and bounded intervals over the partition key.
 >
 > Invariant-protection implemented in response to design review: partitions cannot be dropped or
 > altered individually, `DROP GRAPH` refuses node-table subgraphs, dropping a partitioned table is
@@ -72,8 +71,8 @@ the parent".
 Two kinds of "other tables" can be coupled to a partitioned table:
 
 * **Rel tables.** A rel attaches to node tables by *table ID* through per-pair CSR indexes. A
-  partitioned parent owns no storage, so declaring `FROM Orders TO Item` resolves to **one pair per
-  partition**: `(Orders_p0, Item), ..., (Orders_p3, Item)`. Rels therefore attach to real storage,
+  HASH or LIST parent owns no storage, so declaring `FROM Orders TO Item` resolves to **one pair per
+  existing partition**: `(Orders_p0, Item), ..., (Orders_p3, Item)`. Rels therefore attach to real storage,
   and reads through the parent work unchanged. Consequently:
   * Dropping the parent is **refused** while any rel still references *any* partition — the same
     check a plain node table has always had, applied to every table the cascade would remove, and
@@ -91,12 +90,16 @@ Two kinds of "other tables" can be coupled to a partitioned table:
     Note the cost: a self-rel on an n-partition table materializes n² rel tables (each with its own
     CSR indexes), which is negligible for typical n but grows quadratically — keep partition counts
     modest on tables with self-relations until pair creation can be made lazy.
+  * For daily RANGE, declare relationships against a materialized child, e.g.
+    `CREATE REL TABLE Opened(FROM AppUser TO SessionLog_p0)`. Each endpoint pair refers to that
+    specific child. Declaring a relationship against the daily parent, including through
+    `ALTER TABLE ... ADD FROM ... TO ...`, is currently rejected.
 * **User graphs.** A `GraphCatalogEntry` carries no table membership — it is only a name marker
   surfaced by `SHOW_GRAPHS` — so nothing else can live "inside" a partition's subgraph.
 
 ### (c) Updates to the partition column are refused (no row movement yet)
 
-A row's home partition is decided by `hash(key) % n` at write time. If an update changed the key in
+Each row is routed at write time by its HASH bucket, LIST value or RANGE calendar day. If an update changed the key in
 place, the row would sit in a partition that no longer matches its key — invisible to future
 partition pruning and inconsistent with direct-partition scans. Ladybug node offsets are also
 referenced by rel tables' `INTERNAL_ID`s, so a "move" is really delete + insert with reference
@@ -134,26 +137,44 @@ CREATE NODE TABLE Orders (
 ) PARTITION BY HASH (region) PARTITIONS 4;
 ```
 
-The grammar still accepts `PARTITION BY RANGE (<col>) PARTITIONS n`, but the binder refuses it:
-RANGE partitioning is not implemented yet (see the status note above).
+### Daily RANGE
 
-The grammar extension lives in `src/antlr4/Cypher.g4`:
+Run the following statements in a new database:
 
+```cypher
+CREATE NODE TABLE SessionLog (id INT64 PRIMARY KEY, login_ts TIMESTAMP)
+PARTITION BY RANGE (login_ts) INTERVAL '1 day';
+MATCH (s:SessionLog) RETURN count(*) AS sessions;
+
+CREATE (:SessionLog {id: 1, login_ts: TIMESTAMP('2026-11-22 08:00:00')});
+CREATE (:SessionLog {id: 2, login_ts: TIMESTAMP('2026-11-22 22:00:00')});
+CREATE (:SessionLog {id: 3, login_ts: TIMESTAMP('2026-11-19 10:00:00')});
+
+PROFILE MATCH (s:SessionLog)
+WHERE s.login_ts >= TIMESTAMP('2026-11-22 00:00:00')
+  AND s.login_ts <  TIMESTAMP('2026-11-23 00:00:00')
+RETURN s.id;
 ```
-iC_PartitionBy     : PARTITION SP BY SP ( iC_PartitionRange | iC_PartitionHash ) ;
-iC_PartitionHash   : HASH  SP? '(' SP? oC_PropertyKeyName SP? ')' SP PARTITIONS SP oC_IntegerLiteral ;
-iC_PartitionRange  : RANGE SP? '(' SP? oC_PropertyKeyName SP? ')' SP PARTITIONS SP oC_IntegerLiteral ;
-```
 
-`PARTITION`, `PARTITIONS`, `HASH` and `RANGE` were added to `src/antlr4/keywords.txt` and to the
-`iC_NonReservedKeywords` list so they remain usable as identifiers elsewhere.
+The first query returns zero. Creating or querying the empty parent allocates no child tables.
+The first two writes share `SessionLog_p0` (November 22). The late November 19 write creates
+`SessionLog_p1`. November 20 and 21 have no children. Child numbers follow creation order and
+remain stable after reopening. The scan in the example's `PROFILE` lists only `SessionLog_p0`;
+running the same `MATCH` without `PROFILE` returns IDs 1 and 2.
+
+Each partition covers midnight inclusive to the following midnight exclusive. A
+`TIMESTAMP_TZ` key uses **UTC** for both routing and pruning: `2026-11-23 00:00:00+08:00`
+belongs to November 22 UTC. A timestamp without a time zone uses its own calendar date.
+Writes with a NULL key fail. A read for a missing day returns no rows and leaves the catalog
+unchanged.
 
 ### Eligible partition columns
 
-A partition column must be a column of the table whose type is orderable/comparable and stable:
-integral, floating-point, date/timestamp, string, UUID, or blob. This is enforced at bind time by
-`LogicalTypeUtils::isPartitionable` (`src/common/types/types.cpp`). Erroring, for example, on a
-LIST/STRUCT/MAP partition key.
+HASH and LIST accept integral types, DATE, supported timestamp types, STRING, UUID and BLOB.
+Daily RANGE accepts DATE, TIMESTAMP, TIMESTAMP_SEC, TIMESTAMP_MS, TIMESTAMP_NS and TIMESTAMP_TZ
+on native node tables. The only daily interval currently accepted is `INTERVAL '1 day'`.
+The legacy `PARTITION BY RANGE (col) PARTITIONS n` clause is rejected because a partition count
+alone supplies no bounds. Explicit bounds are planned separately.
 
 ## Architecture & pipeline
 
@@ -161,7 +182,7 @@ The feature threads a small amount of partition metadata through the existing DD
 
 | Layer | File(s) | Role |
 |-------|---------|------|
-| Grammar | `src/antlr4/Cypher.g4`, `keywords.txt` | `PARTITION BY ... PARTITIONS n` |
+| Grammar | `src/antlr4/Cypher.g4`, `keywords.txt` | HASH count, LIST key or daily RANGE interval |
 | Parser AST | `src/include/parser/ddl/create_table_info.h` (`ParsedPartitionInfo`) | parsed clause |
 | Transformer | `src/parser/transform/transform_ddl.cpp` (`transformPartitionInfo`) | AST from parse tree |
 | Binder | `binder/ddl/bound_create_table_info.h` (`BoundPartitionInfo`), `bind_ddl.cpp` | validation + carry metadata |
@@ -175,7 +196,7 @@ A partitioned parent is a `NodeTableCatalogEntry` whose partition metadata is se
 `setPartitionInfo(...)`:
 
 ```cpp
-std::optional<binder::BoundPartitionMethod> partitionMethod;  // HASH | RANGE (parent only)
+std::optional<binder::BoundPartitionMethod> partitionMethod;  // HASH | LIST | RANGE_DAY (legacy RANGE encoding retained)
 std::string                              partitionColumnName;
 common::property_id_t                    partitionColumnID;
 uint64_t                                 numPartitions;
@@ -192,10 +213,15 @@ uint64_t                                 partitionIndex;      // child's ordinal
 On `CREATE`, `Catalog::createNodeTableEntry`:
 
 1. Creates the parent entry (schema + serial sequence).
-2. For each `i in [0, numPartitions)`, creates a child `NodeTableCatalogEntry` subgraph named
+2. HASH creates the configured number of children. LIST starts with one empty, unkeyed child.
+   Daily RANGE starts with zero. For each initial child, the catalog creates a subgraph named
    `<parent>_p<i>`, copies the property definitions, sets its back-reference
    (`setParentInfo(parentID, i)`), and registers it in the **same public catalog set** as the
    parent, recording its (normal, small) table-id in `childTableIDs`.
+3. The first write for a new LIST key or RANGE day registers the new child and its routing key
+   in the same transaction. The parent's encoded-key map is persisted at checkpoint. Each child's
+   WAL create record carries its encoded key so replay can restore the mapping to the replayed
+   child ID. Storage version **53** identifies the daily RANGE method.
 
 > **Why the public catalog set?** Internal catalog entries carry OIDs near 2^63, and several
 > execution/storage structures index state by table-id with a `std::vector`, which would attempt a
@@ -233,19 +259,16 @@ Because each partition is a real node table, you can also address a specific par
   partitioned parent are routed into the partition matching each row's partition-key value. HASH
   partitions use the same value hashing as the built-in `HASH()` function. Primary-key uniqueness
   is enforced per partition, not across the parent.
-* **Equality partition pruning.** A directly referenced partition key equated to a constant of
-  the same type selects its HASH bucket or LIST child. Other predicates retain the existing scan
-  behavior. See the compatibility and scope notes below.
+* **Partition pruning.** Equality on the partition key selects its HASH bucket, LIST child or
+  RANGE day. Daily RANGE can also exclude days using inequality predicates. See the scope below.
 * **`ALTER` is limited to `RENAME`.** Renaming the parent renames its `<parent>_p<i>` partitions
   along with it. Other alter operations (add/drop/rename property, sorted-by) are refused on the
   parent, and partitions cannot be altered directly at all, until alter propagation lands.
 * **Partition columns are not updatable.** See design note (c): rows cannot move between
   partitions; delete and re-insert instead.
-* **Rels attach per partition.** `FROM <parent>` expands to one pair per partition; rel pattern
-  writes against the parent are refused (use a specific partition) until runtime rel routing lands.
-* **RANGE is refused at DDL time.** Meaningful range partitioning needs bounds derived from the
-  actual value distribution (declarative bounds or data-driven splitting); a static stand-in would
-  misplace rows silently. See the roadmap.
+* **Rels attach per partition.** HASH/LIST parent endpoint declarations expand to existing
+  partitions. Daily RANGE supports concrete child endpoints. A parent-wide relationship that
+  automatically includes future days is roadmap work.
 * **No remote partitions yet.** Only local (in-process) partition subgraphs exist today.
 
 ## Roadmap
@@ -256,8 +279,8 @@ The canonical path is `COPY INTO Orders FROM file`. Implemented:
 
 * `BoundCopyFromInfo`/`NodeBatchInsertInfo` carry the partition method, partition-key column id,
   and the child table list (`common::NodePartitionWriteInfo`).
-* `NodeBatchInsert` evaluates each row's partition-key value, computes `hash(value) % n`, and
-  routes consecutive same-partition runs into the correct child `NodeTable`'s node group. Each
+* `NodeBatchInsert` evaluates each row's partition key and selects a HASH bucket, LIST value
+  or RANGE day. It routes same-partition runs into the selected child `NodeTable`'s node group. Each
   child is an ordinary `NodeTable`, so its own WAL/MVCC machinery (`appendToLastNodeGroup` +
   commit/undo records) applies the routed write.
 * Primary-key duplicate detection is per partition (each child has its own PK index), matching how
@@ -265,22 +288,13 @@ The canonical path is `COPY INTO Orders FROM file`. Implemented:
 * Single-row `CREATE`/`MERGE` routes at runtime in `NodeInsertExecutor`: the partition key is
   evaluated, the matching child table is selected, and the row is inserted there.
 
-### 1b. RANGE partitioning (not implemented; DDL refuses it)
-
-Real RANGE needs bounds that reflect the data: either user-declared bounds
-(`PARTITION p0 VALUES < (...)`) or dynamic, distribution-aware splitting of the input (min/max or
-equi-depth histograms computed during COPY, persisted with the parent). Equal splits of the *type
-domain* were considered and rejected: every realistic timestamp lands in one middle bucket.
-Until one of those exists, the binder refuses `PARTITION BY RANGE` instead of silently routing by
-hash.
-
 ### 2. Rel writes against the parent
 
 Route pattern-based rel creation/merge by the source row's actual partition at runtime (mirroring
 `NodeInsertExecutor::resolveTargetTable`): carry the candidate per-pair rel tables in the insert
 info and select by the resolved source node's table ID.
 
-### 3. Equality partition pruning
+### 3. Partition pruning
 
 Filter push-down restricts the scan's physical table IDs before choosing an index. HASH uses
 the same vector hash and modulus as write routing; LIST uses the persisted encoded-key map.
@@ -307,13 +321,16 @@ UUID-typed parameter for the equality predicate; the existing pruning eligibilit
 
 Prepared plans are also rebound after catalog changes within an explicit transaction and after
 leaving a transaction whose catalog changes they observed. A cached empty result must not hide
-a newly created LIST partition or retain a partition that was rolled back.
+a newly created LIST or daily RANGE partition or retain a partition that was rolled back.
 
 The initial scope is native partition children in the active catalog, with a direct key property
 and a literal or bound parameter of exactly the key's type. Expressions that have already folded
-to such a literal also qualify. Comparisons that cast the key, OR/IN/range predicates, foreign
-or remotely routed scans, and unsupported key encodings retain their existing behavior. RANGE
-partitioning itself remains unimplemented.
+to such a literal also qualify. For daily RANGE, `=`, `<`, `<=`, `>` and `>=` select days
+that intersect the predicate. Conjunctive lower and upper bounds can restrict both ends.
+The row filter still evaluates the exact timestamp within each selected day. Apply the predicate
+to the original key column as in the `SessionLog` example. A cast or function around the key,
+an unsupported OR, or a predicate on another property alone can require scanning all candidate
+children.
 
 Correct pruning requires every row to satisfy its child's routing rule. Direct `CREATE`, `MERGE`
 inserts and `COPY` into a child therefore reject a mismatching key; write to the parent for
@@ -330,7 +347,8 @@ copy the rows through its parent, then verify the copied data before replacing t
 
 ### 4. RANGE partitioning: dynamic, distribution-aware splits
 
-Unblocks `PARTITION BY RANGE` (currently refused at DDL). Two shapes, in increasing ambition:
+Daily RANGE provides fixed calendar boundaries today. Two additional kinds of boundaries
+remain design work:
 
 * **Declarative bounds** — extend the grammar to accept per-partition bounds:
   ```cypher

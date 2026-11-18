@@ -875,14 +875,19 @@ static table_catalog_entry_set_t expandPartitionedNodeTables(catalog::Catalog* c
     main::ClientContext* clientContext) {
     table_catalog_entry_set_t expanded;
     bool anyClaimed = false;
+    bool anyUnclaimed = false;
     std::string claimedParentName;
     for (auto entry : entrySet) {
         if (entry->getType() != CatalogEntryType::NODE_TABLE_ENTRY) {
+            anyUnclaimed = true;
             expanded.insert(entry);
             continue;
         }
         auto* nodeEntry = entry->ptrCast<NodeTableCatalogEntry>();
-        if (!nodeEntry->isPartitioned()) {
+        // Keep the schema available to MATCH and the first CREATE/MERGE before a day
+        // partition exists. The scan planner omits storage-less parents.
+        if (!nodeEntry->isPartitioned() || nodeEntry->getChildTableIDs().empty()) {
+            anyUnclaimed = true;
             expanded.insert(entry);
             continue;
         }
@@ -894,6 +899,7 @@ static table_catalog_entry_set_t expandPartitionedNodeTables(catalog::Catalog* c
             common::PartitionHandle handle = nullptr;
             if (hooks == nullptr || hooks->locate == nullptr ||
                 !hooks->locate(hooks->context, ref, &handle)) {
+                anyUnclaimed = true;
                 expanded.insert(child);
                 continue;
             }
@@ -936,7 +942,9 @@ static table_catalog_entry_set_t expandPartitionedNodeTables(catalog::Catalog* c
                 retainPartitionedScanEntry(std::move(patched), clientContext, spec.scanFunction));
         }
     }
-    if (anyClaimed && expanded.size() > 1) {
+    // The entry set deduplicates by table ID. A wrapper substitute can have the
+    // same ID as a local child, so test ownership independently of the set size.
+    if (anyClaimed && (anyUnclaimed || expanded.size() > 1)) {
         throw BinderException(std::format(
             "Table {}: scanning a mix of locally stored and remotely routed partitions is not "
             "supported. A routing wrapper must claim either all or none of a scanned parent's "
