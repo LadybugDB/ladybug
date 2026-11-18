@@ -465,7 +465,21 @@ void Planner::planRelScan(uint32_t relPos, const QueryGraphPlanningInfo& info) {
         }
     }
 
-    for (const auto direction : rel->getExtendDirections()) {
+    auto extendDirections = rel->getExtendDirections();
+    // A path node predicate exempts the source node but checks every other node on the path,
+    // including the destination, so a recursive search must seed from the source node for the
+    // predicate roles to hold (see the guard in tryPlanINLJoin for the same reason). Only
+    // emit the source-bound (FWD storage) plan when a node predicate is present. The
+    // FWD-storage plan scans both storages at runtime for BOTH patterns. The BWD-storage
+    // plan is only dropped when FWD storage is also available; with BWD-only storage there
+    // is no source-bound alternative.
+    if (rel->isRecursive() && rel->getRecursiveInfo()->nodePredicate != nullptr &&
+        extendDirections.size() > 1) {
+        extendDirections.erase(
+            std::remove(extendDirections.begin(), extendDirections.end(), ExtendDirection::BWD),
+            extendDirections.end());
+    }
+    for (const auto direction : extendDirections) {
         auto plan = LogicalPlan();
         auto [boundNode, nbrNode] = getBoundAndNbrNodes(*rel, direction);
         const auto extendDirection = getExtendDirection(*rel, *boundNode);
@@ -856,6 +870,22 @@ bool Planner::tryPlanINLJoin(const SubqueryGraph& subgraph, const SubqueryGraph&
     auto nbrNode =
         boundNode->getUniqueName() == rel->getSrcNodeName() ? rel->getDstNode() : rel->getSrcNode();
     auto extendDirection = getExtendDirection(*rel, *boundNode);
+    // A path node predicate exempts the source node but checks every other node on the path,
+    // including the destination, so a recursive search must seed from the source node for the
+    // predicate roles to hold. Seeding from the destination instead inverts the roles: the
+    // destination would be exempt and the source checked. The source- and destination-bound
+    // legs otherwise tie in cost, and the tie is broken by plan-insertion order, which follows
+    // unordered-map iteration and therefore differs across standard libraries (MSVC seeded
+    // from the destination on Windows while libstdc++/libc++ seed from the source), flipping
+    // single-pair SHORTEST results for direction-sensitive predicates. Refuse the
+    // destination-bound leg when a node predicate is present; the caller falls back to the
+    // hash-join path, which seeds from the source. When only the destination is bound there
+    // is no source-bound alternative, and the fallback seeds from the destination the same
+    // way, so nothing is lost.
+    if (rel->isRecursive() && rel->getRecursiveInfo()->nodePredicate != nullptr &&
+        *boundNode != *rel->getSrcNode()) {
+        return false;
+    }
     if (currentQueryGraphPlanningInfo != nullptr &&
         currentQueryGraphPlanningInfo->subqueryType != SubqueryPlanningType::NONE) {
         const auto srcCorrelated =
