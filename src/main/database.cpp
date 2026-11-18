@@ -17,7 +17,9 @@
 
 #include <cstdint>
 #include <fstream>
+#include <mutex>
 #include <string>
+#include <unordered_set>
 
 #include "common/exception/exception.h"
 #include "common/file_system/virtual_file_system.h"
@@ -95,6 +97,29 @@ uint64_t getAvailableSystemMemory() {
 
 } // namespace
 
+namespace {
+// In-process guard for nodejs#29: POSIX fcntl locks are per-process, so a second
+// Database on the same path in the same process would otherwise open successfully
+// and its WAL would be stolen by the first DB's close-time checkpoint.
+// Track file-backed read-write opens; read-only and in-memory opens are exempt
+// (read-only second open while RW is alive is relied on by
+// WalTest.LargeWALRecordReplayWithPreviousDBAlive).
+std::mutex openDbMtx;
+std::unordered_set<std::string> openRwDbPaths;
+bool tryClaimOpenDbPath(const std::string& path) {
+    std::lock_guard<std::mutex> lck{openDbMtx};
+    if (openRwDbPaths.contains(path)) {
+        return false;
+    }
+    openRwDbPaths.insert(path);
+    return true;
+}
+void releaseOpenDbPath(const std::string& path) {
+    std::lock_guard<std::mutex> lck{openDbMtx};
+    openRwDbPaths.erase(path);
+}
+} // namespace
+
 SystemConfig::SystemConfig(uint64_t bufferPoolSize_, uint64_t maxNumThreads, bool enableCompression,
     bool readOnly, uint64_t maxDBSize, bool autoCheckpoint, uint64_t checkpointThreshold,
     bool forceCheckpointOnClose, bool throwOnWalReplayFailure, bool enableChecksums,
@@ -169,35 +194,53 @@ void Database::initMembers(std::string_view dbPath, construct_bm_func_t initBmFu
     }
     vfs = std::make_unique<VirtualFileSystem>(databasePath);
     validatePathInReadOnly();
-
-    bufferManager = initBmFunc(*this);
-    memoryManager = std::make_unique<MemoryManager>(bufferManager.get(), vfs.get());
+    // Claim the path before any WAL/data file is touched so a second RW open
+    // in this process fails fast instead of corrupting the first DB's WAL on close.
+    const bool needsOpenClaim = !DBConfig::isDBPathInMemory(databasePath) && !dbConfig->readOnly;
+    if (needsOpenClaim) {
+        if (!tryClaimOpenDbPath(databasePath)) {
+            throw RuntimeException("Cannot open database at " + databasePath +
+                                   " in read-write mode: it is already open in this process. " +
+                                   "Close the existing Database first.");
+        }
+        ownsOpenPathClaim = true;
+    }
+    try {
+        bufferManager = initBmFunc(*this);
+        memoryManager = std::make_unique<MemoryManager>(bufferManager.get(), vfs.get());
 #if defined(__APPLE__)
-    queryProcessor =
-        std::make_unique<processor::QueryProcessor>(dbConfig->maxNumThreads, dbConfig->threadQos);
+        queryProcessor = std::make_unique<processor::QueryProcessor>(dbConfig->maxNumThreads,
+            dbConfig->threadQos);
 #else
-    queryProcessor = std::make_unique<processor::QueryProcessor>(dbConfig->maxNumThreads);
+        queryProcessor = std::make_unique<processor::QueryProcessor>(dbConfig->maxNumThreads);
 #endif
 
-    catalog = std::make_unique<Catalog>();
-    storageManager = std::make_unique<StorageManager>(databasePath, dbConfig->readOnly,
-        dbConfig->enableChecksums, *memoryManager, dbConfig->enableCompression,
-        dbConfig->enableDefaultHashIndex, vfs.get());
-    transactionManager = std::make_unique<TransactionManager>(storageManager->getWAL());
-    databaseManager = std::make_unique<DatabaseManager>();
+        catalog = std::make_unique<Catalog>();
+        storageManager = std::make_unique<StorageManager>(databasePath, dbConfig->readOnly,
+            dbConfig->enableChecksums, *memoryManager, dbConfig->enableCompression,
+            dbConfig->enableDefaultHashIndex, vfs.get());
+        transactionManager = std::make_unique<TransactionManager>(storageManager->getWAL());
+        databaseManager = std::make_unique<DatabaseManager>();
 
-    extensionManager = std::make_unique<extension::ExtensionManager>();
-    dbLifeCycleManager = std::make_shared<DatabaseLifeCycleManager>();
-    if (clientContext.isInMemory()) {
-        storageManager->initDataFileHandle(vfs.get(), &clientContext);
-        extensionManager->autoLoadLinkedExtensions(&clientContext);
-        return;
+        extensionManager = std::make_unique<extension::ExtensionManager>();
+        dbLifeCycleManager = std::make_shared<DatabaseLifeCycleManager>();
+        if (clientContext.isInMemory()) {
+            storageManager->initDataFileHandle(vfs.get(), &clientContext);
+            extensionManager->autoLoadLinkedExtensions(&clientContext);
+            return;
+        }
+        StorageManager::recover(clientContext, dbConfig->throwOnWalReplayFailure,
+            dbConfig->enableChecksums);
+
+        // Load graphs from system catalog
+        databaseManager->loadGraphsFromCatalog(memoryManager.get(), &clientContext);
+    } catch (...) {
+        if (ownsOpenPathClaim) {
+            releaseOpenDbPath(databasePath);
+            ownsOpenPathClaim = false;
+        }
+        throw;
     }
-    StorageManager::recover(clientContext, dbConfig->throwOnWalReplayFailure,
-        dbConfig->enableChecksums);
-
-    // Load graphs from system catalog
-    databaseManager->loadGraphsFromCatalog(memoryManager.get(), &clientContext);
 }
 
 Database::~Database() {
@@ -206,6 +249,10 @@ Database::~Database() {
             ClientContext clientContext(this);
             transactionManager->checkpoint(clientContext);
         } catch (...) {} // NOLINT
+    }
+    if (ownsOpenPathClaim) {
+        releaseOpenDbPath(databasePath);
+        ownsOpenPathClaim = false;
     }
     dbLifeCycleManager->isDatabaseClosed = true;
 }
