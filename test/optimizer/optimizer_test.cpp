@@ -2573,7 +2573,7 @@ TEST_F(OptimizerTest, LatePropertiesAfterTopKUseLookup) {
     }
 }
 
-// The lookup probes the index only after the statement's earlier writes to its table finished.
+// The lookups probe the index only after the statement's earlier writes to their table finished.
 TEST_F(OptimizerTest, PrimaryKeyLookupAfterWriteAccumulates) {
     auto accumulatesBeforeLookup = [&](const std::string& query) {
         auto plan = getRoot(query);
@@ -2596,6 +2596,8 @@ TEST_F(OptimizerTest, PrimaryKeyLookupAfterWriteAccumulates) {
     };
     for (auto query : {"UNWIND [0] AS i CREATE (:person {ID: 100 + i}) WITH i "
                        "MATCH (b:person {ID: 100 + i}) RETURN b.ID",
+             "UNWIND [0] AS i CREATE (:person {ID: 100 + i}) WITH i "
+             "MATCH (a:person {ID: 100 + i}), (b:person {ID: 101 - i}) RETURN b.ID",
              "UNWIND [0] AS i MATCH (a:person {ID: i}) SET a.age = 1 WITH i "
              "MATCH (b:person {ID: i + 2}) RETURN b.age",
              "UNWIND [0] AS i MERGE (:person {ID: 100 + i}) WITH i "
@@ -2622,6 +2624,41 @@ TEST_F(OptimizerTest, PrimaryKeyLookupKeyFromOneGroup) {
     plan = getRoot(twoGroups);
     EXPECT_EQ(countLookups(plan->getLastOperator().get()), 0u);
     EXPECT_EQ(getCount(*conn->query(twoGroups)), 4);
+}
+
+TEST_F(OptimizerTest, PrimaryKeyLookupPerDisconnectedNode) {
+    for (auto query :
+        {"UNWIND [{s: 0, d: 2}] AS r MATCH (a:person {ID: r.s}), (b:person {ID: r.d}) "
+         "RETURN a.ID, b.ID",
+            "UNWIND [{s: 0, d: 2}] AS r WITH r MATCH (a:person {ID: r.s}) "
+            "MATCH (b:person {ID: r.d}) RETURN a.ID, b.ID",
+            "UNWIND [0] AS i WITH i AS s, i + 2 AS d MATCH (a:person {ID: s}), (b:person {ID: d}) "
+            "RETURN a.ID, b.ID",
+            "UNWIND [{s: 0, d: 1}] AS r MATCH (a:person {ID: r.s}), (b:organisation {ID: r.d}) "
+            "RETURN a.ID, b.ID"}) {
+        auto plan = getRoot(query);
+        auto* root = plan->getLastOperator().get();
+        EXPECT_EQ(countLookups(root), 2u) << query;
+        EXPECT_FALSE(hasOperatorType(root, planner::LogicalOperatorType::SCAN_NODE_TABLE)) << query;
+    }
+}
+
+// Without a usable key from the input row for every node, the clause keeps the join plan.
+TEST_F(OptimizerTest, PrimaryKeyLookupNeedsRowKeyForEveryNode) {
+    for (auto query : {"UNWIND [0] AS i MATCH (a:person {ID: i}), (b:organisation) RETURN a.ID",
+             "UNWIND [0] AS i MATCH (a:person {ID: i}), (b:person {ID: 2}) RETURN a.ID",
+             "UNWIND [0] AS i MATCH (a:person {ID: i}), (b:person {ID: a.ID + 2}) RETURN b.ID",
+             "UNWIND [0] AS i MATCH (a:person {ID: i}), (b:person)-[:knows]->(c:person) "
+             "RETURN a.ID",
+             "UNWIND [0] AS i MATCH (a:person {ID: i}), (b:person:organisation {ID: i}) "
+             "RETURN a.ID",
+             "UNWIND [0] AS x UNWIND [2] AS y MATCH (a:person {ID: x}), (b:person {ID: x + y}) "
+             "RETURN b.ID"}) {
+        auto plan = getRoot(query);
+        auto* root = plan->getLastOperator().get();
+        EXPECT_EQ(countLookups(root), 0u) << query;
+        EXPECT_TRUE(hasOperatorType(root, planner::LogicalOperatorType::SCAN_NODE_TABLE)) << query;
+    }
 }
 
 } // namespace testing

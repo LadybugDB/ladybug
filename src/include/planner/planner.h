@@ -303,6 +303,8 @@ public:
         LogicalPlan& plan, const binder::NodeOrRelExpression* nodeOrRel = nullptr);
     bool tryPlanQueryPrimaryKeyLookup(const binder::QueryGraphCollection& queryGraphCollection,
         const binder::expression_vector& predicates, LogicalPlan& plan);
+    void appendQueryPrimaryKeyLookup(const binder::NodeExpression& node, common::table_id_t tableID,
+        std::shared_ptr<binder::Expression> key, LogicalPlan& plan);
     bool tryPlanCorrelatedPrimaryKeyLookup(const binder::QueryGraphCollection& queryGraphCollection,
         const binder::expression_vector& predicates, const binder::expression_vector& corrExprs,
         const Schema& outerSchema, common::cardinality_t corrExprsCard, LogicalPlan& rightPlan);
