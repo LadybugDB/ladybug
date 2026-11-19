@@ -2599,5 +2599,22 @@ TEST_F(OptimizerTest, PrimaryKeyLookupNeedsRowKeyForEveryNode) {
     }
 }
 
+// A MERGE runs after the lookups of its input finished, with one accumulate where its own plan
+// already accumulates the input.
+TEST_F(OptimizerTest, PrimaryKeyLookupBeforeMergeAccumulatesOnce) {
+    auto accumulates = [&](const std::string& query) {
+        std::vector<planner::LogicalOperator*> ops;
+        collectOperators(getRoot(query)->getLastOperator().get(),
+            planner::LogicalOperatorType::ACCUMULATE, ops);
+        return ops.size();
+    };
+    EXPECT_EQ(accumulates("UNWIND [0, 7] AS i MATCH (a:person {ID: i}) MERGE (:person {ID: 7}) "
+                          "RETURN count(*)"),
+        1u);
+    EXPECT_EQ(accumulates("UNWIND [0] AS i MATCH (a:person {ID: i}) MERGE (:person {ID: i + 100}) "
+                          "RETURN count(*)"),
+        1u);
+}
+
 } // namespace testing
 } // namespace lbug

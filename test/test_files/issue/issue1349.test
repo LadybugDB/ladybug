@@ -94,3 +94,16 @@
 1|y
 2|x
 2|y
+
+# A MERGE after the lookups does not create a node that a later row then finds.
+-STATEMENT UNWIND [0, 70001] AS i MATCH (a:N {id: i}), (b:N {id: i}) MERGE (:N {id: 70001})
+           RETURN count(*);
+---- 1
+1
+-STATEMENT UNWIND [0, 70002] AS i MATCH (a:N {id: i}) MERGE (:N {id: 70002}) RETURN count(*);
+---- 1
+1
+-STATEMENT UNWIND [[0, 70003], [70003, 0]] AS r WITH r[1] AS l, r[2] AS m
+           MATCH (a:N {id: l}) MERGE (:N {id: m}) RETURN count(*);
+---- 1
+1
