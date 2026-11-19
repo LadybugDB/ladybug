@@ -86,20 +86,42 @@ __m256i compareIntegral(__m256i left, __m256i right) {
     }
 }
 
+// Equals and GreaterThan from comparison_functions.h, NaN order included. They are restated here,
+// and NaN is tested as `value != value` rather than through the inline <cmath> function, so this
+// AVX2-compiled file defines no inline function that the linker could pick for other files.
+template<typename T>
+bool isNaNScalar(T value) {
+    if constexpr (std::is_floating_point_v<T>) {
+        return value != value;
+    } else {
+        return false;
+    }
+}
+
+template<typename T>
+bool equalScalar(T left, T right) {
+    return left == right || (isNaNScalar(left) && isNaNScalar(right));
+}
+
+template<typename T>
+bool greaterScalar(T left, T right) {
+    return left > right || (isNaNScalar(left) && !isNaNScalar(right));
+}
+
 template<typename T, ComparisonOperation OPERATION>
 bool compareScalar(const T& left, const T& right) {
     if constexpr (OPERATION == ComparisonOperation::EQUAL) {
-        return left == right;
+        return equalScalar(left, right);
     } else if constexpr (OPERATION == ComparisonOperation::NOT_EQUAL) {
-        return !(left == right);
+        return !equalScalar(left, right);
     } else if constexpr (OPERATION == ComparisonOperation::GREATER_THAN) {
-        return left > right;
+        return greaterScalar(left, right);
     } else if constexpr (OPERATION == ComparisonOperation::GREATER_THAN_EQUAL) {
-        return left > right || left == right;
+        return greaterScalar(left, right) || equalScalar(left, right);
     } else if constexpr (OPERATION == ComparisonOperation::LESS_THAN) {
-        return !(left > right || left == right);
+        return !(greaterScalar(left, right) || equalScalar(left, right));
     } else {
-        return !(left > right);
+        return !greaterScalar(left, right);
     }
 }
 
@@ -185,49 +207,87 @@ common::sel_t selectVectorIntegral(const void* leftPtr, const void* rightPtr, co
     return selected;
 }
 
+__m256 loadFloating(const float* data) {
+    return _mm256_loadu_ps(data);
+}
+
+__m256d loadFloating(const double* data) {
+    return _mm256_loadu_pd(data);
+}
+
+__m256 broadcastFloating(float value) {
+    return _mm256_set1_ps(value);
+}
+
+__m256d broadcastFloating(double value) {
+    return _mm256_set1_pd(value);
+}
+
+template<int PREDICATE>
+uint32_t compareLanes(__m256 left, __m256 right) {
+    return static_cast<uint32_t>(_mm256_movemask_ps(_mm256_cmp_ps(left, right, PREDICATE)));
+}
+
+template<int PREDICATE>
+uint32_t compareLanes(__m256d left, __m256d right) {
+    return static_cast<uint32_t>(_mm256_movemask_pd(_mm256_cmp_pd(left, right, PREDICATE)));
+}
+
+// The single predicate compareScalar reduces to when the right operand is not NaN.
+template<ComparisonOperation OPERATION>
+constexpr int predicateForOrderedRight() {
+    if constexpr (OPERATION == ComparisonOperation::EQUAL) {
+        return _CMP_EQ_OQ;
+    } else if constexpr (OPERATION == ComparisonOperation::NOT_EQUAL) {
+        return _CMP_NEQ_UQ;
+    } else if constexpr (OPERATION == ComparisonOperation::GREATER_THAN) {
+        return _CMP_NLE_UQ;
+    } else if constexpr (OPERATION == ComparisonOperation::GREATER_THAN_EQUAL) {
+        return _CMP_NLT_UQ;
+    } else if constexpr (OPERATION == ComparisonOperation::LESS_THAN) {
+        return _CMP_LT_OQ;
+    } else {
+        return _CMP_LE_OQ;
+    }
+}
+
+// compareScalar for a block of FLOAT or DOUBLE lanes.
+template<typename T, ComparisonOperation OPERATION, typename VECTOR>
+uint32_t compareFloating(VECTOR left, VECTOR right) {
+    constexpr uint32_t ALL_LANES = (1u << (32 / sizeof(T))) - 1;
+    const auto leftNaN = compareLanes<_CMP_UNORD_Q>(left, left);
+    const auto rightNaN = compareLanes<_CMP_UNORD_Q>(right, right);
+    const auto equal = compareLanes<_CMP_EQ_OQ>(left, right) | (leftNaN & rightNaN);
+    const auto greater = compareLanes<_CMP_GT_OQ>(left, right) | (leftNaN & ~rightNaN);
+    if constexpr (OPERATION == ComparisonOperation::EQUAL) {
+        return equal;
+    } else if constexpr (OPERATION == ComparisonOperation::NOT_EQUAL) {
+        return ~equal & ALL_LANES;
+    } else if constexpr (OPERATION == ComparisonOperation::GREATER_THAN) {
+        return greater;
+    } else if constexpr (OPERATION == ComparisonOperation::GREATER_THAN_EQUAL) {
+        return greater | equal;
+    } else if constexpr (OPERATION == ComparisonOperation::LESS_THAN) {
+        return ~(greater | equal) & ALL_LANES;
+    } else {
+        return ~greater & ALL_LANES;
+    }
+}
+
 template<typename T, ComparisonOperation OPERATION>
 common::sel_t selectConstantFloating(const void* dataPtr, common::sel_t count,
     const void* constantPtr, const uint64_t* nullMask, common::sel_t* output) {
     constexpr common::sel_t LANE_COUNT = 32 / sizeof(T);
     const auto data = static_cast<const T*>(dataPtr);
     const auto constant = *static_cast<const T*>(constantPtr);
+    const auto constantVector = broadcastFloating(constant);
+    // A NaN constant is rare enough to leave to the scalar loop below.
+    const auto vectorized = !isNaNScalar(constant);
     common::sel_t selected = 0;
     common::sel_t base = 0;
-    for (; base + LANE_COUNT <= count; base += LANE_COUNT) {
-        uint32_t laneMask;
-        if constexpr (std::is_same_v<T, float>) {
-            const auto values = _mm256_loadu_ps(data + base);
-            const auto constantVector = _mm256_set1_ps(constant);
-            if constexpr (OPERATION == ComparisonOperation::EQUAL) {
-                laneMask = _mm256_movemask_ps(_mm256_cmp_ps(values, constantVector, _CMP_EQ_OQ));
-            } else if constexpr (OPERATION == ComparisonOperation::NOT_EQUAL) {
-                laneMask = _mm256_movemask_ps(_mm256_cmp_ps(values, constantVector, _CMP_NEQ_UQ));
-            } else if constexpr (OPERATION == ComparisonOperation::GREATER_THAN) {
-                laneMask = _mm256_movemask_ps(_mm256_cmp_ps(values, constantVector, _CMP_GT_OQ));
-            } else if constexpr (OPERATION == ComparisonOperation::GREATER_THAN_EQUAL) {
-                laneMask = _mm256_movemask_ps(_mm256_cmp_ps(values, constantVector, _CMP_GE_OQ));
-            } else if constexpr (OPERATION == ComparisonOperation::LESS_THAN) {
-                laneMask = _mm256_movemask_ps(_mm256_cmp_ps(values, constantVector, _CMP_NGE_UQ));
-            } else {
-                laneMask = _mm256_movemask_ps(_mm256_cmp_ps(values, constantVector, _CMP_NGT_UQ));
-            }
-        } else {
-            const auto values = _mm256_loadu_pd(data + base);
-            const auto constantVector = _mm256_set1_pd(constant);
-            if constexpr (OPERATION == ComparisonOperation::EQUAL) {
-                laneMask = _mm256_movemask_pd(_mm256_cmp_pd(values, constantVector, _CMP_EQ_OQ));
-            } else if constexpr (OPERATION == ComparisonOperation::NOT_EQUAL) {
-                laneMask = _mm256_movemask_pd(_mm256_cmp_pd(values, constantVector, _CMP_NEQ_UQ));
-            } else if constexpr (OPERATION == ComparisonOperation::GREATER_THAN) {
-                laneMask = _mm256_movemask_pd(_mm256_cmp_pd(values, constantVector, _CMP_GT_OQ));
-            } else if constexpr (OPERATION == ComparisonOperation::GREATER_THAN_EQUAL) {
-                laneMask = _mm256_movemask_pd(_mm256_cmp_pd(values, constantVector, _CMP_GE_OQ));
-            } else if constexpr (OPERATION == ComparisonOperation::LESS_THAN) {
-                laneMask = _mm256_movemask_pd(_mm256_cmp_pd(values, constantVector, _CMP_NGE_UQ));
-            } else {
-                laneMask = _mm256_movemask_pd(_mm256_cmp_pd(values, constantVector, _CMP_NGT_UQ));
-            }
-        }
+    for (; vectorized && base + LANE_COUNT <= count; base += LANE_COUNT) {
+        auto laneMask = compareLanes<predicateForOrderedRight<OPERATION>()>(
+            loadFloating(data + base), constantVector);
         laneMask = applyNullMask<LANE_COUNT>(laneMask, nullMask, base);
         selected = compactLaneMask(laneMask, base, output, selected);
     }
@@ -249,40 +309,12 @@ common::sel_t selectVectorFloating(const void* leftPtr, const void* rightPtr, co
     common::sel_t selected = 0;
     common::sel_t base = 0;
     for (; base + LANE_COUNT <= count; base += LANE_COUNT) {
-        uint32_t laneMask;
-        if constexpr (std::is_same_v<T, float>) {
-            const auto leftValues = _mm256_loadu_ps(left + base);
-            const auto rightValues = _mm256_loadu_ps(right + base);
-            if constexpr (OPERATION == ComparisonOperation::EQUAL) {
-                laneMask = _mm256_movemask_ps(_mm256_cmp_ps(leftValues, rightValues, _CMP_EQ_OQ));
-            } else if constexpr (OPERATION == ComparisonOperation::NOT_EQUAL) {
-                laneMask = _mm256_movemask_ps(_mm256_cmp_ps(leftValues, rightValues, _CMP_NEQ_UQ));
-            } else if constexpr (OPERATION == ComparisonOperation::GREATER_THAN) {
-                laneMask = _mm256_movemask_ps(_mm256_cmp_ps(leftValues, rightValues, _CMP_GT_OQ));
-            } else if constexpr (OPERATION == ComparisonOperation::GREATER_THAN_EQUAL) {
-                laneMask = _mm256_movemask_ps(_mm256_cmp_ps(leftValues, rightValues, _CMP_GE_OQ));
-            } else if constexpr (OPERATION == ComparisonOperation::LESS_THAN) {
-                laneMask = _mm256_movemask_ps(_mm256_cmp_ps(leftValues, rightValues, _CMP_NGE_UQ));
-            } else {
-                laneMask = _mm256_movemask_ps(_mm256_cmp_ps(leftValues, rightValues, _CMP_NGT_UQ));
-            }
-        } else {
-            const auto leftValues = _mm256_loadu_pd(left + base);
-            const auto rightValues = _mm256_loadu_pd(right + base);
-            if constexpr (OPERATION == ComparisonOperation::EQUAL) {
-                laneMask = _mm256_movemask_pd(_mm256_cmp_pd(leftValues, rightValues, _CMP_EQ_OQ));
-            } else if constexpr (OPERATION == ComparisonOperation::NOT_EQUAL) {
-                laneMask = _mm256_movemask_pd(_mm256_cmp_pd(leftValues, rightValues, _CMP_NEQ_UQ));
-            } else if constexpr (OPERATION == ComparisonOperation::GREATER_THAN) {
-                laneMask = _mm256_movemask_pd(_mm256_cmp_pd(leftValues, rightValues, _CMP_GT_OQ));
-            } else if constexpr (OPERATION == ComparisonOperation::GREATER_THAN_EQUAL) {
-                laneMask = _mm256_movemask_pd(_mm256_cmp_pd(leftValues, rightValues, _CMP_GE_OQ));
-            } else if constexpr (OPERATION == ComparisonOperation::LESS_THAN) {
-                laneMask = _mm256_movemask_pd(_mm256_cmp_pd(leftValues, rightValues, _CMP_NGE_UQ));
-            } else {
-                laneMask = _mm256_movemask_pd(_mm256_cmp_pd(leftValues, rightValues, _CMP_NGT_UQ));
-            }
-        }
+        const auto leftValues = loadFloating(left + base);
+        const auto rightValues = loadFloating(right + base);
+        auto laneMask =
+            compareLanes<_CMP_UNORD_Q>(leftValues, rightValues) == 0 ?
+                compareLanes<predicateForOrderedRight<OPERATION>()>(leftValues, rightValues) :
+                compareFloating<T, OPERATION>(leftValues, rightValues);
         laneMask = applyNullMask<LANE_COUNT>(laneMask, leftNullMask, base);
         laneMask = applyNullMask<LANE_COUNT>(laneMask, rightNullMask, base);
         selected = compactLaneMask(laneMask, base, output, selected);

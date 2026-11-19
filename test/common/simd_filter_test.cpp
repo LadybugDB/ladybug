@@ -146,8 +146,8 @@ void verifyFloatingKernel(common::PhysicalTypeID type) {
     data[2] = T{0};
     data[31] = std::numeric_limits<T>::infinity();
     data[32] = std::numeric_limits<T>::quiet_NaN();
+    data[33] = -std::numeric_limits<T>::quiet_NaN();
     data[129] = std::numeric_limits<T>::signaling_NaN();
-    const T constant = T{1};
     common::NullMask nullMask{COUNT};
     for (const auto i : {17u, 63u, 64u, 127u, 128u, 255u}) {
         nullMask.setNull(i, true);
@@ -155,27 +155,31 @@ void verifyFloatingKernel(common::PhysicalTypeID type) {
 
     std::vector<common::sel_t> scalar(COUNT);
     std::vector<common::sel_t> dispatched(COUNT);
-    for (const auto operation : COMPARISON_OPERATIONS) {
-        const auto scalarCount = function::simd::selectConstantScalar(data.data(), COUNT, &constant,
-            nullMask.getData(), scalar.data(), type, operation);
-        const auto dispatchedCount = function::simd::selectConstant(data.data(), COUNT, &constant,
-            nullMask.getData(), dispatched.data(), type, operation);
-        std::vector<common::sel_t> expected;
-        for (common::sel_t i = 0; i < COUNT; ++i) {
-            if (!nullMask.isNull(i) && evaluateComparison(data[i], constant, operation)) {
-                expected.push_back(i);
+    for (const auto constant : {T{1}, std::numeric_limits<T>::quiet_NaN(),
+             -std::numeric_limits<T>::quiet_NaN(), std::numeric_limits<T>::infinity()}) {
+        for (const auto operation : COMPARISON_OPERATIONS) {
+            const auto scalarCount = function::simd::selectConstantScalar(data.data(), COUNT,
+                &constant, nullMask.getData(), scalar.data(), type, operation);
+            const auto dispatchedCount = function::simd::selectConstant(data.data(), COUNT,
+                &constant, nullMask.getData(), dispatched.data(), type, operation);
+            std::vector<common::sel_t> expected;
+            for (common::sel_t i = 0; i < COUNT; ++i) {
+                if (!nullMask.isNull(i) && evaluateComparison(data[i], constant, operation)) {
+                    expected.push_back(i);
+                }
             }
+            ASSERT_EQ(scalarCount, expected.size());
+            ASSERT_EQ(dispatchedCount, expected.size());
+            EXPECT_TRUE(std::equal(expected.begin(), expected.end(), scalar.begin()));
+            EXPECT_TRUE(std::equal(expected.begin(), expected.end(), dispatched.begin()));
         }
-        ASSERT_EQ(scalarCount, expected.size());
-        ASSERT_EQ(dispatchedCount, expected.size());
-        EXPECT_TRUE(std::equal(expected.begin(), expected.end(), scalar.begin()));
-        EXPECT_TRUE(std::equal(expected.begin(), expected.end(), dispatched.begin()));
     }
 
     std::vector<T> right(COUNT);
     for (common::sel_t i = 0; i < COUNT; ++i) {
         right[i] = data[(i * 19 + 3) % COUNT];
     }
+    right[32] = -std::numeric_limits<T>::quiet_NaN();
     right[65] = std::numeric_limits<T>::quiet_NaN();
     common::NullMask rightNullMask{COUNT};
     for (const auto i : {5u, 64u, 126u, 127u, 192u}) {
@@ -200,6 +204,22 @@ void verifyFloatingKernel(common::PhysicalTypeID type) {
     }
 }
 
+template<typename T>
+void verifyNaNOrder() {
+    const auto nan = std::numeric_limits<T>::quiet_NaN();
+    const auto inf = std::numeric_limits<T>::infinity();
+    EXPECT_TRUE(function::Equals::operation(nan, -nan));
+    EXPECT_FALSE(function::NotEquals::operation(nan, nan));
+    EXPECT_TRUE(function::GreaterThan::operation(nan, inf));
+    EXPECT_TRUE(function::LessThan::operation(inf, nan));
+    EXPECT_FALSE(function::GreaterThan::operation(T{1}, nan));
+    EXPECT_FALSE(function::LessThan::operation(nan, T{1}));
+    EXPECT_TRUE(function::GreaterThanEquals::operation(nan, nan));
+    EXPECT_TRUE(function::LessThanEquals::operation(T{1}, nan));
+    EXPECT_FALSE(function::LessThanEquals::operation(nan, T{1}));
+    EXPECT_FALSE(function::LessThan::operation(nan, nan));
+}
+
 } // namespace
 
 TEST(SIMDFilterTest, KernelsMatchIntegerComparisons) {
@@ -211,6 +231,11 @@ TEST(SIMDFilterTest, KernelsMatchIntegerComparisons) {
     verifyIntegerKernels<uint16_t>(common::PhysicalTypeID::UINT16);
     verifyIntegerKernels<uint32_t>(common::PhysicalTypeID::UINT32);
     verifyIntegerKernels<uint64_t>(common::PhysicalTypeID::UINT64);
+}
+
+TEST(SIMDFilterTest, NaNEqualsNaNAndSortsAboveInfinity) {
+    verifyNaNOrder<float>();
+    verifyNaNOrder<double>();
 }
 
 TEST(SIMDFilterTest, KernelsPreserveFloatingPointSemantics) {

@@ -9,6 +9,7 @@
 #include "common/null_mask.h"
 #include "common/simd/cpu_features.h"
 #include "common/vector/value_vector.h"
+#include "function/comparison/comparison_functions.h"
 
 #if defined(_MSC_VER) && defined(LBUG_SIMD_COMPILED_AVX2)
 #include <intrin.h>
@@ -44,19 +45,17 @@ constexpr common::sel_t MIN_SIMD_FILTER_SIZE = 64;
 template<typename T, ComparisonOperation OPERATION>
 bool compare(const T& left, const T& right) {
     if constexpr (OPERATION == ComparisonOperation::EQUAL) {
-        return left == right;
+        return Equals::operation(left, right);
     } else if constexpr (OPERATION == ComparisonOperation::NOT_EQUAL) {
-        return !(left == right);
+        return NotEquals::operation(left, right);
     } else if constexpr (OPERATION == ComparisonOperation::GREATER_THAN) {
-        return left > right;
+        return GreaterThan::operation(left, right);
     } else if constexpr (OPERATION == ComparisonOperation::GREATER_THAN_EQUAL) {
-        return left > right || left == right;
+        return GreaterThanEquals::operation(left, right);
     } else if constexpr (OPERATION == ComparisonOperation::LESS_THAN) {
-        // Match LessThan::operation exactly, including its unordered floating-point behavior.
-        return !(left > right || left == right);
+        return LessThan::operation(left, right);
     } else {
-        // Match LessThanEquals::operation exactly, including NaN behavior.
-        return !(left > right);
+        return LessThanEquals::operation(left, right);
     }
 }
 

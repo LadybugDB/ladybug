@@ -354,10 +354,12 @@ void Column::updateStatistics(ColumnChunkMetadata& metadata, offset_t maxIndex,
     DASSERT((!min && !max) || (min && max));
     if (min && max) {
         // If new values are outside of the existing min/max, update them
-        if (max->gt(metadata.compMeta.max, dataType.getPhysicalType())) {
+        if (metadata.compMeta.max.replacedAsBoundBy(*max, false /* isMin */,
+                dataType.getPhysicalType())) {
             metadata.compMeta.max = *max;
         }
-        if (metadata.compMeta.min.gt(*min, dataType.getPhysicalType())) {
+        if (metadata.compMeta.min.replacedAsBoundBy(*min, true /* isMin */,
+                dataType.getPhysicalType())) {
             metadata.compMeta.min = *min;
         }
     }

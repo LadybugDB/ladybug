@@ -1,3 +1,4 @@
+#include <cmath>
 #include <cstdint>
 #include <type_traits>
 
@@ -148,15 +149,41 @@ auto notMask(MASK mask) {
     }
 }
 
+// equalVector and greaterVector with the NaN order of compareScalar for FLOAT and DOUBLE lanes; a
+// lane is NaN exactly when it is not equal to itself.
+template<typename T, typename VECTOR>
+auto equalOrdered(VECTOR left, VECTOR right) {
+    const auto equal = equalVector<T>(left, right);
+    if constexpr (std::is_floating_point_v<T>) {
+        const auto bothNaN =
+            notMask<T>(orMask<T>(equalVector<T>(left, left), equalVector<T>(right, right)));
+        return orMask<T>(equal, bothNaN);
+    } else {
+        return equal;
+    }
+}
+
+template<typename T, typename VECTOR>
+auto greaterOrdered(VECTOR left, VECTOR right) {
+    const auto greater = greaterVector<T>(left, right);
+    if constexpr (std::is_floating_point_v<T>) {
+        const auto onlyLeftNaN = notMask<T>(
+            orMask<T>(equalVector<T>(left, left), notMask<T>(equalVector<T>(right, right))));
+        return orMask<T>(greater, onlyLeftNaN);
+    } else {
+        return greater;
+    }
+}
+
 template<typename T, ComparisonOperation OPERATION, typename VECTOR>
 auto compareVector(VECTOR left, VECTOR right) {
-    const auto equal = equalVector<T>(left, right);
+    const auto equal = equalOrdered<T>(left, right);
     if constexpr (OPERATION == ComparisonOperation::EQUAL) {
         return equal;
     } else if constexpr (OPERATION == ComparisonOperation::NOT_EQUAL) {
         return notMask<T>(equal);
     } else {
-        const auto greater = greaterVector<T>(left, right);
+        const auto greater = greaterOrdered<T>(left, right);
         if constexpr (OPERATION == ComparisonOperation::GREATER_THAN) {
             return greater;
         } else if constexpr (OPERATION == ComparisonOperation::GREATER_THAN_EQUAL) {
@@ -169,20 +196,40 @@ auto compareVector(VECTOR left, VECTOR right) {
     }
 }
 
+// Equals and GreaterThan from comparison_functions.h, NaN order included.
+template<typename T>
+bool isNaNScalar(T value) {
+    if constexpr (std::is_floating_point_v<T>) {
+        return std::isnan(value);
+    } else {
+        return false;
+    }
+}
+
+template<typename T>
+bool equalScalar(T left, T right) {
+    return left == right || (isNaNScalar(left) && isNaNScalar(right));
+}
+
+template<typename T>
+bool greaterScalar(T left, T right) {
+    return left > right || (isNaNScalar(left) && !isNaNScalar(right));
+}
+
 template<typename T, ComparisonOperation OPERATION>
 bool compareScalar(const T& left, const T& right) {
     if constexpr (OPERATION == ComparisonOperation::EQUAL) {
-        return left == right;
+        return equalScalar(left, right);
     } else if constexpr (OPERATION == ComparisonOperation::NOT_EQUAL) {
-        return !(left == right);
+        return !equalScalar(left, right);
     } else if constexpr (OPERATION == ComparisonOperation::GREATER_THAN) {
-        return left > right;
+        return greaterScalar(left, right);
     } else if constexpr (OPERATION == ComparisonOperation::GREATER_THAN_EQUAL) {
-        return left > right || left == right;
+        return greaterScalar(left, right) || equalScalar(left, right);
     } else if constexpr (OPERATION == ComparisonOperation::LESS_THAN) {
-        return !(left > right || left == right);
+        return !(greaterScalar(left, right) || equalScalar(left, right));
     } else {
-        return !(left > right);
+        return !greaterScalar(left, right);
     }
 }
 

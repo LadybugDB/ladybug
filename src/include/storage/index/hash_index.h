@@ -286,7 +286,7 @@ private:
 
     inline bool equals(const transaction::Transaction* /*transaction*/, Key keyToLookup,
         const T& keyInEntry) const {
-        return keyToLookup == keyInEntry;
+        return HashIndexUtils::keysEqual(keyToLookup, keyInEntry);
     }
 
     inline common::hash_t hashStored(const transaction::Transaction* /*transaction*/,

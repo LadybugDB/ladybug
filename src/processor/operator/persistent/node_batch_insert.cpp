@@ -19,6 +19,7 @@
 #include "common/finally_wrapper.h"
 #include "common/type_utils.h"
 #include "common/vector/value_vector.h"
+#include "function/comparison/comparison_functions.h"
 #include "main/client_context.h"
 #include "main/db_config.h"
 #include "processor/execution_context.h"
@@ -56,6 +57,26 @@ StoredPKValue<T> readPKValue(const ColumnChunkData& pkChunk, offset_t pos) {
         return pkChunk.cast<StringChunkData>().getValue<std::string>(pos);
     } else {
         return pkChunk.getValue<T>(pos);
+    }
+}
+
+// The order and equality of comparison_functions.h, in which NaN keys sort last and equal each
+// other.
+template<typename V>
+bool pkLess(const V& left, const V& right) {
+    if constexpr (std::is_floating_point_v<V>) {
+        return function::LessThan::operation(left, right);
+    } else {
+        return left < right;
+    }
+}
+
+template<typename V>
+bool pkEqual(const V& left, const V& right) {
+    if constexpr (std::is_floating_point_v<V>) {
+        return function::Equals::operation(left, right);
+    } else {
+        return left == right;
     }
 }
 
@@ -195,7 +216,7 @@ struct NoIndexPKValidatorImpl final : NoIndexPKValidator {
         }
         // Sort the residual buffer so it can participate as one more sorted source alongside the
         // spilled runs, then stream-merge everything to detect cross-run duplicates.
-        std::sort(buffer.begin(), buffer.end());
+        std::sort(buffer.begin(), buffer.end(), pkLess<StoredPKValue<T>>);
         mergeAndCheckDuplicates();
     }
 
@@ -275,9 +296,9 @@ private:
     }
 
     static void sortAndCheckDuplicates(std::vector<StoredPKValue<T>>& values) {
-        std::sort(values.begin(), values.end());
+        std::sort(values.begin(), values.end(), pkLess<StoredPKValue<T>>);
         for (size_t i = 1; i < values.size(); ++i) {
-            if (values[i] == values[i - 1]) {
+            if (pkEqual(values[i], values[i - 1])) {
                 throw RuntimeException(
                     ExceptionMessage::duplicatePKException(pkValueToString<T>(values[i])));
             }
@@ -332,7 +353,9 @@ private:
             sources.push_back(std::move(s));
         }
 
-        auto cmp = [&sources](size_t a, size_t b) { return sources[a].cur > sources[b].cur; };
+        auto cmp = [&sources](size_t a, size_t b) {
+            return pkLess(sources[b].cur, sources[a].cur);
+        };
         std::vector<size_t> heap;
         heap.reserve(sources.size());
         for (size_t i = 0; i < sources.size(); ++i) {
@@ -348,7 +371,7 @@ private:
             const auto idx = heap.back();
             auto& src = sources[idx];
             DASSERT(src.hasCur);
-            if (last.has_value() && src.cur == *last) {
+            if (last.has_value() && pkEqual(src.cur, *last)) {
                 throw RuntimeException(
                     ExceptionMessage::duplicatePKException(pkValueToString<T>(src.cur)));
             }

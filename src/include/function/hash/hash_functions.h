@@ -1,8 +1,10 @@
 #pragma once
 
+#include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <functional>
+#include <limits>
 #include <unordered_set>
 
 #include "common/exception/runtime.h"
@@ -11,6 +13,7 @@
 #include "common/types/string_t.h"
 #include "common/types/types.h"
 #include "common/types/uint128_t.h"
+#include <bit>
 
 namespace lbug {
 namespace function {
@@ -119,9 +122,12 @@ inline void Hash::operation(const common::uint128_t& key, common::hash_t& result
 
 template<>
 inline void Hash::operation(const double& key, common::hash_t& result) {
-    // 0 and -0 are not byte-equivalent, but should have the same hash
+    // 0 and -0 are not byte-equivalent, but should have the same hash. All NaNs are equal (see
+    // comparison_functions.h), so they hash as the default quiet NaN.
     if (key == 0) {
         result = murmurhash64(0);
+    } else if (std::isnan(key)) {
+        result = murmurhash64(std::bit_cast<uint64_t>(std::numeric_limits<double>::quiet_NaN()));
     } else {
         result = murmurhash64(*reinterpret_cast<const uint64_t*>(&key));
     }
@@ -129,9 +135,12 @@ inline void Hash::operation(const double& key, common::hash_t& result) {
 
 template<>
 inline void Hash::operation(const float& key, common::hash_t& result) {
-    // 0 and -0 are not byte-equivalent, but should have the same hash
+    // 0 and -0 are not byte-equivalent, but should have the same hash. All NaNs are equal (see
+    // comparison_functions.h), so they hash as the default quiet NaN.
     if (key == 0) {
         result = murmurhash64(0);
+    } else if (std::isnan(key)) {
+        result = murmurhash64(std::bit_cast<uint32_t>(std::numeric_limits<float>::quiet_NaN()));
     } else {
         result = murmurhash64(*reinterpret_cast<const uint32_t*>(&key));
     }

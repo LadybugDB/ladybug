@@ -6,6 +6,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <limits>
 #include <new>
 #include <optional>
 #include <type_traits>
@@ -52,6 +53,10 @@ void appendIntegral(std::vector<uint8_t>& bytes, T value) {
 template<typename T>
 void appendFloat(std::vector<uint8_t>& bytes, T value) {
     using U = std::conditional_t<sizeof(T) == sizeof(uint32_t), uint32_t, uint64_t>;
+    // All NaNs are one key, above +inf (see comparison_functions.h).
+    if (std::isnan(value)) {
+        value = std::numeric_limits<T>::quiet_NaN();
+    }
     U encoded = 0;
     std::memcpy(&encoded, &value, sizeof(T));
     const auto signBit = U{1} << (sizeof(T) * 8 - 1);

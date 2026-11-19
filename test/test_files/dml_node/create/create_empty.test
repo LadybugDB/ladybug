@@ -344,15 +344,18 @@ inf
 inf
 -STATEMENT MATCH (t:test) WHERE t.id = to_float("-inf") RETURN t.id;
 ---- 0
-# NaN should not be searchable
+# Every NaN is one key: any NaN finds it, and a second NaN is a duplicate
 -STATEMENT CREATE (t:test {id:0.0/0.0});
 ---- ok
--STATEMENT MATCH (t:test) WHERE t.id = 0.0/0.0 RETURN t.id;
----- 0
+-STATEMENT MATCH (t:test) WHERE t.id = 0.0/0.0 RETURN count(*);
+---- 1
+1
 -STATEMENT CREATE (t:test {id:sqrt(-1.0)});
----- ok
--STATEMENT MATCH (t:test) WHERE t.id = sqrt(-1.0) RETURN t.id;
----- 0
+---- error(regex)
+^Runtime exception: Found duplicated primary key value .*
+-STATEMENT MATCH (t:test) WHERE t.id = sqrt(-1.0) RETURN count(*);
+---- 1
+1
 
 -CASE CreateBlobPK
 -STATEMENT CREATE NODE TABLE test(id BLOB, PRIMARY KEY(id));

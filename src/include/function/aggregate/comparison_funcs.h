@@ -3,6 +3,7 @@
 #include "common/types/int128_t.h"
 #include "common/types/types.h"
 #include "common/types/uint128_t.h"
+#include "function/comparison/comparison_functions.h"
 
 namespace lbug {
 namespace function {
@@ -27,9 +28,11 @@ inline bool valueLess(const uint8_t* left, const uint8_t* right, common::Logical
     case common::LogicalTypeID::UINT64:
         return *reinterpret_cast<const uint64_t*>(left) < *reinterpret_cast<const uint64_t*>(right);
     case common::LogicalTypeID::FLOAT:
-        return *reinterpret_cast<const float*>(left) < *reinterpret_cast<const float*>(right);
+        return LessThan::operation(*reinterpret_cast<const float*>(left),
+            *reinterpret_cast<const float*>(right));
     case common::LogicalTypeID::DOUBLE:
-        return *reinterpret_cast<const double*>(left) < *reinterpret_cast<const double*>(right);
+        return LessThan::operation(*reinterpret_cast<const double*>(left),
+            *reinterpret_cast<const double*>(right));
     case common::LogicalTypeID::INT128:
         return *reinterpret_cast<const common::int128_t*>(left) <
                *reinterpret_cast<const common::int128_t*>(right);
