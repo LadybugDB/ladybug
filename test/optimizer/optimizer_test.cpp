@@ -2511,5 +2511,38 @@ TEST_F(OptimizerTest, LatePropertiesAfterTopKUseLookup) {
     }
 }
 
+// The lookup probes the index only after the statement's earlier writes to its table finished.
+TEST_F(OptimizerTest, PrimaryKeyLookupAfterWriteAccumulates) {
+    auto accumulatesBeforeLookup = [&](const std::string& query) {
+        auto plan = getRoot(query);
+        std::vector<planner::LogicalOperator*> lookups;
+        collectOperators(plan->getLastOperator().get(),
+            planner::LogicalOperatorType::QUERY_PRIMARY_KEY_LOOKUP, lookups);
+        if (lookups.empty()) {
+            ADD_FAILURE() << query;
+            return false;
+        }
+        auto* op = lookups.front();
+        while (op->getOperatorType() != planner::LogicalOperatorType::ACCUMULATE &&
+               !planner::LogicalOperatorUtils::isUpdate(op->getOperatorType())) {
+            if (op->getNumChildren() == 0) {
+                return false;
+            }
+            op = op->getChild(0).get();
+        }
+        return op->getOperatorType() == planner::LogicalOperatorType::ACCUMULATE;
+    };
+    for (auto query : {"UNWIND [0] AS i CREATE (:person {ID: 100 + i}) WITH i "
+                       "MATCH (b:person {ID: 100 + i}) RETURN b.ID",
+             "UNWIND [0] AS i MATCH (a:person {ID: i}) SET a.age = 1 WITH i "
+             "MATCH (b:person {ID: i + 2}) RETURN b.age",
+             "UNWIND [0] AS i MERGE (:person {ID: 100 + i}) WITH i "
+             "MATCH (b:person {ID: 100 + i}) RETURN b.ID"}) {
+        EXPECT_TRUE(accumulatesBeforeLookup(query)) << query;
+    }
+    EXPECT_FALSE(accumulatesBeforeLookup("UNWIND [0] AS i CREATE (:organisation {ID: 100 + i}) "
+                                         "WITH i MATCH (b:person {ID: i}) RETURN b.ID"));
+}
+
 } // namespace testing
 } // namespace lbug
