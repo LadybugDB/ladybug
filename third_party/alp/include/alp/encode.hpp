@@ -319,11 +319,11 @@ struct AlpEncode {
 
 #ifdef __AVX512F__
 		for (size_t i {0}; i < config::VECTOR_SIZE; i = i + 8) {
-			__m512d l            = _mm512_loadu_pd(tmp_dbl_arr + i);
-			__m512d r            = _mm512_loadu_pd(input_vector + i);
-			__m512i index        = _mm512_loadu_pd(INDEX_ARR + i);
-			auto    is_exception = _mm512_cmpneq_pd_mask(l, r);
-			_mm512_mask_compressstoreu_pd(tmp_index + exceptions_idx, is_exception, index);
+			__m512d  l            = _mm512_loadu_pd(encoded_dbl_arr + i);
+			__m512d  r            = _mm512_loadu_pd(dbl_arr_without_specials + i);
+			__m512i  index        = _mm512_loadu_si512(::alp::INDEX_ARR + i);
+			__mmask8 is_exception = _mm512_cmpneq_pd_mask(l, r);
+			_mm512_mask_compressstoreu_epi64(INDEX_ARR + exceptions_idx, is_exception, index);
 			exceptions_idx += LOOKUP_TABLE[is_exception];
 		}
 #else
@@ -399,12 +399,18 @@ struct AlpEncode {
 
 #ifdef __AVX512F__
 		for (size_t i {0}; i < config::VECTOR_SIZE; i = i + 16) {
-			__m512  l            = _mm512_loadu_ps(tmp_dbl_arr + i);
-			__m512  r            = _mm512_loadu_ps(input_vector + i);
-			__m512i index        = _mm512_loadu_ps(INDEX_ARR + i);
-			auto    is_exception = _mm512_cmpneq_ps_mask(l, r);
-			_mm512_mask_compressstoreu_ps(tmp_index + exceptions_idx, is_exception, index);
-			exceptions_idx += LOOKUP_TABLE[is_exception];
+			__m512    l            = _mm512_loadu_ps(encoded_dbl_arr + i);
+			__m512    r            = _mm512_loadu_ps(dbl_arr_without_specials + i);
+			__mmask16 is_exception = _mm512_cmpneq_ps_mask(l, r);
+			// 16 float lanes vs 8 uint64 indices per AVX512 register: handle in two halves.
+			__m512i  index_lo = _mm512_loadu_si512(::alp::INDEX_ARR + i);
+			__m512i  index_hi = _mm512_loadu_si512(::alp::INDEX_ARR + i + 8);
+			__mmask8 lo_mask  = static_cast<__mmask8>(is_exception & 0xFF);
+			__mmask8 hi_mask  = static_cast<__mmask8>((is_exception >> 8) & 0xFF);
+			_mm512_mask_compressstoreu_epi64(INDEX_ARR + exceptions_idx, lo_mask, index_lo);
+			exceptions_idx += static_cast<uint64_t>(__builtin_popcount((unsigned)lo_mask));
+			_mm512_mask_compressstoreu_epi64(INDEX_ARR + exceptions_idx, hi_mask, index_hi);
+			exceptions_idx += static_cast<uint64_t>(__builtin_popcount((unsigned)hi_mask));
 		}
 #else
 		for (size_t i {0}; i < config::VECTOR_SIZE; i++) {
