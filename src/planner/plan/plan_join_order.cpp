@@ -1074,6 +1074,22 @@ static void analyzeLookupOuterPlan(const LogicalOperator* op, const CardinalityE
     }
 }
 
+static bool hasCorrelatedNodeScan(const LogicalOperator& op, const QueryGraphPlanningInfo& info) {
+    if (op.getOperatorType() == LogicalOperatorType::SCAN_NODE_TABLE) {
+        const auto& scan = op.constCast<LogicalScanNodeTable>();
+        if (scan.getScanType() == LogicalScanNodeTableType::SCAN &&
+            info.containsCorrExpr(*scan.getNodeID())) {
+            return true;
+        }
+    }
+    for (auto i = 0u; i < op.getNumChildren(); ++i) {
+        if (hasCorrelatedNodeScan(*op.getChild(i), info)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool Planner::tryPlanLookupJoin(const SubqueryGraph& innerSubgraph, const LogicalPlan& innerPlan,
     const LogicalPlan& outerPlan, const std::shared_ptr<NodeExpression>& joinNode,
     const expression_vector& predicates, const SubqueryGraph& newSubgraph, uint64_t maxCost) {
@@ -1113,6 +1129,16 @@ bool Planner::tryPlanLookupJoin(const SubqueryGraph& innerSubgraph, const Logica
     // group, so the factorized estimate checked above can be far below the number of probes.
     const auto numProbes = plan.getCardinality();
     if (numProbes > PlannerKnobs::LOOKUP_JOIN_MAX_OUTER_CARDINALITY) {
+        return false;
+    }
+    // planBaseTableScans estimates a correlated node's scan at the outer side's rows, expecting
+    // the join with the outer side to mask it. tryProbeToBuildHJSIP skips that mask when the
+    // outer side is estimated at least as large as this one (unless a LIMIT is pushed into it).
+    // With no more probes than outer rows the scan then reads the whole table, and every row is
+    // probed. Other reasons the mask can be missing are not covered here.
+    const auto* info = currentQueryGraphPlanningInfo;
+    if (info != nullptr && info->subqueryType == SubqueryPlanningType::UNNEST_CORRELATED &&
+        numProbes <= info->corrExprsCard && hasCorrelatedNodeScan(*plan.getLastOperator(), *info)) {
         return false;
     }
     const auto outputGroupPos = plan.getSchema()->getGroupPos(*key);

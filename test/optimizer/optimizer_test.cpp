@@ -819,6 +819,65 @@ TEST_F(OptimizerTest, LookupJoinCountsEarlierHopFanOut) {
         hasOperatorType(plan->getLastOperator().get(), planner::LogicalOperatorType::HASH_JOIN));
 }
 
+static bool hasNodeIDOnlyScan(const planner::LogicalOperator* op) {
+    if (op->getOperatorType() == planner::LogicalOperatorType::SCAN_NODE_TABLE) {
+        auto& scan = op->constCast<planner::LogicalScanNodeTable>();
+        if (scan.getScanType() == planner::LogicalScanNodeTableType::SCAN &&
+            scan.getProperties().empty()) {
+            return true;
+        }
+    }
+    for (auto i = 0u; i < op->getNumChildren(); ++i) {
+        if (hasNodeIDOnlyScan(op->getChild(i).get())) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// The second MATCH rescans a's 1,000 lkr_person rows by node ID, and the planner estimates that
+// scan at the outer side's few rows. With one organisation per person the lookup on b has no more
+// probes than outer rows, the outer join does not mask the scan, and the lookup would probe every
+// person.
+TEST_F(OptimizerTest, LookupJoinSkipsCorrelatedNodeScan) {
+    for (auto query : {"CREATE NODE TABLE lkr_person(id INT64, name STRING, PRIMARY KEY(id));",
+             "CREATE NODE TABLE lkr_org(id INT64, name STRING, PRIMARY KEY(id));",
+             "CREATE REL TABLE lkr_works(FROM lkr_person TO lkr_org, MANY_ONE);",
+             "UNWIND range(0, 999) AS i CREATE (:lkr_person {id: i, name: CAST(i AS STRING)});",
+             "UNWIND range(0, 499) AS i CREATE (:lkr_org {id: i, name: CAST(i AS STRING)});",
+             "MATCH (a:lkr_person), (b:lkr_org) WHERE b.id = a.id % 500 "
+             "CREATE (a)-[:lkr_works]->(b);",
+             "ANALYZE;"}) {
+        auto result = conn->query(query);
+        ASSERT_TRUE(result->isSuccess()) << query << ": " << result->getErrorMessage();
+    }
+    for (auto query : {"UNWIND [0, 125, 250] AS i MATCH (a:lkr_person) WHERE a.id = i "
+                       "MATCH (a)-[:lkr_works]->(b:lkr_org) RETURN b.name, a.id;",
+             "MATCH (a:lkr_person {id: 7}) WITH a "
+             "MATCH (a)-[:lkr_works]->(b:lkr_org) RETURN b.name, a.id;",
+             "MATCH (a:lkr_person) WHERE a.name = '7' WITH a, count(*) AS k "
+             "MATCH (a)-[:lkr_works]->(b:lkr_org) RETURN b.name, a.id;"}) {
+        auto plan = getRoot(query);
+        std::vector<planner::LogicalOperator*> lookups;
+        collectOperators(plan->getLastOperator().get(),
+            planner::LogicalOperatorType::QUERY_PRIMARY_KEY_LOOKUP, lookups);
+        for (auto* lookup : lookups) {
+            EXPECT_FALSE(hasNodeIDOnlyScan(lookup)) << query;
+        }
+    }
+    // Two persons per organisation: the lookup on a has more probes than outer rows, so the outer
+    // join masks the rescan of b (probe side accumulated) and the lookup stays.
+    auto plan = getRoot("MATCH (b:lkr_org {id: 7}) WITH b "
+                        "MATCH (b)<-[:lkr_works]-(a:lkr_person) RETURN a.name, b.id;");
+    std::vector<planner::LogicalOperator*> lookups;
+    collectOperators(plan->getLastOperator().get(),
+        planner::LogicalOperatorType::QUERY_PRIMARY_KEY_LOOKUP, lookups);
+    ASSERT_EQ(lookups.size(), 1u);
+    EXPECT_TRUE(hasNodeIDOnlyScan(lookups[0]));
+    EXPECT_TRUE(
+        hasOperatorType(plan->getLastOperator().get(), planner::LogicalOperatorType::ACCUMULATE));
+}
+
 TEST_F(OptimizerTest, PlanUndirectedInnerJoin) {
     if (common::DEFAULT_EXTEND_DIRECTION != common::ExtendDirection::BOTH) {
         GTEST_SKIP();

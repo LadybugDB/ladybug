@@ -435,6 +435,7 @@ static bool tryProbeToBuildHJSIP(LogicalOperator* op,
     // buildCard rows while materialization pays collect + rescan over probeCard rows, so the
     // optimization cannot pay off: keep the plain pipelined hash join. Exempt the LIMIT
     // pushdown path (probeLimit), whose capped probe still benefits from the mask.
+    // Planner::tryPlanLookupJoin relies on this condition for correlated node rescans.
     if (probeLimit == nullptr &&
         hashJoin.getChild(0)->getCardinality() >= hashJoin.getChild(1)->getCardinality()) {
         return false;
