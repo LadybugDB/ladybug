@@ -1,0 +1,96 @@
+-DATASET CSV empty
+-BUFFER_POOL_SIZE 67108864
+
+--
+
+-CASE Issue1349PrimaryKeyLookupPerNode
+# Every node of a MATCH matched by a key from the input row is looked up in the primary-key
+# index (github issue #1349). A plan that combines scans of both tables does not fit this
+# buffer pool.
+
+-STATEMENT CREATE NODE TABLE N(id INT64, v INT64, PRIMARY KEY(id));
+---- ok
+-STATEMENT CREATE NODE TABLE M(name STRING, PRIMARY KEY(name));
+---- ok
+-STATEMENT CREATE REL TABLE E(FROM N TO N, k INT64);
+---- ok
+-STATEMENT CREATE REL TABLE F(FROM N TO M);
+---- ok
+-STATEMENT COPY N FROM (UNWIND range(0, 65535) AS i RETURN i, i % 7);
+---- ok
+-STATEMENT CREATE (:M {name: 'x'}), (:M {name: 'y'});
+---- ok
+
+-STATEMENT UNWIND [{s: 1, d: 2, k: 1}, {s: 3, d: 4, k: 2}] AS r
+           MATCH (a:N {id: r.s}), (b:N {id: r.d}) CREATE (a)-[:E {k: r.k}]->(b);
+---- ok
+-STATEMENT UNWIND [{s: 5, d: 6, k: 3}] AS r WITH r
+           MATCH (a:N {id: r.s}) MATCH (b:N {id: r.d}) CREATE (a)-[:E {k: r.k}]->(b);
+---- ok
+-STATEMENT UNWIND [7] AS i WITH i AS s, i + 1 AS d
+           MATCH (a:N {id: s}), (b:N {id: d}) CREATE (a)-[:E {k: 4}]->(b);
+---- ok
+-STATEMENT UNWIND [{s: 9, d: 'y'}] AS r MATCH (a:N {id: r.s}), (m:M {name: r.d})
+           CREATE (a)-[:F]->(m);
+---- ok
+-STATEMENT MATCH (a:N)-[e:E]->(b:N) RETURN e.k, a.id, b.id ORDER BY e.k;
+-CHECK_ORDER
+---- 4
+1|1|2
+2|3|4
+3|5|6
+4|7|8
+-STATEMENT MATCH (a:N)-[:F]->(m:M) RETURN a.id, m.name;
+---- 1
+9|y
+
+-STATEMENT COPY (UNWIND [[11, 12], [13, 14]] AS p RETURN p[1] AS s, p[2] AS d)
+           TO "${DATABASE_PATH}/pairs.csv" (header=true);
+---- ok
+-STATEMENT LOAD FROM "${DATABASE_PATH}/pairs.csv" (header=true)
+           MATCH (a:N {id: s}), (b:N {id: d}) RETURN a.id, b.id;
+---- 2
+11|12
+13|14
+
+# Nodes created earlier in the statement, also by later rows, are found.
+-STATEMENT UNWIND range(0, 4999) AS i CREATE (:N {id: 100000 + i})
+           WITH i MATCH (a:N {id: 100000 + i}), (b:N {id: 104999 - i}) RETURN count(*);
+---- 1
+5000
+
+# A missing or null key drops the row; the same key may bind both nodes.
+-STATEMENT UNWIND [{s: 1, d: 2}, {s: 1, d: 70000}, {s: CAST(NULL AS INT64), d: 2}, {s: 3, d: 3}] AS r
+           MATCH (a:N {id: r.s}), (b:N {id: r.d}) RETURN a.id, b.id;
+---- 2
+1|2
+3|3
+
+# Predicates other than the keys still apply, on one node or across both.
+-STATEMENT UNWIND range(0, 20) AS i MATCH (a:N {id: i}), (b:N {id: i + 1})
+           WHERE a.v = 3 AND a.v < b.v RETURN a.id, b.id;
+---- 3
+3|4
+10|11
+17|18
+-STATEMENT UNWIND [{s: 1, d: 2}, {s: 4, d: 4}] AS r MATCH (a:N), (b:N)
+           WHERE a.id = r.s AND a.id = r.d AND b.id = r.d RETURN a.id, b.id;
+---- 1
+4|4
+
+# Each key reads one of two UNWIND groups.
+-STATEMENT UNWIND [1, 2] AS x UNWIND [10, 20] AS y MATCH (a:N {id: x}), (b:N {id: y})
+           RETURN a.id, b.id;
+---- 4
+1|10
+1|20
+2|10
+2|20
+
+# Without a key from the row for every node the clause keeps the join plan.
+-STATEMENT UNWIND [1, 2] AS i MATCH (a:N {id: i}), (m:M) RETURN a.id, m.name;
+---- 4
+1|x
+1|y
+2|x
+2|y

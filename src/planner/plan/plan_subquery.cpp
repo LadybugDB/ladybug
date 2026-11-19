@@ -151,24 +151,7 @@ bool Planner::tryPlanCorrelatedPrimaryKeyLookup(const QueryGraphCollection& quer
     appendExpressionsScan(corrExprs, rightPlan);
     rightPlan.getLastOperator()->setCardinality(corrExprsCard);
     appendDistinct(corrExprs, rightPlan);
-    appendFlattens(rightPlan.getSchema()->getGroupsPosInScope(), rightPlan);
-    auto properties = getProperties(*node);
-    properties.erase(std::remove_if(properties.begin(), properties.end(),
-                         [](const std::shared_ptr<Expression>& expression) {
-                             return expression->constCast<PropertyExpression>().isInternalID();
-                         }),
-        properties.end());
-    const auto dependentExprs = getDependentExprs(key, *rightPlan.getSchema());
-    DASSERT(!dependentExprs.empty());
-    const auto outputGroupPos = rightPlan.getSchema()->getGroupPos(*dependentExprs[0]);
-    for ([[maybe_unused]] auto& dependentExpr : dependentExprs) {
-        DASSERT(rightPlan.getSchema()->getGroupPos(*dependentExpr) == outputGroupPos);
-    }
-    auto lookup = std::make_shared<LogicalQueryPrimaryKeyLookup>(tableID, node->getInternalID(),
-        properties, key, outputGroupPos, rightPlan.getLastOperator());
-    lookup->computeFactorizedSchema();
-    lookup->setCardinality(rightPlan.getCardinality());
-    rightPlan.setLastOperator(std::move(lookup));
+    appendQueryPrimaryKeyLookup(*node, tableID, std::move(key), rightPlan);
     appendFilters(residualPredicates, rightPlan);
     return true;
 }
@@ -232,57 +215,92 @@ static bool dependsOnOneGroup(const std::shared_ptr<Expression>& expression, con
     return true;
 }
 
-bool Planner::tryPlanQueryPrimaryKeyLookup(const QueryGraphCollection& queryGraphCollection,
-    const expression_vector& predicates, LogicalPlan& plan) {
-    if (queryGraphCollection.getNumQueryGraphs() != 1) {
-        return false;
-    }
-    auto queryGraph = queryGraphCollection.getQueryGraph(0);
-    if (queryGraph->getNumQueryNodes() != 1 || queryGraph->getNumQueryRels() != 0) {
-        return false;
-    }
-    auto node = queryGraph->getQueryNode(0);
-    auto tableIDs = node->getTableIDs();
-    if (tableIDs.size() != 1 || plan.getSchema()->isExpressionInScope(*node->getInternalID())) {
-        return false;
-    }
-    auto tableID = tableIDs[0];
-    auto* table =
-        storage::StorageManager::tryGetNativeNodeTable(*clientContext, *node->getEntry(0));
-    if (!table || !table->tryGetPrimaryKeyIndex()) {
-        return false;
-    }
-
-    std::shared_ptr<Expression> key;
-    expression_vector residualPredicates;
-    for (auto& predicate : predicates) {
-        if (predicate->expressionType != ExpressionType::EQUALS) {
-            residualPredicates.push_back(predicate);
+// The first equality between the node's primary key and an expression of the input rows
+// becomes the lookup key; its predicate is marked as used.
+static std::shared_ptr<Expression> findQueryPrimaryKeyLookupKey(const NodeExpression& node,
+    table_id_t tableID, const expression_vector& predicates, const Schema& schema,
+    std::vector<bool>& usedPredicates) {
+    for (auto i = 0u; i < predicates.size(); ++i) {
+        auto& predicate = predicates[i];
+        if (usedPredicates[i] || predicate->expressionType != ExpressionType::EQUALS) {
             continue;
         }
         auto lhs = predicate->getChild(0);
         auto rhs = predicate->getChild(1);
-        if (isNodePrimaryKey(*rhs, *node, tableID)) {
+        if (isNodePrimaryKey(*rhs, node, tableID)) {
             std::swap(lhs, rhs);
         }
-        if (key == nullptr && isNodePrimaryKey(*lhs, *node, tableID) &&
-            plan.getSchema()->evaluable(*rhs) && dependsOnOneGroup(rhs, *plan.getSchema())) {
-            key = rhs;
-        } else {
-            residualPredicates.push_back(predicate);
+        if (isNodePrimaryKey(*lhs, node, tableID) && schema.evaluable(*rhs) &&
+            dependsOnOneGroup(rhs, schema)) {
+            usedPredicates[i] = true;
+            return rhs;
         }
     }
-    if (key == nullptr) {
+    return nullptr;
+}
+
+// Each disconnected node of the clause, e.g. both nodes of
+// MATCH (a {id: r.src}), (b {id: r.dst}), gets its own lookup. Keys are resolved against the
+// input rows only, so a key that refers to another node of the clause keeps the join plan.
+bool Planner::tryPlanQueryPrimaryKeyLookup(const QueryGraphCollection& queryGraphCollection,
+    const expression_vector& predicates, LogicalPlan& plan) {
+    struct Lookup {
+        std::shared_ptr<NodeExpression> node;
+        table_id_t tableID;
+        std::shared_ptr<Expression> key;
+    };
+    if (queryGraphCollection.getNumQueryGraphs() == 0) {
         return false;
     }
-
-    // The lookup runs in the pipeline of the earlier clauses, so writes to its table must finish
-    // first or a row misses the writes of later rows.
-    if (writesTable(*plan.getLastOperator(), tableID)) {
+    std::vector<bool> usedPredicates(predicates.size(), false);
+    std::vector<Lookup> lookups;
+    for (auto i = 0u; i < queryGraphCollection.getNumQueryGraphs(); ++i) {
+        auto queryGraph = queryGraphCollection.getQueryGraph(i);
+        if (queryGraph->getNumQueryNodes() != 1 || queryGraph->getNumQueryRels() != 0) {
+            return false;
+        }
+        auto node = queryGraph->getQueryNode(0);
+        auto tableIDs = node->getTableIDs();
+        if (tableIDs.size() != 1 || plan.getSchema()->isExpressionInScope(*node->getInternalID())) {
+            return false;
+        }
+        auto* table =
+            storage::StorageManager::tryGetNativeNodeTable(*clientContext, *node->getEntry(0));
+        if (!table || !table->tryGetPrimaryKeyIndex()) {
+            return false;
+        }
+        auto key = findQueryPrimaryKeyLookupKey(*node, tableIDs[0], predicates, *plan.getSchema(),
+            usedPredicates);
+        if (key == nullptr) {
+            return false;
+        }
+        lookups.push_back({std::move(node), tableIDs[0], std::move(key)});
+    }
+    // The lookups run in the pipeline of the earlier clauses, so writes to a looked-up table must
+    // finish first or a row misses the writes of later rows. Accumulating only merges groups, so
+    // each key still reads one group.
+    if (std::any_of(lookups.begin(), lookups.end(), [&](const Lookup& lookup) {
+            return writesTable(*plan.getLastOperator(), lookup.tableID);
+        })) {
         tryAppendAccumulate(plan);
     }
+    for (auto& lookup : lookups) {
+        appendQueryPrimaryKeyLookup(*lookup.node, lookup.tableID, lookup.key, plan);
+    }
+    expression_vector residualPredicates;
+    for (auto i = 0u; i < predicates.size(); ++i) {
+        if (!usedPredicates[i]) {
+            residualPredicates.push_back(predicates[i]);
+        }
+    }
+    appendFilters(residualPredicates, plan);
+    return true;
+}
+
+void Planner::appendQueryPrimaryKeyLookup(const NodeExpression& node, table_id_t tableID,
+    std::shared_ptr<Expression> key, LogicalPlan& plan) {
     appendFlattens(plan.getSchema()->getGroupsPosInScope(), plan);
-    auto properties = getProperties(*node);
+    auto properties = getProperties(node);
     properties.erase(std::remove_if(properties.begin(), properties.end(),
                          [](const std::shared_ptr<Expression>& expression) {
                              return expression->constCast<PropertyExpression>().isInternalID();
@@ -294,13 +312,11 @@ bool Planner::tryPlanQueryPrimaryKeyLookup(const QueryGraphCollection& queryGrap
     for ([[maybe_unused]] auto& dependentExpr : dependentExprs) {
         DASSERT(plan.getSchema()->getGroupPos(*dependentExpr) == outputGroupPos);
     }
-    auto lookup = std::make_shared<LogicalQueryPrimaryKeyLookup>(tableID, node->getInternalID(),
-        properties, key, outputGroupPos, plan.getLastOperator());
+    auto lookup = std::make_shared<LogicalQueryPrimaryKeyLookup>(tableID, node.getInternalID(),
+        properties, std::move(key), outputGroupPos, plan.getLastOperator());
     lookup->computeFactorizedSchema();
     lookup->setCardinality(plan.getCardinality());
     plan.setLastOperator(std::move(lookup));
-    appendFilters(residualPredicates, plan);
-    return true;
 }
 
 expression_vector Planner::getCorrelatedExprs(const QueryGraphCollection& collection,
