@@ -201,12 +201,21 @@ bool ExpressionVisitor::isRandom(const Expression& expression) {
     return false;
 }
 
-// Volatile: random functions; functions that change state, which are nextval and setval
-// (isReadOnly == false) and setseed, which stays read-only because the read/write analyzer would
-// count it as a write; and currval, which reads the state nextval and setval change. A lambda's
-// body is checked too, although collectChildren does not return it. A subquery is planned on its
-// own and joined in as a column, so moving an expression that uses it never re-evaluates its body;
-// checking its WHERE is only conservative.
+// Random functions, and functions that change state: nextval and setval (isReadOnly == false),
+// and setseed, which stays read-only because the read/write analyzer would count it as a write.
+static bool isRandomOrChangesState(const function::Function& function) {
+    return isRandomFunction(function.name) || !function.isReadOnly ||
+           function.name == function::SetSeedFunction::name;
+}
+
+// currval reads the state nextval and setval change.
+static bool isVolatileFunction(const function::Function& function) {
+    return isRandomOrChangesState(function) || function.name == function::CurrValFunction::name;
+}
+
+// A lambda's body is checked too, although collectChildren does not return it. A subquery is
+// planned on its own and joined in as a column, so moving an expression that uses it never
+// re-evaluates its body; checking its WHERE is only conservative.
 bool ExpressionVisitor::isVolatile(const Expression& expression) {
     if (expression.expressionType == ExpressionType::LAMBDA) {
         auto body = expression.constCast<LambdaExpression>().getFunctionExpr();
@@ -214,13 +223,9 @@ bool ExpressionVisitor::isVolatile(const Expression& expression) {
             return true;
         }
     }
-    if (expression.expressionType == ExpressionType::FUNCTION) {
-        auto& function = expression.constCast<ScalarFunctionExpression>().getFunction();
-        if (isRandomFunction(function.name) || !function.isReadOnly ||
-            function.name == function::SetSeedFunction::name ||
-            function.name == function::CurrValFunction::name) {
-            return true;
-        }
+    if (expression.expressionType == ExpressionType::FUNCTION &&
+        isVolatileFunction(expression.constCast<ScalarFunctionExpression>().getFunction())) {
+        return true;
     }
     for (auto& child : ExpressionChildrenCollector::collectChildren(expression)) {
         if (isVolatile(*child)) {
@@ -330,20 +335,8 @@ bool ConstantExpressionVisitor::isConstant(const Expression& expr) {
 }
 
 bool ConstantExpressionVisitor::visitFunction(const Expression& expr) {
-    auto& funcExpr = expr.constCast<ScalarFunctionExpression>();
-    // nextval and setval change state, so they must run, not fold.
-    if (!funcExpr.getFunction().isReadOnly) {
-        return false;
-    }
-    if (funcExpr.getFunction().name == function::GenRandomUUIDFunction::name) {
-        return false;
-    }
-    if (funcExpr.getFunction().name == function::RandFunction::name) {
-        return false;
-    }
-    // setseed changes state too, but stays read-only: the read/write analyzer would count it as a
-    // write. Folded, it would reseed when the statement is bound, not each time it runs.
-    if (funcExpr.getFunction().name == function::SetSeedFunction::name) {
+    // Unlike isVolatile, currval folds, so that {id: currval('s')} stays a primary-key lookup.
+    if (isRandomOrChangesState(expr.constCast<ScalarFunctionExpression>().getFunction())) {
         return false;
     }
     return visitChildren(expr);
