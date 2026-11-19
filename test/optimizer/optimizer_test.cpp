@@ -2544,5 +2544,23 @@ TEST_F(OptimizerTest, PrimaryKeyLookupAfterWriteAccumulates) {
                                          "WITH i MATCH (b:person {ID: i}) RETURN b.ID"));
 }
 
+static uint64_t countLookups(planner::LogicalOperator* root) {
+    std::vector<planner::LogicalOperator*> lookups;
+    collectOperators(root, planner::LogicalOperatorType::QUERY_PRIMARY_KEY_LOOKUP, lookups);
+    return lookups.size();
+}
+
+// A key reading two UNWIND groups keeps the join plan.
+TEST_F(OptimizerTest, PrimaryKeyLookupKeyFromOneGroup) {
+    auto plan = getRoot("UNWIND [0, 3] AS x UNWIND [2, 5] AS y MATCH (b:person {ID: x}) "
+                        "RETURN b.ID");
+    EXPECT_EQ(countLookups(plan->getLastOperator().get()), 1u);
+    const std::string twoGroups = "UNWIND [0, 3] AS x UNWIND [2, 5] AS y "
+                                  "MATCH (b:person {ID: x + y}) RETURN count(*)";
+    plan = getRoot(twoGroups);
+    EXPECT_EQ(countLookups(plan->getLastOperator().get()), 0u);
+    EXPECT_EQ(getCount(*conn->query(twoGroups)), 4);
+}
+
 } // namespace testing
 } // namespace lbug
