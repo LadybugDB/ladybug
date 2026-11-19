@@ -217,6 +217,21 @@ static bool writesTable(const LogicalOperator& op, table_id_t tableID) {
     return false;
 }
 
+// The lookup writes into the group of the key's inputs, so they must all be in one group.
+static bool dependsOnOneGroup(const std::shared_ptr<Expression>& expression, const Schema& schema) {
+    const auto dependentExprs = getDependentExprs(expression, schema);
+    if (dependentExprs.empty()) {
+        return false;
+    }
+    const auto groupPos = schema.getGroupPos(*dependentExprs[0]);
+    for (auto& dependentExpr : dependentExprs) {
+        if (schema.getGroupPos(*dependentExpr) != groupPos) {
+            return false;
+        }
+    }
+    return true;
+}
+
 bool Planner::tryPlanQueryPrimaryKeyLookup(const QueryGraphCollection& queryGraphCollection,
     const expression_vector& predicates, LogicalPlan& plan) {
     if (queryGraphCollection.getNumQueryGraphs() != 1) {
@@ -251,8 +266,7 @@ bool Planner::tryPlanQueryPrimaryKeyLookup(const QueryGraphCollection& queryGrap
             std::swap(lhs, rhs);
         }
         if (key == nullptr && isNodePrimaryKey(*lhs, *node, tableID) &&
-            plan.getSchema()->evaluable(*rhs) &&
-            !getDependentExprs(rhs, *plan.getSchema()).empty()) {
+            plan.getSchema()->evaluable(*rhs) && dependsOnOneGroup(rhs, *plan.getSchema())) {
             key = rhs;
         } else {
             residualPredicates.push_back(predicate);
