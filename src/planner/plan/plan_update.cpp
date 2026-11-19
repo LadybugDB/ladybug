@@ -1,8 +1,10 @@
+#include "binder/expression/node_rel_expression.h"
 #include "binder/query/updating_clause/bound_delete_clause.h"
 #include "binder/query/updating_clause/bound_insert_clause.h"
 #include "binder/query/updating_clause/bound_merge_clause.h"
 #include "binder/query/updating_clause/bound_set_clause.h"
 #include "planner/operator/persistent/logical_merge.h"
+#include "planner/operator/scan/logical_query_primary_key_lookup.h"
 #include "planner/planner.h"
 
 using namespace lbug::common;
@@ -49,6 +51,49 @@ void Planner::planInsertClause(const BoundUpdatingClause& updatingClause, Logica
     }
 }
 
+// Follows the pipeline that ends at `op` through probe sides, up to an accumulate, aggregation,
+// distinct or sort.
+static bool pipelineLooksUpTable(const LogicalOperator* op, const table_id_set_t& tableIDs) {
+    while (true) {
+        switch (op->getOperatorType()) {
+        case LogicalOperatorType::ACCUMULATE:
+        case LogicalOperatorType::AGGREGATE:
+        case LogicalOperatorType::DISTINCT:
+        case LogicalOperatorType::ORDER_BY:
+            return false;
+        case LogicalOperatorType::QUERY_PRIMARY_KEY_LOOKUP:
+            if (tableIDs.contains(op->constCast<LogicalQueryPrimaryKeyLookup>().getTableID())) {
+                return true;
+            }
+            break;
+        default:
+            break;
+        }
+        if (op->getNumChildren() == 0) {
+            return false;
+        }
+        op = op->getChild(0).get();
+    }
+}
+
+static table_id_set_t getWrittenNodeTables(const BoundMergeClause& mergeClause) {
+    table_id_set_t tableIDs;
+    auto add = [&](const Expression& pattern) {
+        auto patternTableIDs = pattern.constCast<NodeOrRelExpression>().getTableIDsSet();
+        tableIDs.insert(patternTableIDs.begin(), patternTableIDs.end());
+    };
+    for (auto* info : mergeClause.getInsertNodeInfos()) {
+        add(*info->pattern);
+    }
+    for (auto& info : mergeClause.getOnCreateSetNodeInfos()) {
+        add(*info.pattern);
+    }
+    for (auto& info : mergeClause.getOnMatchSetNodeInfos()) {
+        add(*info.pattern);
+    }
+    return tableIDs;
+}
+
 void Planner::planMergeClause(const BoundUpdatingClause& updatingClause, LogicalPlan& plan) {
     auto& mergeClause = updatingClause.constCast<BoundMergeClause>();
     expression_vector predicates;
@@ -74,6 +119,11 @@ void Planner::planMergeClause(const BoundUpdatingClause& updatingClause, Logical
     auto existenceMark = mergeClause.getExistenceMark();
     planOptionalMatch(*mergeClause.getQueryGraphCollection(), predicates, existenceMark, plan,
         nullptr /* hint */);
+    // A per-row primary-key lookup in the MERGE's pipeline would see what the MERGE of an earlier
+    // row wrote.
+    if (pipelineLooksUpTable(plan.getLastOperator().get(), getWrittenNodeTables(mergeClause))) {
+        appendAccumulate(plan);
+    }
     auto merge = std::make_shared<LogicalMerge>(existenceMark, keys, plan.getLastOperator());
     if (mergeClause.hasInsertNodeInfo()) {
         for (auto& info : mergeClause.getInsertNodeInfos()) {
