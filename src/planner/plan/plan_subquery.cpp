@@ -25,6 +25,10 @@
 #include "planner/operator/logical_limit.h"
 #include "planner/operator/logical_projection.h"
 #include "planner/operator/logical_unwind.h"
+#include "planner/operator/persistent/logical_delete.h"
+#include "planner/operator/persistent/logical_insert.h"
+#include "planner/operator/persistent/logical_merge.h"
+#include "planner/operator/persistent/logical_set.h"
 #include "planner/operator/scan/logical_expressions_scan.h"
 #include "planner/operator/scan/logical_query_primary_key_lookup.h"
 #include "planner/planner.h"
@@ -169,6 +173,50 @@ bool Planner::tryPlanCorrelatedPrimaryKeyLookup(const QueryGraphCollection& quer
     return true;
 }
 
+template<typename INFO>
+static bool infosWriteTable(const std::vector<INFO>& infos, table_id_t tableID) {
+    return std::any_of(infos.begin(), infos.end(), [&](const INFO& info) {
+        return info.pattern->template constCast<NodeOrRelExpression>().getTableIDsSet().contains(
+            tableID);
+    });
+}
+
+static bool writesTable(const LogicalOperator& op, table_id_t tableID) {
+    switch (op.getOperatorType()) {
+    case LogicalOperatorType::INSERT: {
+        if (infosWriteTable(op.constCast<LogicalInsert>().getInfos(), tableID)) {
+            return true;
+        }
+    } break;
+    case LogicalOperatorType::SET_PROPERTY: {
+        if (infosWriteTable(op.constCast<LogicalSetProperty>().getInfos(), tableID)) {
+            return true;
+        }
+    } break;
+    case LogicalOperatorType::DELETE: {
+        if (infosWriteTable(op.constCast<LogicalDelete>().getInfos(), tableID)) {
+            return true;
+        }
+    } break;
+    case LogicalOperatorType::MERGE: {
+        auto& merge = op.constCast<LogicalMerge>();
+        if (infosWriteTable(merge.getInsertNodeInfos(), tableID) ||
+            infosWriteTable(merge.getOnCreateSetNodeInfos(), tableID) ||
+            infosWriteTable(merge.getOnMatchSetNodeInfos(), tableID)) {
+            return true;
+        }
+    } break;
+    default:
+        break;
+    }
+    for (auto& child : op.getChildren()) {
+        if (writesTable(*child, tableID)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool Planner::tryPlanQueryPrimaryKeyLookup(const QueryGraphCollection& queryGraphCollection,
     const expression_vector& predicates, LogicalPlan& plan) {
     if (queryGraphCollection.getNumQueryGraphs() != 1) {
@@ -214,6 +262,11 @@ bool Planner::tryPlanQueryPrimaryKeyLookup(const QueryGraphCollection& queryGrap
         return false;
     }
 
+    // The lookup runs in the pipeline of the earlier clauses, so writes to its table must finish
+    // first or a row misses the writes of later rows.
+    if (writesTable(*plan.getLastOperator(), tableID)) {
+        tryAppendAccumulate(plan);
+    }
     appendFlattens(plan.getSchema()->getGroupsPosInScope(), plan);
     auto properties = getProperties(*node);
     properties.erase(std::remove_if(properties.begin(), properties.end(),

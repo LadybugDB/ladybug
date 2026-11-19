@@ -1,0 +1,39 @@
+-DATASET CSV empty
+
+--
+
+-CASE CreateThenPrimaryKeyLookup
+# A MATCH by primary key after a write in the same statement sees every write to the table, also
+# those of rows after the one looking them up.
+
+-STATEMENT CREATE NODE TABLE N(id INT64, v INT64, PRIMARY KEY(id));
+---- ok
+-STATEMENT UNWIND range(0, 4999) AS i CREATE (:N {id: 100000 + i})
+           WITH i MATCH (b:N {id: 104999 - i}) RETURN count(*), sum(b.id);
+---- 1
+5000|512497500
+-STATEMENT UNWIND range(0, 4999) AS i CREATE (:N {id: 200000 + i})
+           WITH i MATCH (a:N {id: 200000 + i}) MATCH (b:N {id: 204999 - i}) RETURN count(*);
+---- 1
+5000
+-STATEMENT UNWIND range(0, 4999) AS i MATCH (a:N {id: 100000 + i}) SET a.v = i
+           WITH i MATCH (b:N {id: 104999 - i}) RETURN count(b.v), sum(b.v);
+---- 1
+5000|12497500
+-STATEMENT UNWIND range(0, 4999) AS i MATCH (a:N {id: 200000 + i}) DELETE a
+           WITH i MATCH (b:N {id: 204999 - i}) RETURN count(*);
+---- 1
+0
+-STATEMENT CREATE NODE TABLE M(id INT64, PRIMARY KEY(id));
+---- ok
+-STATEMENT UNWIND range(0, 4999) AS i CREATE (:M {id: i})
+           WITH i MATCH (b:N {id: 104999 - i}) RETURN count(*);
+---- 1
+5000
+-STATEMENT CREATE REL TABLE W(FROM N TO M);
+---- ok
+-STATEMENT UNWIND range(0, 4999) AS i MATCH (p:N {id: 100000 + i}), (o:M) WHERE o.id = 1
+           MERGE (p)-[:W]->(o) ON CREATE SET p.v = i + 1
+           WITH i MATCH (b:N {id: 104999 - i}) RETURN count(b.v), sum(b.v);
+---- 1
+5000|12502500
