@@ -28,8 +28,7 @@ FileHandle::FileHandle(const std::string& path, uint8_t fhFlags, BufferManager* 
     }
 }
 
-void FileHandle::constructPersistentFileHandle(const std::string& path, VirtualFileSystem* vfs,
-    main::ClientContext* context) {
+FileOpenFlags FileHandle::getPersistentFileOpenFlags() const {
     FileOpenFlags openFlags{0};
     if (isReadOnlyFile()) {
         openFlags.flags = FileFlags::READ_ONLY;
@@ -40,7 +39,18 @@ void FileHandle::constructPersistentFileHandle(const std::string& path, VirtualF
             ((createFileIfNotExists()) ? FileFlags::CREATE_IF_NOT_EXISTS : 0x00000000);
         openFlags.lockType = isLockRequired() ? FileLockType::WRITE_LOCK : FileLockType::NO_LOCK;
     }
-    fileInfo = vfs->openFile(path, openFlags, context);
+    return openFlags;
+}
+
+void FileHandle::reopenPersistentFile(const std::string& path, VirtualFileSystem* vfs,
+    main::ClientContext* context) {
+    DASSERT(!isInMemoryMode() && fileInfo == nullptr);
+    fileInfo = vfs->openFile(path, getPersistentFileOpenFlags(), context);
+}
+
+void FileHandle::constructPersistentFileHandle(const std::string& path, VirtualFileSystem* vfs,
+    main::ClientContext* context) {
+    fileInfo = vfs->openFile(path, getPersistentFileOpenFlags(), context);
     const auto fileLength = fileInfo->getFileSize();
     numPages = ceil(static_cast<double>(fileLength) / static_cast<double>(getPageSize()));
     pageCapacity = 0;

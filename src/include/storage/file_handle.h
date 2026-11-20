@@ -28,7 +28,8 @@ class ClientContext;
 
 namespace common {
 class VirtualFileSystem;
-}
+struct FileOpenFlags;
+} // namespace common
 
 namespace storage {
 // FileHandle serves several purposes:
@@ -117,6 +118,11 @@ public:
     common::page_idx_t getNumPages() const { return numPages; }
     common::FileInfo* getFileInfo() const { return fileInfo.get(); }
     void resetFileInfo() { fileInfo.reset(); }
+    // Opens path (the same file after a rename) into this handle after resetFileInfo(), with
+    // the flags the handle was created with. The handle, its file index and its cached frames
+    // stay valid, so tables keep their pointers to it.
+    void reopenPersistentFile(const std::string& path, common::VirtualFileSystem* vfs,
+        main::ClientContext* context);
     void setFileInfo(std::unique_ptr<common::FileInfo> fileInfo_) {
         fileInfo = std::move(fileInfo_);
     }
@@ -135,6 +141,7 @@ private:
     bool isLockRequired() const { return fhFlags & isLockRequiredMask; }
 
     common::page_idx_t addNewPageWithoutLock();
+    common::FileOpenFlags getPersistentFileOpenFlags() const;
     void constructPersistentFileHandle(const std::string& path, common::VirtualFileSystem* vfs,
         main::ClientContext* context);
     void constructTmpFileHandle(const std::string& path);

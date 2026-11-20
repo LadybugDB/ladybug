@@ -109,11 +109,23 @@ public:
         std::optional<common::uuid> legacyDatabaseID, bool checkpointBundle);
 
     // Move a partition child's data file (and sidecars) after its catalog rename, keeping the
-    // live Table object and its page mappings intact.
+    // live Table object and its page mappings intact. Never overwrites an existing file: if the
+    // new name's file exists, the child moves to its table-ID file name instead.
     void renameChild(main::ClientContext* context, common::table_id_t tableID,
         const std::string& newChildName);
 
 private:
+    // Data file path for a child. Children normally use the file named after them
+    // (`<db>.<child>.<ext>`). A dropped or renamed-away child keeps its file until the next
+    // checkpoint retires it, so a child created under the same name before then would share
+    // that file: both would hold it open for writing, and the checkpoint would delete it. Such
+    // a child uses `<db>.<child>.t<tableID>.<ext>` instead, and keeps it after reopen.
+    // Requires mtx.
+    std::string choosePathNoLock(main::ClientContext* context, common::table_id_t tableID,
+        const std::string& childName) const;
+    // True if a registered child other than tableID has its data file at path. Requires mtx.
+    bool isPathHeldByOtherNoLock(const std::string& path, common::table_id_t tableID) const;
+
     std::shared_mutex mtx;
     std::unordered_map<common::table_id_t, std::unique_ptr<storage::StorageManager>> managers;
 };

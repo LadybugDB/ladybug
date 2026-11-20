@@ -1654,6 +1654,137 @@ TEST_F(CheckpointRetryAfterFailureTest, CommittedPartitionRecoveryRejectsMissing
     EXPECT_THROW(createDBAndConn(), RuntimeException);
 }
 
+// A dropped or renamed-away partition child keeps its data file until the next checkpoint
+// retires it. A partitioned table created under the same name before then used to open that same
+// file for writing; the checkpoint then deleted it, and the database no longer opened.
+class PartitionChildFileReuseTest : public CheckpointRetryAfterFailureTest {
+public:
+    void run(const std::string& query) const {
+        auto res = conn->query(query);
+        ASSERT_TRUE(res->isSuccess()) << query << ": " << res->getErrorMessage();
+    }
+
+    std::vector<int64_t> ids(const std::string& table) const {
+        auto res = conn->query(std::format("MATCH (n:{}) RETURN n.id ORDER BY n.id;", table));
+        EXPECT_TRUE(res->isSuccess()) << res->getErrorMessage();
+        std::vector<int64_t> out;
+        while (res->isSuccess() && res->hasNext()) {
+            out.push_back(res->getNext()->getValue(0)->getValue<int64_t>());
+        }
+        return out;
+    }
+
+    static std::vector<int64_t> range(int64_t begin, int64_t end) {
+        std::vector<int64_t> out;
+        for (auto i = begin; i < end; i++) {
+            out.push_back(i);
+        }
+        return out;
+    }
+
+    void createPartitioned(const std::string& table, int64_t begin, int64_t end) const {
+        run(std::format("CREATE NODE TABLE {}(id INT64 PRIMARY KEY, k INT64) PARTITION BY "
+                        "HASH(k) PARTITIONS 3;",
+            table));
+        run(std::format("UNWIND range({}, {}) AS i CREATE (:{} {{id: i, k: i}});", begin, end - 1,
+            table));
+    }
+
+    void reopen() {
+        conn.reset();
+        database.reset();
+        createDBAndConn();
+    }
+};
+
+TEST_F(PartitionChildFileReuseTest, RecreatedBeforeCheckpointKeepsItsRows) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    createPartitioned("P", 0, 100);
+    checkpoint();
+    run("DROP TABLE P;");
+    createPartitioned("P", 1000, 1200);
+    checkpoint();
+    EXPECT_EQ(ids("P"), range(1000, 1200));
+    reopen();
+    EXPECT_EQ(ids("P"), range(1000, 1200));
+    // The child keeps its table-ID file across further checkpoints and reopens.
+    run("UNWIND range(1200, 1210) AS i CREATE (:P {id: i, k: i});");
+    checkpoint();
+    reopen();
+    EXPECT_EQ(ids("P"), range(1000, 1211));
+}
+
+TEST_F(PartitionChildFileReuseTest, RecreatedBeforeCheckpointRecoversFromWAL) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    createPartitioned("P", 0, 100);
+    checkpoint();
+    run("DROP TABLE P;");
+    createPartitioned("P", 1000, 1200);
+    // No checkpoint: recovery opens the dropped child from the checkpointed catalog, then
+    // replays the drop and the new table from the WAL.
+    reopen();
+    EXPECT_EQ(ids("P"), range(1000, 1200));
+    checkpoint();
+    reopen();
+    EXPECT_EQ(ids("P"), range(1000, 1200));
+}
+
+// The checkpoint that moves a renamed child's files used to replace the child's FileHandle,
+// leaving its columns reading through the old, closed one until the database was reopened.
+TEST_F(PartitionChildFileReuseTest, RenamedChildIsReadableAfterCheckpoint) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    createPartitioned("P", 0, 100);
+    checkpoint();
+    run("ALTER TABLE P RENAME TO Q;");
+    checkpoint();
+    EXPECT_EQ(ids("Q"), range(0, 100));
+    run("UNWIND range(100, 110) AS i CREATE (:Q {id: i, k: i});");
+    checkpoint();
+    EXPECT_EQ(ids("Q"), range(0, 111));
+    reopen();
+    EXPECT_EQ(ids("Q"), range(0, 111));
+}
+
+TEST_F(PartitionChildFileReuseTest, CreatedUnderRenamedAwayNameBeforeCheckpoint) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    createPartitioned("P", 0, 100);
+    checkpoint();
+    run("ALTER TABLE P RENAME TO Q;");
+    createPartitioned("P", 1000, 1200);
+    checkpoint();
+    EXPECT_EQ(ids("Q"), range(0, 100));
+    EXPECT_EQ(ids("P"), range(1000, 1200));
+    reopen();
+    EXPECT_EQ(ids("Q"), range(0, 100));
+    EXPECT_EQ(ids("P"), range(1000, 1200));
+}
+
+TEST_F(PartitionChildFileReuseTest, SwappedNamesDoNotOverwriteEachOther) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    createPartitioned("P", 0, 100);
+    createPartitioned("Q", 1000, 1050);
+    checkpoint();
+    run("ALTER TABLE P RENAME TO T;");
+    run("ALTER TABLE Q RENAME TO P;");
+    run("ALTER TABLE T RENAME TO Q;");
+    checkpoint();
+    EXPECT_EQ(ids("Q"), range(0, 100));
+    EXPECT_EQ(ids("P"), range(1000, 1050));
+    reopen();
+    EXPECT_EQ(ids("Q"), range(0, 100));
+    EXPECT_EQ(ids("P"), range(1000, 1050));
+}
+
 TEST_F(CheckpointRetryAfterFailureTest, CommittedRecoveryReplaysChildShadowBeforeParsingChildFile) {
     if (inMemMode || systemConfig->checkpointThreshold == 0) {
         GTEST_SKIP();
