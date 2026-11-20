@@ -583,7 +583,7 @@ void Checkpointer::logCheckpointAndApplyShadowPages(bool walRotated_) {
     } else {
         wal.logAndFlushCheckpoint(&clientContext);
     }
-    shadowFile.applyShadowPages(*mainStorageManager, clientContext);
+    mainStorageManager->applyShadowPagesAndPublish(clientContext);
     applyShadowPagesForPartitionChildren();
 }
 
@@ -600,8 +600,7 @@ void Checkpointer::applyGraphShadowPages() {
     for (const auto& target : checkpointTargets) {
         if (target.storageManager != mainStorageManager) {
             beforeGraphShadowApply(*target.storageManager);
-            target.storageManager->getShadowFile().applyShadowPages(*target.storageManager,
-                clientContext);
+            target.storageManager->applyShadowPagesAndPublish(clientContext);
         }
     }
 }

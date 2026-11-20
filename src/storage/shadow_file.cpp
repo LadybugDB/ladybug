@@ -167,21 +167,60 @@ bool ShadowFile::readShadowVersionIfExists(file_idx_t originalFile, page_idx_t o
     return true;
 }
 
-void ShadowFile::applyShadowPages(StorageManager& storageManager, ClientContext& context) const {
+std::shared_lock<std::shared_mutex> ShadowFile::lockForPairedRead() const {
+    if (applyPending.load(std::memory_order_acquire)) {
+        // Queue behind the pending apply so it is not starved by a stream of readers.
+        std::lock_guard gate{applyGateMtx};
+    }
+    std::shared_lock lock{applyMtx};
+    if (applyFailed) {
+        throw RuntimeException("Primary key index is unavailable after a checkpoint failed while "
+                               "applying its pages; reopen the database to recover.");
+    }
+    return lock;
+}
+
+void ShadowFile::applyShadowPages(StorageManager& storageManager, ClientContext& context,
+    const std::function<void()>& publish) const {
     const auto pageBuffer = std::make_unique<uint8_t[]>(LBUG_PAGE_SIZE);
     page_idx_t shadowPageIdx = 1; // Skip header page.
     auto dataFH = storageManager.getDataFH();
     auto dataFileInfo = dataFH->getFileInfo();
     DASSERT(shadowingFH);
-    for (const auto& record : shadowPageRecords) {
-        shadowingFH->readPageFromDisk(pageBuffer.get(), shadowPageIdx++);
-        dataFileInfo->writeFile(pageBuffer.get(), LBUG_PAGE_SIZE,
-            record.originalPageIdx * LBUG_PAGE_SIZE);
-        // Acquire page state lock before updating the in-memory frame. This ensures concurrent
-        // optimistic readers will detect the version change and retry, seeing the new page data.
-        MemoryManager::Get(context)->getBufferManager()->updateFrameIfPageIsInFrame(
-            record.originalFileIdx, pageBuffer.get(), record.originalPageIdx);
+    {
+        std::lock_guard gate{applyGateMtx};
+        applyPending.store(true, std::memory_order_release);
+        struct ClearPending {
+            std::atomic<bool>& flag;
+            ~ClearPending() { flag.store(false, std::memory_order_release); }
+        } clearPending{applyPending};
+        // Paired readers hold applyMtx shared from header read to slot read, so new slot pages
+        // and the headers that address them become visible to them in one step (#1052).
+        std::unique_lock exclusive{applyMtx};
+        try {
+            for (const auto& record : shadowPageRecords) {
+                shadowingFH->readPageFromDisk(pageBuffer.get(), shadowPageIdx++);
+                dataFileInfo->writeFile(pageBuffer.get(), LBUG_PAGE_SIZE,
+                    record.originalPageIdx * LBUG_PAGE_SIZE);
+                // Acquire page state lock before updating the in-memory frame. This ensures
+                // concurrent optimistic readers will detect the version change and retry,
+                // seeing the new page data.
+                MemoryManager::Get(context)->getBufferManager()->updateFrameIfPageIsInFrame(
+                    record.originalFileIdx, pageBuffer.get(), record.originalPageIdx);
+            }
+            if (publish) {
+                publish();
+            }
+        } catch (...) {
+            // The commit record is durable, so this is not rolled back (the WAL is poisoned
+            // instead). Readers must not pair the remaining in-memory headers with a partially
+            // applied data file.
+            applyFailed = true;
+            throw;
+        }
     }
+    // Readers see written pages before they are durable; recovery replays the shadow file if
+    // the sync does not complete, so it need not block paired readers.
     dataFileInfo->syncFile();
 }
 

@@ -2,6 +2,7 @@
 
 #include <atomic>
 #include <functional>
+#include <mutex>
 #include <optional>
 #include <shared_mutex>
 
@@ -88,7 +89,17 @@ public:
 
     FileHandle& getShadowingFH() const { return *shadowingFH; }
 
-    void applyShadowPages(StorageManager& storageManager, main::ClientContext& context) const;
+    // Writes the shadow pages into the data file. `publish` runs before the apply lock is
+    // released, so in-memory state that addresses the new pages (the primary-key index read
+    // headers) changes together with the pages for readers holding lockForPairedRead().
+    void applyShadowPages(StorageManager& storageManager, main::ClientContext& context,
+        const std::function<void()>& publish = {}) const;
+
+    // Read transactions that pair cached in-memory metadata with data-file pages (primary-key
+    // lookups, #1052) hold this for the whole lookup. It excludes applyShadowPages() and its
+    // publication step, so a lookup sees either the old pages and headers or the new ones,
+    // never new slot pages read through old headers. Throws after a failed apply.
+    std::shared_lock<std::shared_mutex> lockForPairedRead() const;
 
     // `ownerDatabaseID` is the ID of the database running the checkpoint, stamped into the shadow
     // header (see ShadowFileHeader::ownerDatabaseID).
@@ -141,6 +152,17 @@ private:
     // thread therefore must not hold such a published shadow page pinned while it takes mtx
     // exclusively (create, publish, clear or reset), or it would deadlock with those readers.
     mutable std::shared_mutex mtx;
+    // See lockForPairedRead(). applyMtx is held exclusively while shadow pages are applied and
+    // published. std::shared_mutex may prefer readers, so the applying thread also holds
+    // applyGateMtx and raises applyPending: new paired readers then wait behind the apply
+    // instead of starving it.
+    mutable std::mutex applyGateMtx;
+    mutable std::shared_mutex applyMtx;
+    mutable std::atomic<bool> applyPending{false};
+    // Set under applyMtx when applying or publishing fails after the commit record is durable.
+    // The data file may then hold a mix of old and new pages, so paired reads fail until the
+    // database is reopened and recovery replays the shadow file.
+    mutable bool applyFailed = false;
     // Fast path for readers: false when there is no shadow page.
     std::atomic<bool> hasShadowPages{false};
 };

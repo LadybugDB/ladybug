@@ -593,11 +593,31 @@ bool StorageManager::vacuumInMemoryUpdates(transaction_t horizon) {
     return didWork;
 }
 
+void StorageManager::applyShadowPagesAndPublish(main::ClientContext& context) {
+    // Collect the tables first so applyMtx (held while publishing) never nests inside mtx.
+    std::vector<Table*> tablesToPublish;
+    {
+        std::shared_lock lck{mtx};
+        tablesToPublish.reserve(tables.size());
+        for (auto& [id, table] : tables) {
+            tablesToPublish.push_back(table.get());
+        }
+    }
+    // Publishing at finalizeCheckpoint() instead would leave a window in which readers resolve
+    // primary keys through the old index headers over the new slot pages (#1052).
+    shadowFile->applyShadowPages(*this, context, [&]() {
+        for (auto* table : tablesToPublish) {
+            table->finalizeCheckpoint(context);
+        }
+    });
+}
+
 void StorageManager::finalizeCheckpoint(main::ClientContext& context) {
     dataFH->getPageManager()->finalizeCheckpoint();
     // Publish staged per-table state (e.g. PK index read headers) now that the checkpoint
     // committed. Must run post-commit: publishing earlier would expose half-checkpointed
-    // state to a rollback that cannot restore it.
+    // state to a rollback that cannot restore it. Storage managers whose shadow pages went
+    // through applyShadowPagesAndPublish() have already published, so this is a no-op for them.
     std::unique_lock lck{mtx};
     for (auto& [id, table] : tables) {
         table->finalizeCheckpoint(context);
