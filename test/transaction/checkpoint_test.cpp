@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <chrono>
 #include <condition_variable>
 #include <cstdlib>
@@ -5795,56 +5796,81 @@ private:
 
 class CheckpointShadowWindowTest : public FlakyCheckpointerTest {
 protected:
-    // Looks up committed keys from another connection after the shadow pages are applied and
-    // before the checkpoint returns (#1052). The second batch grows the hash index enough to
-    // split slots that hold keys from the first checkpoint.
-    void checkLookupsAfterShadowApply(const std::string& pkType,
-        const std::function<std::string(int64_t)>& keyLiteral) {
-        constexpr int64_t numInitialRows = 20000;
-        constexpr int64_t numRows = 120000;
-        constexpr int64_t numKeysToCheck = 3000;
-        const auto keyExpr = pkType == "STRING" ? std::string{"'k' + string(i)"} : std::string{"i"};
+    static constexpr int64_t numInitialRows = 20000;
+    static constexpr int64_t numRows = 120000;
+    static constexpr int64_t numKeysToCheck = 3000;
+
+    // Checkpoints numInitialRows rows, then commits rows up to numRows. The second batch grows
+    // the hash index enough to split slots that hold keys from the first checkpoint, so the
+    // next checkpoint rewrites slot pages those keys live on. With reopenBeforeGrowth, the
+    // database is reopened after the first checkpoint, so the first batch is only reachable
+    // through the on-disk index rather than the in-memory local storage.
+    void setUpGrowth(const std::string& pkType, const std::string& partitionClause = "",
+        bool reopenBeforeGrowth = false) {
+        stringKeys = pkType == "STRING";
+        const auto keyExpr = stringKeys ? std::string{"'k' + string(i)"} : std::string{"i"};
         const auto insertRows = [&](int64_t start, int64_t end) {
             return std::format(
                 "UNWIND range({}, {}) AS i CREATE (:test {{id: {}, name: 'name_' + string(i)}});",
                 start, end - 1, keyExpr);
         };
-        for (const auto& query : {std::string{"CALL force_checkpoint_on_close=false;"},
-                 std::string{"CALL auto_checkpoint=false;"},
-                 std::format("CREATE NODE TABLE test(id {} PRIMARY KEY, name STRING);", pkType),
-                 insertRows(0, numInitialRows), std::string{"CHECKPOINT;"},
-                 insertRows(numInitialRows, numRows)}) {
+        const auto run = [&](const std::string& query) {
             auto result = conn->query(query);
-            ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+            ASSERT_TRUE(result->isSuccess()) << query << ": " << result->getErrorMessage();
+        };
+        const auto disableAutoCheckpoint = [&]() {
+            run("CALL force_checkpoint_on_close=false;");
+            run("CALL auto_checkpoint=false;");
+        };
+        disableAutoCheckpoint();
+        run(std::format("CREATE NODE TABLE test(id {} PRIMARY KEY, name STRING){};", pkType,
+            partitionClause));
+        run(insertRows(0, numInitialRows));
+        run("CHECKPOINT;");
+        if (reopenBeforeGrowth) {
+            createDBAndConn();
+            disableAutoCheckpoint();
         }
+        run(insertRows(numInitialRows, numRows));
+    }
 
-        const auto checkKeys = [&]() {
-            main::Connection readConn{database.get()};
-            std::array<size_t, 2> wrongKeys{};
-            for (size_t batch = 0; batch < wrongKeys.size(); ++batch) {
-                const auto start = batch == 0 ? 0 : numInitialRows;
-                for (auto key = start; key < start + numKeysToCheck; ++key) {
-                    auto result = readConn.query(std::format(
-                        "MATCH (t:test) WHERE t.id = {} RETURN t.name;", keyLiteral(key)));
-                    if (!result->isSuccess() || !result->hasNext() ||
-                        result->getNext()->getValue(0)->getValue<std::string>() !=
-                            std::format("name_{}", key) ||
-                        result->hasNext()) {
-                        ++wrongKeys[batch];
-                    }
+    std::string keyLiteral(int64_t key) const {
+        return stringKeys ? std::format("'k{}'", key) : std::to_string(key);
+    }
+
+    bool lookupIsCorrect(main::Connection& readConn, int64_t key) const {
+        auto result = readConn.query(
+            std::format("MATCH (t:test) WHERE t.id = {} RETURN t.name;", keyLiteral(key)));
+        return result->isSuccess() && result->hasNext() &&
+               result->getNext()->getValue(0)->getValue<std::string>() ==
+                   std::format("name_{}", key) &&
+               !result->hasNext();
+    }
+
+    // Wrong lookups among the first numKeysToCheck keys of the checkpointed batch and of the
+    // newly committed batch.
+    std::array<size_t, 2> wrongLookups() const {
+        main::Connection readConn{database.get()};
+        std::array<size_t, 2> wrongKeys{};
+        for (size_t batch = 0; batch < wrongKeys.size(); ++batch) {
+            const auto start = batch == 0 ? 0 : numInitialRows;
+            for (auto key = start; key < start + numKeysToCheck; ++key) {
+                if (!lookupIsCorrect(readConn, key)) {
+                    ++wrongKeys[batch];
                 }
             }
-            return wrongKeys;
-        };
+        }
+        return wrongKeys;
+    }
 
+    // Looks up keys on another connection right after the shadow pages are applied, before
+    // the checkpoint returns (#1052). This pins the read to that point deterministically.
+    void checkLookupsRightAfterShadowApply() {
         std::optional<std::array<size_t, 2>> wrongDuringCheckpoint;
         auto* context = getClientContext(*conn);
         FlakyCheckpointer checkpointer([&](main::ClientContext& clientContext) {
             return std::make_unique<CheckpointerWithReadAfterApplyingShadowPages>(clientContext,
-                [&]() {
-                    std::thread reader([&]() { wrongDuringCheckpoint = checkKeys(); });
-                    reader.join();
-                });
+                [&]() { wrongDuringCheckpoint = wrongLookups(); });
         });
         checkpointer.setCheckpointer(*context);
         auto result = conn->query("CHECKPOINT;");
@@ -5854,22 +5880,110 @@ protected:
         EXPECT_EQ((*wrongDuringCheckpoint)[0], 0u)
             << "previously checkpointed keys after shadow apply";
         EXPECT_EQ((*wrongDuringCheckpoint)[1], 0u) << "newly committed keys after shadow apply";
-        EXPECT_EQ(checkKeys(), (std::array<size_t, 2>{})) << "after checkpoint completion";
+        EXPECT_EQ(wrongLookups(), (std::array<size_t, 2>{})) << "after checkpoint completion";
     }
+
+    // A reader thread looks up keys from both batches in a loop while the checkpoint runs, so
+    // lookups race the shadow-page apply and the index publication on the paired-read lock.
+    void checkLookupsLoopingAcrossCheckpoint() {
+        std::atomic<bool> stop{false};
+        std::atomic<bool> checkpointRunning{false};
+        std::atomic<size_t> numLookups{0};
+        std::atomic<size_t> numLookupsDuringCheckpoint{0};
+        std::atomic<size_t> numWrong{0};
+        std::thread reader([&]() {
+            main::Connection readConn{database.get()};
+            for (int64_t i = 0; !stop.load(); ++i) {
+                const auto offset = i % numKeysToCheck;
+                const auto key = i % 2 == 0 ? offset : numInitialRows + offset;
+                const bool duringCheckpoint = checkpointRunning.load();
+                if (!lookupIsCorrect(readConn, key)) {
+                    ++numWrong;
+                }
+                ++numLookups;
+                if (duringCheckpoint && checkpointRunning.load()) {
+                    ++numLookupsDuringCheckpoint;
+                }
+            }
+        });
+        while (numLookups.load() == 0) {
+            std::this_thread::yield();
+        }
+        checkpointRunning = true;
+        auto result = conn->query("CHECKPOINT;");
+        checkpointRunning = false;
+        const auto lookupsAtCheckpointEnd = numLookups.load();
+        while (numLookups.load() < lookupsAtCheckpointEnd + 100) {
+            std::this_thread::yield();
+        }
+        stop = true;
+        reader.join();
+        ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+        EXPECT_GT(numLookupsDuringCheckpoint.load(), 0u) << "no lookup overlapped the checkpoint";
+        EXPECT_EQ(numWrong.load(), 0u) << "of " << numLookups.load() << " lookups";
+    }
+
+private:
+    bool stringKeys = false;
 };
 
 TEST_F(CheckpointShadowWindowTest, Int64PrimaryKeyLookupRightAfterShadowApply) {
     if (inMemMode || systemConfig->checkpointThreshold == 0) {
         GTEST_SKIP();
     }
-    checkLookupsAfterShadowApply("INT64", [](int64_t key) { return std::to_string(key); });
+    setUpGrowth("INT64");
+    checkLookupsRightAfterShadowApply();
 }
 
 TEST_F(CheckpointShadowWindowTest, StringPrimaryKeyLookupRightAfterShadowApply) {
     if (inMemMode || systemConfig->checkpointThreshold == 0) {
         GTEST_SKIP();
     }
-    checkLookupsAfterShadowApply("STRING", [](int64_t key) { return std::format("'k{}'", key); });
+    setUpGrowth("STRING");
+    checkLookupsRightAfterShadowApply();
+}
+
+TEST_F(CheckpointShadowWindowTest, PrimaryKeyLookupsLoopingAcrossCheckpoint) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    setUpGrowth("INT64");
+    checkLookupsLoopingAcrossCheckpoint();
+}
+
+// Partition children have their own storage managers and shadow files. Their staged index
+// state must be published together with their pages, like the main database's.
+TEST_F(CheckpointShadowWindowTest, PartitionChildLookupRightAfterShadowApply) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    setUpGrowth("INT64", " PARTITION BY HASH(id) PARTITIONS 2");
+    checkLookupsRightAfterShadowApply();
+}
+
+TEST_F(CheckpointShadowWindowTest, PartitionChildLookupsLoopingAcrossCheckpoint) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    setUpGrowth("INT64", " PARTITION BY HASH(id) PARTITIONS 2");
+    checkLookupsLoopingAcrossCheckpoint();
+}
+
+// After a reopen, a child's first batch is only in its on-disk index. A child that never
+// published its checkpoint kept the read headers it loaded at open over the slot pages the
+// checkpoint rewrote, until the next reopen.
+TEST_F(CheckpointShadowWindowTest, PartitionChildLookupsAfterCheckpointFollowingReopen) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    setUpGrowth("INT64", " PARTITION BY HASH(id) PARTITIONS 2", true /* reopenBeforeGrowth */);
+    {
+        auto result = conn->query("CHECKPOINT;");
+        ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    }
+    EXPECT_EQ(wrongLookups(), (std::array<size_t, 2>{})) << "after checkpoint";
+    createDBAndConn();
+    EXPECT_EQ(wrongLookups(), (std::array<size_t, 2>{})) << "after reopen";
 }
 #endif // __SINGLE_THREADED__
 

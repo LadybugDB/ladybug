@@ -1041,6 +1041,15 @@ Index* NodeTable::tryGetPrimaryKeyIndex() const {
     return nullptr;
 }
 
+const ShadowFile* NodeTable::getPairedReadShadowFile(
+    const transaction::Transaction* transaction) const {
+    if (transaction->getType() == transaction::TransactionType::CHECKPOINT) {
+        return nullptr;
+    }
+    const auto* pkIndex = tryGetPKIndex();
+    return pkIndex == nullptr ? nullptr : &pkIndex->getShadowFile();
+}
+
 bool NodeTable::lookupPK(const Transaction* transaction, ValueVector* keyVector, uint64_t vectorPos,
     offset_t& result) const {
     // Lookup joins on node internal IDs (e.g. fetching Person payloads for already-bound

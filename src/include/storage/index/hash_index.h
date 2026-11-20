@@ -413,12 +413,14 @@ public:
         visible_func isVisible) {
         DASSERT(indexInfo.keyDataTypes[0] == common::TypeUtils::getPhysicalTypeIDForType<T>());
         // Hold off a concurrent shadow-page apply for the whole lookup so the read headers and
-        // the slot pages they address come from the same checkpoint (#1052). The checkpointing
-        // thread itself never runs a lookup while it applies.
-        std::shared_lock<std::shared_mutex> pairedReadLock;
-        if (trx->getType() != transaction::TransactionType::CHECKPOINT) {
-            pairedReadLock = shadowFile.lockForPairedRead();
-        }
+        // the slot pages they address come from the same checkpoint (#1052). A batch caller may
+        // already hold the scope (see NodeTable::getPairedReadShadowFile); it is re-entrant.
+        // CHECKPOINT transactions run on the checkpointing thread, which applies shadow pages
+        // itself and never concurrently with its own lookups; publication must not look up
+        // keys at all, which checkNotPublishingOnThisThread enforces.
+        ShadowFile::checkNotPublishingOnThisThread();
+        ShadowFile::PairedReadScope pairedReadScope{
+            trx->getType() == transaction::TransactionType::CHECKPOINT ? nullptr : &shadowFile};
         auto* curIndex = getTypedHashIndex(key);
         if (curIndex->lookupInternal(trx, key, result, isVisible)) {
             return true;
@@ -555,6 +557,7 @@ public:
     void checkpoint(main::ClientContext*, storage::PageAllocator& pageAllocator,
         ShadowFile&) override;
     OverflowFile* getOverflowFile() const { return overflowFile.get(); }
+    const ShadowFile& getShadowFile() const { return shadowFile; }
 
     void rollbackCheckpoint() override;
     // Publishes the staged storage-phase checkpoint (read headers, local-storage clear).
