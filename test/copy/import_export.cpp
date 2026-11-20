@@ -165,7 +165,7 @@ TEST_F(ImportExportSerialTest, ExportKeepsPlainSequenceAsDropCreateNextval) {
     ASSERT_EQ(queryInt(importConn, "RETURN nextval('s')"), 9);
 }
 
-TEST_F(ImportExportSerialTest, ExportRestoresSerialOfRelTableWithSetval) {
+TEST_F(ImportExportSerialTest, SerialColumnOfRelTableRoundTrips) {
     auto tempDir = TestHelper::getTempDir(getTestGroupAndName());
     auto dir = exportWith(*conn, "serial_rel", tempDir,
         {"CREATE NODE TABLE n(id INT64, PRIMARY KEY(id))",
@@ -175,9 +175,15 @@ TEST_F(ImportExportSerialTest, ExportRestoresSerialOfRelTableWithSetval) {
     auto schema = readFile(common::LocalFileSystem::joinPath(dir, "schema.cypher"));
     EXPECT_NE(schema.find("RETURN setval('r_s_serial', 1);"), std::string::npos) << schema;
     EXPECT_EQ(schema.find("DROP SEQUENCE"), std::string::npos) << schema;
-    // Importing the data of a rel table with a SERIAL column fails in its COPY (the data file has
-    // the SERIAL column, the COPY does not expect it), which is independent of the sequence
-    // statement, so only the exported schema is checked here.
+    main::Database db(common::LocalFileSystem::joinPath(dir, "imported.lbdb"));
+    main::Connection importConn(&db);
+    auto result = importConn.query("IMPORT DATABASE '" + dir + "'");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    // The SERIAL values in the data file are read back, not regenerated, and the counter is
+    // restored after them.
+    ASSERT_EQ(queryInt(importConn, "MATCH (:n {id: 1})-[e:r]->(:n {id: 2}) RETURN e.s"), 0);
+    ASSERT_EQ(queryInt(importConn, "MATCH (:n {id: 2})-[e:r]->(:n {id: 1}) RETURN e.s"), 1);
+    ASSERT_EQ(queryInt(importConn, "RETURN currval('r_s_serial')"), 1);
 }
 
 TEST_F(ImportExportSerialTest, ImportWithIcebugDiskStorageFormatRunsSetval) {

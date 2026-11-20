@@ -213,18 +213,17 @@ static std::string getNativeCopyStatements(VirtualFileSystem* vfs, const std::st
         if (!vfs->fileOrPathExists(vfs->joinPath(boundFilePath, dataFile), context)) {
             continue;
         }
-        // Explicit column list for node tables (covers SERIAL pk values, which COPY FROM
-        // would otherwise auto-generate). Rel tables rely on positional binding: the flat
-        // file already stores from/to key columns followed by properties in schema order.
+        // Explicit property list, so that SERIAL values in the data file are read back instead of
+        // being auto-generated (COPY FROM would otherwise expect no column for them). For rel
+        // tables the list names the properties only: the flat file already stores the from/to
+        // key columns first, which COPY binds by position.
         std::string columns;
-        if (!isRel) {
-            std::vector<std::string> columnList;
-            for (auto& property : info.propertyDefinitions) {
-                columnList.push_back(StringUtils::quoteIdentifier(property.getName()));
-            }
-            if (!columnList.empty()) {
-                columns = std::format(" ({})", StringUtils::join(columnList, ", "));
-            }
+        std::vector<std::string> columnList;
+        for (auto& property : info.propertyDefinitions) {
+            columnList.push_back(StringUtils::quoteIdentifier(property.getName()));
+        }
+        if (!columnList.empty()) {
+            columns = std::format(" ({})", StringUtils::join(columnList, ", "));
         }
         copies += std::format("COPY {}{} FROM \"{}\";\n",
             StringUtils::quoteIdentifier(info.tableName), columns, filePath);
