@@ -1,0 +1,212 @@
+-DATASET CSV empty
+
+--
+
+-CASE CreateAndSetParallelRels
+-STATEMENT CREATE NODE TABLE P(id INT64, PRIMARY KEY(id));
+---- ok
+-STATEMENT CREATE REL TABLE K(FROM P TO P, since INT64);
+---- ok
+-STATEMENT CREATE (:P {id: 1}), (:P {id: 2});
+---- ok
+-STATEMENT MATCH (a:P {id: 1}), (b:P {id: 2})
+           UNWIND range(1, 3000) AS i
+           CREATE (a)-[r:K]->(b)
+           SET r.since = i
+           RETURN count(r), sum(r.since);
+---- 1
+3000|4501500
+-STATEMENT MATCH (:P {id: 1})-[r:K]->(:P {id: 2}) RETURN count(r), sum(r.since), min(r.since), max(r.since);
+---- 1
+3000|4501500|1|3000
+
+-CASE SetAndDeleteParallelRelsInTransaction
+-STATEMENT CREATE NODE TABLE P(id INT64, PRIMARY KEY(id));
+---- ok
+-STATEMENT CREATE REL TABLE K(FROM P TO P, since INT64);
+---- ok
+-STATEMENT CREATE REL TABLE KF(FROM P TO P, since INT64) WITH (storage_direction = 'fwd');
+---- ok
+-STATEMENT CREATE (:P {id: 1}), (:P {id: 2});
+---- ok
+-STATEMENT BEGIN TRANSACTION;
+---- ok
+-STATEMENT MATCH (a:P {id: 1}), (b:P {id: 2})
+           UNWIND range(1, 3000) AS i
+           CREATE (a)-[:K {since: i}]->(b), (b)-[:K {since: -i}]->(a),
+                  (a)-[:KF {since: i}]->(b), (b)-[:KF {since: -i}]->(a);
+---- ok
+-STATEMENT MATCH ()-[r]->() WHERE r.since % 3 = 0 DELETE r;
+---- ok
+-STATEMENT MATCH ()-[r]->() SET r.since = r.since * 10;
+---- ok
+-STATEMENT MATCH (:P {id: 1})-[r]->(:P {id: 2}) RETURN label(r), count(r), sum(r.since), max(r.since) ORDER BY label(r);
+---- 2
+K|2000|30000000|29990
+KF|2000|30000000|29990
+-STATEMENT MATCH (:P {id: 2})-[r]->(:P {id: 1}) RETURN label(r), count(r), sum(r.since), min(r.since) ORDER BY label(r);
+---- 2
+K|2000|-30000000|-29990
+KF|2000|-30000000|-29990
+-STATEMENT COMMIT;
+---- ok
+-STATEMENT MATCH (:P {id: 1})-[r]->(:P {id: 2}) RETURN label(r), count(r), sum(r.since), max(r.since) ORDER BY label(r);
+---- 2
+K|2000|30000000|29990
+KF|2000|30000000|29990
+-STATEMENT MATCH (:P {id: 2})-[r]->(:P {id: 1}) RETURN label(r), count(r), sum(r.since), min(r.since) ORDER BY label(r);
+---- 2
+K|2000|-30000000|-29990
+KF|2000|-30000000|-29990
+
+-CASE DetachDeleteNodeWithParallelUncommittedRels
+-STATEMENT CREATE NODE TABLE P(id INT64, PRIMARY KEY(id));
+---- ok
+-STATEMENT CREATE REL TABLE K(FROM P TO P, since INT64);
+---- ok
+-STATEMENT CREATE REL TABLE KF(FROM P TO P, since INT64) WITH (storage_direction = 'fwd');
+---- ok
+-STATEMENT CREATE (:P {id: 1}), (:P {id: 2}), (:P {id: 3});
+---- ok
+-STATEMENT BEGIN TRANSACTION;
+---- ok
+-STATEMENT MATCH (a:P {id: 1}), (b:P {id: 2}), (c:P {id: 3})
+           UNWIND range(1, 3000) AS i
+           CREATE (a)-[:K {since: i}]->(b), (b)-[:K {since: i}]->(c), (b)-[:KF {since: i}]->(c),
+                  (a)-[:K {since: i}]->(c), (c)-[:KF {since: -i}]->(a);
+---- ok
+-STATEMENT MATCH (b:P {id: 2}) DETACH DELETE b;
+---- ok
+-STATEMENT MATCH (x)-[r]->(y) RETURN label(r), x.id, y.id, count(r), sum(r.since) ORDER BY label(r);
+---- 2
+K|1|3|3000|4501500
+KF|3|1|3000|-4501500
+-STATEMENT COMMIT;
+---- ok
+-STATEMENT MATCH (x)-[r]->(y) RETURN label(r), x.id, y.id, count(r), sum(r.since) ORDER BY label(r);
+---- 2
+K|1|3|3000|4501500
+KF|3|1|3000|-4501500
+
+-CASE SetAndDeleteParallelRelsInRelGroup
+-STATEMENT CREATE NODE TABLE P(id INT64, PRIMARY KEY(id));
+---- ok
+-STATEMENT CREATE NODE TABLE Q(id INT64, PRIMARY KEY(id));
+---- ok
+-STATEMENT CREATE REL TABLE G(FROM P TO P, FROM P TO Q, since INT64);
+---- ok
+-STATEMENT CREATE (:P {id: 1}), (:P {id: 2}), (:Q {id: 1});
+---- ok
+-STATEMENT BEGIN TRANSACTION;
+---- ok
+-STATEMENT MATCH (a:P {id: 1}), (b:P {id: 2}), (c:Q {id: 1})
+           UNWIND range(1, 3000) AS i
+           CREATE (a)-[r1:G]->(b), (a)-[r2:G]->(c)
+           SET r1.since = i, r2.since = -i;
+---- ok
+-STATEMENT MATCH (a:P)-[r:G]->(b) WHERE r.since % 3 = 0 DELETE r;
+---- ok
+-STATEMENT MATCH (a:P)-[r:G]->(b) SET r.since = r.since * 10;
+---- ok
+-STATEMENT MATCH (a:P)-[r:G]->(b) RETURN label(b), count(r), sum(r.since), min(r.since), max(r.since) ORDER BY label(b);
+---- 2
+P|2000|30000000|10|29990
+Q|2000|-30000000|-29990|-10
+-STATEMENT COMMIT;
+---- ok
+-STATEMENT MATCH (a:P)-[r:G]->(b) RETURN label(b), count(r), sum(r.since), min(r.since), max(r.since) ORDER BY label(b);
+---- 2
+P|2000|30000000|10|29990
+Q|2000|-30000000|-29990|-10
+
+-CASE MergeParallelUncommittedRels
+-STATEMENT CREATE NODE TABLE P(id INT64, PRIMARY KEY(id));
+---- ok
+-STATEMENT CREATE REL TABLE K(FROM P TO P, since INT64, tag STRING);
+---- ok
+-STATEMENT CREATE (:P {id: 1}), (:P {id: 2});
+---- ok
+-STATEMENT BEGIN TRANSACTION;
+---- ok
+-STATEMENT MATCH (a:P {id: 1}), (b:P {id: 2})
+           UNWIND range(1, 3000) AS i
+           CREATE (a)-[:K {since: i}]->(b);
+---- ok
+-STATEMENT MATCH (a:P {id: 1}), (b:P {id: 2})
+           UNWIND [5, 2999, 4000, 4000] AS s
+           MERGE (a)-[r:K {since: s}]->(b)
+           ON MATCH SET r.tag = 'matched'
+           ON CREATE SET r.tag = 'created';
+---- ok
+-STATEMENT MATCH (:P {id: 1})-[r:K]->(:P {id: 2}) WHERE r.tag IS NOT NULL RETURN r.since, r.tag ORDER BY r.since;
+---- 3
+5|matched
+2999|matched
+4000|matched
+-STATEMENT COMMIT;
+---- ok
+-STATEMENT MATCH (:P {id: 1})-[r:K]->(:P {id: 2}) RETURN count(r), count(r.tag);
+---- 1
+3001|3
+
+-CASE SetAndDeleteUncommittedRelsOfOneNode
+-STATEMENT CREATE NODE TABLE P(id INT64, PRIMARY KEY(id));
+---- ok
+-STATEMENT CREATE REL TABLE K(FROM P TO P, since INT64);
+---- ok
+-STATEMENT UNWIND range(0, 3000) AS i CREATE (:P {id: i});
+---- ok
+-STATEMENT BEGIN TRANSACTION;
+---- ok
+-STATEMENT MATCH (h:P {id: 0}), (b:P) WHERE b.id > 0 CREATE (h)-[r:K]->(b) SET r.since = b.id;
+---- ok
+-STATEMENT MATCH (:P {id: 0})-[r:K]->() WHERE r.since % 3 = 0 DELETE r;
+---- ok
+-STATEMENT MATCH (:P {id: 0})-[r:K]->() SET r.since = r.since * 10;
+---- ok
+-STATEMENT MATCH (:P {id: 0})-[r:K]->(b)
+           RETURN count(r), sum(r.since), min(r.since), max(r.since), count(CASE WHEN r.since <> b.id * 10 THEN 1 END);
+---- 1
+2000|30000000|10|29990|0
+-STATEMENT COMMIT;
+---- ok
+-STATEMENT MATCH (:P {id: 0})-[r:K]->(b)
+           RETURN count(r), sum(r.since), min(r.since), max(r.since), count(CASE WHEN r.since <> b.id * 10 THEN 1 END);
+---- 1
+2000|30000000|10|29990|0
+
+-CASE DeleteParallelUncommittedRelsRecovery
+-STATEMENT CALL force_checkpoint_on_close=false;
+---- ok
+-STATEMENT CALL auto_checkpoint=false;
+---- ok
+-STATEMENT CREATE NODE TABLE P(id INT64, PRIMARY KEY(id));
+---- ok
+-STATEMENT CREATE REL TABLE K(FROM P TO P, since INT64);
+---- ok
+-STATEMENT CREATE REL TABLE KF(FROM P TO P, since INT64) WITH (storage_direction = 'fwd');
+---- ok
+-STATEMENT CREATE (:P {id: 1}), (:P {id: 2});
+---- ok
+-STATEMENT BEGIN TRANSACTION;
+---- ok
+-STATEMENT MATCH (a:P {id: 1}), (b:P {id: 2})
+           UNWIND range(1, 3000) AS i
+           CREATE (a)-[:K {since: i}]->(b), (b)-[:K {since: -i}]->(a), (a)-[:KF {since: i}]->(b);
+---- ok
+-STATEMENT MATCH ()-[r:K]->() WHERE r.since % 3 = 0 DELETE r;
+---- ok
+-STATEMENT MATCH ()-[r:KF]->() WHERE r.since % 3 = 0 DELETE r;
+---- ok
+-STATEMENT MATCH (:P {id: 1})-[r:K]->(:P {id: 2}) WHERE r.since <= 10 UNWIND [1, 2] AS x DELETE r;
+---- ok
+-STATEMENT COMMIT;
+---- ok
+-RELOADDB
+-STATEMENT MATCH (a:P)-[r:K]->(b:P) RETURN a.id, b.id, count(r), sum(r.since) ORDER BY a.id;
+---- 2
+1|2|1993|2999963
+2|1|2000|-3000000
+-STATEMENT MATCH (a:P)-[r:KF]->(b:P) RETURN a.id, b.id, count(r), sum(r.since);
+---- 1
+1|2|2000|3000000

@@ -1,7 +1,6 @@
 #include "storage/local_storage/local_rel_table.h"
 
 #include <algorithm>
-#include <numeric>
 
 #include "common/enums/rel_direction.h"
 #include "storage/table/rel_table.h"
@@ -60,6 +59,8 @@ bool LocalRelTable::insert(Transaction*, TableInsertState& state) {
         }
     }
 
+    // findMatchingRow and commit rely on each rel ID naming its row; findMatchingRow and delete_
+    // also rely on the row lists staying ascending.
     const auto numRowsInLocalTable = localNodeGroup->getNumRows();
     for (auto i = 0u; i < numRowsToAppend; i++) {
         const auto relIDPos = getPosToRead(*relIDVector, i);
@@ -89,6 +90,25 @@ bool LocalRelTable::insert(Transaction*, TableInsertState& state) {
     return true;
 }
 
+// Until commit rewrites them, local rel IDs are MAX_NUM_ROWS_IN_TABLE + local row, and local rows
+// never move. A row is live, and bound to the given nodes in every stored direction, iff it is
+// still in those nodes' (ascending) row lists.
+static row_idx_t findMatchingRow(const std::vector<row_idx_vec_t*>& rowIndicesToCheck,
+    offset_t relOffset) {
+    DASSERT(!rowIndicesToCheck.empty());
+    if (relOffset < StorageConstants::MAX_NUM_ROWS_IN_TABLE) {
+        return INVALID_ROW_IDX;
+    }
+    const row_idx_t row = relOffset - StorageConstants::MAX_NUM_ROWS_IN_TABLE;
+    for (const auto* rowIndex : rowIndicesToCheck) {
+        if (!std::binary_search(rowIndex->begin(), rowIndex->end(), row)) {
+            DASSERT(std::find(rowIndex->begin(), rowIndex->end(), row) == rowIndex->end());
+            return INVALID_ROW_IDX;
+        }
+    }
+    return row;
+}
+
 bool LocalRelTable::update(Transaction* transaction, TableUpdateState& state) {
     DASSERT(transaction->isDummy());
     const auto& updateState = state.cast<RelTableUpdateState>();
@@ -110,7 +130,7 @@ bool LocalRelTable::update(Transaction* transaction, TableUpdateState& state) {
         return false;
     }
     const auto relOffset = updateState.relIDVector.readNodeOffset(relIDPos);
-    const auto matchedRow = findMatchingRow(transaction, rowIndicesToUpdate, relOffset);
+    const auto matchedRow = findMatchingRow(rowIndicesToUpdate, relOffset);
     if (matchedRow == INVALID_ROW_IDX) {
         return false;
     }
@@ -122,7 +142,7 @@ bool LocalRelTable::update(Transaction* transaction, TableUpdateState& state) {
     return true;
 }
 
-bool LocalRelTable::delete_(Transaction* transaction, TableDeleteState& state) {
+bool LocalRelTable::delete_(Transaction*, TableDeleteState& state) {
     const auto& deleteState = state.cast<RelTableDeleteState>();
 
     std::vector<row_idx_vec_t*> rowIndicesToDeleteFrom;
@@ -158,13 +178,14 @@ bool LocalRelTable::delete_(Transaction* transaction, TableDeleteState& state) {
         return false;
     }
     const auto relOffset = deleteState.relIDVector.readNodeOffset(relIDPos);
-    const auto matchedRow = findMatchingRow(transaction, rowIndicesToDeleteFrom, relOffset);
+    const auto matchedRow = findMatchingRow(rowIndicesToDeleteFrom, relOffset);
     if (matchedRow == INVALID_ROW_IDX) {
         return false;
     }
 
     for (auto* rowIndexToDeleteFrom : rowIndicesToDeleteFrom) {
-        std::erase(*rowIndexToDeleteFrom, matchedRow);
+        rowIndexToDeleteFrom->erase(std::lower_bound(rowIndexToDeleteFrom->begin(),
+            rowIndexToDeleteFrom->end(), matchedRow));
     }
     return true;
 }
@@ -254,60 +275,6 @@ bool LocalRelTable::scan(const Transaction* transaction, TableScanState& state) 
             relScanState.cachedBoundNodeSelVector[relScanState.currBoundNodeIdx]);
         return true;
     }
-}
-
-static std::unique_ptr<RelTableScanState> setupLocalTableScanState(DataChunk& scanChunk,
-    std::span<row_idx_t> intersectRows) {
-    const std::vector columnIDs{LOCAL_REL_ID_COLUMN_ID};
-    auto scanState = std::make_unique<RelTableScanState>(nullptr,
-        std::vector{&scanChunk.getValueVectorMutable(0)}, scanChunk.state);
-    scanState->columnIDs = columnIDs;
-    scanState->nodeGroupScanState->chunkStates.resize(columnIDs.size());
-    scanChunk.state->getSelVectorUnsafe().setSelSize(intersectRows.size());
-    for (uint64_t i = 0; i < intersectRows.size(); i++) {
-        scanState->rowIdxVector->setValue<row_idx_t>(i, intersectRows[i]);
-    }
-    return scanState;
-}
-
-row_idx_t LocalRelTable::findMatchingRow(const Transaction* transaction,
-    const std::vector<row_idx_vec_t*>& rowIndicesToCheck, offset_t relOffset) const {
-    for (auto* rowIndex : rowIndicesToCheck) {
-        std::sort(rowIndex->begin(), rowIndex->end());
-    }
-    std::vector<row_idx_t> intersectRows =
-        std::accumulate(rowIndicesToCheck.begin(), rowIndicesToCheck.end(), *rowIndicesToCheck[0],
-            [](row_idx_vec_t curIntersection, row_idx_vec_t* rowIndex) -> row_idx_vec_t {
-                row_idx_vec_t ret;
-                std::set_intersection(curIntersection.begin(), curIntersection.end(),
-                    rowIndex->begin(), rowIndex->end(), std::back_inserter(ret));
-                return ret;
-            });
-    // Loop over relID column chunks to find the relID.
-    const auto numVectorsToScan =
-        ceilDiv(static_cast<uint64_t>(intersectRows.size()), DEFAULT_VECTOR_CAPACITY);
-    for (uint64_t vectorIdx = 0; vectorIdx < numVectorsToScan; ++vectorIdx) {
-        DataChunk scanChunk(1);
-        scanChunk.insert(0, std::make_shared<ValueVector>(LogicalType::INTERNAL_ID()));
-
-        const uint64_t startRowToScan = vectorIdx * DEFAULT_VECTOR_CAPACITY;
-        const auto endRowToScan = std::min(startRowToScan + DEFAULT_VECTOR_CAPACITY,
-            static_cast<uint64_t>(intersectRows.size()));
-        std::span currentRowsToCheck{intersectRows.begin() + startRowToScan,
-            intersectRows.begin() + endRowToScan};
-        const auto scanState = setupLocalTableScanState(scanChunk, currentRowsToCheck);
-
-        [[maybe_unused]] auto lookupRes = localNodeGroup->lookupMultiple(transaction, *scanState);
-        const auto scannedRelIDVector = scanState->outputVectors[0];
-        DASSERT(
-            scannedRelIDVector->state->getSelVector().getSelSize() == currentRowsToCheck.size());
-        for (auto i = 0u; i < currentRowsToCheck.size(); i++) {
-            if (scannedRelIDVector->getValue<internalID_t>(i).offset == relOffset) {
-                return currentRowsToCheck[i];
-            }
-        }
-    }
-    return INVALID_ROW_IDX;
 }
 
 } // namespace storage
