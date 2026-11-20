@@ -80,10 +80,6 @@ public:
         common::column_id_t columnID);
 
 private:
-    common::row_idx_t findMatchingRow(const transaction::Transaction* transaction,
-        const std::vector<row_idx_vec_t*>& rowIndicesToCheck, common::offset_t relOffset) const;
-
-private:
     // We don't duplicate local rel tuples. Tuples are stored same as node tuples.
     // Chunks stored in local rel table are organized as follows:
     // [srcNodeID, dstNodeID, relID, property1, property2, ...]
