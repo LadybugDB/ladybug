@@ -105,12 +105,44 @@ void ShadowFile::publishShadowPage(file_idx_t originalFile, page_idx_t originalP
     hasShadowPages.store(true, std::memory_order_release);
 }
 
-ShadowFile::ShadowSavepoint ShadowFile::createSavepoint() const {
+ShadowFile::ShadowSavepoint ShadowFile::createSavepoint() {
+    savedPagesForSavepoint.clear();
     std::shared_lock lck{mtx};
-    return shadowPageRecords.size();
+    activeSavepoint = shadowPageRecords.size();
+    return *activeSavepoint;
+}
+
+void ShadowFile::releaseSavepoint() {
+    activeSavepoint.reset();
+    savedPagesForSavepoint.clear();
+}
+
+void ShadowFile::preservePageForSavepoint(page_idx_t shadowPageIdx, const uint8_t* frame) {
+    // Shadow page i + 1 holds shadowPageRecords[i] (page 0 is the header), so the pages that
+    // existed when the savepoint was taken are 1..savepoint.
+    if (!activeSavepoint.has_value() || shadowPageIdx > *activeSavepoint ||
+        savedPagesForSavepoint.contains(shadowPageIdx)) {
+        return;
+    }
+    auto saved = std::make_unique<uint8_t[]>(LBUG_PAGE_SIZE);
+    memcpy(saved.get(), frame, LBUG_PAGE_SIZE);
+    savedPagesForSavepoint.emplace(shadowPageIdx, std::move(saved));
 }
 
 void ShadowFile::rollbackToSavepoint(ShadowSavepoint savepoint) {
+    DASSERT(activeSavepoint == savepoint);
+    // Undo in-place rewrites of shadow pages that predate the savepoint before dropping the newer
+    // ones (follow-up to LadybugDB/ladybug#1051). Without this, a group rolled back over a
+    // shadow page it rewrote would leave the new bytes under the restored chunk metadata. Pinning
+    // locks the page, so concurrent optimistic readers retry and see the restored contents. mtx
+    // is not held here (see mtx).
+    for (const auto& [shadowPageIdx, saved] : savedPagesForSavepoint) {
+        auto* frame = shadowingFH->pinPage(shadowPageIdx, PageReadPolicy::READ_PAGE);
+        memcpy(frame, saved.get(), LBUG_PAGE_SIZE);
+        shadowingFH->setLockedPageDirty(shadowPageIdx);
+        shadowingFH->unpinPage(shadowPageIdx);
+    }
+    releaseSavepoint();
     std::unique_lock lck{mtx};
     DASSERT(savepoint <= shadowPageRecords.size());
     if (savepoint == shadowPageRecords.size()) {
