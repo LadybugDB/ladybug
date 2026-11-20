@@ -1097,6 +1097,9 @@ void CSRNodeGroup::checkpoint(MemoryManager&, NodeGroupCheckpointState& state) {
         }
         throw;
     }
+    if (shadowFile != nullptr) {
+        shadowFile->releaseSavepoint();
+    }
     if (retentionPath && !inMemNoop) {
         // Every merge path above resets version state, so the floor advances here. The
         // pending entry (if any) covers readers down to the previous floor.
