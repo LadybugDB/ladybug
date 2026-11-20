@@ -139,6 +139,8 @@ public:
 
 private:
     FileHandle* getOrCreateShadowingFH();
+    // Drops the shadow pages created after the savepoint (map entries, records, frames).
+    void truncateToSavepoint(ShadowSavepoint savepoint);
 
     static void replayShadowPageRecordsCore(common::FileInfo& shadowFileInfo,
         common::FileInfo& dataFileInfo, uint64_t maxDatabasePages,
@@ -174,7 +176,10 @@ private:
     // The data file may then hold a mix of old and new pages, so paired reads fail until the
     // database is reopened and recovery replays the shadow file.
     mutable bool applyFailed = false;
-    // Savepoint state, owned by the checkpointing thread (see createSavepoint).
+    // Savepoint state, owned by the checkpointing thread (see createSavepoint). At most one
+    // savepoint is active: node-group checkpoints run one at a time, each taking a savepoint and
+    // then releasing it or rolling back to it. createSavepoint asserts that, and clear() and
+    // reset() release a savepoint a failed checkpoint left armed.
     std::optional<ShadowSavepoint> activeSavepoint;
     std::unordered_map<common::page_idx_t, std::unique_ptr<uint8_t[]>> savedPagesForSavepoint;
     // Fast path for readers: false when there is no shadow page.

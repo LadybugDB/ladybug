@@ -2,6 +2,7 @@
 
 #include <algorithm>
 
+#include "common/exception/internal.h"
 #include "common/exception/io.h"
 #include "common/exception/runtime.h"
 #include "common/file_system/virtual_file_system.h"
@@ -105,6 +106,9 @@ void ShadowFile::publishShadowPage(file_idx_t originalFile, page_idx_t originalP
 }
 
 ShadowFile::ShadowSavepoint ShadowFile::createSavepoint() {
+    // One savepoint at a time (see activeSavepoint): the previous one must have been released
+    // or rolled back, so there are no saved pages to discard here.
+    DASSERT(!activeSavepoint.has_value() && savedPagesForSavepoint.empty());
     savedPagesForSavepoint.clear();
     std::shared_lock lck{mtx};
     activeSavepoint = shadowPageRecords.size();
@@ -119,7 +123,7 @@ void ShadowFile::releaseSavepoint() {
 void ShadowFile::preservePageForSavepoint(page_idx_t shadowPageIdx, const uint8_t* frame) {
     // Shadow page i + 1 holds shadowPageRecords[i] (page 0 is the header), so the pages that
     // existed when the savepoint was taken are 1..savepoint.
-    if (!activeSavepoint.has_value() || shadowPageIdx > *activeSavepoint ||
+    if (!activeSavepoint.has_value() || shadowPageIdx == 0 || shadowPageIdx > *activeSavepoint ||
         savedPagesForSavepoint.contains(shadowPageIdx)) {
         return;
     }
@@ -129,19 +133,41 @@ void ShadowFile::preservePageForSavepoint(page_idx_t shadowPageIdx, const uint8_
 }
 
 void ShadowFile::rollbackToSavepoint(ShadowSavepoint savepoint) {
-    DASSERT(activeSavepoint == savepoint);
+    // A release build must not roll back to a stale or foreign savepoint either: that would
+    // drop shadow pages of groups that completed.
+    if (activeSavepoint != savepoint) {
+        throw InternalException(std::format(
+            "Cannot roll back to shadow savepoint {}: the active savepoint is {}.", savepoint,
+            activeSavepoint.has_value() ? std::to_string(*activeSavepoint) : "none"));
+    }
     // Undo in-place rewrites of shadow pages that predate the savepoint before dropping the newer
     // ones (follow-up to LadybugDB/ladybug#1051). Without this, a group rolled back over a
     // shadow page it rewrote would leave the new bytes under the restored chunk metadata. Pinning
     // locks the page, so concurrent optimistic readers retry and see the restored contents. mtx
     // is not held here (see mtx).
+    // Best effort: a failed restore must not skip the others, the release or the truncation
+    // below. The first error is rethrown after the savepoint is fully unwound.
+    std::exception_ptr restoreError;
     for (const auto& [shadowPageIdx, saved] : savedPagesForSavepoint) {
-        auto* frame = shadowingFH->pinPage(shadowPageIdx, PageReadPolicy::READ_PAGE);
-        memcpy(frame, saved.get(), LBUG_PAGE_SIZE);
-        shadowingFH->setLockedPageDirty(shadowPageIdx);
-        shadowingFH->unpinPage(shadowPageIdx);
+        try {
+            auto* frame = shadowingFH->pinPage(shadowPageIdx, PageReadPolicy::READ_PAGE);
+            memcpy(frame, saved.get(), LBUG_PAGE_SIZE);
+            shadowingFH->setLockedPageDirty(shadowPageIdx);
+            shadowingFH->unpinPage(shadowPageIdx);
+        } catch (...) {
+            if (!restoreError) {
+                restoreError = std::current_exception();
+            }
+        }
     }
     releaseSavepoint();
+    truncateToSavepoint(savepoint);
+    if (restoreError) {
+        std::rethrow_exception(restoreError);
+    }
+}
+
+void ShadowFile::truncateToSavepoint(ShadowSavepoint savepoint) {
     std::unique_lock lck{mtx};
     DASSERT(savepoint <= shadowPageRecords.size());
     if (savepoint == shadowPageRecords.size()) {
@@ -478,6 +504,8 @@ void ShadowFile::flushAll(const uuid& ownerDatabaseID) const {
 
 void ShadowFile::clear(BufferManager& bm, bool syncParentDirectory) {
     DASSERT(shadowingFH);
+    // A checkpoint abandoned mid-group must not leave a savepoint armed over the next one.
+    releaseSavepoint();
     // Concurrent readers may be reading shadow pages (see readShadowVersionIfExists).
     std::unique_lock lck{mtx};
     // Evict pages, truncate to zero pages (which also truncates the on-disk file), then unlink
@@ -504,6 +532,7 @@ void ShadowFile::clear(BufferManager& bm, bool syncParentDirectory) {
 }
 
 void ShadowFile::reset() {
+    releaseSavepoint();
     // Keep the shadowing FileHandle (and its VM frame groups) alive across checkpoints:
     // each FileHandle allocates VMRegion frame groups that count against max_db_size and
     // are never reclaimed, so orphaning the handle here exhausted max_db_size after a
