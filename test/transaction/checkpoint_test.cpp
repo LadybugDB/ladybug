@@ -27,6 +27,7 @@
 #include "catalog/catalog_entry/sequence_catalog_entry.h"
 #include "catalog/catalog_entry/table_catalog_entry.h"
 #include "common/checksum.h"
+#include "common/exception/internal.h"
 #include "common/exception/io.h"
 #include "common/exception/runtime.h"
 #include "common/file_system/virtual_file_system.h"
@@ -10554,6 +10555,24 @@ TEST_F(FailedInPlaceCheckpointTest, RelsReadBackAfterFailedCSRCheckpointFollowin
     res.reset();
     createDBAndConn();
     check("after reopening");
+}
+
+// Rolling back to a savepoint that is not the active one would drop shadow pages of groups that
+// completed, so it is refused in release builds too.
+TEST_F(FailedInPlaceCheckpointTest, ShadowSavepointRollbackRequiresTheActiveSavepoint) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    auto& shadowFile = getStorageManager(*database)->getShadowFile();
+    EXPECT_THROW(shadowFile.rollbackToSavepoint(0), InternalException);
+    const auto savepoint = shadowFile.createSavepoint();
+    EXPECT_THROW(shadowFile.rollbackToSavepoint(savepoint + 1), InternalException);
+    // A refused rollback leaves the savepoint active.
+    EXPECT_NO_THROW(shadowFile.rollbackToSavepoint(savepoint));
+    // After the rollback no savepoint is active, so a new one can be taken and released.
+    EXPECT_THROW(shadowFile.rollbackToSavepoint(savepoint), InternalException);
+    shadowFile.createSavepoint();
+    shadowFile.releaseSavepoint();
 }
 
 } // namespace testing
