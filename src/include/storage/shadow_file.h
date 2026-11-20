@@ -6,6 +6,7 @@
 #include <optional>
 #include <shared_mutex>
 
+#include "common/copy_constructors.h"
 #include "common/types/uuid.h"
 #include "storage/file_handle.h"
 
@@ -99,7 +100,26 @@ public:
     // lookups, #1052) hold this for the whole lookup. It excludes applyShadowPages() and its
     // publication step, so a lookup sees either the old pages and headers or the new ones,
     // never new slot pages read through old headers. Throws after a failed apply.
-    std::shared_lock<std::shared_mutex> lockForPairedRead() const;
+    //
+    // Re-entrant per thread: a scope nested in another scope of the same shadow file takes no
+    // second lock, so a batch of lookups can hold one scope around all of them. A null
+    // shadow file makes the scope a no-op.
+    class PairedReadScope {
+    public:
+        explicit PairedReadScope(const ShadowFile* shadowFile);
+        ~PairedReadScope();
+        DELETE_COPY_AND_MOVE(PairedReadScope);
+
+    private:
+        const ShadowFile* previous = nullptr;
+        bool owns = false;
+        std::shared_lock<std::shared_mutex> lock;
+    };
+
+    // Throws if this thread is inside applyShadowPages()'s publication step. Primary-key lookups
+    // call it: a lookup there would see half-published state (CHECKPOINT transactions skip the
+    // paired-read lock), and any other transaction would deadlock on it.
+    static void checkNotPublishingOnThisThread();
 
     // `ownerDatabaseID` is the ID of the database running the checkpoint, stamped into the shadow
     // header (see ShadowFileHeader::ownerDatabaseID).
@@ -127,6 +147,9 @@ public:
         std::optional<common::uuid> legacyDatabaseID = std::nullopt);
 
 private:
+    // Taken by PairedReadScope; see it for the contract.
+    std::shared_lock<std::shared_mutex> lockForPairedRead() const;
+
     FileHandle* getOrCreateShadowingFH();
 
     static void replayShadowPageRecordsCore(common::FileInfo& shadowFileInfo,
@@ -162,6 +185,15 @@ private:
     // Set under applyMtx when applying or publishing fails after the commit record is durable.
     // The data file may then hold a mix of old and new pages, so paired reads fail until the
     // database is reopened and recovery replays the shadow file.
+    //
+    // Only paired reads need this fence. Primary-key hash indexes are the only structures whose
+    // read transactions read the data file directly: their disk arrays and overflow file skip
+    // the shadow file outside CHECKPOINT transactions. Column pages are read shadow-first
+    // (ColumnReadWriter::readFromPage -> readShadowVersionIfExists), and this failure path
+    // keeps the shadow pages published: the WAL is poisoned, and neither postCheckpointCleanup
+    // nor rollback runs to clear them. So column scans keep reading complete pages. ART indexes
+    // read their disk tree only when disk-backed, and checkpoints do not rewrite those
+    // (ArtPrimaryKeyIndex::checkpoint returns early).
     mutable bool applyFailed = false;
     // Fast path for readers: false when there is no shadow page.
     std::atomic<bool> hasShadowPages{false};

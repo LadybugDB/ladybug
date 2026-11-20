@@ -393,11 +393,13 @@ void Checkpointer::postCheckpointCleanup(bool canResetPageManagerToCurrent) try 
         }
         target.storageManager->finalizeCheckpoint(clientContext);
     }
-    // Finalize partition children's page managers: their allocations were committed when the
-    // main header was written and their shadow pages applied.
+    // Finalize partition children: their allocations were committed when the main header was
+    // written and their shadow pages applied. This also publishes the staged state of children
+    // whose shadow pages were not applied above (no shadow file); for the others it is already
+    // published.
     if (auto* dbManager = main::DatabaseManager::Get(clientContext)) {
         for (auto* sm : dbManager->getPartitionStorageRegistry()->getAllManagers()) {
-            sm->getDataFH()->getPageManager()->finalizeCheckpoint();
+            sm->finalizeCheckpoint(clientContext);
         }
     }
     auto bufferManager = MemoryManager::Get(clientContext)->getBufferManager();
@@ -620,7 +622,9 @@ void Checkpointer::applyShadowPagesForPartitionChildren() {
         if (!shadowFile.hasShadowingFH()) {
             continue;
         }
-        shadowFile.applyShadowPages(*sm, clientContext);
+        // Publish the child's staged primary-key index state together with its pages, as for
+        // the main database (#1052).
+        sm->applyShadowPagesAndPublish(clientContext);
         sm->getDataFH()->flushAllDirtyPagesInFrames();
     }
 }
