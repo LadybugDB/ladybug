@@ -197,6 +197,7 @@ private:
         construct_bm_func_t constructBMFunc);
 
     void validatePathInReadOnly() const;
+    void releaseMembersBeforeOpenPathClaim();
 
 private:
     // EXTENSION ABI: extensions ship once per minor version and must keep working with
