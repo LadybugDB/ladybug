@@ -22,6 +22,12 @@ struct LocalFileInfo final : FileInfo {
     const void* handle;
 #else
     const int fd;
+    // Set when this open holds the process's write lock on the file, which is then registered by
+    // (device, inode) so a second write-locked open in the same process is refused (see
+    // LocalFileSystem::openFile). Unregistered when the file is closed.
+    bool holdsRegisteredWriteLock = false;
+    uint64_t fileDevice = 0;
+    uint64_t fileInode = 0;
 #endif
 };
 

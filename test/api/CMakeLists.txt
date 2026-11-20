@@ -17,4 +17,5 @@ add_lbug_api_test(api_test
         result_value_test.cpp
         storage_driver_test.cpp
         udf_test.cpp
-        read_only_test.cpp)
+        read_only_test.cpp
+        same_process_write_lock_test.cpp)

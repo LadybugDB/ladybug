@@ -28,8 +28,33 @@
 #include "storage/storage_utils.h"
 #include <format>
 
+#ifndef _WIN32
+#include <mutex>
+#include <set>
+#include <utility>
+#endif
+
 namespace lbug {
 namespace common {
+
+#ifndef _WIN32
+namespace {
+// POSIX record locks belong to the process, so a second write lock on a file this process
+// already holds succeeds, and closing any descriptor of the file drops all of the process's
+// locks on it. Two writable Database objects on one file in one process would then each run
+// their own WAL replay and checkpoints over the same file and lose committed rows. Windows
+// locks belong to the handle and already refuse that. Write-locked opens are registered here
+// by file identity so a second one in the same process fails the same way.
+std::mutex& writeLockedFilesMutex() {
+    static std::mutex mtx;
+    return mtx;
+}
+std::set<std::pair<uint64_t, uint64_t>>& writeLockedFiles() {
+    static std::set<std::pair<uint64_t, uint64_t>> files;
+    return files;
+}
+} // namespace
+#endif
 
 LocalFileInfo::~LocalFileInfo() {
 #ifdef _WIN32
@@ -39,6 +64,12 @@ LocalFileInfo::~LocalFileInfo() {
 #else
     if (fd != -1) {
         close(fd);
+    }
+    if (holdsRegisteredWriteLock) {
+        // Unregister after closing: until then, a new open would get a second descriptor whose
+        // close could drop this lock.
+        std::lock_guard lck{writeLockedFilesMutex()};
+        writeLockedFiles().erase({fileDevice, fileInode});
     }
 #endif
 }
@@ -146,6 +177,25 @@ std::unique_ptr<FileInfo> LocalFileSystem::openFile(const std::string& path, Fil
     }
     return std::make_unique<LocalFileInfo>(fullPath, handle, this);
 #else
+    // Held across the check, open and lock so two threads cannot both pass the check. The check
+    // runs before open: once the file is open, closing the new descriptor to back out would drop
+    // the lock the existing open holds.
+    std::unique_lock<std::mutex> writeLockRegistration;
+    if (flags.lockType == FileLockType::WRITE_LOCK) {
+        writeLockRegistration = std::unique_lock{writeLockedFilesMutex()};
+        struct stat existing {};
+        if (stat(fullPath.c_str(), &existing) == 0 &&
+            writeLockedFiles().contains(
+                {static_cast<uint64_t>(existing.st_dev), static_cast<uint64_t>(existing.st_ino)})) {
+            // Not phrased as lock contention: there is no other process to wait for.
+            throw IOException(std::format(
+                "Cannot open {} for writing: it is already open for writing in this process. "
+                "Open one read-write Database per database file and process and share it across "
+                "connections, or open the others read-only.\n"
+                "See the docs: https://docs.ladybugdb.com/concurrency for more information.",
+                fullPath));
+        }
+    }
     int fd = open(fullPath.c_str(), openFlags, 0644);
     if (fd == -1) {
         throw IOException(std::format("Cannot open file {}: {}", fullPath, posixErrMessage()));
@@ -190,7 +240,17 @@ std::unique_ptr<FileInfo> LocalFileSystem::openFile(const std::string& path, Fil
                               "The filesystem may not support POSIX record locks.");
         }
     }
-    return std::make_unique<LocalFileInfo>(fullPath, fd, this);
+    auto fileInfo = std::make_unique<LocalFileInfo>(fullPath, fd, this);
+    if (writeLockRegistration.owns_lock()) {
+        struct stat opened {};
+        if (fstat(fd, &opened) == 0) {
+            fileInfo->fileDevice = static_cast<uint64_t>(opened.st_dev);
+            fileInfo->fileInode = static_cast<uint64_t>(opened.st_ino);
+            writeLockedFiles().insert({fileInfo->fileDevice, fileInfo->fileInode});
+            fileInfo->holdsRegisteredWriteLock = true;
+        }
+    }
+    return fileInfo;
 #endif
 }
 
