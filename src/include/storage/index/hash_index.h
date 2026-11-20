@@ -550,6 +550,7 @@ public:
 
     void delete_(common::ValueVector* keyVector);
     void discardPrimaryKey(common::ValueVector* keyVector) override;
+    void discardPrimaryKeyAt(common::ValueVector* keyVector, uint64_t pos) override;
 
     void checkpointInMemory() override;
     void checkpoint(main::ClientContext*, storage::PageAllocator& pageAllocator,
