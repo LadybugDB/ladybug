@@ -274,6 +274,16 @@ void Checkpointer::beginCheckpoint(common::transaction_t snapshotTimestamp,
     pinningTxnID = pinningTxnID_;
     checkpointTargets = collectCheckpointTargets();
 
+    // Capture the data-file page counts while the write gate is held: pages appended after this
+    // point belong to the checkpoint itself and can be reclaimed on rollback, while pages of
+    // committed but uncheckpointed transactions below the boundary are live and must stay.
+    mainStorageManager->beginCheckpointPageCapture();
+    if (auto* dbManager = main::DatabaseManager::Get(clientContext)) {
+        for (auto* sm : dbManager->getPartitionStorageRegistry()->getAllManagers()) {
+            sm->beginCheckpointPageCapture();
+        }
+    }
+
     // A held-open reader pins the WAL: rotating now would orphan the frozen records its
     // snapshot may still need, and the next checkpoint refuses to overwrite a leftover
     // frozen WAL. The checkpoint proceeds without rotation; the CHECKPOINT record lands in
@@ -380,6 +390,14 @@ void Checkpointer::finishCheckpoint() {
     flushGraphShadowFiles();
     logCheckpointAndApplyShadowPages(walRotatedByManager.at(mainStorageManager));
     applyGraphShadowPages();
+    // The checkpoint succeeded: its appended pages are now part of the committed state, so the
+    // rollback boundary is dropped. A later failed checkpoint re-captures it on begin.
+    mainStorageManager->clearCheckpointPageCapture();
+    if (auto* dbManager = main::DatabaseManager::Get(clientContext)) {
+        for (auto* sm : dbManager->getPartitionStorageRegistry()->getAllManagers()) {
+            sm->clearCheckpointPageCapture();
+        }
+    }
 }
 
 void Checkpointer::postCheckpointCleanup(bool canResetPageManagerToCurrent) try {
@@ -634,6 +652,10 @@ void Checkpointer::rollback() try {
     // Any pages freed during the checkpoint are no longer freed
     for (const auto& target : checkpointTargets) {
         target.storageManager->rollbackCheckpoint(*target.catalog, &clientContext);
+    }
+    if (checkpointTargets.empty() && mainStorageManager != nullptr) {
+        mainStorageManager->rollbackCheckpoint(*clientContext.getDatabase()->getCatalog(),
+            &clientContext);
     }
     // Discard children's in-progress shadow pages so a later open cannot replay them.
     if (!isInMemory) {

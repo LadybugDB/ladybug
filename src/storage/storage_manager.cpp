@@ -604,8 +604,25 @@ void StorageManager::finalizeCheckpoint(main::ClientContext& context) {
     }
 }
 
+void StorageManager::beginCheckpointPageCapture() {
+    std::unique_lock lck{mtx};
+    if (dataFH == nullptr) {
+        return;
+    }
+    checkpointBeginNumPages = dataFH->getNumPages();
+}
+
+void StorageManager::clearCheckpointPageCapture() {
+    std::unique_lock lck{mtx};
+    checkpointBeginNumPages.reset();
+}
+
 void StorageManager::rollbackCheckpoint(const Catalog& catalog, main::ClientContext* context) {
     std::unique_lock lck{mtx};
+    // Only pages appended by the checkpoint itself (beyond the boundary captured when it began)
+    // can be reclaimed. The committed-but-uncheckpointed pages below the boundary are still live.
+    const common::page_idx_t checkpointNumPages = checkpointBeginNumPages.value_or(0);
+
     const auto nodeTableEntries = catalog.getNodeTableEntries(&DUMMY_CHECKPOINT_TRANSACTION);
     for (const auto tableEntry : nodeTableEntries) {
         // Partitioned parents hold no physical storage; only their partition subgraphs do.
@@ -619,13 +636,15 @@ void StorageManager::rollbackCheckpoint(const Catalog& catalog, main::ClientCont
                 PartitionStorageRegistry::Get(context)->tryGet(tableEntry->getTableID());
             if (childSM != nullptr && childSM->containsTable(tableEntry->getTableID())) {
                 childSM->getTable(tableEntry->getTableID())->rollbackCheckpoint();
-                childSM->getDataFH()->getPageManager()->rollbackCheckpoint();
+                const common::page_idx_t childNumPages =
+                    childSM->checkpointBeginNumPages.value_or(0);
+                childSM->getDataFH()->getPageManager()->rollbackCheckpoint(childNumPages);
             }
             continue;
         }
         tables.at(tableEntry->getTableID())->rollbackCheckpoint();
     }
-    dataFH->getPageManager()->rollbackCheckpoint();
+    dataFH->getPageManager()->rollbackCheckpoint(checkpointNumPages);
 }
 
 std::optional<std::reference_wrapper<const IndexType>> StorageManager::getIndexType(

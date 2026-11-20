@@ -93,6 +93,16 @@ void PageManager::finalizeCheckpoint() {
     freeSpaceManager->finalizeCheckpoint(fileHandle);
 }
 
+void PageManager::rollbackCheckpoint(common::page_idx_t checkpointNumPages) {
+    {
+        common::UniqLock lck{mtx};
+        freeSpaceManager->rollbackCheckpoint();
+    }
+    if (checkpointNumPages > 0) {
+        reclaimTailPagesIfNeeded(checkpointNumPages);
+    }
+}
+
 void PageManager::clearEvictedBMEntriesIfNeeded(BufferManager* bufferManager) {
     freeSpaceManager->clearEvictedBufferManagerEntriesIfNeeded(bufferManager);
 }
