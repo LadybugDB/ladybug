@@ -2,9 +2,11 @@
 
 #include <atomic>
 #include <functional>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <shared_mutex>
+#include <unordered_map>
 
 #include "common/types/uuid.h"
 #include "storage/file_handle.h"
@@ -70,15 +72,24 @@ public:
     // thread can roll back to it to drop exactly the shadow pages created since, without
     // disturbing shadow pages created by already-checkpointed tables. Used to undo a
     // partially completed node group checkpoint (see LadybugDB/ladybug#1051).
+    // While a savepoint is active, the first rewrite of a shadow page that predates it saves the
+    // page's contents (see preservePageForSavepoint), so rollback can restore it. Such pages come
+    // from tables or groups checkpointed earlier, or from a previous failed checkpoint whose
+    // shadow pages are kept for the next one.
     using ShadowSavepoint = size_t;
-    ShadowSavepoint createSavepoint() const;
-    // Drops all shadow pages created after the savepoint: their map entries, their
-    // records, and their frames (evicted without flushing, so their contents never reach
-    // the data file). Later allocations reuse the freed shadow page indices, preserving
-    // the invariant that shadowPageRecords[i] describes shadow page i+1 (see flushAll).
-    // Must not be called while a published shadow page of a column data page is pinned
-    // (see mtx).
+    ShadowSavepoint createSavepoint();
+    // Ends the active savepoint without rolling back and drops the saved page contents.
+    void releaseSavepoint();
+    // Restores the saved contents of shadow pages that predate the savepoint, then drops all
+    // shadow pages created after it: their map entries, their records, and their frames
+    // (evicted without flushing, so their contents never reach the data file). Later
+    // allocations reuse the freed shadow page indices, preserving the invariant that
+    // shadowPageRecords[i] describes shadow page i+1 (see flushAll). Ends the savepoint. Must
+    // not be called while a published shadow page of a column data page is pinned (see mtx).
     void rollbackToSavepoint(ShadowSavepoint savepoint);
+    // Called by the checkpointing thread with an existing shadow page pinned for writing, before
+    // it is modified. Saves the page's contents once if it predates the active savepoint.
+    void preservePageForSavepoint(common::page_idx_t shadowPageIdx, const uint8_t* frame);
     // Reads the shadow version of a page if the current checkpoint has one, and returns false
     // without calling readOp otherwise. Unlike the functions above, this is safe to call from
     // read transactions running concurrently with a checkpoint: a checkpoint publishes the new
@@ -163,6 +174,9 @@ private:
     // The data file may then hold a mix of old and new pages, so paired reads fail until the
     // database is reopened and recovery replays the shadow file.
     mutable bool applyFailed = false;
+    // Savepoint state, owned by the checkpointing thread (see createSavepoint).
+    std::optional<ShadowSavepoint> activeSavepoint;
+    std::unordered_map<common::page_idx_t, std::unique_ptr<uint8_t[]>> savedPagesForSavepoint;
     // Fast path for readers: false when there is no shadow page.
     std::atomic<bool> hasShadowPages{false};
 };

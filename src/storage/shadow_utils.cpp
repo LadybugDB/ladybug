@@ -20,6 +20,9 @@ ShadowPageAndFrame ShadowUtils::createShadowVersionIfNecessaryAndPinPage(page_id
             shadowPage = shadowFile.getShadowPage(fileIdx, originalPage);
             shadowFrame =
                 shadowFile.getShadowingFH().pinPage(shadowPage, PageReadPolicy::READ_PAGE);
+            // The caller rewrites this page in place; keep its prior contents for a savepoint
+            // rollback.
+            shadowFile.preservePageForSavepoint(shadowPage, shadowFrame);
         } else {
             shadowPage = shadowFile.createShadowPage(fileIdx, originalPage);
             shadowFrame =

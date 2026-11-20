@@ -10024,5 +10024,292 @@ TEST_F(PartitionCrashRecoveryTest, HashParentSurvivesCrashRecovery) {
     EXPECT_EQ(hashPlan->toString().find("H_p1"), std::string::npos);
 }
 
+// Runs a checkpoint whose first page allocation fails, then checks that the committed data reads
+// back unchanged before any reopen, after a retry succeeds, and after reopening the database.
+class FailedInPlaceCheckpointTest : public FlakyCheckpointerTest {
+public:
+    std::vector<std::string> queryRows(const std::string& query) const {
+        auto res = conn->query(query);
+        EXPECT_TRUE(res->isSuccess()) << res->getErrorMessage();
+        std::vector<std::string> rows;
+        if (!res->isSuccess()) {
+            return rows;
+        }
+        while (res->hasNext()) {
+            auto row = res->getNext()->toString();
+            if (!row.empty() && row.back() == '\n') {
+                row.pop_back();
+            }
+            rows.push_back(std::move(row));
+        }
+        return rows;
+    }
+
+    void failFirstAllocationInCheckpoint() const {
+        auto context = getClientContext(*conn);
+        bool failed = false;
+        FlakyCheckpointer flakyCheckpointer([&failed](main::ClientContext& ctx) {
+            return std::make_unique<FlakyCheckpointerFailsDuringOutOfPlaceRewrite>(ctx, failed);
+        });
+        flakyCheckpointer.setCheckpointer(*context);
+        auto res = conn->query("CHECKPOINT;");
+        FlakyCheckpointer::resetCheckpointer(*context);
+        ASSERT_FALSE(res->isSuccess());
+        ASSERT_TRUE(failed);
+    }
+
+    void checkpoint() const {
+        auto res = conn->query("CHECKPOINT;");
+        ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+    }
+};
+
+// Fails the `failAt`-th page allocation (1-based) of a checkpoint and counts all allocations.
+class FailNthAllocationPageAllocator final : public PageAllocator {
+public:
+    FailNthAllocationPageAllocator(PageAllocator& inner, uint64_t failAt, uint64_t& numAllocations)
+        : PageAllocator(inner.getDataFH()), inner{inner}, failAt{failAt},
+          numAllocations{numAllocations} {}
+
+    PageRange allocatePageRange(page_idx_t numPages) override {
+        if (++numAllocations == failAt) {
+            throw RuntimeException("checkpoint failed.");
+        }
+        return inner.allocatePageRange(numPages);
+    }
+    void freePageRange(PageRange block) override { inner.freePageRange(block); }
+
+private:
+    PageAllocator& inner;
+    uint64_t failAt;
+    uint64_t& numAllocations;
+};
+
+// Runs the storage phase with the `failAt`-th page allocation failing. If fewer allocations
+// happen, the checkpoint still fails, after the storage phase of every table completed.
+class FlakyCheckpointerFailsOnNthAllocation final : public Checkpointer {
+public:
+    FlakyCheckpointerFailsOnNthAllocation(main::ClientContext& context, uint64_t failAt,
+        uint64_t& numAllocations)
+        : Checkpointer(context), failAt{failAt}, numAllocations{numAllocations} {}
+
+    bool checkpointStorage() override {
+        for (const auto& target : checkpointTargets) {
+            FailNthAllocationPageAllocator pageAllocator(
+                *target.storageManager->getDataFH()->getPageManager(), failAt, numAllocations);
+            const Transaction snapshotTxn(TransactionType::CHECKPOINT,
+                Transaction::DUMMY_TRANSACTION_ID, snapshotTS);
+            target.storageManager->checkpoint(&clientContext, *target.catalog, snapshotTxn,
+                pageAllocator, tableEpochWatermarksByManager.at(target.storageManager));
+        }
+        throw RuntimeException("checkpoint failed after the storage phase.");
+    }
+
+private:
+    uint64_t failAt;
+    uint64_t& numAllocations;
+};
+
+// Two failed checkpoints in a row. The first fails at allocation `k1`, possibly after one CSR
+// node group (e.g. the forward direction) completed and left its in-place rewrites in shadow
+// pages, which a failed checkpoint does not discard. The second, after another rel is added to
+// the same source node, fails at allocation `k2`, possibly inside that same node group after it
+// rewrote those shadow pages again. Every committed rel must read back exactly after each
+// failure, after a successful checkpoint and after reopening the database.
+TEST_F(FailedInPlaceCheckpointTest, RelsReadBackAfterTwoFailedCSRCheckpoints) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CALL force_checkpoint_on_close=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CALL auto_checkpoint=false;")->isSuccess());
+    constexpr int64_t numNodes = 1000;
+    auto failCheckpointAt = [&](uint64_t failAt) {
+        auto context = getClientContext(*conn);
+        uint64_t numAllocations = 0;
+        FlakyCheckpointer flakyCheckpointer([&](main::ClientContext& ctx) {
+            return std::make_unique<FlakyCheckpointerFailsOnNthAllocation>(ctx, failAt,
+                numAllocations);
+        });
+        flakyCheckpointer.setCheckpointer(*context);
+        auto res = conn->query("CHECKPOINT;");
+        FlakyCheckpointer::resetCheckpointer(*context);
+        EXPECT_FALSE(res->isSuccess());
+        return numAllocations;
+    };
+    struct Case {
+        std::string suffix;
+        std::vector<std::string> expected;
+    };
+    auto check = [&](const Case& c, const std::string& when) {
+        const auto fwd = queryRows(std::format("MATCH (a:n{0})-[r:e{0}]->(b:n{0}) RETURN a.id, "
+                                               "b.id, r.w ORDER BY a.id, b.id, r.w;",
+            c.suffix));
+        const auto bwd = queryRows(std::format("MATCH (b:n{0})<-[r:e{0}]-(a:n{0}) RETURN a.id, "
+                                               "b.id, r.w ORDER BY a.id, b.id, r.w;",
+            c.suffix));
+        auto describe = [&](const std::vector<std::string>& actual) {
+            std::vector<std::string> missing, extra;
+            auto sortedExpected = c.expected;
+            auto sortedActual = actual;
+            std::sort(sortedExpected.begin(), sortedExpected.end());
+            std::sort(sortedActual.begin(), sortedActual.end());
+            std::set_difference(sortedExpected.begin(), sortedExpected.end(), sortedActual.begin(),
+                sortedActual.end(), std::back_inserter(missing));
+            std::set_difference(sortedActual.begin(), sortedActual.end(), sortedExpected.begin(),
+                sortedExpected.end(), std::back_inserter(extra));
+            std::string out = std::format("{} rows, {} missing, {} unexpected;", actual.size(),
+                missing.size(), extra.size());
+            for (auto i = 0u; i < std::min<size_t>(missing.size(), 5); i++) {
+                out += " -" + missing[i];
+            }
+            for (auto i = 0u; i < std::min<size_t>(extra.size(), 5); i++) {
+                out += " +" + extra[i];
+            }
+            return out;
+        };
+        EXPECT_EQ(fwd, c.expected) << c.suffix << " forward, " << when << ": " << describe(fwd);
+        EXPECT_EQ(bwd, c.expected) << c.suffix << " backward, " << when << ": " << describe(bwd);
+    };
+    auto runQuery = [&](const std::string& query) {
+        auto res = conn->query(query);
+        ASSERT_TRUE(res->isSuccess()) << query << ": " << res->getErrorMessage();
+    };
+
+    // Sweeps both failure points until a checkpoint's storage phase completes without reaching
+    // the failing allocation (that last case fails after the storage phase).
+    bool firstReachedEnd = false;
+    for (uint64_t k1 = 1; !firstReachedEnd; k1++) {
+        bool secondReachedEnd = false;
+        for (uint64_t k2 = 1; !secondReachedEnd; k2++) {
+            Case c{std::format("_{}_{}", k1, k2), {}};
+            runQuery(std::format("CREATE NODE TABLE n{}(id INT64 PRIMARY KEY);", c.suffix));
+            runQuery(std::format("CREATE REL TABLE e{0}(FROM n{0} TO n{0}, w INT64);", c.suffix));
+            runQuery(std::format("UNWIND range(0, {}) AS i CREATE (:n{} {{id: i}});", numNodes - 1,
+                c.suffix));
+            runQuery(std::format("MATCH (a:n{0}), (b:n{0}) WHERE b.id = (a.id + 1) % {1} "
+                                 "CREATE (a)-[:e{0} {{w: a.id}}]->(b);",
+                c.suffix, numNodes));
+            runQuery("CHECKPOINT;");
+            for (int64_t i = 0; i < numNodes; i++) {
+                c.expected.push_back(std::format("{}|{}|{}", i, (i + 1) % numNodes, i));
+            }
+            auto addRel = [&](int64_t dst, int64_t w) {
+                runQuery(std::format("MATCH (a:n{0} {{id: 0}}), (b:n{0} {{id: {1}}}) CREATE "
+                                     "(a)-[:e{0} {{w: {2}}}]->(b);",
+                    c.suffix, dst, w));
+                c.expected.push_back(std::format("0|{}|{}", dst, w));
+                std::sort(c.expected.begin(), c.expected.end(), [](const auto& x, const auto& y) {
+                    auto key = [](const std::string& row) {
+                        std::vector<int64_t> v;
+                        size_t start = 0;
+                        for (size_t pos; (pos = row.find('|', start)) != std::string::npos;
+                             start = pos + 1) {
+                            v.push_back(std::stoll(row.substr(start, pos - start)));
+                        }
+                        v.push_back(std::stoll(row.substr(start)));
+                        return v;
+                    };
+                    return key(x) < key(y);
+                });
+            };
+            addRel(500, 7);
+            const auto first = failCheckpointAt(k1);
+            firstReachedEnd = first < k1;
+            check(c,
+                std::format("after the first failed checkpoint (allocation {} of {})", k1, first));
+            addRel(600, 8);
+            const auto second = failCheckpointAt(k2);
+            secondReachedEnd = second < k2;
+            check(c, std::format("after the second failed checkpoint (allocations {} of {}, "
+                                 "then {} of {})",
+                         k1, first, k2, second));
+            runQuery("CHECKPOINT;");
+            check(c, "after a successful checkpoint");
+            createDBAndConn();
+            runQuery("CALL force_checkpoint_on_close=false;");
+            runQuery("CALL auto_checkpoint=false;");
+            check(c, "after reopening");
+            // Keep only one pair of tables at a time, so the sweep stays within the buffer pool.
+            runQuery(std::format("DROP TABLE e{};", c.suffix));
+            runQuery(std::format("DROP TABLE n{};", c.suffix));
+            runQuery("CHECKPOINT;");
+        }
+    }
+}
+
+// Minimal form of the sweep above. The first checkpoint fails after its storage phase, so every
+// CSR node group completed and left its in-place rewrites in shadow pages, which the failed
+// checkpoint keeps. After another rel is added to node 0, the second checkpoint fails at its
+// first page allocation, inside the forward CSR node group after its data columns were rewritten
+// in place into those same shadow pages. Restoring the group's pre-checkpoint chunks and dropping
+// the shadow pages created since its savepoint does not undo writes to shadow pages that already
+// existed.
+TEST_F(FailedInPlaceCheckpointTest, RelsReadBackAfterFailedCSRCheckpointFollowingFailedCheckpoint) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CALL force_checkpoint_on_close=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CALL auto_checkpoint=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE n(id INT64 PRIMARY KEY);")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE REL TABLE e(FROM n TO n, w INT64);")->isSuccess());
+    constexpr int64_t numNodes = 1000;
+    ASSERT_TRUE(
+        conn->query(std::format("UNWIND range(0, {}) AS i CREATE (:n {{id: i}});", numNodes - 1))
+            ->isSuccess());
+    auto res = conn->query(std::format(
+        "MATCH (a:n), (b:n) WHERE b.id = (a.id + 1) % {} CREATE (a)-[:e {{w: a.id}}]->(b);",
+        numNodes));
+    ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+    checkpoint();
+
+    std::vector<std::string> expected;
+    for (int64_t i = 0; i < numNodes; i++) {
+        expected.push_back(std::format("{}|{}|{}", i, (i + 1) % numNodes, i));
+        if (i == 0) {
+            expected.push_back("0|500|7");
+            expected.push_back("0|600|8");
+        }
+    }
+    const std::string fwdQuery =
+        "MATCH (a:n)-[r:e]->(b:n) RETURN a.id, b.id, r.w ORDER BY a.id, b.id, r.w;";
+    const std::string bwdQuery =
+        "MATCH (b:n)<-[r:e]-(a:n) RETURN a.id, b.id, r.w ORDER BY a.id, b.id, r.w;";
+    auto check = [&](const std::string& when) {
+        const auto fwd = queryRows(fwdQuery);
+        const auto bwd = queryRows(bwdQuery);
+        EXPECT_EQ(fwd, expected) << "forward, " << when;
+        EXPECT_EQ(bwd, expected) << "backward, " << when;
+        for (auto i = 0u; i < std::min(fwd.size(), expected.size()); i++) {
+            if (fwd[i] != expected[i]) {
+                ADD_FAILURE() << "forward, " << when << ": first wrong row " << i << ": got "
+                              << fwd[i] << ", expected " << expected[i];
+                break;
+            }
+        }
+    };
+
+    res = conn->query("MATCH (a:n {id: 0}), (b:n {id: 500}) CREATE (a)-[:e {w: 7}]->(b);");
+    ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+    auto context = getClientContext(*conn);
+    {
+        FlakyCheckpointer flakyCheckpointer([](main::ClientContext& ctx) {
+            return std::make_unique<FlakyCheckpointerFailsOnSerialization>(ctx);
+        });
+        flakyCheckpointer.setCheckpointer(*context);
+        ASSERT_FALSE(conn->query("CHECKPOINT;")->isSuccess());
+        FlakyCheckpointer::resetCheckpointer(*context);
+    }
+    res = conn->query("MATCH (a:n {id: 0}), (b:n {id: 600}) CREATE (a)-[:e {w: 8}]->(b);");
+    ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+    failFirstAllocationInCheckpoint();
+    check("after the second failed checkpoint");
+    checkpoint();
+    check("after a successful checkpoint");
+    // Query results must not outlive the database they were read from.
+    res.reset();
+    createDBAndConn();
+    check("after reopening");
+}
+
 } // namespace testing
 } // namespace lbug
