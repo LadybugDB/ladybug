@@ -83,7 +83,9 @@ bool LocalRelTable::insert(Transaction*, TableInsertState& state) {
             const auto& nodeIDVector = insertState.getBoundNodeIDVector(directedIndex.direction);
             const auto nodePos = getPosToRead(nodeIDVector, i);
             const auto nodeOffset = nodeIDVector.readNodeOffset(nodePos);
-            directedIndex.index[nodeOffset].push_back(rowToInsert);
+            auto& rows = directedIndex.index[nodeOffset];
+            DASSERT(rows.empty() || rows.back() < rowToInsert);
+            rows.push_back(rowToInsert);
         }
     }
 
@@ -95,14 +97,12 @@ bool LocalRelTable::insert(Transaction*, TableInsertState& state) {
 // still in those nodes' (ascending) row lists.
 static row_idx_t findMatchingRow(const std::vector<row_idx_vec_t*>& rowIndicesToCheck,
     offset_t relOffset) {
-    DASSERT(!rowIndicesToCheck.empty());
-    if (relOffset < StorageConstants::MAX_NUM_ROWS_IN_TABLE) {
+    if (rowIndicesToCheck.empty() || relOffset < StorageConstants::MAX_NUM_ROWS_IN_TABLE) {
         return INVALID_ROW_IDX;
     }
     const row_idx_t row = relOffset - StorageConstants::MAX_NUM_ROWS_IN_TABLE;
     for (const auto* rowIndex : rowIndicesToCheck) {
         if (!std::binary_search(rowIndex->begin(), rowIndex->end(), row)) {
-            DASSERT(std::find(rowIndex->begin(), rowIndex->end(), row) == rowIndex->end());
             return INVALID_ROW_IDX;
         }
     }
@@ -184,8 +184,10 @@ bool LocalRelTable::delete_(Transaction*, TableDeleteState& state) {
     }
 
     for (auto* rowIndexToDeleteFrom : rowIndicesToDeleteFrom) {
-        rowIndexToDeleteFrom->erase(std::lower_bound(rowIndexToDeleteFrom->begin(),
-            rowIndexToDeleteFrom->end(), matchedRow));
+        const auto it = std::lower_bound(rowIndexToDeleteFrom->begin(), rowIndexToDeleteFrom->end(),
+            matchedRow);
+        DASSERT(it != rowIndexToDeleteFrom->end() && *it == matchedRow);
+        rowIndexToDeleteFrom->erase(it);
     }
     return true;
 }
