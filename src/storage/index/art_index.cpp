@@ -1179,5 +1179,11 @@ void ArtPrimaryKeyIndex::discardPrimaryKey(ValueVector* keyVector) {
     }
 }
 
+void ArtPrimaryKeyIndex::discardPrimaryKeyAt(ValueVector* keyVector, uint64_t pos) {
+    std::lock_guard lck{mutex};
+    materializeDiskTree();
+    erase(ArtKey::encode(keyVector, pos));
+}
+
 } // namespace storage
 } // namespace lbug
