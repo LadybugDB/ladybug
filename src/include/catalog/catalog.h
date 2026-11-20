@@ -107,6 +107,10 @@ public:
 
     // Add table entry (for extensions).
     void addTableEntry(std::unique_ptr<TableCatalogEntry> entry);
+    // Same, but as part of `transaction`: the entry is undone on rollback and becomes
+    // visible at commit. Not logged to the WAL (shadow entries are not persisted).
+    void addTableEntry(transaction::Transaction* transaction,
+        std::unique_ptr<TableCatalogEntry> entry);
 
     // ----------------------------- Sequences ----------------------------
 
