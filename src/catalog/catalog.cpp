@@ -336,6 +336,10 @@ void Catalog::addTableEntry(std::unique_ptr<TableCatalogEntry> entry) {
     tables->createEntry(&transaction::DUMMY_TRANSACTION, std::move(entry));
 }
 
+void Catalog::addTableEntry(Transaction* transaction, std::unique_ptr<TableCatalogEntry> entry) {
+    tables->createEntry(transaction, std::move(entry), true /* skipLoggingToWAL */);
+}
+
 CatalogEntry* Catalog::createRelGroupEntry(Transaction* transaction,
     const BoundCreateTableInfo& info) {
     const auto extraInfo = info.extraInfo->ptrCast<BoundExtraCreateRelTableGroupInfo>();
