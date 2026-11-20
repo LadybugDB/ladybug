@@ -72,6 +72,10 @@ public:
     // In-memory databases never checkpoint, so this is their only version reclamation.
     bool vacuumInMemoryUpdates(common::transaction_t horizon);
     void finalizeCheckpoint(main::ClientContext& context);
+    // Applies this storage manager's shadow pages and publishes the staged per-table checkpoint
+    // state (primary-key index read headers) in the same step for concurrent readers (#1052).
+    // Only call after the checkpoint's commit record is durable.
+    void applyShadowPagesAndPublish(main::ClientContext& context);
     void rollbackCheckpoint(const catalog::Catalog& catalog, main::ClientContext* context);
 
     WAL& getWAL() const;

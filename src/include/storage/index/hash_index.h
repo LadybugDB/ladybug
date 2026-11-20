@@ -19,6 +19,7 @@
 #include "storage/index/hash_index_utils.h"
 #include "storage/index/in_mem_hash_index.h"
 #include "storage/local_storage/local_hash_index.h"
+#include "storage/shadow_file.h"
 
 namespace lbug {
 namespace common {
@@ -411,6 +412,13 @@ public:
     inline bool lookup(const transaction::Transaction* trx, T key, common::offset_t& result,
         visible_func isVisible) {
         DASSERT(indexInfo.keyDataTypes[0] == common::TypeUtils::getPhysicalTypeIDForType<T>());
+        // Hold off a concurrent shadow-page apply for the whole lookup so the read headers and
+        // the slot pages they address come from the same checkpoint (#1052). The checkpointing
+        // thread itself never runs a lookup while it applies.
+        std::shared_lock<std::shared_mutex> pairedReadLock;
+        if (trx->getType() != transaction::TransactionType::CHECKPOINT) {
+            pairedReadLock = shadowFile.lockForPairedRead();
+        }
         auto* curIndex = getTypedHashIndex(key);
         if (curIndex->lookupInternal(trx, key, result, isVisible)) {
             return true;

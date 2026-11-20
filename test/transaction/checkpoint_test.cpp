@@ -26,6 +26,7 @@
 #include "catalog/catalog_entry/sequence_catalog_entry.h"
 #include "catalog/catalog_entry/table_catalog_entry.h"
 #include "common/checksum.h"
+#include "common/exception/io.h"
 #include "common/exception/runtime.h"
 #include "common/file_system/virtual_file_system.h"
 #include "common/serializer/buffer_reader.h"
@@ -612,6 +613,102 @@ TEST_F(CheckpointRetryAfterFailureTest, RetryAfterFailureWithDurableCheckpointRe
     EXPECT_FALSE(conn->query("CHECKPOINT;")->isSuccess());
     createDBAndConn();
     checkNodes(100);
+}
+
+// Injects an I/O error during apply while leaving the durable shadow file intact for recovery.
+class FailSecondShadowRead final : public FileSystem {
+public:
+    FailSecondShadowRead(FileInfo& shadow, std::unique_ptr<FileInfo> delegate)
+        : shadow{shadow}, delegate{std::move(delegate)}, original{shadow.fileSystem} {
+        shadow.fileSystem = this;
+    }
+
+    ~FailSecondShadowRead() override { shadow.fileSystem = original; }
+
+    void syncFile(const FileInfo&) const override { delegate->syncFile(); }
+
+protected:
+    void readFromFile(FileInfo&, void* buffer, uint64_t numBytes,
+        uint64_t position) const override {
+        if (++numReads == 2) {
+            throw IOException{"Injected failure reading the second checkpoint shadow page."};
+        }
+        delegate->readFromFile(buffer, numBytes, position);
+    }
+
+    int64_t readFile(FileInfo&, void* buffer, size_t numBytes) const override {
+        return delegate->readFile(buffer, numBytes);
+    }
+
+    void writeFile(FileInfo&, const uint8_t* buffer, uint64_t numBytes,
+        uint64_t offset) const override {
+        delegate->writeFile(buffer, numBytes, offset);
+    }
+
+    int64_t seek(FileInfo&, uint64_t offset, int whence) const override {
+        return delegate->seek(offset, whence);
+    }
+
+    uint64_t getFileSize(const FileInfo&) const override { return delegate->getFileSize(); }
+
+private:
+    FileInfo& shadow;
+    std::unique_ptr<FileInfo> delegate;
+    FileSystem* original;
+    mutable size_t numReads = 0;
+};
+
+class CheckpointerFailsDuringShadowApply final : public Checkpointer {
+public:
+    explicit CheckpointerFailsDuringShadowApply(main::ClientContext& context)
+        : Checkpointer(context) {}
+
+    void logCheckpointAndApplyShadowPages(bool walRotated) override {
+        auto& shadow = *mainStorageManager->getShadowFile().getShadowingFH().getFileInfo();
+        auto* vfs = VirtualFileSystem::GetUnsafe(clientContext);
+        FailSecondShadowRead failure{shadow,
+            vfs->openFile(shadow.path, FileOpenFlags{FileFlags::READ_ONLY | FileFlags::WRITE},
+                &clientContext)};
+        Checkpointer::logCheckpointAndApplyShadowPages(walRotated);
+    }
+};
+
+TEST_F(CheckpointRetryAfterFailureTest, PartialShadowApplyRejectsPKReadsUntilReopen) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    insertNodes(0, 100);
+    checkpoint();
+    insertNodes(100, 200);
+
+    auto* context = getClientContext(*conn);
+    FlakyCheckpointer failingCheckpoint([](main::ClientContext& clientContext) {
+        return std::make_unique<CheckpointerFailsDuringShadowApply>(clientContext);
+    });
+    failingCheckpoint.setCheckpointer(*context);
+    auto result = conn->query("CHECKPOINT;");
+    FlakyCheckpointer::resetCheckpointer(*context);
+    ASSERT_FALSE(result->isSuccess());
+    ASSERT_NE(result->getErrorMessage().find("Injected failure reading the second checkpoint"),
+        std::string::npos);
+
+    const auto oldKeyQuery = "MATCH (t:test) WHERE t.id = 0 RETURN t.name;";
+    auto rejectedRead = conn->query(oldKeyQuery);
+    ASSERT_FALSE(rejectedRead->isSuccess());
+    EXPECT_NE(rejectedRead->getErrorMessage().find("Primary key index is unavailable"),
+        std::string::npos);
+
+    createDBAndConn();
+    checkNodes(200);
+    for (const auto key : {0, 100, 199}) {
+        auto lookup =
+            conn->query(std::format("MATCH (t:test) WHERE t.id = {} RETURN t.name;", key));
+        ASSERT_TRUE(lookup->isSuccess()) << lookup->getErrorMessage();
+        ASSERT_TRUE(lookup->hasNext()) << key;
+        EXPECT_EQ(lookup->getNext()->getValue(0)->getValue<std::string>(),
+            std::format("name_{}", key));
+        EXPECT_FALSE(lookup->hasNext()) << key;
+    }
 }
 
 TEST_F(CheckpointRetryAfterFailureTest, FailedRetryKeepsDurableCheckpointRecord) {
@@ -5677,6 +5774,102 @@ TEST_F(FlakyCheckpointerTest, ReadBeforeShadowPagesAreAppliedSeesCommittedString
     for (auto i = 0u; i < numRows; i++) {
         EXPECT_EQ(readNames[i], getName(i));
     }
+}
+#endif // __SINGLE_THREADED__
+
+#ifndef __SINGLE_THREADED__
+class CheckpointerWithReadAfterApplyingShadowPages final : public Checkpointer {
+public:
+    CheckpointerWithReadAfterApplyingShadowPages(main::ClientContext& clientContext,
+        std::function<void()> readFunc)
+        : Checkpointer(clientContext), readFunc(std::move(readFunc)) {}
+
+    void logCheckpointAndApplyShadowPages(bool walRotated) override {
+        Checkpointer::logCheckpointAndApplyShadowPages(walRotated);
+        readFunc();
+    }
+
+private:
+    std::function<void()> readFunc;
+};
+
+class CheckpointShadowWindowTest : public FlakyCheckpointerTest {
+protected:
+    // Looks up committed keys from another connection after the shadow pages are applied and
+    // before the checkpoint returns (#1052). The second batch grows the hash index enough to
+    // split slots that hold keys from the first checkpoint.
+    void checkLookupsAfterShadowApply(const std::string& pkType,
+        const std::function<std::string(int64_t)>& keyLiteral) {
+        constexpr int64_t numInitialRows = 20000;
+        constexpr int64_t numRows = 120000;
+        constexpr int64_t numKeysToCheck = 3000;
+        const auto keyExpr = pkType == "STRING" ? std::string{"'k' + string(i)"} : std::string{"i"};
+        const auto insertRows = [&](int64_t start, int64_t end) {
+            return std::format(
+                "UNWIND range({}, {}) AS i CREATE (:test {{id: {}, name: 'name_' + string(i)}});",
+                start, end - 1, keyExpr);
+        };
+        for (const auto& query : {std::string{"CALL force_checkpoint_on_close=false;"},
+                 std::string{"CALL auto_checkpoint=false;"},
+                 std::format("CREATE NODE TABLE test(id {} PRIMARY KEY, name STRING);", pkType),
+                 insertRows(0, numInitialRows), std::string{"CHECKPOINT;"},
+                 insertRows(numInitialRows, numRows)}) {
+            auto result = conn->query(query);
+            ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+        }
+
+        const auto checkKeys = [&]() {
+            main::Connection readConn{database.get()};
+            std::array<size_t, 2> wrongKeys{};
+            for (size_t batch = 0; batch < wrongKeys.size(); ++batch) {
+                const auto start = batch == 0 ? 0 : numInitialRows;
+                for (auto key = start; key < start + numKeysToCheck; ++key) {
+                    auto result = readConn.query(std::format(
+                        "MATCH (t:test) WHERE t.id = {} RETURN t.name;", keyLiteral(key)));
+                    if (!result->isSuccess() || !result->hasNext() ||
+                        result->getNext()->getValue(0)->getValue<std::string>() !=
+                            std::format("name_{}", key) ||
+                        result->hasNext()) {
+                        ++wrongKeys[batch];
+                    }
+                }
+            }
+            return wrongKeys;
+        };
+
+        std::optional<std::array<size_t, 2>> wrongDuringCheckpoint;
+        auto* context = getClientContext(*conn);
+        FlakyCheckpointer checkpointer([&](main::ClientContext& clientContext) {
+            return std::make_unique<CheckpointerWithReadAfterApplyingShadowPages>(clientContext,
+                [&]() {
+                    std::thread reader([&]() { wrongDuringCheckpoint = checkKeys(); });
+                    reader.join();
+                });
+        });
+        checkpointer.setCheckpointer(*context);
+        auto result = conn->query("CHECKPOINT;");
+        FlakyCheckpointer::resetCheckpointer(*context);
+        ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+        ASSERT_TRUE(wrongDuringCheckpoint.has_value());
+        EXPECT_EQ((*wrongDuringCheckpoint)[0], 0u)
+            << "previously checkpointed keys after shadow apply";
+        EXPECT_EQ((*wrongDuringCheckpoint)[1], 0u) << "newly committed keys after shadow apply";
+        EXPECT_EQ(checkKeys(), (std::array<size_t, 2>{})) << "after checkpoint completion";
+    }
+};
+
+TEST_F(CheckpointShadowWindowTest, Int64PrimaryKeyLookupRightAfterShadowApply) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    checkLookupsAfterShadowApply("INT64", [](int64_t key) { return std::to_string(key); });
+}
+
+TEST_F(CheckpointShadowWindowTest, StringPrimaryKeyLookupRightAfterShadowApply) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    checkLookupsAfterShadowApply("STRING", [](int64_t key) { return std::format("'k{}'", key); });
 }
 #endif // __SINGLE_THREADED__
 
