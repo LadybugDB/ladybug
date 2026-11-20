@@ -162,6 +162,8 @@ private:
     std::shared_lock<std::shared_mutex> lockForPairedRead() const;
 
     FileHandle* getOrCreateShadowingFH();
+    // Drops the shadow pages created after the savepoint (map entries, records, frames).
+    void truncateToSavepoint(ShadowSavepoint savepoint);
 
     static void replayShadowPageRecordsCore(common::FileInfo& shadowFileInfo,
         common::FileInfo& dataFileInfo, uint64_t maxDatabasePages,
@@ -206,7 +208,10 @@ private:
     // read their disk tree only when disk-backed, and checkpoints do not rewrite those
     // (ArtPrimaryKeyIndex::checkpoint returns early).
     mutable bool applyFailed = false;
-    // Savepoint state, owned by the checkpointing thread (see createSavepoint).
+    // Savepoint state, owned by the checkpointing thread (see createSavepoint). At most one
+    // savepoint is active: node-group checkpoints run one at a time, each taking a savepoint and
+    // then releasing it or rolling back to it. createSavepoint asserts that, and clear() and
+    // reset() release a savepoint a failed checkpoint left armed.
     std::optional<ShadowSavepoint> activeSavepoint;
     std::unordered_map<common::page_idx_t, std::unique_ptr<uint8_t[]>> savedPagesForSavepoint;
     // Fast path for readers: false when there is no shadow page.

@@ -1069,8 +1069,17 @@ void CSRNodeGroup::checkpoint(MemoryManager&, NodeGroupCheckpointState& state) {
         if (deferredPages) {
             deferredPages->discard();
         }
-        // Restore the pre-checkpoint persistent chunks, then drop this group's shadow pages,
-        // so both reads and a retried checkpoint see the old data under the old header.
+        // Undo this group's shadow pages, then restore the pre-checkpoint persistent chunks,
+        // so both reads and a retried checkpoint see the old data under the old header. The
+        // shadow rollback runs first and cannot be skipped by a failing metadata restore; it
+        // always releases the savepoint, even if a page restore fails. The original error is
+        // the one rethrown.
+        if (shadowFile != nullptr) {
+            try {
+                shadowFile->rollbackToSavepoint(shadowSavepoint);
+            } catch (...) { // NOLINT(bugprone-empty-catch): keep the checkpoint's own error.
+            }
+        }
         if (persistentSnapshot != nullptr) {
             common::Deserializer deserializer{std::make_unique<common::BufferReader>(
                 persistentSnapshot->getBlobData(), persistentSnapshot->getSize())};
@@ -1091,9 +1100,6 @@ void CSRNodeGroup::checkpoint(MemoryManager&, NodeGroupCheckpointState& state) {
                 }
             }
             persistentChunkGroup = std::move(restoredGroup);
-        }
-        if (shadowFile != nullptr) {
-            shadowFile->rollbackToSavepoint(shadowSavepoint);
         }
         throw;
     }
