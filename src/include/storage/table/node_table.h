@@ -112,6 +112,7 @@ private:
     NodeTable* table;
 };
 
+class ShadowFile;
 class StorageManager;
 
 class LBUG_API NodeTable : public Table {
@@ -180,6 +181,10 @@ public:
     common::column_id_t getPKColumnID() const { return pkColumnID; }
     Index* tryGetPrimaryKeyIndex() const;
     PrimaryKeyIndex* tryGetPKIndex() const;
+    // The shadow file a batch of lookupPK calls can hold one ShadowFile::PairedReadScope on, so
+    // the hash primary-key index takes its paired-read lock once per batch instead of per key.
+    // nullptr when there is no hash primary-key index or for a CHECKPOINT transaction.
+    const ShadowFile* getPairedReadShadowFile(const transaction::Transaction* transaction) const;
     PrimaryKeyIndex* getPKIndex() const {
         auto* index = tryGetPKIndex();
         DASSERT(index);

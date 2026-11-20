@@ -2,6 +2,7 @@
 
 #include <algorithm>
 
+#include "common/exception/internal.h"
 #include "common/exception/io.h"
 #include "common/exception/runtime.h"
 #include "common/file_system/virtual_file_system.h"
@@ -167,6 +168,37 @@ bool ShadowFile::readShadowVersionIfExists(file_idx_t originalFile, page_idx_t o
     return true;
 }
 
+namespace {
+// The shadow file whose paired-read scope this thread currently holds (see PairedReadScope).
+thread_local const ShadowFile* pairedReadScopeOnThisThread = nullptr;
+// True while this thread runs applyShadowPages()'s publication step.
+thread_local bool publishingOnThisThread = false;
+} // namespace
+
+void ShadowFile::checkNotPublishingOnThisThread() {
+    if (publishingOnThisThread) {
+        throw InternalException(
+            "A primary-key lookup ran while publishing a checkpoint's index state. Publication "
+            "must not look up keys: it would read half-published index state.");
+    }
+}
+
+ShadowFile::PairedReadScope::PairedReadScope(const ShadowFile* shadowFile)
+    : previous{pairedReadScopeOnThisThread} {
+    if (shadowFile == nullptr || shadowFile == pairedReadScopeOnThisThread) {
+        return;
+    }
+    lock = shadowFile->lockForPairedRead();
+    pairedReadScopeOnThisThread = shadowFile;
+    owns = true;
+}
+
+ShadowFile::PairedReadScope::~PairedReadScope() {
+    if (owns) {
+        pairedReadScopeOnThisThread = previous;
+    }
+}
+
 std::shared_lock<std::shared_mutex> ShadowFile::lockForPairedRead() const {
     if (applyPending.load(std::memory_order_acquire)) {
         // Queue behind the pending apply so it is not starved by a stream of readers.
@@ -209,6 +241,10 @@ void ShadowFile::applyShadowPages(StorageManager& storageManager, ClientContext&
                     record.originalFileIdx, pageBuffer.get(), record.originalPageIdx);
             }
             if (publish) {
+                publishingOnThisThread = true;
+                struct ClearPublishing {
+                    ~ClearPublishing() { publishingOnThisThread = false; }
+                } clearPublishing;
                 publish();
             }
         } catch (...) {

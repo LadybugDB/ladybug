@@ -5,6 +5,8 @@
 #include "binder/expression/expression_util.h"
 #include "processor/execution_context.h"
 #include "storage/buffer_manager/memory_manager.h"
+#include "storage/shadow_file.h"
+#include "storage/table/node_table.h"
 
 using namespace lbug::common;
 using namespace lbug::storage;
@@ -76,6 +78,8 @@ bool QueryPrimaryKeyLookup::getNextTuplesInternal(ExecutionContext* context) {
         auto& outputSelVector = nodeIDVector->state->getSelVectorUnsafe();
         outputSelVector.setToFiltered();
         outputSize = 0;
+        // One paired-read lock for the whole batch instead of one per key.
+        storage::ShadowFile::PairedReadScope pkReads{table->getPairedReadShadowFile(transaction)};
         for (sel_t i = 0; i < numRows; ++i) {
             const auto inputPos = inputSelVector[i];
             const auto keyPos = keySelVector[i];

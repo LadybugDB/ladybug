@@ -14,6 +14,7 @@
 #include "processor/warning_context.h"
 #include "storage/buffer_manager/memory_manager.h"
 #include "storage/index/hash_index.h"
+#include "storage/shadow_file.h"
 #include "storage/storage_utils.h"
 #include "storage/table/node_group.h"
 #include "storage/table/node_table.h"
@@ -194,6 +195,9 @@ void fillOffsetArraysFromVectorInternal(transaction::Transaction* transaction,
         keyVector->dataType.getPhysicalType(),
         [&]<IndexHashable T>(T) {
             OffsetVectorManager resultManager{resultVector, errorHandler};
+            // One paired-read lock for the whole batch instead of one per key.
+            storage::ShadowFile::PairedReadScope pkReads{
+                info.nodeTable->getPairedReadShadowFile(transaction)};
             for (sel_t i = 0u; i < numKeys; i++) {
                 auto pos = selVector ? selVector[i] : i;
                 if constexpr (!hasNoNullsGuarantee) {
