@@ -1,4 +1,4 @@
-add_lbug_api_test(api_test
+set(API_TEST_SOURCES
         api_test.cpp
         file_search_path_test.cpp
         partition_routing_test.cpp
@@ -19,3 +19,8 @@ add_lbug_api_test(api_test
         udf_test.cpp
         read_only_test.cpp
         same_process_write_lock_test.cpp)
+# Forks child processes to exercise the file locks between processes.
+if(NOT WIN32 AND NOT EMSCRIPTEN)
+    list(APPEND API_TEST_SOURCES db_locking_test.cpp)
+endif()
+add_lbug_api_test(api_test ${API_TEST_SOURCES})
