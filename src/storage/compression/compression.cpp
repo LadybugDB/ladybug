@@ -1238,6 +1238,18 @@ bool StorageValue::gt(const StorageValue& other, common::PhysicalTypeID type) co
     }
 }
 
+bool StorageValue::replacedAsBoundBy(const StorageValue& candidate, bool isMin,
+    common::PhysicalTypeID type) const {
+    if (type == common::PhysicalTypeID::FLOAT || type == common::PhysicalTypeID::DOUBLE) {
+        const auto boundIsNaN = std::isnan(floatVal);
+        const auto candidateIsNaN = std::isnan(candidate.floatVal);
+        if (boundIsNaN || candidateIsNaN) {
+            return boundIsNaN && !candidateIsNaN;
+        }
+    }
+    return isMin ? gt(candidate, type) : candidate.gt(*this, type);
+}
+
 std::pair<std::optional<StorageValue>, std::optional<StorageValue>> getMinMaxStorageValue(
     const uint8_t* data, uint64_t offset, uint64_t numValues, PhysicalTypeID physicalType,
     const NullMask* nullMask, bool valueRequiredIfUnsupported) {

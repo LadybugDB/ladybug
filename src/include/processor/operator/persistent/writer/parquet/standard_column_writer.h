@@ -42,6 +42,10 @@ struct BaseParquetOperator {
 
     template<class SRC, class TGT>
     static void handleStats(ColumnWriterStatistics* stats, SRC /*sourceValue*/, TGT targetValue) {
+        // Parquet min/max statistics must not hold NaN, which readers cannot order.
+        if (function::isNaN(targetValue)) {
+            return;
+        }
         auto& numericStats = (NumericStatisticsState<SRC, TGT, BaseParquetOperator>&)*stats;
         uint8_t result = 0;
         function::LessThan::operation(targetValue, numericStats.min, result,

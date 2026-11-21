@@ -11,6 +11,7 @@
 #include "common/types/string_t.h"
 #include "common/types/uuid.h"
 #include "common/vector/value_vector.h"
+#include "function/comparison/comparison_functions.h"
 #include "function/hash/hash_functions.h"
 #include "storage/storage_utils.h"
 #include <format>
@@ -44,9 +45,9 @@ bool Value::operator==(const Value& rhs) const {
     case PhysicalTypeID::UINT8:
         return val.uint8Val == rhs.val.uint8Val;
     case PhysicalTypeID::DOUBLE:
-        return val.doubleVal == rhs.val.doubleVal;
+        return function::Equals::operation(val.doubleVal, rhs.val.doubleVal);
     case PhysicalTypeID::FLOAT:
-        return val.floatVal == rhs.val.floatVal;
+        return function::Equals::operation(val.floatVal, rhs.val.floatVal);
     case PhysicalTypeID::POINTER:
         return val.pointer == rhs.val.pointer;
     case PhysicalTypeID::INTERVAL:

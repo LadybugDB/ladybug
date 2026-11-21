@@ -8,6 +8,7 @@
 #include "common/system_config.h"
 #include "common/types/string_t.h"
 #include "common/types/types.h"
+#include "function/comparison/comparison_functions.h"
 #include "function/hash/hash_functions.h"
 #include "storage/index/hash_index_header.h"
 
@@ -52,6 +53,16 @@ public:
             std::min(static_cast<uint64_t>(keyInEntry.len), common::string_t::PREFIX_LENGTH);
         return keyToLookup.length() == keyInEntry.len &&
                memcmp(keyToLookup.data(), keyInEntry.prefix, prefixLen) == 0;
+    }
+
+    // Key equality of comparison_functions.h, where all NaNs are one key.
+    template<typename T, typename U>
+    static bool keysEqual(const T& keyToLookup, const U& keyInEntry) {
+        if constexpr (std::is_floating_point_v<T>) {
+            return function::Equals::operation<T>(keyToLookup, keyInEntry);
+        } else {
+            return keyToLookup == keyInEntry;
+        }
     }
 
     template<typename T>

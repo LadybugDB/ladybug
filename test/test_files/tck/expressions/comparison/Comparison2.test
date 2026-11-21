@@ -138,20 +138,22 @@ null
 
 #  Comparing NaN
 -CASE Scenario8
+# NaN is above every other value and equal to itself here (FLOAT and DOUBLE use a total order);
+# the TCK expects False for every comparison.
 -STATEMENT RETURN 0.0 / 0.0 > 1 AS gt, 0.0 / 0.0 >= 1 AS gtE, 0.0 / 0.0 < 1 AS lt, 0.0 / 0.0 <= 1 AS ltE;
 ## Outcome: the result should be, in any order:
 ---- 1
-False|False|True|True
+True|True|False|False
 
 -STATEMENT RETURN 0.0 / 0.0 > 1.0 AS gt, 0.0 / 0.0 >= 1.0 AS gtE, 0.0 / 0.0 < 1.0 AS lt, 0.0 / 0.0 <= 1.0 AS ltE;
 ## Outcome: the result should be, in any order:
 ---- 1
-False|False|True|True
+True|True|False|False
 
 -STATEMENT RETURN 0.0 / 0.0 > 0.0 / 0.0 AS gt, 0.0 / 0.0 >= 0.0 / 0.0 AS gtE, 0.0 / 0.0 < 0.0 / 0.0 AS lt, 0.0 / 0.0 <= 0.0 / 0.0 AS ltE;
 ## Outcome: the result should be, in any order:
 ---- 1
-False|False|True|True
+False|True|False|True
 
 
 #  Comparability between numbers and strings

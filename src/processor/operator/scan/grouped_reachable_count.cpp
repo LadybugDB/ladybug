@@ -6,6 +6,7 @@
 #include "common/exception/runtime.h"
 #include "common/system_config.h"
 #include "common/vector/value_vector.h"
+#include "function/comparison/comparison_functions.h"
 #include "main/client_context.h"
 #include "processor/execution_context.h"
 #include "storage/buffer_manager/memory_manager.h"
@@ -67,7 +68,8 @@ void GroupedReachableCount::appendToKey(std::string& out, const KeyValue& key,
     } break;
     case PhysicalTypeID::FLOAT:
     case PhysicalTypeID::DOUBLE: {
-        out.append(reinterpret_cast<const char*>(&key.dblVal), sizeof(key.dblVal));
+        const auto value = function::canonicalFloat(key.dblVal);
+        out.append(reinterpret_cast<const char*>(&value), sizeof(value));
     } break;
     case PhysicalTypeID::STRING: {
         // Length-prefixed: a NUL-terminated encoding would let ("a\0", "b") and

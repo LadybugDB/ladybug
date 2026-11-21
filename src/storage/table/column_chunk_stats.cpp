@@ -30,19 +30,21 @@ void ColumnChunkStats::update(const common::ValueVector& data, uint64_t offset, 
 
 void ColumnChunkStats::update(std::optional<StorageValue> newMin,
     std::optional<StorageValue> newMax, common::PhysicalTypeID dataType) {
-    if (!min.has_value() || (newMin.has_value() && min->gt(*newMin, dataType))) {
+    if (!min.has_value() ||
+        (newMin.has_value() && min->replacedAsBoundBy(*newMin, true /* isMin */, dataType))) {
         min = newMin;
     }
-    if (!max.has_value() || (newMax.has_value() && newMax->gt(*max, dataType))) {
+    if (!max.has_value() ||
+        (newMax.has_value() && max->replacedAsBoundBy(*newMax, false /* isMin */, dataType))) {
         max = newMax;
     }
 }
 
 void ColumnChunkStats::update(StorageValue val, common::PhysicalTypeID dataType) {
-    if (!min.has_value() || min->gt(val, dataType)) {
+    if (!min.has_value() || min->replacedAsBoundBy(val, true /* isMin */, dataType)) {
         min = val;
     }
-    if (!max.has_value() || val.gt(*max, dataType)) {
+    if (!max.has_value() || max->replacedAsBoundBy(val, false /* isMin */, dataType)) {
         max = val;
     }
 }

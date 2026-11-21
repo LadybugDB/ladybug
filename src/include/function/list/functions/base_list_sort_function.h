@@ -5,6 +5,7 @@
 #include "common/exception/runtime.h"
 #include "common/string_utils.h"
 #include "common/vector/value_vector.h"
+#include "function/comparison/comparison_functions.h"
 
 namespace lbug {
 namespace function {
@@ -86,10 +87,19 @@ public:
         // Sort the data based on order.
         auto sortingValues =
             reinterpret_cast<T*>(common::ListVector::getListValues(&resultVector, result));
+        // std::less is no strict weak order once a NaN is present; use the NaN order instead.
+        const auto less = [](const T& left, const T& right) {
+            if constexpr (std::is_floating_point_v<T>) {
+                return LessThan::operation(left, right);
+            } else {
+                return left < right;
+            }
+        };
         if (ascOrder) {
-            std::sort(sortingValues + sortStart, sortingValues + sortEnd, std::less{});
+            std::sort(sortingValues + sortStart, sortingValues + sortEnd, less);
         } else {
-            std::sort(sortingValues + sortStart, sortingValues + sortEnd, std::greater{});
+            std::sort(sortingValues + sortStart, sortingValues + sortEnd,
+                [&](const T& left, const T& right) { return less(right, left); });
         }
     }
 

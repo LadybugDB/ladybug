@@ -202,10 +202,11 @@ False|True
 ---- 1
 False|True
 
+# NaN equals NaN here (FLOAT and DOUBLE use a total order), unlike the TCK's False|True.
 -STATEMENT RETURN 0.0 / 0.0 = 0.0 / 0.0 AS isEqual, 0.0 / 0.0 <> 0.0 / 0.0 AS isNotEqual;
 ## Outcome: the result should be, in any order:
 ---- 1
-False|True
+True|False
 
 -CASE Scenario8_error
 -SKIP

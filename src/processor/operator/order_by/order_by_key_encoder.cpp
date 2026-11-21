@@ -5,6 +5,7 @@
 
 #include "common/exception/runtime.h"
 #include "common/utils.h"
+#include "function/comparison/comparison_functions.h"
 #include "storage/storage_utils.h"
 #include <format>
 
@@ -356,6 +357,9 @@ template<>
 void OrderByKeyEncoder::encodeData(double data, uint8_t* resultPtr, bool swapBytes) {
     // resultPtr points into a packed key buffer with no alignment guarantee, so all
     // multi-byte access goes through memcpy / byte-wise ops (UBSan).
+    // Equal values must encode alike: both zeros as +0.0, every NaN as the quiet NaN, which sorts
+    // above +inf.
+    data = function::canonicalFloat(data);
     memcpy(resultPtr, &data, sizeof(data));
     if (swapBytes) {
         uint64_t dataBytes;
@@ -407,7 +411,8 @@ void OrderByKeyEncoder::encodeData(string_t data, uint8_t* resultPtr, bool /*swa
 
 template<>
 void OrderByKeyEncoder::encodeData(float data, uint8_t* resultPtr, bool swapBytes) {
-    // See above: resultPtr may be misaligned.
+    // See above: resultPtr may be misaligned, and equal values must encode alike.
+    data = function::canonicalFloat(data);
     memcpy(resultPtr, &data, sizeof(data));
     if (swapBytes) {
         uint32_t dataBytes;
