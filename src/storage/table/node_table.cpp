@@ -853,7 +853,7 @@ bool NodeTable::checkpoint(main::ClientContext* context, TableCatalogEntry* tabl
             tableEntry->getOwningCatalog()->incrementColumnIDsVersion();
         }
     }
-    lastCheckpointedEpoch = effectiveEpoch;
+    storeCheckpointedEpoch(effectiveEpoch);
     return true;
 }
 
@@ -877,12 +877,14 @@ bool NodeTable::rollbackGroupCollectionInsert(node_group_idx_t nodeGroupIdx, row
 }
 
 void NodeTable::rollbackCheckpoint() {
+    restoreCheckpointedEpoch();
     for (auto& index : indexes) {
         index.rollbackCheckpoint();
     }
 }
 
 void NodeTable::finalizeCheckpoint(main::ClientContext& context) {
+    commitCheckpointedEpoch();
     // Publish ONLY the primary-key index's staged checkpoint. Other indexes (e.g. extension
     // HNSW/FTS indexes) define Index::finalize for their own explicit flows with a live
     // transaction; invoking it here post-commit crashes (no active transaction), and main

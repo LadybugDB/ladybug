@@ -9067,6 +9067,186 @@ TEST_F(FailedCheckpointPKIndexTest, StringLookupsSurviveFailedCheckpoint) {
     checkPointLookups(keyOf, 0, 140, "after reopen");
 }
 
+// These retry right after the failed checkpoint. The tests above insert duplicates first, whose
+// rollback makes the retry rewrite the metadata, which hides the skip.
+TEST_F(FailedCheckpointPKIndexTest, FirstIndexCheckpointSurvivesFailedCheckpoint) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE test(id INT64 PRIMARY KEY, v INT64);")->isSuccess());
+    checkpoint();
+    // The index's first keys: it has no header page on disk yet.
+    for (auto i = 0; i < 100; i++) {
+        ASSERT_TRUE(
+            conn->query(std::format("CREATE (:test {{id: {}, v: {}}});", i, i))->isSuccess());
+    }
+    failCheckpointOnSerialization();
+    checkpoint();
+    createDBAndConn();
+    checkCount(100);
+    checkPointLookups([](int64_t k) { return std::to_string(k); }, 0, 100, "after reopen");
+    EXPECT_FALSE(conn->query("CREATE (:test {id: 10, v: -1});")->isSuccess());
+    checkCount(100);
+}
+
+TEST_F(FailedCheckpointPKIndexTest, RetryWithoutWritesKeepsKeysOnce) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE test(id INT64 PRIMARY KEY, v INT64);")->isSuccess());
+    for (auto i = 0; i < 300; i++) {
+        ASSERT_TRUE(
+            conn->query(std::format("CREATE (:test {{id: {}, v: {}}});", i, i))->isSuccess());
+    }
+    checkpoint();
+    for (auto i = 300; i < 400; i++) {
+        ASSERT_TRUE(
+            conn->query(std::format("CREATE (:test {{id: {}, v: {}}});", i, i))->isSuccess());
+    }
+    failCheckpointOnSerialization();
+    checkpoint();
+    createDBAndConn();
+    checkCount(400);
+    checkPointLookups([](int64_t k) { return std::to_string(k); }, 0, 400, "after reopen");
+    // Each key is in the index once: deleting one leaves nothing to find, and it can be added
+    // again.
+    ASSERT_TRUE(conn->query("MATCH (t:test {id: 350}) DELETE t;")->isSuccess());
+    auto res = conn->query("MATCH (t:test) WHERE t.id = 350 RETURN t.id;");
+    ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+    EXPECT_FALSE(res->hasNext());
+    EXPECT_TRUE(conn->query("CREATE (:test {id: 350, v: -1});")->isSuccess());
+    EXPECT_FALSE(conn->query("CREATE (:test {id: 10, v: -1});")->isSuccess());
+    checkCount(400);
+}
+
+TEST_F(FailedCheckpointPKIndexTest, RelChangesSurviveFailedCheckpoint) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE test(id INT64 PRIMARY KEY, v INT64);")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE REL TABLE knows(FROM test TO test);")->isSuccess());
+    ASSERT_TRUE(conn->query("UNWIND range(0, 9) AS i CREATE (:test {id: i, v: i});")->isSuccess());
+    checkpoint();
+    // Only the rel table changes before the failed checkpoint.
+    ASSERT_TRUE(conn->query("MATCH (a:test), (b:test) WHERE b.id = a.id + 1 "
+                            "CREATE (a)-[:knows]->(b);")
+                    ->isSuccess());
+    failCheckpointOnSerialization();
+    checkpoint();
+    createDBAndConn();
+    auto res = conn->query("MATCH (:test)-[k:knows]->(:test) RETURN COUNT(k);");
+    ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+    EXPECT_EQ(res->getNext()->getValue(0)->getValue<int64_t>(), 9);
+}
+
+// Enough keys for the failed checkpoint to add overflow slots: the retry must merge the keys into
+// the slot pages as they were before it, not into its shadow pages.
+TEST_F(FailedCheckpointPKIndexTest, RetryMergesKeysIntoSlotsOnce) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE test(id INT64 PRIMARY KEY, v INT64);")->isSuccess());
+    ASSERT_TRUE(
+        conn->query("UNWIND range(0, 299) AS i CREATE (:test {id: i, v: i});")->isSuccess());
+    checkpoint();
+    ASSERT_TRUE(
+        conn->query("UNWIND range(300, 30299) AS i CREATE (:test {id: i, v: i});")->isSuccess());
+    failCheckpointOnSerialization();
+    checkpoint();
+    createDBAndConn();
+    checkCount(30300);
+    const auto keyOf = [](int64_t k) { return std::to_string(k); };
+    checkPointLookups(keyOf, 0, 400, "after reopen");
+    checkPointLookups(keyOf, 30000, 30300, "after reopen");
+    EXPECT_FALSE(conn->query("CREATE (:test {id: 15000, v: -1});")->isSuccess());
+}
+
+// The same with a write before the retry, which makes the retry checkpoint the table on main too.
+TEST_F(FailedCheckpointPKIndexTest, RetryAfterAWriteMergesKeysIntoSlotsOnce) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE test(id INT64 PRIMARY KEY, v INT64);")->isSuccess());
+    ASSERT_TRUE(
+        conn->query("UNWIND range(0, 299) AS i CREATE (:test {id: i, v: i});")->isSuccess());
+    checkpoint();
+    ASSERT_TRUE(
+        conn->query("UNWIND range(300, 30299) AS i CREATE (:test {id: i, v: i});")->isSuccess());
+    failCheckpointOnSerialization();
+    ASSERT_TRUE(conn->query("CREATE (:test {id: 40000, v: 0});")->isSuccess());
+    checkpoint();
+    createDBAndConn();
+    checkCount(30301);
+    const auto keyOf = [](int64_t k) { return std::to_string(k); };
+    checkPointLookups(keyOf, 30000, 30300, "after reopen");
+    checkPointLookups(keyOf, 40000, 40001, "after reopen");
+    EXPECT_FALSE(conn->query("CREATE (:test {id: 15000, v: -1});")->isSuccess());
+}
+
+// The checkpoint fails in the second table, after the first one is done. The retry also applies
+// the failed attempt's shadow page of the in-place update, which the rollback keeps, so this
+// passes without the epoch restore too; the tests above fail without it.
+TEST_F(FailedCheckpointPKIndexTest, FailureInALaterTableKeepsTheEarlierTablesChanges) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE a(id INT64 PRIMARY KEY, v INT64);")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE b(id INT64 PRIMARY KEY, v INT64);")->isSuccess());
+    ASSERT_TRUE(conn->query("UNWIND range(0, 299) AS i CREATE (:a {id: i, v: i});")->isSuccess());
+    checkpoint();
+    // Updated in place, so the checkpoint of `a` allocates no pages; the new rows of `b` do.
+    ASSERT_TRUE(conn->query("MATCH (x:a) WHERE x.id = 7 SET x.v = 5;")->isSuccess());
+    ASSERT_TRUE(conn->query("UNWIND range(0, 99) AS i CREATE (:b {id: i, v: i});")->isSuccess());
+    auto context = getClientContext(*conn);
+    bool failed = false;
+    FlakyCheckpointer flakyCheckpointer([&failed](main::ClientContext& ctx) {
+        return std::make_unique<FlakyCheckpointerFailsDuringOutOfPlaceRewrite>(ctx, failed);
+    });
+    flakyCheckpointer.setCheckpointer(*context);
+    ASSERT_FALSE(conn->query("CHECKPOINT;")->isSuccess());
+    FlakyCheckpointer::resetCheckpointer(*context);
+    ASSERT_TRUE(failed);
+    checkpoint();
+    createDBAndConn();
+    auto res = conn->query("MATCH (x:a) WHERE x.id = 7 RETURN x.v;");
+    ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+    ASSERT_TRUE(res->hasNext());
+    EXPECT_EQ(res->getNext()->getValue(0)->getValue<int64_t>(), 5);
+    res = conn->query("MATCH (x:b) RETURN COUNT(*);");
+    ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+    EXPECT_EQ(res->getNext()->getValue(0)->getValue<int64_t>(), 100);
+}
+
+// The failed checkpoint adds slot pages to the index, and its rollback must drop their shadow
+// copies with those of the pages that were already there.
+TEST_F(FailedCheckpointPKIndexTest, RollbackDropsShadowsOfAddedSlotPages) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE test(id INT64 PRIMARY KEY, v INT64);")->isSuccess());
+    ASSERT_TRUE(
+        conn->query("UNWIND range(0, 299) AS i CREATE (:test {id: i, v: i});")->isSuccess());
+    checkpoint();
+    auto* storageManager = getClientContext(*conn)->getDatabase()->getStorageManager();
+    const auto* dataFH = storageManager->getDataFH();
+    const auto numPagesBefore = dataFH->getNumPages();
+    ASSERT_TRUE(
+        conn->query("UNWIND range(300, 30299) AS i CREATE (:test {id: i, v: i});")->isSuccess());
+    failCheckpointOnSerialization();
+    ASSERT_GT(dataFH->getNumPages(), numPagesBefore);
+    auto numShadowedNewPages = 0u;
+    for (auto pageIdx = numPagesBefore; pageIdx < dataFH->getNumPages(); pageIdx++) {
+        if (storageManager->getShadowFile().hasShadowPage(dataFH->getFileIndex(), pageIdx)) {
+            numShadowedNewPages++;
+        }
+    }
+    EXPECT_EQ(numShadowedNewPages, 0u);
+    checkpoint();
+    createDBAndConn();
+    checkCount(30300);
+    checkPointLookups([](int64_t k) { return std::to_string(k); }, 30000, 30300, "after reopen");
+}
+
 // A rel scan that is already in progress keeps the CSR header, persistent group, in-memory
 // groups, and CSR index it started with. A checkpoint may replace those while the scan runs.
 #ifndef __SINGLE_THREADED__

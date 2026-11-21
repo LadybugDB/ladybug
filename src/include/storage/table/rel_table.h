@@ -250,7 +250,8 @@ public:
         uint64_t epochWatermark = 0,
         common::transaction_t retentionHorizon = common::INVALID_TRANSACTION,
         const std::vector<common::transaction_t>& openStartTSs = {}) override;
-    void rollbackCheckpoint() override {};
+    void rollbackCheckpoint() override;
+    void finalizeCheckpoint(main::ClientContext& context) override;
     void reclaimStorage(PageAllocator& pageAllocator) const override;
     bool vacuumInMemoryUpdates(common::transaction_t horizon) override;
 
