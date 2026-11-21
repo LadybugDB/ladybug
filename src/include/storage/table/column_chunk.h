@@ -258,7 +258,7 @@ public:
     // Applies a capture taken earlier: drops sub-horizon chains in place and stages
     // synthetic horizon base nodes from the captured values. Safe on chunks shared with
     // in-flight scans: every removed node is invisible to all live scans (startTS is
-    // always >= the horizon), and empty vector shells are pruned only when unshared.
+    // always >= the horizon), and trailing empty vector shells are popped only when unshared.
     void applyUpdateRetention(UpdateRetentionCapture&& capture);
     // Copies retained chains (kept nodes, kept newest-below nodes, synthetic horizon base
     // nodes) from an in-memory source chunk whose rows land `rowDelta` rows later in this
