@@ -183,6 +183,46 @@ jobs:
           echo set^(DuckDB_FOUND TRUE^)
           ) > C:\local\lib\cmake\DuckDB\DuckDBConfig.cmake
 
+      # The lance extension builds a native reader (lance_ladybug_ffi) via
+      # Cargo, and prost-build (via lance-core) needs protoc. Mirrors the
+      # "Install Rust toolchain and protoc" step in
+      # extension/.github/workflows/ci.yml. Must run before the CMake
+      # configure step; lance/CMakeLists.txt fails fast with a clear
+      # message when cargo is unavailable.
+      - name: Install Rust toolchain and protoc (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          set -e
+          if ! command -v cargo >/dev/null 2>&1; then
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+              | sh -s -- -y --profile minimal --default-toolchain stable
+          fi
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          export PATH="$HOME/.cargo/bin:$PATH"
+          cargo --version
+          # CMake maps matrix.arch to the Rust target triple; make sure the
+          # matching std target is installed (default toolchain already
+          # carries the native triple).
+          case "${{ matrix.arch }}" in
+            x86_64) rustup target add x86_64-unknown-linux-gnu ;;
+            aarch64|arm64) rustup target add aarch64-unknown-linux-gnu ;;
+          esac
+          if ! command -v protoc >/dev/null 2>&1; then
+            if ! dnf install -y protobuf-compiler; then
+              # Fallback: official protoc release (covers repos without the
+              # compiler package).
+              PROTOC_VERSION="29.3"
+              case "${{ matrix.arch }}" in
+                x86_64) PROTOC_ARCH="x86_64" ;;
+                aarch64|arm64) PROTOC_ARCH="aarch_64" ;;
+              esac
+              curl -LsSf -o /tmp/protoc.zip "https://github.com/protocolbuffers/protobuf/releases/download/v${PROTOC_VERSION}/protoc-${PROTOC_VERSION}-linux-${PROTOC_ARCH}.zip"
+              unzip -o /tmp/protoc.zip -d /usr/local bin/protoc 'include/*'
+              rm -f /tmp/protoc.zip
+            fi
+          fi
+          protoc --version
+
       - name: Build precompiled extensions (Linux)
         if: runner.os == 'Linux'
         run: |
@@ -194,6 +234,11 @@ jobs:
           # instead of the pixi env's Arrow 25, which the root CMakeLists
           # prepends to CMAKE_PREFIX_PATH.
           export EXTRA_CMAKE_FLAGS="-DOPENSSL_ROOT_DIR=/usr/lib64/openssl3 -DOPENSSL_INCLUDE_DIR=/usr/include/openssl3 -DOPENSSL_CRYPTO_LIBRARY=/usr/lib64/openssl3/libcrypto.so -DOPENSSL_SSL_LIBRARY=/usr/lib64/openssl3/libssl.so -DArrow_ROOT=/usr"
+          # lance is opt-in via EXTRA_EXTENSIONS (its CMake FATAL_ERRORs
+          # without cargo+protoc, hence the install step above). Keep in
+          # sync with EXTRA_EXTENSIONS in ci-workflow.yml and
+          # extension/.github/workflows/ci.yml.
+          export EXTRA_EXTENSIONS="lance"
           make extension-release
 
       - name: Install PostgreSQL client (macOS)
