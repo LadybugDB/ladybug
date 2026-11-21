@@ -634,8 +634,7 @@ void ArrowRowBatch::copyNullValueArray(ArrowVector* vector, const LogicalType& t
     vector->numNulls++;
     auto* child = vector->childData[0].get();
     const auto& childType = ArrayType::getChildType(type);
-    const auto required =
-        child->numValues + static_cast<int64_t>(ArrayType::getNumElements(type));
+    const auto required = child->numValues + static_cast<int64_t>(ArrayType::getNumElements(type));
     if (required > child->capacity) {
         resizeVector(child, childType, required, fallbackExtensionTypes);
     }
