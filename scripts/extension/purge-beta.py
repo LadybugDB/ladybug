@@ -1,6 +1,6 @@
 import pathlib
 import os
-from packaging.version import Version
+from packaging.version import InvalidVersion, Version
 
 CURRENT_DIR = pathlib.Path(__file__).parent.resolve()
 
@@ -14,7 +14,20 @@ releases_to_purge = [r for r in releases_to_purge if r not in production_release
 releases_to_purge = [r[1:] for r in releases_to_purge]
 releases_to_purge.sort(key=Version)
 
-releases_to_purge.pop()
+# Spare the newest non-production release only if it is newer than every
+# production release, i.e. it is the in-development beta. Stale betas older
+# than the supported production releases (e.g. v0.18.1) are purged as well.
+production_versions = []
+for r in production_releases:
+    try:
+        production_versions.append(Version(r[1:] if r.startswith('v') else r))
+    except InvalidVersion:
+        continue
+keep_newest = True
+if production_versions and releases_to_purge:
+    keep_newest = Version(releases_to_purge[-1]) > max(production_versions)
+if keep_newest and releases_to_purge:
+    releases_to_purge.pop()
 
 releases_to_purge = ['v' + r for r in releases_to_purge]
 
