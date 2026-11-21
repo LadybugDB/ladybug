@@ -709,6 +709,17 @@ void PrimaryKeyIndex::discardPrimaryKey(ValueVector* keyVector) {
         [](auto) { UNREACHABLE_CODE; });
 }
 
+void PrimaryKeyIndex::discardPrimaryKeyAt(ValueVector* keyVector, uint64_t pos) {
+    DASSERT(indexInfo.keyDataTypes.size() == 1);
+    if (keyVector->isNull(pos)) {
+        return;
+    }
+    TypeUtils::visit(
+        indexInfo.keyDataTypes[0],
+        [&]<IndexHashable T>(T) { discardLocal(keyVector->getValue<T>(pos)); },
+        [](auto) { UNREACHABLE_CODE; });
+}
+
 void PrimaryKeyIndex::checkpointInMemory() {
     // Publish the disk-array headers before the per-index slot state: updateLastPageOnDisk()
     // derives lastPageOnDisk from the read headers, so slots must observe the new headers.

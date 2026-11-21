@@ -99,6 +99,7 @@ public:
         bool upperInclusive, common::idx_t maxResults, std::vector<common::offset_t>& results,
         visible_func isVisible) override;
     void discardPrimaryKey(common::ValueVector* keyVector) override;
+    void discardPrimaryKeyAt(common::ValueVector* keyVector, uint64_t pos) override;
 
     void checkpoint(main::ClientContext*, PageAllocator&, ShadowFile&) override;
     void rollbackCheckpoint() override;

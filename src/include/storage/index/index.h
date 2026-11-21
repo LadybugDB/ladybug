@@ -174,6 +174,13 @@ public:
     virtual void discardPrimaryKey(common::ValueVector* /*keyVector*/) {
         // DO NOTHING.
     }
+    // Discards the single key at `pos`. Used by PK rollback to drop only keys whose
+    // indexed offset lies inside the rolled-back row range (gh-1650). The default
+    // falls back to the whole-vector discard for extension indexes.
+    virtual void discardPrimaryKeyAt(common::ValueVector* keyVector, uint64_t pos) {
+        (void)pos;
+        discardPrimaryKey(keyVector);
+    }
     virtual bool needCommitInsert() const { return false; }
     virtual void commitInsert(transaction::Transaction*, const common::ValueVector&,
         const std::vector<common::ValueVector*>&, InsertState&) {

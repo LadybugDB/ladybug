@@ -130,7 +130,7 @@ struct UncommittedIndexInserter final : IndexScanHelper {
 struct RollbackPKDeleter final : IndexScanHelper {
     RollbackPKDeleter(row_idx_t startNodeOffset, row_idx_t numRows, NodeTable* table,
         Index* pkIndex)
-        : IndexScanHelper(table, pkIndex),
+        : IndexScanHelper(table, pkIndex), startNodeOffset(startNodeOffset), numRows(numRows),
           semiMask(SemiMaskUtil::createMask(startNodeOffset + numRows)) {
         semiMask->maskRange(startNodeOffset, startNodeOffset + numRows);
         semiMask->enable();
@@ -142,6 +142,8 @@ struct RollbackPKDeleter final : IndexScanHelper {
     bool processScanOutput(main::ClientContext* context, NodeGroupScanResult scanResult,
         const std::vector<ValueVector*>& scannedVectors) override;
 
+    row_idx_t startNodeOffset;
+    row_idx_t numRows;
     std::unique_ptr<SemiMask> semiMask;
 };
 
@@ -222,13 +224,33 @@ std::unique_ptr<NodeTableScanState> RollbackPKDeleter::initScanState(const Trans
 
 bool RollbackPKDeleter::processScanOutput(main::ClientContext* context,
     NodeGroupScanResult scanResult, const std::vector<ValueVector*>& scannedVectors) {
-    (void)context;
     if (scanResult == NODE_GROUP_SCAN_EMPTY_RESULT) {
         return false;
     }
     DASSERT(scannedVectors.size() == 1);
     auto& scannedVector = *scannedVectors[0];
-    index->discardPrimaryKey(&scannedVector);
+    // gh-1650: a failed COPY/INSERT may have appended rows whose keys duplicate existing
+    // rows. Those duplicate keys were never inserted (insert returned false), so blindly
+    // discarding every scanned key removes the pre-existing row's index entry. Only drop
+    // a key when its indexed offset lies inside the rolled-back range.
+    auto* transaction = transaction::Transaction::Get(*context);
+    const auto endOffset = startNodeOffset + numRows;
+    for (auto i = 0u; i < scannedVector.state->getSelVector().getSelSize(); i++) {
+        const auto pos = scannedVector.state->getSelVector()[i];
+        if (scannedVector.isNull(pos)) {
+            continue;
+        }
+        offset_t indexedOffset = INVALID_OFFSET;
+        const auto found = index->lookupPrimaryKey(transaction, &scannedVector, pos, indexedOffset,
+            [](offset_t) { return true; });
+        if (!found) {
+            continue;
+        }
+        if (indexedOffset < startNodeOffset || indexedOffset >= endOffset) {
+            continue;
+        }
+        index->discardPrimaryKeyAt(&scannedVector, pos);
+    }
     return true;
 }
 } // namespace
