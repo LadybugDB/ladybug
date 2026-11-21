@@ -135,10 +135,13 @@ static void resizeBLOBVector(ArrowVector* vector, const LogicalType& type, int64
 static void resizeFixedListVector(ArrowVector* vector, const LogicalType& type, int64_t capacity,
     bool fallbackExtensionTypes) {
     resizeGeneric(vector, type, capacity, fallbackExtensionTypes);
+    // gh-1637: do NOT pre-size the child to capacity * numElements. Python's get_as_arrow
+    // uses an adaptive chunk_size of ~10M rows, so pre-sizing a DOUBLE[10000] child would
+    // try to allocate ~800GB and segfault. The child grows dynamically in
+    // templateCopyNonNullValue<ARRAY>/copyNullValueArray instead, like LIST does.
     std::vector<LogicalType> typeVec;
     typeVec.push_back(ArrayType::getChildType(type).copy());
-    resizeChildVectors(vector, typeVec, vector->capacity * ArrayType::getNumElements(type),
-        fallbackExtensionTypes);
+    resizeChildVectors(vector, typeVec, 0, fallbackExtensionTypes);
 }
 
 static void resizeListVector(ArrowVector* vector, const LogicalType& type, int64_t capacity,
@@ -366,8 +369,16 @@ template<>
 void ArrowRowBatch::templateCopyNonNullValue<LogicalTypeID::ARRAY>(ArrowVector* vector,
     const Value& value, std::int64_t /*pos*/, bool fallbackExtensionTypes) {
     auto numElements = value.childrenSize;
+    // Grow the child to fit the new elements (see resizeFixedListVector). Pre-sizing to
+    // capacity * numElements over-allocates for large chunk sizes (gh-1637).
+    auto* child = vector->childData[0].get();
+    const auto& childType = ArrayType::getChildType(value.getDataType());
+    const auto required = child->numValues + static_cast<int64_t>(numElements);
+    if (required > child->capacity) {
+        resizeVector(child, childType, required, fallbackExtensionTypes);
+    }
     for (auto i = 0u; i < numElements; i++) {
-        appendValue(vector->childData[0].get(), *value.children[i], fallbackExtensionTypes);
+        appendValue(child, *value.children[i], fallbackExtensionTypes);
     }
 }
 
@@ -621,9 +632,14 @@ void ArrowRowBatch::copyNullValueArray(ArrowVector* vector, const LogicalType& t
     std::int64_t pos, bool fallbackExtensionTypes) {
     setBitToZero(vector->validity.data(), pos);
     vector->numNulls++;
+    auto* child = vector->childData[0].get();
+    const auto& childType = ArrayType::getChildType(type);
+    const auto required = child->numValues + static_cast<int64_t>(ArrayType::getNumElements(type));
+    if (required > child->capacity) {
+        resizeVector(child, childType, required, fallbackExtensionTypes);
+    }
     for (auto i = 0u; i < ArrayType::getNumElements(type); i++) {
-        appendNullValue(vector->childData[0].get(), ArrayType::getChildType(type),
-            fallbackExtensionTypes);
+        appendNullValue(child, childType, fallbackExtensionTypes);
     }
 }
 
