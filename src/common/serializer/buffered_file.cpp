@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <utility>
 
 #include "common/assert.h"
 #include "common/exception/runtime.h"
@@ -19,7 +20,12 @@ BufferedFileWriter::BufferedFileWriter(FileInfo& fileInfo)
       fileInfo(fileInfo) {}
 
 BufferedFileWriter::~BufferedFileWriter() {
-    flush();
+    // A destructor cannot report a failed write; writers whose bytes must reach the file flush
+    // them first.
+    try {
+        flush();
+    } catch (...) { // NOLINT(bugprone-empty-catch): see above.
+    }
 }
 
 void BufferedFileWriter::write(const uint8_t* data, uint64_t size) {
@@ -53,10 +59,11 @@ void BufferedFileWriter::flush() {
     if (bufferOffset == 0) {
         return;
     }
-    fileInfo.writeFile(buffer.get(), bufferOffset, fileOffset);
-    fileOffset += bufferOffset;
-    bufferOffset = 0;
-    memset(buffer.get(), 0, BUFFER_SIZE);
+    // The bytes leave the buffer even when the write fails: neither a later flush nor the
+    // destructor may write them after the caller has seen the failure.
+    const auto size = std::exchange(bufferOffset, 0);
+    fileInfo.writeFile(buffer.get(), size, fileOffset);
+    fileOffset += size;
 }
 
 void BufferedFileWriter::sync() {

@@ -18,8 +18,12 @@ public:
     void write(const uint8_t* data, uint64_t size) override;
 
     void clear() override;
+    // The bytes leave the buffer even when the write fails; fileOffset advances only after it
+    // succeeds.
     void flush() override;
     void sync() override;
+    // Drops the buffered bytes without writing them.
+    void discardBuffer() { bufferOffset = 0; }
 
     // Note: this function resets the next file offset to be written. Make sure the buffer is empty.
     void setFileOffset(uint64_t fileOffset) { this->fileOffset = fileOffset; }
