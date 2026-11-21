@@ -107,8 +107,13 @@ void ShadowFile::publishShadowPage(file_idx_t originalFile, page_idx_t originalP
 
 ShadowFile::ShadowSavepoint ShadowFile::createSavepoint() {
     // One savepoint at a time (see activeSavepoint): the previous one must have been released
-    // or rolled back, so there are no saved pages to discard here.
-    DASSERT(!activeSavepoint.has_value() && savedPagesForSavepoint.empty());
+    // or rolled back. Taking a second one would discard the first group's saved pages, so it
+    // is refused in release builds too, like a mismatched rollbackToSavepoint.
+    if (activeSavepoint.has_value()) {
+        throw InternalException(
+            std::format("Cannot take a shadow savepoint while savepoint {} is still active.",
+                *activeSavepoint));
+    }
     savedPagesForSavepoint.clear();
     std::shared_lock lck{mtx};
     activeSavepoint = shadowPageRecords.size();
@@ -161,9 +166,26 @@ void ShadowFile::rollbackToSavepoint(ShadowSavepoint savepoint) {
         }
     }
     releaseSavepoint();
-    truncateToSavepoint(savepoint);
+    try {
+        truncateToSavepoint(savepoint);
+    } catch (const std::exception& e) {
+        // The shadow file may still list pages the failed group created.
+        recordSavepointRollbackFailure(e.what());
+        throw;
+    } catch (...) {
+        recordSavepointRollbackFailure("unknown exception");
+        throw;
+    }
     if (restoreError) {
-        std::rethrow_exception(restoreError);
+        try {
+            std::rethrow_exception(restoreError);
+        } catch (const std::exception& e) {
+            recordSavepointRollbackFailure(e.what());
+            throw;
+        } catch (...) {
+            recordSavepointRollbackFailure("unknown exception");
+            throw;
+        }
     }
 }
 

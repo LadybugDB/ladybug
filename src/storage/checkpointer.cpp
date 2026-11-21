@@ -633,6 +633,16 @@ void Checkpointer::rollback() try {
     if (isInMemory) {
         return;
     }
+    // A failed savepoint restore can leave a failed node group's bytes in a shadow page that
+    // completed groups also own (see ShadowFile::recordSavepointRollbackFailure). Partition
+    // children are not checkpoint targets; their shadow files are cleared below.
+    std::string savepointRollbackFailures;
+    for (const auto& target : checkpointTargets) {
+        if (const auto& failure =
+                target.storageManager->getShadowFile().getSavepointRollbackFailure()) {
+            savepointRollbackFailures += (savepointRollbackFailures.empty() ? "" : "; ") + *failure;
+        }
+    }
     beforeRollback();
     // Any pages freed during the checkpoint are no longer freed
     for (const auto& target : checkpointTargets) {
@@ -656,6 +666,12 @@ void Checkpointer::rollback() try {
         if (rotated) {
             storageManager->getWAL().undoRotationForCheckpoint();
         }
+    }
+    if (!savepointRollbackFailures.empty()) {
+        // Poisoned by the handler below: a retried checkpoint would apply those pages.
+        throw common::RuntimeException(std::format(
+            "a node group could not restore its shadow pages after a failed checkpoint: {}",
+            savepointRollbackFailures));
     }
     releaseCheckpointLocks();
 } catch (const std::exception& e) {
