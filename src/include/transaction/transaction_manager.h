@@ -71,6 +71,10 @@ public:
     };
     HorizonPinInfo snapshotHorizonInfo();
 
+    bool hasCommittedWriteTransaction() const {
+        return hasCommittedWriteTransaction_.load(std::memory_order_acquire);
+    }
+
     static TransactionManager* Get(const main::ClientContext& context);
 
     // Rollback holds the public-function mutex through undo replay. BEGIN registers a writer
@@ -188,6 +192,7 @@ private:
     // can poll without holding mtxForSerializingPublicFunctionCalls.
     std::atomic<uint32_t> activeWriteTransactionCount{0};
     std::atomic<uint32_t> committingWriteTransactionCount{0};
+    std::atomic<bool> hasCommittedWriteTransaction_{false};
     uint64_t checkpointWaitTimeoutInMicros = common::DEFAULT_CHECKPOINT_WAIT_TIMEOUT_IN_MICROS;
 
     init_checkpointer_func_t initCheckpointerFunc;

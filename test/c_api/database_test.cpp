@@ -1,3 +1,5 @@
+#include <fstream>
+
 #include "c_api/lbug.h"
 #include "graph_test/base_graph_test.h"
 #include "gtest/gtest.h"
@@ -252,4 +254,50 @@ TEST_F(CApiDatabaseTest, UseConnectionAfterDatabaseDestroy) {
     ASSERT_EQ(state, LbugError);
 
     lbug_connection_destroy(&conn);
+}
+
+TEST_F(CApiDatabaseTest, ReadWriteWithoutWritesDoesNotCheckpointOnClose) {
+    if (databasePath == "" || databasePath == ":memory:") {
+        return;
+    }
+    lbug_database database;
+    lbug_connection connection;
+    lbug_query_result queryResult;
+    lbug_state state;
+    auto databasePathCStr = databasePath.c_str();
+    auto systemConfig = defaultSystemConfig;
+
+    state = lbug_database_init(databasePathCStr, systemConfig, &database);
+    ASSERT_EQ(state, LbugSuccess);
+    state = lbug_connection_init(&database, &connection);
+    ASSERT_EQ(state, LbugSuccess);
+    state = lbug_connection_query(&connection,
+        "CREATE NODE TABLE person(id INT64, PRIMARY KEY(id))", &queryResult);
+    ASSERT_TRUE(lbug_query_result_is_success(&queryResult));
+    lbug_query_result_destroy(&queryResult);
+    lbug_connection_destroy(&connection);
+    lbug_database_destroy(&database);
+
+    std::ifstream fileBefore(databasePath, std::ios::binary);
+    std::vector<char> beforeBytes((std::istreambuf_iterator<char>(fileBefore)),
+        std::istreambuf_iterator<char>());
+    fileBefore.close();
+    ASSERT_FALSE(beforeBytes.empty());
+
+    state = lbug_database_init(databasePathCStr, systemConfig, &database);
+    ASSERT_EQ(state, LbugSuccess);
+    state = lbug_connection_init(&database, &connection);
+    ASSERT_EQ(state, LbugSuccess);
+    state = lbug_connection_query(&connection, "MATCH (p:person) RETURN count(*)", &queryResult);
+    ASSERT_TRUE(lbug_query_result_is_success(&queryResult));
+    lbug_query_result_destroy(&queryResult);
+    lbug_connection_destroy(&connection);
+    lbug_database_destroy(&database);
+
+    std::ifstream fileAfter(databasePath, std::ios::binary);
+    std::vector<char> afterBytes((std::istreambuf_iterator<char>(fileAfter)),
+        std::istreambuf_iterator<char>());
+    fileAfter.close();
+
+    ASSERT_EQ(beforeBytes, afterBytes);
 }
