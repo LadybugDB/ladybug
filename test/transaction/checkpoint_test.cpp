@@ -469,6 +469,54 @@ TEST_F(CheckpointRetryAfterFailureTest, FailedRollbackPoisonsWAL) {
     checkNodes(100);
 }
 
+// A node group whose shadow savepoint restore failed records that on the shadow file (see
+// CSRNodeGroup::checkpoint). The failed checkpoint's rollback must then poison the WAL with the
+// recorded errors, so no later checkpoint or write builds on the affected shadow pages.
+class FlakyCheckpointerWithFailedSavepointRestore final : public Checkpointer {
+public:
+    explicit FlakyCheckpointerWithFailedSavepointRestore(main::ClientContext& context)
+        : Checkpointer(context) {}
+
+protected:
+    bool checkpointStorage() override {
+        mainStorageManager->getShadowFile().recordSavepointRollbackFailure(
+            "injected page restore failure");
+        throw RuntimeException("checkpoint failed.");
+    }
+};
+
+TEST_F(CheckpointRetryAfterFailureTest, FailedSavepointRestorePoisonsWAL) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    insertNodes(0, 100);
+    FlakyCheckpointer flakyCheckpointer([](main::ClientContext& context) {
+        return std::make_unique<FlakyCheckpointerWithFailedSavepointRestore>(context);
+    });
+    flakyCheckpointer.setCheckpointer(*getClientContext(*conn));
+    auto res = conn->query("CHECKPOINT;");
+    ASSERT_FALSE(res->isSuccess());
+    EXPECT_NE(res->getErrorMessage().find("refuses further writes until restart"),
+        std::string::npos)
+        << res->getErrorMessage();
+    EXPECT_NE(res->getErrorMessage().find("injected page restore failure"), std::string::npos)
+        << res->getErrorMessage();
+    FlakyCheckpointer::resetCheckpointer(*getClientContext(*conn));
+    // Neither a retried checkpoint nor a write may build on the shadow pages.
+    res = conn->query("CHECKPOINT;");
+    ASSERT_FALSE(res->isSuccess());
+    EXPECT_NE(res->getErrorMessage().find("panic state"), std::string::npos)
+        << res->getErrorMessage();
+    res = conn->query("CREATE (a:test {id: 100, name: 'name_100'});");
+    ASSERT_FALSE(res->isSuccess());
+    EXPECT_NE(res->getErrorMessage().find("injected page restore failure"), std::string::npos)
+        << res->getErrorMessage();
+    res.reset();
+    // Reopening discards the uncommitted shadow file and replays the WAL.
+    createDBAndConn();
+    checkNodes(100);
+}
+
 class FlakyCheckpointerFailsOnSerialization final : public Checkpointer {
 public:
     explicit FlakyCheckpointerFailsOnSerialization(main::ClientContext& context)
@@ -10572,7 +10620,10 @@ TEST_F(FailedInPlaceCheckpointTest, ShadowSavepointRollbackRequiresTheActiveSave
     // After the rollback no savepoint is active, so a new one can be taken and released.
     EXPECT_THROW(shadowFile.rollbackToSavepoint(savepoint), InternalException);
     shadowFile.createSavepoint();
+    // Only one savepoint can be active: a second would discard the first group's saved pages.
+    EXPECT_THROW(shadowFile.createSavepoint(), InternalException);
     shadowFile.releaseSavepoint();
+    EXPECT_FALSE(shadowFile.hasFailedSavepointRollback());
 }
 
 } // namespace testing

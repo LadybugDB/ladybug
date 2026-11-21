@@ -1,10 +1,12 @@
 #include "storage/table/csr_node_group.h"
 
 #include <algorithm>
+#include <exception>
 #include <limits>
 #include <vector>
 
 #include "common/constants.h"
+#include "common/exception/runtime.h"
 #include "common/serializer/buffer_reader.h"
 #include "common/serializer/buffer_writer.h"
 #include "common/serializer/deserializer.h"
@@ -17,6 +19,7 @@
 #include "storage/table/lazy_segment_scanner.h"
 #include "storage/table/rel_table.h"
 #include "transaction/transaction.h"
+#include <format>
 #include <ranges>
 
 using namespace lbug::common;
@@ -24,6 +27,18 @@ using namespace lbug::transaction;
 
 namespace lbug {
 namespace storage {
+
+namespace {
+std::string describeException(const std::exception_ptr& error) {
+    try {
+        std::rethrow_exception(error);
+    } catch (const std::exception& e) {
+        return e.what();
+    } catch (...) {
+        return "unknown exception";
+    }
+}
+} // namespace
 
 // Partial header decodes per node group before a scan decodes the group's whole CSR header.
 static constexpr idx_t MAX_HEADER_SPANS_PER_GROUP = 16;
@@ -1072,12 +1087,17 @@ void CSRNodeGroup::checkpoint(MemoryManager&, NodeGroupCheckpointState& state) {
         // Undo this group's shadow pages, then restore the pre-checkpoint persistent chunks,
         // so both reads and a retried checkpoint see the old data under the old header. The
         // shadow rollback runs first and cannot be skipped by a failing metadata restore; it
-        // always releases the savepoint, even if a page restore fails. The original error is
-        // the one rethrown.
+        // always releases the savepoint, even if a page restore fails.
+        std::exception_ptr shadowRollbackError;
         if (shadowFile != nullptr) {
             try {
                 shadowFile->rollbackToSavepoint(shadowSavepoint);
-            } catch (...) { // NOLINT(bugprone-empty-catch): keep the checkpoint's own error.
+            } catch (...) {
+                shadowRollbackError = std::current_exception();
+                // Record it before the metadata restore below, which can throw too: the
+                // record is what makes Checkpointer::rollback poison the WAL. The combined
+                // message replaces it once both errors are known.
+                shadowFile->recordSavepointRollbackFailure(describeException(shadowRollbackError));
             }
         }
         if (persistentSnapshot != nullptr) {
@@ -1100,6 +1120,18 @@ void CSRNodeGroup::checkpoint(MemoryManager&, NodeGroupCheckpointState& state) {
                 }
             }
             persistentChunkGroup = std::move(restoredGroup);
+        }
+        if (shadowRollbackError) {
+            // A shadow page that predates the savepoint may still hold this attempt's bytes.
+            // Record both errors on the shadow file: Checkpointer::rollback poisons the WAL with
+            // them, and its error is the one the caller sees.
+            auto message = std::format(
+                "Checkpoint of a rel table node group failed: {} Restoring its shadow pages also "
+                "failed: {}",
+                describeException(std::current_exception()),
+                describeException(shadowRollbackError));
+            shadowFile->recordSavepointRollbackFailure(message);
+            throw common::RuntimeException(std::move(message));
         }
         throw;
     }

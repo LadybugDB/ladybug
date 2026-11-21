@@ -6,6 +6,7 @@
 #include <mutex>
 #include <optional>
 #include <shared_mutex>
+#include <string>
 #include <unordered_map>
 
 #include "common/copy_constructors.h"
@@ -88,6 +89,19 @@ public:
     // shadowPageRecords[i] describes shadow page i+1 (see flushAll). Ends the savepoint. Must
     // not be called while a published shadow page of a column data page is pinned (see mtx).
     void rollbackToSavepoint(ShadowSavepoint savepoint);
+    // Set once a rollbackToSavepoint failed to restore a page: this shadow file may then hold a
+    // failed group's bytes in a page that completed groups also own, under that group's restored
+    // chunk metadata. Until the database is reopened, reads of that group can return those
+    // bytes. Checkpointer::rollback poisons the WAL with this message, so no later checkpoint
+    // applies the pages and no write builds on them; reopening discards the uncommitted shadow
+    // file. A later message (e.g. the node group's combined error) replaces an earlier one.
+    void recordSavepointRollbackFailure(std::string message) {
+        savepointRollbackFailure = std::move(message);
+    }
+    const std::optional<std::string>& getSavepointRollbackFailure() const {
+        return savepointRollbackFailure;
+    }
+    bool hasFailedSavepointRollback() const { return savepointRollbackFailure.has_value(); }
     // Called by the checkpointing thread with an existing shadow page pinned for writing, before
     // it is modified. Saves the page's contents once if it predates the active savepoint.
     void preservePageForSavepoint(common::page_idx_t shadowPageIdx, const uint8_t* frame);
@@ -210,9 +224,10 @@ private:
     mutable bool applyFailed = false;
     // Savepoint state, owned by the checkpointing thread (see createSavepoint). At most one
     // savepoint is active: node-group checkpoints run one at a time, each taking a savepoint and
-    // then releasing it or rolling back to it. createSavepoint asserts that, and clear() and
-    // reset() release a savepoint a failed checkpoint left armed.
+    // then releasing it or rolling back to it, which createSavepoint enforces. clear() and
+    // reset() also release a savepoint.
     std::optional<ShadowSavepoint> activeSavepoint;
+    std::optional<std::string> savepointRollbackFailure;
     std::unordered_map<common::page_idx_t, std::unique_ptr<uint8_t[]>> savedPagesForSavepoint;
     // Fast path for readers: false when there is no shadow page.
     std::atomic<bool> hasShadowPages{false};
