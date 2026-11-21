@@ -130,8 +130,7 @@ struct UncommittedIndexInserter final : IndexScanHelper {
 struct RollbackPKDeleter final : IndexScanHelper {
     RollbackPKDeleter(row_idx_t startNodeOffset, row_idx_t numRows, NodeTable* table,
         Index* pkIndex)
-        : IndexScanHelper(table, pkIndex),
-          startNodeOffset(startNodeOffset), numRows(numRows),
+        : IndexScanHelper(table, pkIndex), startNodeOffset(startNodeOffset), numRows(numRows),
           semiMask(SemiMaskUtil::createMask(startNodeOffset + numRows)) {
         semiMask->maskRange(startNodeOffset, startNodeOffset + numRows);
         semiMask->enable();
@@ -242,8 +241,8 @@ bool RollbackPKDeleter::processScanOutput(main::ClientContext* context,
             continue;
         }
         offset_t indexedOffset = INVALID_OFFSET;
-        const auto found = index->lookupPrimaryKey(transaction, &scannedVector, pos,
-            indexedOffset, [](offset_t) { return true; });
+        const auto found = index->lookupPrimaryKey(transaction, &scannedVector, pos, indexedOffset,
+            [](offset_t) { return true; });
         if (!found) {
             continue;
         }
