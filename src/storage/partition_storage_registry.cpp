@@ -1,5 +1,7 @@
 #include "storage/partition_storage_registry.h"
 
+#include <filesystem>
+
 #include "catalog/catalog.h"
 #include "catalog/catalog_entry/node_table_catalog_entry.h"
 #include "common/constants.h"
@@ -18,6 +20,7 @@
 #include "storage/storage_utils.h"
 #include "storage/table/node_table.h"
 #include "transaction/transaction.h"
+#include <format>
 
 using namespace lbug::catalog;
 using namespace lbug::common;
@@ -36,6 +39,12 @@ static std::string getChildPath(main::ClientContext* context, const std::string&
         return ":" + childName;
     }
     return StorageUtils::getGraphPath(dbPath, childName);
+}
+
+// File name for a child whose own name is still taken (see choosePathNoLock).
+static std::string getChildPathWithTableID(main::ClientContext* context,
+    const std::string& childName, table_id_t tableID) {
+    return getChildPath(context, std::format("{}.t{}", childName, tableID));
 }
 
 // Restore the child file's page manager from its own header. The checkpointer persists each
@@ -78,7 +87,7 @@ StorageManager& PartitionStorageRegistry::getOrCreate(main::ClientContext* conte
     if (auto it = managers.find(tableID); it != managers.end()) {
         return *it->second;
     }
-    auto path = getChildPath(context, childName);
+    auto path = choosePathNoLock(context, tableID, childName);
     auto* vfs = VirtualFileSystem::GetUnsafe(*context);
     if (requireExistingFile && !vfs->fileOrPathExists(path, context)) {
         throw RuntimeException(std::format(
@@ -95,6 +104,28 @@ StorageManager& PartitionStorageRegistry::getOrCreate(main::ClientContext* conte
     auto* raw = storageManager.get();
     managers.emplace(tableID, std::move(storageManager));
     return *raw;
+}
+
+bool PartitionStorageRegistry::isPathHeldByOtherNoLock(const std::string& path,
+    table_id_t tableID) const {
+    for (const auto& [otherID, sm] : managers) {
+        if (otherID != tableID && sm->getDatabasePath() == path) {
+            return true;
+        }
+    }
+    return false;
+}
+
+std::string PartitionStorageRegistry::choosePathNoLock(main::ClientContext* context,
+    table_id_t tableID, const std::string& childName) const {
+    const auto byTableID = getChildPathWithTableID(context, childName, tableID);
+    auto* vfs = VirtualFileSystem::GetUnsafe(*context);
+    // A child that needed its table-ID file keeps using it after reopen and recovery.
+    if (vfs->fileOrPathExists(byTableID, context)) {
+        return byTableID;
+    }
+    const auto byName = getChildPath(context, childName);
+    return isPathHeldByOtherNoLock(byName, tableID) ? byTableID : byName;
 }
 
 StorageManager* PartitionStorageRegistry::tryGet(table_id_t tableID) {
@@ -293,6 +324,8 @@ void PartitionStorageRegistry::renameChild(main::ClientContext* context, table_i
     const std::string& newChildName) {
     StorageManager* sm = nullptr;
     std::string oldPath;
+    std::string newPath;
+    auto vfs = VirtualFileSystem::GetUnsafe(*context);
     {
         std::unique_lock xlock{mtx};
         auto it = managers.find(tableID);
@@ -301,12 +334,28 @@ void PartitionStorageRegistry::renameChild(main::ClientContext* context, table_i
         }
         sm = it->second.get();
         oldPath = sm->getDatabasePath();
+        namespace fs = std::filesystem;
+        const auto dir = fs::path(oldPath).parent_path();
+        const auto inDir = [&](const std::string& path) {
+            return (dir / fs::path(path).filename()).string();
+        };
+        newPath = inDir(getChildPath(context, newChildName));
+        // renameFile replaces an existing target, which may be another child's live file (for
+        // example after renames that swap two names) or a stale one.
+        if (newPath != oldPath && (vfs->fileOrPathExists(newPath, context) ||
+                                      isPathHeldByOtherNoLock(newPath, tableID))) {
+            newPath = inDir(getChildPathWithTableID(context, newChildName, tableID));
+        }
     }
-    namespace fs = std::filesystem;
-    const auto dir = fs::path(oldPath).parent_path();
-    const auto newPath = (dir / fs::path(getChildPath(context, newChildName)).filename()).string();
-    auto vfs = VirtualFileSystem::GetUnsafe(*context);
-    sm->closeFileHandle();
+    if (newPath == oldPath) {
+        return;
+    }
+    auto* dataFH = sm->getDataFH();
+    if (dataFH->isInMemoryMode()) {
+        sm->setDatabasePath(newPath);
+        return;
+    }
+    dataFH->resetFileInfo();
     const std::pair<std::string, std::string> moves[] = {{oldPath, newPath},
         {StorageUtils::getWALFilePath(oldPath), StorageUtils::getWALFilePath(newPath)},
         {StorageUtils::getShadowFilePath(oldPath), StorageUtils::getShadowFilePath(newPath)}};
@@ -316,7 +365,9 @@ void PartitionStorageRegistry::renameChild(main::ClientContext* context, table_i
         }
     }
     sm->setDatabasePath(newPath);
-    sm->initDataFileHandle(vfs, context);
+    // Reopen into the same FileHandle: the child's columns hold pointers to it, so replacing it
+    // (as initDataFileHandle would) left them reading through a closed file.
+    dataFH->reopenPersistentFile(newPath, vfs, context);
 }
 
 void PartitionStorageRegistry::reconcilePaths(main::ClientContext* context,
@@ -339,9 +390,14 @@ void PartitionStorageRegistry::reconcilePaths(main::ClientContext* context,
             if (it == expectedNames.end()) {
                 continue;
             }
-            const auto expected =
+            const auto current = std::filesystem::path(sm->getDatabasePath()).filename().string();
+            const auto byName =
                 std::filesystem::path(getChildPath(context, it->second)).filename().string();
-            if (std::filesystem::path(sm->getDatabasePath()).filename().string() != expected) {
+            const auto byTableID =
+                std::filesystem::path(getChildPathWithTableID(context, it->second, tableID))
+                    .filename()
+                    .string();
+            if (current != byName && current != byTableID) {
                 renames.emplace_back(tableID, it->second);
             }
         }
