@@ -127,13 +127,16 @@ static std::string mapLegacySerialRestore(const std::string& schema) {
     if (schema.empty()) {
         return schema;
     }
+    // Strip every '\r': a CRLF file written through a Windows text-mode stream gains an extra
+    // '\r' per line ("\r\n" becomes "\r\r\n"), so skipping only "\r" before "\n" leaves a
+    // stray "\r" behind and the triple below no longer matches.
     std::string result;
     result.reserve(schema.size());
-    for (size_t i = 0; i < schema.size(); i++) {
-        if (schema[i] == '\r' && i + 1 < schema.size() && schema[i + 1] == '\n') {
+    for (char c : schema) {
+        if (c == '\r') {
             continue;
         }
-        result += schema[i];
+        result += c;
     }
     std::vector<std::string> serialNames;
     for (auto& parsedStatement : Parser::parseQuery(result)) {
