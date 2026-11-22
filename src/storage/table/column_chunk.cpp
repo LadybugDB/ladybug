@@ -14,6 +14,10 @@
 #include "storage/table/column_chunk_data.h"
 #include "storage/table/column_chunk_scanner.h"
 #include "storage/table/combined_chunk_scanner.h"
+#include "storage/table/dictionary_chunk.h"
+#include "storage/table/list_chunk_data.h"
+#include "storage/table/string_chunk_data.h"
+#include "storage/table/struct_chunk_data.h"
 #include "transaction/transaction.h"
 
 using namespace lbug::common;
@@ -284,8 +288,133 @@ void ColumnChunk::write(Column& column, ChunkState& state, offset_t dstOffset,
     }
 }
 
+namespace {
+constexpr uint64_t kSegmentBytesPageSize = static_cast<uint64_t>(common::LBUG_PAGE_SIZE);
+
+uint64_t sumOnDiskChunkPages(const ColumnChunkData& chunk) {
+    uint64_t pages = chunk.getMetadata().getNumPages();
+    if (chunk.getNullData() != nullptr) {
+        pages += chunk.getNullData()->getMetadata().getNumPages();
+    }
+    switch (chunk.getDataType().getPhysicalType()) {
+    case PhysicalTypeID::STRING:
+    case PhysicalTypeID::JSON: {
+        const auto& strChunk = chunk.cast<StringChunkData>();
+        pages += strChunk.getIndexColumnChunk()->getMetadata().getNumPages();
+        pages += strChunk.getDictionaryChunk().getOffsetChunk()->getMetadata().getNumPages();
+        pages += strChunk.getDictionaryChunk().getStringDataChunk()->getMetadata().getNumPages();
+        break;
+    }
+    case PhysicalTypeID::ARRAY:
+    case PhysicalTypeID::LIST: {
+        const auto& listChunk = chunk.cast<ListChunkData>();
+        pages += sumOnDiskChunkPages(*listChunk.getSizeColumnChunk());
+        pages += sumOnDiskChunkPages(*listChunk.getOffsetColumnChunk());
+        pages += sumOnDiskChunkPages(*listChunk.getDataColumnChunk());
+        break;
+    }
+    case PhysicalTypeID::STRUCT: {
+        const auto& structChunk = chunk.cast<StructChunkData>();
+        for (common::idx_t i = 0; i < structChunk.getNumChildren(); i++) {
+            pages += sumOnDiskChunkPages(structChunk.getChild(i));
+        }
+        break;
+    }
+    default:
+        break;
+    }
+    return pages;
+}
+} // namespace
+
+uint64_t GetOnDiskSegmentBytes(const ColumnChunkData& chunk) {
+    return sumOnDiskChunkPages(chunk) * kSegmentBytesPageSize;
+}
+
 void ColumnChunk::checkpoint(Column& column,
     std::vector<ChunkCheckpointState>&& chunkCheckpointStates, PageAllocator& pageAllocator) {
+    // Fast path: pure appends beyond existing data (no overwrites/updates) whose
+    // rewrite would exceed kCheckpointExactRewriteMaxBytes. Appends the inserts as
+    // new ON_DISK segments (split to the max segment size) instead of rewriting the
+    // whole last segment out of place (which needs pool memory proportional to one
+    // node group's data). Smaller appends fall through to the legacy exact path
+    // below (in-place updates through the shadow file, merged segments), preserving
+    // shadow-page and segmentation behavior bit-for-bit (gh-1678).
+    if (!chunkCheckpointStates.empty() && !data.empty()) {
+        offset_t totalPersistent = 0;
+        for (auto& seg : data) {
+            totalPersistent += seg->getNumValues();
+        }
+        bool pureAppend = true;
+        for (auto& s : chunkCheckpointStates) {
+            if (s.startRow < totalPersistent ||
+                s.chunkData->getResidencyState() != ResidencyState::IN_MEMORY ||
+                s.numRows != s.chunkData->getNumValues()) {
+                pureAppend = false;
+                break;
+            }
+        }
+        if (pureAppend) {
+            std::sort(chunkCheckpointStates.begin(), chunkCheckpointStates.end(),
+                [](const ChunkCheckpointState& a, const ChunkCheckpointState& b) {
+                    return a.startRow < b.startRow;
+                });
+            offset_t expected = totalPersistent;
+            for (auto& s : chunkCheckpointStates) {
+                if (s.startRow != expected) {
+                    pureAppend = false;
+                    break;
+                }
+                expected += s.numRows;
+            }
+        }
+        if (pureAppend) {
+            uint64_t rewriteBytes = GetOnDiskSegmentBytes(*data.back());
+            for (auto& s : chunkCheckpointStates) {
+                rewriteBytes += s.chunkData->getEstimatedMemoryUsage();
+            }
+            pureAppend = rewriteBytes > kCheckpointExactRewriteMaxBytes;
+        }
+        if (pureAppend) {
+            // Collect locally first for atomicity: on injected page-alloc failure
+            // (gh-1051 style recovery test), flushed pieces stay in newSegments
+            // (local, reclaimed on unwind) and persistent `data` is untouched,
+            // so reads stay correct and retry succeeds.
+            std::vector<std::unique_ptr<ColumnChunkData>> newSegments;
+            try {
+                for (auto& s : chunkCheckpointStates) {
+                    if (s.numRows == 0) {
+                        continue;
+                    }
+                    auto& chunk = *s.chunkData;
+                    chunk.finalize();
+                    if (chunk.shouldSplit()) {
+                        auto pieces = chunk.split(true /*targetMaxSize*/);
+                        // Free the merged copy now; the pieces hold all rows.
+                        s.chunkData.reset();
+                        for (auto& piece : pieces) {
+                            piece->finalize();
+                            newSegments.push_back(Column::flushChunkData(*piece, pageAllocator));
+                            piece.reset();
+                        }
+                    } else {
+                        newSegments.push_back(Column::flushChunkData(chunk, pageAllocator));
+                        s.chunkData.reset();
+                    }
+                }
+            } catch (...) {
+                for (auto& seg : newSegments) {
+                    seg->reclaimStorage(pageAllocator);
+                }
+                throw;
+            }
+            data.reserve(data.size() + newSegments.size());
+            for (auto& seg : newSegments) {
+                data.push_back(std::move(seg));
+            }
+            return;
+        }
+    }
     offset_t segmentStart = 0;
     for (size_t i = 0; i < data.size(); i++) {
         std::vector<SegmentCheckpointState> segmentCheckpointStates;

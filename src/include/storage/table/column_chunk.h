@@ -335,6 +335,13 @@ public:
         }
     }
 
+    void appendSegments(std::vector<std::unique_ptr<ColumnChunkData>> segments) {
+        data.reserve(data.size() + segments.size());
+        for (auto& segment : segments) {
+            data.push_back(std::move(segment));
+        }
+    }
+
     void populateWithDefaultVal(evaluator::ExpressionEvaluator& defaultEvaluator,
         uint64_t& numValues_, ColumnStats* newColumnStats) {
         DASSERT(data.size() == 1 && data.back()->getNumValues() == 0);
@@ -401,6 +408,18 @@ private:
     // pointer without a lock while a writer may be adding the chunk's first update.
     std::shared_ptr<UpdateInfo> updateInfo = std::make_shared<UpdateInfo>();
 };
+
+// Checkpoint rewrite-size gate (gh-1678): when a checkpoint would rewrite at most
+// this many bytes (persistent last segment + inserts), it uses the legacy exact paths
+// (in-place updates through the shadow file, merged segments). Above it, pure appends
+// take the bounded O(batch) append path instead of rebuilding the whole segment out
+// of place, which needs pool memory proportional to one node group's string data.
+// All existing segmentation/shadow-page tests operate far below this threshold.
+inline constexpr uint64_t kCheckpointExactRewriteMaxBytes = 8ull << 20;
+
+// Disk footprint of one ON_DISK segment summed from its metadata page ranges
+// (no buffer scan). Includes child chunks for nested/variable-size types.
+LBUG_API uint64_t GetOnDiskSegmentBytes(const ColumnChunkData& chunk);
 
 } // namespace storage
 } // namespace lbug

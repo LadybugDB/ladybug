@@ -28,6 +28,7 @@ class MmAllocator;
 
 class MemoryBuffer {
     friend class Spiller;
+    friend class MemoryManager;
 
 public:
     LBUG_API MemoryBuffer(MemoryManager* mm, common::page_idx_t blockIdx, uint8_t* buffer,
@@ -100,6 +101,13 @@ public:
 
     std::unique_ptr<MemoryBuffer> allocateBuffer(bool initializeToZero = false,
         uint64_t size = common::TEMP_PAGE_SIZE);
+    // Reallocate a malloc-backed buffer (pageIdx==INVALID) reserving only the
+    // delta (new-old) instead of the full new size, so power-of-two growth
+    // (bit_ceil doubling in DictionaryChunk::appendString) peaks at new rather
+    // than old+new (gh-1678). Falls back to allocate+copy when switching
+    // between malloc and pool pages (TEMP_PAGE_SIZE) or when exclusive.
+    std::unique_ptr<MemoryBuffer> reallocateBuffer(std::unique_ptr<MemoryBuffer> oldBuffer,
+        bool initializeToZero, uint64_t newSize);
     common::page_offset_t getPageSize() const { return pageSize; }
 
     BufferManager* getBufferManager() const { return bm; }

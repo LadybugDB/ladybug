@@ -575,12 +575,10 @@ void ColumnChunkData::setToInMemory() {
 void ColumnChunkData::resize(uint64_t newCapacity) {
     const auto numBytesAfterResize = getBufferSize(newCapacity);
     if (numBytesAfterResize > getBufferSize()) {
-        auto resizedBuffer = buffer->getMemoryManager()->allocateBuffer(false, numBytesAfterResize);
-        auto bufferSize = getBufferSize();
-        auto resizedBufferData = resizedBuffer->getBuffer().data();
-        memcpy(resizedBufferData, buffer->getBuffer().data(), bufferSize);
-        memset(resizedBufferData + bufferSize, 0, numBytesAfterResize - bufferSize);
-        buffer = std::move(resizedBuffer);
+        // Use realloc with delta reservation (gh-1678) to bound peak to new
+        // instead of old+new during power-of-two growth.
+        buffer = buffer->getMemoryManager()->reallocateBuffer(std::move(buffer), false,
+            numBytesAfterResize);
     }
     if (nullData) {
         nullData->resize(newCapacity);
@@ -593,8 +591,8 @@ void ColumnChunkData::resize(uint64_t newCapacity) {
 void ColumnChunkData::resizeWithoutPreserve(uint64_t newCapacity) {
     const auto numBytesAfterResize = getBufferSize(newCapacity);
     if (numBytesAfterResize > getBufferSize()) {
-        auto resizedBuffer = buffer->getMemoryManager()->allocateBuffer(false, numBytesAfterResize);
-        buffer = std::move(resizedBuffer);
+        buffer = buffer->getMemoryManager()->reallocateBuffer(std::move(buffer), false,
+            numBytesAfterResize);
     }
     if (nullData) {
         nullData->resize(newCapacity);
