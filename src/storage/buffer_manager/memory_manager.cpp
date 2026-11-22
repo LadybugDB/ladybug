@@ -61,9 +61,14 @@ MemoryManager::~MemoryManager() {
 }
 
 std::span<uint8_t> MemoryManager::mallocBuffer(bool initializeToZero, uint64_t size) {
-    if (!bm->reserve(size) && !(releaseReusableBuffers() && bm->reserve(size))) {
-        throw BufferManagerException(
-            "Unable to allocate memory! The buffer pool is full and no memory could be freed!");
+    // Retry only if cached memory was actually released, so fail-once injection
+    // (fail the first reserve during commit) still fails deterministically.
+    if (!bm->reserve(size)) {
+        bool released = releaseReusableBuffers();
+        if (!released || !bm->reserve(size)) {
+            throw BufferManagerException(
+                "Unable to allocate memory! The buffer pool is full and no memory could be freed!");
+        }
     }
     void* buffer = nullptr;
     bm->nonEvictableMemory += size;
@@ -102,9 +107,27 @@ std::unique_ptr<MemoryBuffer> MemoryManager::allocateBuffer(bool initializeToZer
     try {
         buffer = bm->pin(*fh, pageIdx, PageReadPolicy::DONT_READ_PAGE);
     } catch (const BufferManagerException&) {
-        // The pin failed to reserve memory; kept buffers may free enough.
+        // The pin failed to reserve memory; kept buffers may free enough. Retry
+        // only if something was actually released, so fail-once injection during
+        // commit still fails deterministically.
+        // Note: pin consumed pageIdx from freePages (or added new page); on failure
+        // return it for reuse to avoid leaking the page index.
+        {
+            std::scoped_lock<std::mutex> lock(allocatorLock);
+            freePages.push(pageIdx);
+        }
         if (!releaseReusableBuffers()) {
             throw;
+        }
+        // Retry with a fresh page index from the pool.
+        {
+            std::scoped_lock<std::mutex> lock(allocatorLock);
+            if (freePages.empty()) {
+                pageIdx = fh->addNewPage();
+            } else {
+                pageIdx = freePages.top();
+                freePages.pop();
+            }
         }
         buffer = bm->pin(*fh, pageIdx, PageReadPolicy::DONT_READ_PAGE);
     }
@@ -113,6 +136,69 @@ std::unique_ptr<MemoryBuffer> MemoryManager::allocateBuffer(bool initializeToZer
         memset(memoryBuffer->getBuffer().data(), 0, pageSize);
     }
     return memoryBuffer;
+}
+
+std::unique_ptr<MemoryBuffer> MemoryManager::reallocateBuffer(
+    std::unique_ptr<MemoryBuffer> oldBuffer, bool initializeToZero, uint64_t newSize) {
+    // Only the malloc path (INVALID_PAGE_IDX, non-TEMP_PAGE_SIZE, non-reusable)
+    // can use realloc. Pool pages (TEMP_PAGE_SIZE) and reusable 1MiB buffers
+    // use different allocators; fall back to allocate+copy for those (small).
+    auto oldSpan = oldBuffer->getBuffer();
+    const auto oldSize = oldSpan.size_bytes();
+    const auto oldPageIdx = oldBuffer->pageIdx;
+    if (oldPageIdx != INVALID_PAGE_IDX || newSize == common::TEMP_PAGE_SIZE ||
+        oldSize == common::TEMP_PAGE_SIZE || newSize == REUSABLE_BUFFER_SIZE ||
+        oldSize == REUSABLE_BUFFER_SIZE) {
+        auto newBuffer = allocateBuffer(false /*initializeToZero*/, newSize);
+        const auto copySize = std::min(oldSize, newSize);
+        if (copySize > 0) {
+            memcpy(newBuffer->getBuffer().data(), oldSpan.data(), copySize);
+        }
+        if (initializeToZero && newSize > copySize) {
+            memset(newBuffer->getBuffer().data() + copySize, 0, newSize - copySize);
+        } else if (newSize > oldSize) {
+            // Preserve ColumnChunkData::resize semantics (zero new tail).
+            memset(newBuffer->getBuffer().data() + oldSize, 0, newSize - oldSize);
+        }
+        return newBuffer;
+    }
+    if (newSize <= oldSize) {
+        return oldBuffer;
+    }
+    const auto delta = newSize - oldSize;
+    // Retry only if cached memory was actually released, so fail-once injection
+    // (fail the first reserve during commit) still fails deterministically.
+    if (!bm->reserve(delta)) {
+        bool released = releaseReusableBuffers();
+        if (!released || !bm->reserve(delta)) {
+            throw BufferManagerException(
+                "Unable to allocate memory! The buffer pool is full and no memory could be freed!");
+        }
+    }
+    // Release ownership without freeing: realloc takes over oldPtr (frees it
+    // if it moves, keeps it if it extends in place). Prevent double-free.
+    uint8_t* oldPtr = oldSpan.data();
+    oldBuffer->preventDestruction();
+    // oldBuffer wrapper destroyed here (no free due to preventDestruction).
+    oldBuffer.reset();
+    void* newPtr = std::realloc(oldPtr, newSize);
+    if (newPtr == nullptr) {
+        bm->freeUsedMemory(delta);
+        bm->nonEvictableMemory -= delta;
+        if (oldPtr != nullptr) {
+            auto rollback = std::make_unique<MemoryBuffer>(this, INVALID_PAGE_IDX, oldPtr, oldSize);
+            (void)rollback;
+        }
+        throw BufferManagerException(
+            "Unable to allocate memory! The buffer pool is full and no memory could be freed!");
+    }
+    bm->nonEvictableMemory += delta;
+    auto newBuffer = std::make_unique<MemoryBuffer>(this, INVALID_PAGE_IDX,
+        static_cast<uint8_t*>(newPtr), newSize);
+    if (initializeToZero || newSize > oldSize) {
+        memset(static_cast<uint8_t*>(newPtr) + oldSize, 0, delta);
+    }
+    return newBuffer;
 }
 
 void MemoryManager::freeBlock(page_idx_t pageIdx, std::span<uint8_t> buffer) {
