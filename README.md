@@ -47,6 +47,8 @@ The database was formerly known as [Kuzu](https://github.com/kuzudb/kuzu).
 | Go       | `go get github.com/LadybugDB/go-ladybug`                                     |
 | Swift    | [lbug-swift](https://github.com/LadybugDB/swift-ladybug)                     |
 | Java     | [Maven Central](https://central.sonatype.com/artifact/com.ladybugdb/lbug) |
+| .NET     | [NuGet](https://www.nuget.org/packages/LadybugDB) |
+| Lean4    | [Reservoir](https://reservoir.lean-lang.org/@Volland/ladybug) |
 | C/C++    | [precompiled binaries](https://github.com/LadybugDB/ladybug/releases/latest) |
 | CLI      | [precompiled binaries](https://github.com/LadybugDB/ladybug/releases/latest) |
 
