@@ -10,12 +10,15 @@ namespace lbug {
 namespace testing {
 
 static std::string readFile(const std::string& path) {
-    std::ifstream in(path);
+    std::ifstream in(path, std::ios::binary);
     return std::string(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
 }
 
 static void writeFile(const std::string& path, const std::string& content) {
-    std::ofstream out(path, std::ios::trunc);
+    // Binary mode: in text mode Windows translates each '\n' into "\r\n", so writing the
+    // CRLF fixture below would land "\r\r\n" in the file instead of the "\r\n" it means to
+    // test.
+    std::ofstream out(path, std::ios::binary | std::ios::trunc);
     out << content;
 }
 
