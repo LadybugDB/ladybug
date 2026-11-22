@@ -251,12 +251,40 @@ jobs:
           echo "CMAKE_PREFIX_PATH=${prefix}:${CMAKE_PREFIX_PATH:-}" >> "$GITHUB_ENV"
           echo "${prefix}/bin" >> "$GITHUB_PATH"
 
+      # The lance extension builds a native reader (lance_ladybug_ffi) via
+      # Cargo, and prost-build (via lance-core) needs protoc. Must run
+      # before the CMake configure step; lance/CMakeLists.txt fails fast
+      # with a clear message when cargo is unavailable.
+      - name: Install Rust toolchain and protoc (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          set -e
+          if ! command -v cargo >/dev/null 2>&1; then
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+              | sh -s -- -y --profile minimal --default-toolchain stable
+          fi
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          export PATH="$HOME/.cargo/bin:$PATH"
+          cargo --version
+          if [ "${{ runner.arch }}" = "X64" ]; then
+            rustup target add x86_64-apple-darwin
+          else
+            rustup target add aarch64-apple-darwin
+          fi
+          if ! command -v protoc >/dev/null 2>&1; then
+            brew install protobuf
+          fi
+          protoc --version
+
       - name: Build precompiled extensions (macOS)
         if: runner.os == 'macOS'
         run: make extension-release
         env:
           MACOSX_DEPLOYMENT_TARGET: 13.3
           CMAKE_OSX_ARCHITECTURES: ${{ matrix.cmake_osx_architectures }}
+          # lance is opt-in via EXTRA_EXTENSIONS (its CMake FATAL_ERRORs
+          # without cargo+protoc, hence the install step above).
+          EXTRA_EXTENSIONS: lance
 
       - name: Relocate libpq dependency for distribution (macOS)
         if: runner.os == 'macOS'
@@ -345,6 +373,28 @@ jobs:
           ./scripts/choco-install.ps1 postgresql -Version 16 -PackageParameters '/NoServer /NoTools'
           echo "CMAKE_PREFIX_PATH=C:\Program Files\PostgreSQL\16;C:\local" >> $env:GITHUB_ENV
 
+      # The lance extension builds a native reader (lance_ladybug_ffi) via
+      # Cargo, and prost-build (via lance-core) needs protoc. Must run
+      # before the CMake configure step; lance/CMakeLists.txt fails fast
+      # with a clear message when cargo is unavailable.
+      - name: Install Rust toolchain and protoc (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if (-not (Get-Command cargo -ErrorAction SilentlyContinue)) {
+            Invoke-WebRequest -Uri https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe -OutFile "$env:TEMP\rustup-init.exe"
+            & "$env:TEMP\rustup-init.exe" -y --profile minimal --default-toolchain stable
+            if ($LASTEXITCODE -ne 0) { exit 1 }
+          }
+          "$env:USERPROFILE\.cargo\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          $env:Path = "$env:USERPROFILE\.cargo\bin;$env:Path"
+          cargo --version
+          rustup target add x86_64-pc-windows-msvc
+          if (-not (Get-Command protoc -ErrorAction SilentlyContinue)) {
+            ./scripts/choco-install.ps1 protobuf
+          }
+          protoc --version
+
       - name: Build precompiled extensions (Windows)
         if: runner.os == 'Windows'
         shell: cmd
@@ -352,6 +402,9 @@ jobs:
           powershell.exe -Command "Add-MpPreference -ExclusionPath '${{ github.workspace }}'"
           call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
           set "EXTRA_CMAKE_FLAGS=-DADBC_INCLUDE_DIR=%CONDA_PREFIX%\Library\include -DADBC_DRIVER_MANAGER_LIBRARY=%CONDA_PREFIX%\Library\lib\adbc_driver_manager.lib"
+          REM lance is opt-in via EXTRA_EXTENSIONS (its CMake FATAL_ERRORs
+          REM without cargo+protoc, hence the install step above).
+          set "EXTRA_EXTENSIONS=lance"
           make extension-release
         env:
           CMAKE_PREFIX_PATH: C:\local
