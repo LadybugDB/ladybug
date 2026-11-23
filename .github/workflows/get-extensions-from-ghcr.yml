@@ -28,7 +28,10 @@ jobs:
           docker cp lbug-extensions:/usr/share/nginx/html ./ghcr-extensions
           sudo chown -R $USER:$USER ghcr-extensions
           sudo chmod -R 755 ghcr-extensions
-          mv ghcr-extensions/html/dataset ghcr-extensions/dataset
+          # The dataset/ directory snuck into the image by mistake and is not
+          # part of the extension repository. Drop it here so it cannot
+          # propagate back into rebuilt images.
+          rm -rf ghcr-extensions/html/dataset
           mv ghcr-extensions/html/ ghcr-extensions/releases
 
       - name: Upload ghcr extensions

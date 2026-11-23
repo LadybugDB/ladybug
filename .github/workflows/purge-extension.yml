@@ -35,13 +35,16 @@ jobs:
       
       - name: Purge extensions
         run: python3 purge-beta.py
-      
+
+      - name: Delete stale vdev and mistaken dataset directories
+        run: |
+          rm -rf releases/vdev dataset
+          ls releases
+
       - name: Upload purged extensions
         uses: actions/upload-artifact@v4
         with:
-          path: |
-            releases
-            dataset
+          path: releases
           name: lbug-extensions
 
   deploy-extensions:

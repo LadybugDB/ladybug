@@ -124,9 +124,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: lbug-extensions
-          path: |
-            releases
-            dataset
+          path: releases
   
   deploy-extensions:
     needs: package-built-extensions
