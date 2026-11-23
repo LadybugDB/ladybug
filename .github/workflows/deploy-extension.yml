@@ -30,6 +30,13 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: lbug-extensions
+          path: downloaded-extensions
+
+      - name: Restore releases directory layout
+        # The lbug-extensions artifact is uploaded with a single path, so
+        # upload-artifact stores the version directories at the artifact
+        # root. Wrap them back into releases/ for the Docker build context.
+        run: mv downloaded-extensions releases
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
