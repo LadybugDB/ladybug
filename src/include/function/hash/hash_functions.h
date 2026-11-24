@@ -171,8 +171,12 @@ inline void Hash::operation(const common::string_t& key, common::hash_t& result)
 
 template<>
 inline void Hash::operation(const common::interval_t& key, common::hash_t& result) {
-    result = combineHashScalar(murmurhash64(key.months),
-        combineHashScalar(murmurhash64(key.days), murmurhash64(key.micros)));
+    // Hash normalized entries so that the hash is consistent with the
+    // normalized interval equality (e.g. '1 month' and '30 days' hash alike).
+    int64_t months = 0, days = 0, micros = 0;
+    common::Interval::normalizeIntervalEntries(key, months, days, micros);
+    result = combineHashScalar(murmurhash64(months),
+        combineHashScalar(murmurhash64(days), murmurhash64(micros)));
 }
 
 template<>
