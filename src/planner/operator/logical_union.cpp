@@ -15,8 +15,7 @@ f_group_pos_set LogicalUnion::getGroupsPosToFlatten(uint32_t childIdx) {
             // expressionsInScope, which may be shorter when a child projects the same
             // expression more than once (e.g. RETURN b.age, b.age).
             DASSERT(childIdx < childProjections.size());
-            if (childIdx >= childProjections.size() ||
-                i >= childProjections[childIdx].size()) {
+            if (childIdx >= childProjections.size() || i >= childProjections[childIdx].size()) {
                 continue;
             }
             auto expression = childProjections[childIdx][i];
