@@ -258,7 +258,7 @@ UpdateNode& UpdateInfo::getOrCreateUpdateNode(idx_t vectorIdx) {
 }
 
 UpdateNode& UpdateInfo::getOrCreateUpdateNodeNoLock(idx_t vectorIdx) {
-    std::unique_lock lock{mtx};
+    // NoLock: caller holds mtx exclusively.
     if (vectorIdx >= updates.size()) {
         updates.resize(vectorIdx + 1);
         for (auto i = 0u; i < updates.size(); i++) {
