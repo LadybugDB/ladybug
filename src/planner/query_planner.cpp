@@ -38,8 +38,31 @@ LogicalPlan Planner::createUnionPlan(std::vector<LogicalPlan>& childrenPlans,
         // Only LogicalProjection deduplicates via insertToScopeMayRepeat;
         // other operator types (e.g. LogicalDelete) keep the full arity in
         // getExpressionsInScope, so we fall back to that.
+        // A UNION arm with its own LIMIT/SKIP (and/or ORDER BY/DISTINCT)
+        // has LogicalLimit/LogicalMultiplicityReducer/LogicalOrderBy/
+        // LogicalDistinct/LogicalFlatten above the final projection, so walk
+        // through those arity-preserving operators to reach the underlying
+        // projection. Without this the fallback stores the deduplicated
+        // schema list, which is shorter than expressionsToUnion when the arm
+        // projects the same expression twice, causing an out-of-bounds read
+        // in LogicalUnion::requireFlatExpression and a width mismatch in the
+        // per-child result collector (SIGSEGV/SIGBUS, see #1693). Note that
+        // appendDistinct/appendProjection insert LogicalFlatten above the
+        // projection for group flattening, hence FLATTEN is included.
         auto* lastOp = childPlan.getLastOperator().get();
-        if (lastOp->getOperatorType() == LogicalOperatorType::PROJECTION) {
+        while (lastOp != nullptr &&
+               (lastOp->getOperatorType() == LogicalOperatorType::LIMIT ||
+                lastOp->getOperatorType() == LogicalOperatorType::MULTIPLICITY_REDUCER ||
+                lastOp->getOperatorType() == LogicalOperatorType::ORDER_BY ||
+                lastOp->getOperatorType() == LogicalOperatorType::DISTINCT ||
+                lastOp->getOperatorType() == LogicalOperatorType::FLATTEN)) {
+            if (lastOp->getNumChildren() == 0) {
+                break;
+            }
+            lastOp = lastOp->getChild(0).get();
+        }
+        if (lastOp != nullptr &&
+            lastOp->getOperatorType() == LogicalOperatorType::PROJECTION) {
             auto& projection = lastOp->constCast<LogicalProjection>();
             childProjections.push_back(projection.getExpressionsToProject());
         } else {
