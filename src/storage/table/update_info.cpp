@@ -17,10 +17,15 @@ namespace storage {
 
 VectorUpdateInfo& UpdateInfo::update(MemoryManager& memoryManager, const Transaction* transaction,
     const idx_t vectorIdx, const sel_t rowIdxInVector, const ValueVector& values) {
-    UpdateNode& header = getOrCreateUpdateNode(vectorIdx);
+    // Hold mtx until the chain lock is taken: vacuumCommitted holds mtx for its whole run and
+    // pops trailing empty slots at its end, so releasing mtx first would let it destroy this
+    // slot (a fresh one has no chain yet) before the chain is locked.
+    std::unique_lock lock{mtx};
+    UpdateNode& header = getOrCreateUpdateNodeNoLock(vectorIdx);
     // We always lock the head of the chain of vectorUpdateInfo to ensure that we can safely
     // read/write to any part of the chain.
     std::unique_lock chainLock{header.mtx};
+    lock.unlock();
     // Traverse the chain of vectorUpdateInfo to find the one that matches the transaction. Also
     // detect if there is any write-write conflicts.
     auto current = header.info.get();
@@ -115,17 +120,20 @@ void UpdateInfo::scanCommitted(const Transaction* transaction, ColumnChunkData& 
 void UpdateInfo::iterateVectorInfo(const Transaction* transaction, idx_t idx,
     const std::function<void(const VectorUpdateInfo&)>& func) const {
     const UpdateNode* head = nullptr;
+    std::shared_lock<std::shared_mutex> chainLock;
     {
         std::shared_lock lock{mtx};
         if (idx >= updates.size() || !updates[idx]->isEmpty()) {
             return;
         }
         head = updates[idx].get();
+        // Hold mtx until the chain lock is taken (see update()): the slot could otherwise be
+        // popped between the two locks, leaving head dangling.
+        chainLock = std::shared_lock{head->mtx};
     }
     // We lock the head of the chain to ensure that we can safely read from any part of the
     // chain.
     DASSERT(head);
-    std::shared_lock chainLock{head->mtx};
     auto current = head->info.get();
     if (current == nullptr) {
         // The chain was emptied after the prefix check (retention dropped every node
@@ -161,8 +169,11 @@ static bool validateUpdateChain(const UpdateNode& updatedNode, const VectorUpdat
 #endif
 
 void UpdateInfo::commit(idx_t vectorIdx, VectorUpdateInfo* info, transaction_t commitTS) {
-    auto& updateNode = getUpdateNode(vectorIdx);
+    // Hold mtx until the chain lock is taken (see update()).
+    std::shared_lock lock{mtx};
+    auto& updateNode = getUpdateNodeNoLock(vectorIdx);
     std::unique_lock chainLock{updateNode.mtx};
+    lock.unlock();
     DASSERT(validateUpdateChain(updateNode, info));
     info->version = commitTS;
 }
@@ -171,13 +182,15 @@ void UpdateInfo::rollback(idx_t vectorIdx, transaction_t version) {
     UpdateNode* header = nullptr;
     // Note that we lock the entire UpdateInfo structure here because we might modify the
     // head of the version chain. This is just a simplification and should be optimized later.
+    std::unique_lock<std::shared_mutex> chainLock;
     {
+        // Hold mtx until the chain lock is taken (see update()).
         std::unique_lock lock{mtx};
         DASSERT(updates.size() > vectorIdx);
         header = updates[vectorIdx].get();
+        chainLock = std::unique_lock{header->mtx};
     }
     DASSERT(header);
-    std::unique_lock chainLock{header->mtx};
     // First check if this version is still in the chain. It might have been removed by
     // a previous rollback entry of the same transaction.
     // TODO(Guodong): This will be optimized by moving VectorUpdateInfo into UndoBuffer.
@@ -228,6 +241,10 @@ bool UpdateInfo::hasUpdates(const Transaction* transaction, row_idx_t startRow,
 
 UpdateNode& UpdateInfo::getUpdateNode(idx_t vectorIdx) {
     std::shared_lock lock{mtx};
+    return getUpdateNodeNoLock(vectorIdx);
+}
+
+UpdateNode& UpdateInfo::getUpdateNodeNoLock(idx_t vectorIdx) {
     if (vectorIdx >= updates.size()) {
         throw InternalException(
             "UpdateInfo does not have update node for vector index: " + std::to_string(vectorIdx));
@@ -236,6 +253,11 @@ UpdateNode& UpdateInfo::getUpdateNode(idx_t vectorIdx) {
 }
 
 UpdateNode& UpdateInfo::getOrCreateUpdateNode(idx_t vectorIdx) {
+    std::unique_lock lock{mtx};
+    return getOrCreateUpdateNodeNoLock(vectorIdx);
+}
+
+UpdateNode& UpdateInfo::getOrCreateUpdateNodeNoLock(idx_t vectorIdx) {
     std::unique_lock lock{mtx};
     if (vectorIdx >= updates.size()) {
         updates.resize(vectorIdx + 1);
@@ -491,8 +513,11 @@ bool UpdateInfo::vacuumCommitted(transaction_t horizon,
 
 VectorUpdateInfo& UpdateInfo::insertRetainedBaseNode(MemoryManager& memoryManager,
     LogicalType dataType, idx_t vectorIdx, transaction_t horizon) {
-    auto& header = getOrCreateUpdateNode(vectorIdx);
+    // Hold mtx until the chain lock is taken (see update()).
+    std::unique_lock lock{mtx};
+    auto& header = getOrCreateUpdateNodeNoLock(vectorIdx);
     std::unique_lock chainLock{header.mtx};
+    lock.unlock();
     // Dismantle newest-first.
     std::vector<std::unique_ptr<VectorUpdateInfo>> nodes;
     auto head = std::move(header.info);
@@ -534,8 +559,11 @@ VectorUpdateInfo& UpdateInfo::insertRetainedBaseNode(MemoryManager& memoryManage
 bool UpdateInfo::stageRetainedRow(MemoryManager& memoryManager, LogicalType dataType,
     idx_t vectorIdx, transaction_t version, sel_t rowInVector, const ColumnChunkData& srcData,
     row_idx_t srcPos) {
-    auto& header = getOrCreateUpdateNode(vectorIdx);
+    // Hold mtx until the chain lock is taken (see update()).
+    std::unique_lock lock{mtx};
+    auto& header = getOrCreateUpdateNodeNoLock(vectorIdx);
     std::unique_lock chainLock{header.mtx};
+    lock.unlock();
     VectorUpdateInfo* node = nullptr;
     for (auto* current = header.info.get(); current != nullptr; current = current->getPrev()) {
         if (current->version == version) {

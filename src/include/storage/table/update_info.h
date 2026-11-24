@@ -180,8 +180,9 @@ public:
     // committed nodes with version >= horizon are kept. When `horizon` is INVALID_TRANSACTION
     // (no active readers) every committed node is folded and dropped, so the chain only
     // retains uncommitted entries. Returns true when any committed data was folded.
-    // Uncommitted nodes linked under the slot lock are preserved. A writer or reader that has
-    // taken a slot but not yet locked it is not protected: the slot can be emptied and popped.
+    // Uncommitted nodes linked under the slot lock are preserved. Slots stay alive while
+    // reserved: every function that takes a slot under mtx holds mtx until it has taken the
+    // slot's own lock, so no slot can be emptied and popped in between.
     // Must NOT run while an older reader (startTS <= folded versions) is still active: the
     // caller must ensure `horizon` is the oldest active startTS (or INVALID when none).
     bool vacuumCommitted(common::transaction_t horizon,
@@ -191,6 +192,12 @@ public:
 private:
     UpdateNode& getUpdateNode(common::idx_t vectorIdx);
     UpdateNode& getOrCreateUpdateNode(common::idx_t vectorIdx);
+    // NoLock variants: the caller must hold mtx (shared or exclusive for get, exclusive
+    // for get-or-create) until it has taken the returned node's own lock. A slot obtained
+    // under mtx must never be used after mtx is released but before its own lock is held:
+    // vacuumCommitted can otherwise empty and pop the slot in between, destroying the node.
+    UpdateNode& getUpdateNodeNoLock(common::idx_t vectorIdx);
+    UpdateNode& getOrCreateUpdateNodeNoLock(common::idx_t vectorIdx);
     // Chains are found by vector index, so only empty slots at the end can go. The caller
     // holds `mtx` exclusively.
     void popTrailingEmptySlots();
