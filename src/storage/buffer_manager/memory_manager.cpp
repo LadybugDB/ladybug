@@ -150,7 +150,9 @@ std::unique_ptr<MemoryBuffer> MemoryManager::reallocateBuffer(
         oldSize == common::TEMP_PAGE_SIZE || newSize == REUSABLE_BUFFER_SIZE ||
         oldSize == REUSABLE_BUFFER_SIZE) {
         auto newBuffer = allocateBuffer(false /*initializeToZero*/, newSize);
-        const auto copySize = std::min(oldSize, newSize);
+        // Explicit template argument: size_bytes() is std::size_t (unsigned long on macOS),
+        // while newSize is uint64_t (unsigned long long there), so deduction fails.
+        const auto copySize = std::min<uint64_t>(oldSize, newSize);
         if (copySize > 0) {
             memcpy(newBuffer->getBuffer().data(), oldSpan.data(), copySize);
         }
