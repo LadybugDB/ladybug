@@ -122,13 +122,18 @@ timestamp_t timestamp_t::operator-(const interval_t& interval) const {
 
 interval_t timestamp_t::operator-(const timestamp_t& rhs) const {
     interval_t result{};
-    // Compute the magnitude without signed overflow (value - rhs may overflow
-    // when the operands have opposite signs) and without abs(INT64_MIN) UB.
-    uint64_t diff =
-        value >= rhs.value ? (uint64_t)(value - rhs.value) : (uint64_t)(rhs.value - value);
+    // Compute the magnitude without signed overflow and without abs(INT64_MIN)
+    // UB. Note the casts happen *before* the subtraction: casting the result
+    // of a signed subtraction (as in (uint64_t)(value - rhs.value)) would still
+    // trigger signed overflow UB when the operands have opposite signs.
+    // Unsigned subtraction wraps modulo 2^64, yielding the correct magnitude
+    // since |value - rhs| <= UINT64_MAX.
+    uint64_t diff = value >= rhs.value ?
+                        static_cast<uint64_t>(value) - static_cast<uint64_t>(rhs.value) :
+                        static_cast<uint64_t>(rhs.value) - static_cast<uint64_t>(value);
     uint64_t days = diff / Interval::MICROS_PER_DAY;
     uint64_t micros = diff % Interval::MICROS_PER_DAY;
-    // days <= INT64_MAX / MICROS_PER_DAY < INT32_MAX and micros < MICROS_PER_DAY,
+    // days <= UINT64_MAX / MICROS_PER_DAY < INT32_MAX and micros < MICROS_PER_DAY,
     // so the narrowing and the negation below cannot overflow.
     result.months = 0;
     result.days = (int32_t)days;
@@ -342,6 +347,16 @@ dtime_t Timestamp::getTime(timestamp_t timestamp) {
 
 timestamp_t Timestamp::fromDateTime(date_t date, dtime_t time) {
     timestamp_t result;
+    // date_t holds a wider int32 range than [Date::MIN_YEAR, Date::MAX_YEAR];
+    // Date::convert DASSERTs (aborting Debug builds) on out-of-range inputs,
+    // so reject them here with an OverflowException instead.
+    {
+        static const int32_t minDays = Date::fromDate(Date::MIN_YEAR, 1, 1).days;
+        static const int32_t maxDays = Date::fromDate(Date::MAX_YEAR, 12, 31).days;
+        if (date.days < minDays || date.days > maxDays) {
+            throw OverflowException{"Timestamp value is out of range"};
+        }
+    }
     int32_t year = 0, month = 0, day = 0, hour = 0, minute = 0, second = 0, microsecond = -1;
     Date::convert(date, year, month, day);
     Time::convert(time, hour, minute, second, microsecond);

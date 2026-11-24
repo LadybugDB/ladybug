@@ -19,6 +19,26 @@ date_t::date_t() : days{0} {}
 
 date_t::date_t(int32_t days_p) : days(days_p) {}
 
+namespace {
+// Valid dates are [Date::MIN_YEAR-01-01, Date::MAX_YEAR-12-31]. date_t can hold
+// a wider int32 range, but Date::convert DASSERTs on out-of-range inputs (and
+// aborts Debug builds when formatting). Guard arithmetic results so they
+// throw OverflowException instead of aborting later.
+inline int32_t dateMinDays() {
+    static const int32_t v = Date::fromDate(Date::MIN_YEAR, 1, 1).days;
+    return v;
+}
+inline int32_t dateMaxDays() {
+    static const int32_t v = Date::fromDate(Date::MAX_YEAR, 12, 31).days;
+    return v;
+}
+inline void validateDateDays(int32_t days) {
+    if (days < dateMinDays() || days > dateMaxDays()) {
+        throw OverflowException{"Date value is out of range"};
+    }
+}
+} // namespace
+
 bool date_t::operator==(const date_t& rhs) const {
     return days == rhs.days;
 }
@@ -44,6 +64,7 @@ bool date_t::operator>=(const date_t& rhs) const {
 }
 
 date_t date_t::operator+(const interval_t& interval) const {
+    validateDateDays(this->days);
     date_t result{};
     if (interval.months != 0) {
         int32_t year = 0, month = 0, day = 0, maxDayInMonth = 0;
@@ -60,9 +81,17 @@ date_t date_t::operator+(const interval_t& interval) const {
         }
         // handle date overflow
         // example: 2020-01-31 + "1 months"
-        maxDayInMonth = Date::monthDays(year, month);
+        try {
+            maxDayInMonth = Date::monthDays(year, month);
+        } catch (...) {
+            throw OverflowException{"Date value is out of range"};
+        }
         day = day > maxDayInMonth ? maxDayInMonth : day;
-        result = Date::fromDate(year, month, day);
+        try {
+            result = Date::fromDate(year, month, day);
+        } catch (const ConversionException& e) {
+            throw OverflowException{"Date value is out of range"};
+        }
     } else {
         result = *this;
     }
@@ -73,6 +102,7 @@ date_t date_t::operator+(const interval_t& interval) const {
         } catch (const OverflowException& e) {
             throw OverflowException{"Date value is out of range"};
         }
+        validateDateDays(result.days);
     }
     if (interval.micros != 0) {
         int32_t dayOffset = int32_t(interval.micros / Interval::MICROS_PER_DAY);
@@ -82,6 +112,7 @@ date_t date_t::operator+(const interval_t& interval) const {
         } catch (const OverflowException& e) {
             throw OverflowException{"Date value is out of range"};
         }
+        validateDateDays(result.days);
     }
     return result;
 }
@@ -130,38 +161,32 @@ bool date_t::operator>=(const timestamp_t& rhs) const {
     return !(*this < rhs);
 }
 
-date_t date_t::operator+(const int32_t& day) const {
-    int32_t lDays = this->days, rDay = day;
-    date_t result{};
-    try {
-        function::Add::operation(lDays, rDay, result.days);
-    } catch (const OverflowException& e) {
-        throw OverflowException{"Date value is out of range"};
-    }
-    return result;
-};
-date_t date_t::operator-(const int32_t& day) const {
-    int32_t lDays = this->days, rDay = day;
-    date_t result{};
-    try {
-        function::Subtract::operation(lDays, rDay, result.days);
-    } catch (const OverflowException& e) {
-        throw OverflowException{"Date value is out of range"};
-    }
-    return result;
-};
 date_t date_t::operator+(const int64_t& day) const {
-    int64_t total = (int64_t)this->days + day;
+    // Use checked int64 arithmetic: a raw (int64)days + day can still overflow
+    // signed int64 (e.g. days > 0, day == INT64_MAX) which is UB.
+    int64_t lDays = (int64_t)this->days, rDay = day, total = 0;
+    try {
+        function::Add::operation(lDays, rDay, total);
+    } catch (const OverflowException& e) {
+        throw OverflowException{"Date value is out of range"};
+    }
     if (total > INT32_MAX || total < INT32_MIN) {
         throw OverflowException{"Date value is out of range"};
     }
+    validateDateDays((int32_t)total);
     return date_t((int32_t)total);
 };
 date_t date_t::operator-(const int64_t& day) const {
-    int64_t total = (int64_t)this->days - day;
+    int64_t lDays = (int64_t)this->days, rDay = day, total = 0;
+    try {
+        function::Subtract::operation(lDays, rDay, total);
+    } catch (const OverflowException& e) {
+        throw OverflowException{"Date value is out of range"};
+    }
     if (total > INT32_MAX || total < INT32_MIN) {
         throw OverflowException{"Date value is out of range"};
     }
+    validateDateDays((int32_t)total);
     return date_t((int32_t)total);
 };
 

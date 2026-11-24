@@ -20,3 +20,15 @@ True
 -STATEMENT RETURN interval('2 months') > interval('30 days'), interval('2 months') < interval('61 days');
 ---- 1
 True|True
+-STATEMENT RETURN (interval('1 month') - interval('1 day')) = interval('29 days');
+---- 1
+True
+-STATEMENT RETURN interval('29 days 24 hours') = interval('30 days');
+---- 1
+True
+-STATEMENT RETURN interval('29 days 48 hours') < interval('30 days');
+---- 1
+False
+-STATEMENT UNWIND [interval('1 month'), interval('30 days'), interval('2 months')] AS x RETURN count(DISTINCT x);
+---- 1
+2

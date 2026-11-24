@@ -22,6 +22,21 @@ Overflow exception: Interval value is out of range
 -STATEMENT RETURN date('2020-01-01') + interval('2147483647 days');
 ---- error
 Overflow exception: Date value is out of range
+-STATEMENT RETURN date('2020-01-01') - interval('2147483647 days');
+---- error
+Overflow exception: Date value is out of range
 -STATEMENT RETURN timestamp('2262-01-01 00:00:00') + interval('2147483647 days');
 ---- error
 Overflow exception: Date value is out of range
+-STATEMENT RETURN timestamp('2262-01-01 00:00:00') + interval('200000000 days');
+---- error
+Overflow exception: Date value is out of range
+-STATEMENT RETURN timestamp('2262-04-12 00:00:00') - timestamp('1677-09-21 00:00:00');
+---- 1
+213504 days
+-STATEMENT RETURN to_microseconds(-9223372036854775808) / -1;
+---- error
+Overflow exception: Interval value is out of range
+-STATEMENT RETURN interval('0 us') - interval('9223372036854775807 us') - interval('1 us');
+---- 1
+-2562047788:00:54.775808
