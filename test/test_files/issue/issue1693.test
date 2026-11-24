@@ -1,0 +1,41 @@
+-DATASET CSV empty
+
+--
+
+-CASE Issue1693UnionArmLimitDuplicateExpression
+# Follow-up to #620: a UNION arm with its own LIMIT/SKIP whose final projection
+# contains the same expression twice crashed (SIGSEGV on x86_64, SIGBUS on
+# aarch64; unordered_map::at on macOS), because
+# Planner::createUnionPlan only captured the non-deduplicated projection list
+# when the arm's last operator was a LogicalProjection. With LIMIT/SKIP (and/or
+# ORDER BY/DISTINCT) the last operator is LogicalLimit (or LogicalDistinct with
+# a LogicalFlatten above the projection), so it fell back to the deduplicated
+# schema list, which is shorter than the union arity.
+
+-STATEMENT CREATE NODE TABLE Gene(id STRING, symbol STRING, PRIMARY KEY(id));
+---- ok
+-STATEMENT CREATE (:Gene {id: 'g0', symbol: 'TP53'});
+---- ok
+-STATEMENT CREATE (:Gene {id: 'g1', symbol: 'EGFR'});
+---- ok
+-STATEMENT MATCH (n:Gene {symbol: 'TP53'}) RETURN n.symbol AS a, n.symbol AS b LIMIT 5 UNION MATCH (n:Gene {symbol: 'EGFR'}) RETURN n.symbol AS a, n.symbol AS b LIMIT 5;
+---- 2
+EGFR|EGFR
+TP53|TP53
+-STATEMENT MATCH (n:Gene {symbol: 'TP53'}) RETURN n.symbol AS a, n.symbol AS b LIMIT 5 UNION ALL MATCH (n:Gene {symbol: 'EGFR'}) RETURN n.symbol AS a, n.symbol AS b LIMIT 5;
+---- 2
+EGFR|EGFR
+TP53|TP53
+-STATEMENT MATCH (n:Gene) RETURN n.symbol AS a, n.symbol AS b ORDER BY a SKIP 1 UNION MATCH (n:Gene) RETURN n.symbol AS a, n.symbol AS b ORDER BY a SKIP 1;
+---- 1
+TP53|TP53
+-STATEMENT MATCH (n:Gene) RETURN DISTINCT n.symbol AS a, n.symbol AS b LIMIT 5 UNION MATCH (n:Gene) RETURN DISTINCT n.symbol AS a, n.symbol AS b LIMIT 5;
+---- 2
+EGFR|EGFR
+TP53|TP53
+-STATEMENT MATCH (n:Gene) RETURN DISTINCT n.symbol AS a, n.symbol AS b LIMIT 5 UNION ALL MATCH (n:Gene) RETURN n.symbol AS a, n.symbol AS b LIMIT 5;
+---- 4
+EGFR|EGFR
+EGFR|EGFR
+TP53|TP53
+TP53|TP53

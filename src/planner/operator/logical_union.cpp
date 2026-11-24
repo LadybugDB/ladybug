@@ -15,6 +15,10 @@ f_group_pos_set LogicalUnion::getGroupsPosToFlatten(uint32_t childIdx) {
             // expressionsInScope, which may be shorter when a child projects the same
             // expression more than once (e.g. RETURN b.age, b.age).
             DASSERT(childIdx < childProjections.size());
+            if (childIdx >= childProjections.size() ||
+                i >= childProjections[childIdx].size()) {
+                continue;
+            }
             auto expression = childProjections[childIdx][i];
             groupsPos.insert(childSchema->getGroupPos(*expression));
         }
@@ -50,6 +54,14 @@ std::unique_ptr<LogicalOperator> LogicalUnion::copy() {
 
 bool LogicalUnion::requireFlatExpression(uint32_t expressionIdx) {
     for (auto childIdx = 0u; childIdx < children.size(); ++childIdx) {
+        if (childIdx >= childProjections.size() ||
+            expressionIdx >= childProjections[childIdx].size()) {
+            // Defensive: the per-child projection snapshot should always match
+            // expressionsToUnion in arity, but a stale snapshot (e.g. after an
+            // optimizer rewrite) must not cause an out-of-bounds read that
+            // crashes the process. Requiring flat is the safe fallback.
+            return true;
+        }
         auto childSchema = children[childIdx]->getSchema();
         // Use the non-deduplicated projection list; indexing by unique name would not
         // work because different arms may have different expressions at the same
