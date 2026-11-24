@@ -442,7 +442,8 @@ public:
         const binder::BoundReadingClause& readingClause);
 
     LogicalPlan createUnionPlan(std::vector<LogicalPlan>& childrenPlans,
-        const binder::expression_vector& expressions, bool isUnionAll);
+        const binder::expression_vector& expressions,
+        const std::vector<binder::expression_vector>& childProjections, bool isUnionAll);
 
     binder::expression_vector getProperties(const binder::Expression& pattern) const;
 
