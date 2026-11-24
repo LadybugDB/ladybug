@@ -14,6 +14,8 @@
 #include "common/data_chunk/data_chunk_state.h"
 #include "common/exception/runtime.h"
 #include "common/system_config.h"
+#include "common/types/int128_t.h"
+#include "common/types/interval_t.h"
 #include "common/types/types.h"
 #include "common/types/value/value.h"
 #include "common/vector/value_vector.h"
@@ -130,10 +132,16 @@ void appendExactValue(std::string& out, const Value& value) {
         appendRawBytes(out, &v, sizeof(v));
     } break;
     case PhysicalTypeID::INTERVAL: {
+        // Serialize the total micros so that equal intervals (e.g. '1 month'
+        // and '30 days') share the same key, consistent with interval_t::operator==.
+        // Serializing raw (months, days, micros) would treat them as distinct.
         const auto& iv = value.val.intervalVal;
-        appendRawBytes(out, &iv.months, sizeof(iv.months));
-        appendRawBytes(out, &iv.days, sizeof(iv.days));
-        appendRawBytes(out, &iv.micros, sizeof(iv.micros));
+        const common::int128_t total =
+            common::int128_t(iv.months) * common::int128_t(common::Interval::MICROS_PER_MONTH) +
+            common::int128_t(iv.days) * common::int128_t(common::Interval::MICROS_PER_DAY) +
+            common::int128_t(iv.micros);
+        appendRawBytes(out, &total.low, sizeof(total.low));
+        appendRawBytes(out, &total.high, sizeof(total.high));
     } break;
     case PhysicalTypeID::INTERNAL_ID: {
         const auto& id = value.val.internalIDVal;

@@ -35,9 +35,9 @@ struct LBUG_API date_t {
     bool operator>(const timestamp_t& rhs) const;
     bool operator>=(const timestamp_t& rhs) const;
 
-    // arithmetic operators
-    date_t operator+(const int32_t& day) const;
-    date_t operator-(const int32_t& day) const;
+    // arithmetic operators (int64 only: a single overload avoids ambiguity for
+    // other integer widths such as int/long/long long, which would otherwise
+    // match int32_t and int64_t equally well via integral conversions).
     date_t operator+(const int64_t& day) const;
     date_t operator-(const int64_t& day) const;
 
