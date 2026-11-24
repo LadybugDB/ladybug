@@ -1,6 +1,8 @@
 #include "processor/operator/persistent/index_builder.h"
 
+#include <string_view>
 #include <thread>
+#include <vector>
 
 #include "common/assert.h"
 #include "common/cast.h"
@@ -66,14 +68,53 @@ void IndexBuilderGlobalQueues::maybeConsumeIndex(size_t index,
             using T = std::decay_t<decltype(queues.type)>;
             auto lck = pkIndex.adoptLockOfTypedIndex(index);
             IndexBufferWithWarningData<T> bufferWithWarningData;
-            while (queues.array[index].pop(bufferWithWarningData)) {
+            while (true) {
+                // Pop under the exclusive lock: MPSCQueue has a single consumer, and this
+                // lock is what serializes pops of this sub-index's queue.
+                if (!queues.array[index].pop(bufferWithWarningData)) {
+                    return;
+                }
                 auto& buffer = bufferWithWarningData.indexBuffer;
                 auto& warningDataBuffer = bufferWithWarningData.warningDataBuffer;
+                // Probe the legacy sub-indexes WITHOUT holding this sub-index's exclusive
+                // lock. The probe takes shared locks on other sub-indexes, so holding the
+                // exclusive lock while probing deadlocks against the thread that owns the
+                // probed sub-index (issue #1669: non-ASCII STRING keys probe a different
+                // sub-index than the one they are appended to). Shared-only probes cannot
+                // deadlock: exclusive holders never block while holding their lock.
+                // This is race-free because a key is only ever appended to the sub-index
+                // selected by its current hash, so no concurrent append can place one of
+                // these keys into a legacy sub-index's local storage; persistent entries
+                // are immutable for the duration of the transaction.
+                lck.unlock();
+                std::vector<uint8_t> legacyHits;
+                if constexpr (std::same_as<T, std::string>) {
+                    legacyHits.assign(buffer.size(), 0);
+                    for (size_t i = 0; i < buffer.size(); i++) {
+                        std::string_view key{buffer[i].first};
+                        auto legacyPos = HashIndexUtils::getLegacyHashIndexPosition(key);
+                        if (legacyPos != index) {
+                            common::offset_t tmp = 0;
+                            auto* legacyIndex =
+                                pkIndex.getTypedHashIndexByPos<common::string_t>(legacyPos);
+                            if (legacyIndex->lookupInternal(transaction, key, tmp,
+                                    [&](offset_t offset) {
+                                        return nodeTable->isVisible(transaction, offset);
+                                    })) {
+                                legacyHits[i] = 1;
+                            }
+                        }
+                    }
+                }
+                // Reacquire the exclusive lock (blocking). Safe: no locks are held while
+                // waiting, and exclusive holders always make progress without blocking.
+                lck.lock();
                 uint64_t insertBufferOffset = 0;
                 while (insertBufferOffset < buffer.size()) {
-                    auto numValuesInserted = pkIndex.appendWithIndexPosNoLock(transaction, buffer,
-                        insertBufferOffset, index,
-                        [&](offset_t offset) { return nodeTable->isVisible(transaction, offset); });
+                    auto numValuesInserted = pkIndex.appendWithIndexPosNoLock(
+                        transaction, buffer, insertBufferOffset, index,
+                        [&](offset_t offset) { return nodeTable->isVisible(transaction, offset); },
+                        legacyHits);
                     if (numValuesInserted < buffer.size() - insertBufferOffset) {
                         const auto& erroneousEntry = buffer[insertBufferOffset + numValuesInserted];
                         OptionalWarningSourceData erroneousEntryWarningData;
@@ -99,7 +140,7 @@ void IndexBuilderGlobalQueues::maybeConsumeIndex(size_t index,
             }
             return;
         },
-        std::move(queues));
+        queues);
 }
 
 IndexBuilderLocalBuffers::IndexBuilderLocalBuffers(IndexBuilderGlobalQueues& globalQueues)

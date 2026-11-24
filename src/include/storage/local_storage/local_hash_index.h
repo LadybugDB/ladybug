@@ -86,7 +86,12 @@ public:
 
     size_t appendNoLock(IndexBuffer<OwnedType>& buffer, uint64_t bufferOffset,
         visible_func isVisible) {
-        return localInsertions.append(buffer, bufferOffset, isVisible);
+        return appendNoLock(buffer, bufferOffset, buffer.size(), isVisible);
+    }
+
+    size_t appendNoLock(IndexBuffer<OwnedType>& buffer, uint64_t bufferOffset, uint64_t bufferEnd,
+        visible_func isVisible) {
+        return localInsertions.append(buffer, bufferOffset, bufferEnd, isVisible);
     }
 
     bool hasUpdates() {
