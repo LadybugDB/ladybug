@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <string_view>
 #include <type_traits>
+#include <vector>
 
 #include "common/cast.h"
 #include "common/exception/runtime.h"
@@ -148,12 +149,19 @@ public:
     // the lock already.
     size_t appendNoLock(const transaction::Transaction* transaction,
         IndexBuffer<BufferKeyType>& buffer, uint64_t bufferOffset, visible_func isVisible) {
+        return appendNoLock(transaction, buffer, bufferOffset, buffer.size(), isVisible);
+    }
+    // Bounded variant: appends keys in [bufferOffset, bufferEnd). Used by the batch index
+    // builder to stop before a key that was already found to be a duplicate elsewhere.
+    size_t appendNoLock(const transaction::Transaction* transaction,
+        IndexBuffer<BufferKeyType>& buffer, uint64_t bufferOffset, uint64_t bufferEnd,
+        visible_func isVisible) {
         // Check if values already exist in persistent storage
         if (indexHeaderForWriteTrx.numEntries > 0) {
-            localStorage->reserveSpaceForAppendNoLock(buffer.size() - bufferOffset);
+            localStorage->reserveSpaceForAppendNoLock(bufferEnd - bufferOffset);
             size_t numValuesInserted = 0;
             common::offset_t result = 0;
-            for (size_t i = bufferOffset; i < buffer.size(); i++) {
+            for (size_t i = bufferOffset; i < bufferEnd; i++) {
                 auto& [key, value] = buffer[i];
                 if (lookupInPersistentIndex(transaction, key, result, isVisible)) {
                     return i - bufferOffset;
@@ -164,7 +172,7 @@ public:
             }
             return numValuesInserted;
         } else {
-            return localStorage->appendNoLock(buffer, bufferOffset, isVisible);
+            return localStorage->appendNoLock(buffer, bufferOffset, bufferEnd, isVisible);
         }
     }
 
@@ -493,25 +501,36 @@ public:
     // Appends the buffer to the index. Returns the number of values successfully inserted.
     // If a key fails to insert, it immediately returns without inserting any more values,
     // and the returned value is also the index of the key which failed to insert.
+    // legacyHits carries the per-key result of probing the legacy sub-indexes for STRING keys
+    // (empty for other key types). It must be computed BEFORE taking this sub-index's exclusive
+    // lock: the probe takes shared locks on other sub-indexes, so probing while holding this
+    // lock deadlocks against the thread owning the probed sub-index (issue #1669).
     template<common::IndexHashable T>
     size_t appendWithIndexPosNoLock(const transaction::Transaction* transaction,
-        IndexBuffer<T>& buffer, uint64_t bufferOffset, uint64_t indexPos, visible_func isVisible) {
+        IndexBuffer<T>& buffer, uint64_t bufferOffset, uint64_t indexPos, visible_func isVisible,
+        const std::vector<uint8_t>& legacyHits) {
         DASSERT(indexInfo.keyDataTypes[0] == common::TypeUtils::getPhysicalTypeIDForType<T>());
         DASSERT(std::all_of(buffer.begin(), buffer.end(), [&](auto& elem) {
             return HashIndexUtils::getHashIndexPosition(elem.first) == indexPos;
         }));
         if constexpr (std::same_as<HashIndexType<T>, common::string_t>) {
+            DASSERT(legacyHits.size() == buffer.size());
             for (size_t i = bufferOffset; i < buffer.size(); i++) {
-                std::string_view sv = stringViewFromKey(buffer[i].first);
-                auto legacyPos = HashIndexUtils::getLegacyHashIndexPosition(sv);
-                if (legacyPos != indexPos) {
-                    common::offset_t tmp = 0;
-                    auto* legacyIndex = getTypedHashIndexByPos<common::string_t>(legacyPos);
-                    if (legacyIndex->lookupInternal(transaction, sv, tmp, isVisible)) {
-                        return i - bufferOffset;
+                if (legacyHits[i]) {
+                    if (i == bufferOffset) {
+                        return 0;
                     }
+                    auto numAppended =
+                        getTypedHashIndexByPos<HashIndexType<T>>(indexPos)->appendNoLock(
+                            transaction, buffer, bufferOffset, i, isVisible);
+                    if (numAppended < i - bufferOffset) {
+                        return numAppended;
+                    }
+                    return i - bufferOffset;
                 }
             }
+        } else {
+            DASSERT(legacyHits.empty());
         }
         return getTypedHashIndexByPos<HashIndexType<T>>(indexPos)->appendNoLock(transaction, buffer,
             bufferOffset, isVisible);

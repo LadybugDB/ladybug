@@ -96,16 +96,22 @@ public:
     // Appends the buffer to the index. Returns the number of values successfully inserted.
     // I.e. if a key fails to insert, its index will be the return value
     size_t append(IndexBuffer<OwnedType>& buffer, uint64_t bufferOffset, visible_func isVisible) {
-        reserve(indexHeader.numEntries + buffer.size() - bufferOffset);
+        return append(buffer, bufferOffset, buffer.size(), isVisible);
+    }
+
+    // Bounded variant: appends keys in [bufferOffset, bufferEnd).
+    size_t append(IndexBuffer<OwnedType>& buffer, uint64_t bufferOffset, uint64_t bufferEnd,
+        visible_func isVisible) {
+        reserve(indexHeader.numEntries + bufferEnd - bufferOffset);
         common::hash_t hashes[INDEX_BUFFER_SIZE];
-        for (size_t i = bufferOffset; i < buffer.size(); i++) {
+        for (size_t i = bufferOffset; i < bufferEnd; i++) {
             hashes[i] = HashIndexUtils::hash(buffer[i].first);
             auto& [key, value] = buffer[i];
             if (!appendInternal(std::move(key), value, hashes[i], isVisible)) {
                 return i - bufferOffset;
             }
         }
-        return buffer.size() - bufferOffset;
+        return bufferEnd - bufferOffset;
     }
 
     bool append(OwnedType&& key, common::offset_t value, visible_func isVisible) {
