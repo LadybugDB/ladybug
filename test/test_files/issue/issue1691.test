@@ -1,0 +1,27 @@
+-DATASET CSV empty
+
+--
+
+-CASE Issue1691IntervalDateOverflow
+# Interval/date/timestamp arithmetic used raw wrapping arithmetic and could
+# SIGFPE (division by zero), SIGSEGV (microsecond overflow), or silently
+# wrap. All of these now raise errors instead.
+
+-STATEMENT RETURN interval('3 days') / 0;
+---- error
+Runtime exception: Divide by zero.
+-STATEMENT RETURN interval('3 days') / -1;
+---- 1
+-3 days
+-STATEMENT RETURN interval('9223372036854775807 us') + interval('1 us');
+---- error
+Overflow exception: Interval value is out of range
+-STATEMENT RETURN interval('2147483647 days') + interval('1 day');
+---- error
+Overflow exception: Interval value is out of range
+-STATEMENT RETURN date('2020-01-01') + interval('2147483647 days');
+---- error
+Overflow exception: Date value is out of range
+-STATEMENT RETURN timestamp('2262-01-01 00:00:00') + interval('2147483647 days');
+---- error
+Overflow exception: Date value is out of range

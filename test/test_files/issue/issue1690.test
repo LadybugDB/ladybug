@@ -1,0 +1,22 @@
+-DATASET CSV empty
+
+--
+
+-CASE Issue1690IntervalOrderingContradiction
+# INTERVAL equality was field-exact while ordering used normalized entries,
+# so INTERVAL '1 month' = INTERVAL '30 days' was False while both
+# a < b and b < a were True. Equality is now evaluated on normalized
+# entries, consistent with the ordering.
+
+-STATEMENT RETURN interval('1 month') = interval('30 days') AS eq, interval('1 month') < interval('30 days') AS a_lt_b, interval('30 days') < interval('1 month') AS b_lt_a, interval('1 month') > interval('30 days') AS a_gt_b, interval('30 days') > interval('1 month') AS b_gt_a;
+---- 1
+True|False|False|False|False
+-STATEMENT RETURN interval('1 month') <= interval('30 days'), interval('1 month') >= interval('30 days'), interval('1 month') <> interval('30 days');
+---- 1
+True|True|False
+-STATEMENT RETURN interval('25 hours') = interval('1 day 1 hour');
+---- 1
+True
+-STATEMENT RETURN interval('2 months') > interval('30 days'), interval('2 months') < interval('61 days');
+---- 1
+True|True

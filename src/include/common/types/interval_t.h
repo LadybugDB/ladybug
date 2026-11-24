@@ -57,7 +57,7 @@ struct LBUG_API interval_t {
     date_t operator+(const date_t& rhs) const;
     interval_t operator-(const interval_t& rhs) const;
 
-    interval_t operator/(const uint64_t& rhs) const;
+    interval_t operator/(const int64_t& rhs) const;
 };
 
 // Note: Aside from some minor changes, this implementation is copied from DuckDB's source code:

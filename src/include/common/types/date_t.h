@@ -38,6 +38,8 @@ struct LBUG_API date_t {
     // arithmetic operators
     date_t operator+(const int32_t& day) const;
     date_t operator-(const int32_t& day) const;
+    date_t operator+(const int64_t& day) const;
+    date_t operator-(const int64_t& day) const;
 
     date_t operator+(const interval_t& interval) const;
     date_t operator-(const interval_t& interval) const;

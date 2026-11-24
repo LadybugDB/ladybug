@@ -2,10 +2,13 @@
 
 #include "common/assert.h"
 #include "common/exception/conversion.h"
+#include "common/exception/overflow.h"
 #include "common/string_utils.h"
 #include "common/types/cast_helpers.h"
 #include "common/types/timestamp_t.h"
+#include "function/arithmetic/add.h"
 #include "function/arithmetic/multiply.h"
+#include "function/arithmetic/subtract.h"
 #include "re2.h"
 #include <format>
 
@@ -64,24 +67,43 @@ date_t date_t::operator+(const interval_t& interval) const {
         result = *this;
     }
     if (interval.days != 0) {
-        result.days += interval.days;
+        int32_t lDays = result.days, rDays = interval.days;
+        try {
+            function::Add::operation(lDays, rDays, result.days);
+        } catch (const OverflowException& e) {
+            throw OverflowException{"Date value is out of range"};
+        }
     }
     if (interval.micros != 0) {
-        result.days += int32_t(interval.micros / Interval::MICROS_PER_DAY);
+        int32_t dayOffset = int32_t(interval.micros / Interval::MICROS_PER_DAY);
+        int32_t lDays = result.days;
+        try {
+            function::Add::operation(lDays, dayOffset, result.days);
+        } catch (const OverflowException& e) {
+            throw OverflowException{"Date value is out of range"};
+        }
     }
     return result;
 }
 
 date_t date_t::operator-(const interval_t& interval) const {
     interval_t inverseRight{};
-    inverseRight.months = -interval.months;
-    inverseRight.days = -interval.days;
-    inverseRight.micros = -interval.micros;
+    int32_t zero32 = 0;
+    int64_t zero64 = 0;
+    int32_t negMonths = interval.months, negDays = interval.days;
+    int64_t negMicros = interval.micros;
+    try {
+        function::Subtract::operation(zero32, negMonths, inverseRight.months);
+        function::Subtract::operation(zero32, negDays, inverseRight.days);
+        function::Subtract::operation(zero64, negMicros, inverseRight.micros);
+    } catch (const OverflowException& e) {
+        throw OverflowException{"Interval value is out of range"};
+    }
     return *this + inverseRight;
 }
 
 int64_t date_t::operator-(const date_t& rhs) const {
-    return (*this).days - rhs.days;
+    return (int64_t)(*this).days - (int64_t)rhs.days;
 }
 
 bool date_t::operator==(const timestamp_t& rhs) const {
@@ -109,10 +131,38 @@ bool date_t::operator>=(const timestamp_t& rhs) const {
 }
 
 date_t date_t::operator+(const int32_t& day) const {
-    return date_t(this->days + day);
+    int32_t lDays = this->days, rDay = day;
+    date_t result{};
+    try {
+        function::Add::operation(lDays, rDay, result.days);
+    } catch (const OverflowException& e) {
+        throw OverflowException{"Date value is out of range"};
+    }
+    return result;
 };
 date_t date_t::operator-(const int32_t& day) const {
-    return date_t(this->days - day);
+    int32_t lDays = this->days, rDay = day;
+    date_t result{};
+    try {
+        function::Subtract::operation(lDays, rDay, result.days);
+    } catch (const OverflowException& e) {
+        throw OverflowException{"Date value is out of range"};
+    }
+    return result;
+};
+date_t date_t::operator+(const int64_t& day) const {
+    int64_t total = (int64_t)this->days + day;
+    if (total > INT32_MAX || total < INT32_MIN) {
+        throw OverflowException{"Date value is out of range"};
+    }
+    return date_t((int32_t)total);
+};
+date_t date_t::operator-(const int64_t& day) const {
+    int64_t total = (int64_t)this->days - day;
+    if (total > INT32_MAX || total < INT32_MIN) {
+        throw OverflowException{"Date value is out of range"};
+    }
+    return date_t((int32_t)total);
 };
 
 const int32_t Date::NORMAL_DAYS[] = {0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
@@ -480,12 +530,21 @@ date_t Date::trunc(DatePartSpecifier specifier, date_t date) {
     case DatePartSpecifier::DECADE:
         return Date::fromDate((Date::getDatePart(DatePartSpecifier::YEAR, date) / 10) * 10,
             1 /* month */, 1 /* day */);
-    case DatePartSpecifier::CENTURY:
-        return Date::fromDate((Date::getDatePart(DatePartSpecifier::YEAR, date) / 100) * 100,
-            1 /* month */, 1 /* day */);
-    case DatePartSpecifier::MILLENNIUM:
-        return Date::fromDate((Date::getDatePart(DatePartSpecifier::YEAR, date) / 1000) * 1000,
-            1 /* month */, 1 /* day */);
+    case DatePartSpecifier::CENTURY: {
+        // Truncate to the first day of the century reported by getDatePart, so
+        // that trunc inverts part (e.g. both agree that 2024-03-15 is in the
+        // 21st century starting 2001-01-01). See #1694.
+        int32_t year = Date::getDatePart(DatePartSpecifier::YEAR, date);
+        int32_t part = Date::getDatePart(DatePartSpecifier::CENTURY, date);
+        int32_t start = year > 0 ? (part - 1) * 100 + 1 : part * 100 + 1;
+        return Date::fromDate(start, 1 /* month */, 1 /* day */);
+    }
+    case DatePartSpecifier::MILLENNIUM: {
+        int32_t year = Date::getDatePart(DatePartSpecifier::YEAR, date);
+        int32_t part = Date::getDatePart(DatePartSpecifier::MILLENNIUM, date);
+        int32_t start = year > 0 ? (part - 1) * 1000 + 1 : part * 1000 + 1;
+        return Date::fromDate(start, 1 /* month */, 1 /* day */);
+    }
     case DatePartSpecifier::QUARTER: {
         int32_t year = 0, month = 0, day = 0;
         Date::convert(date, year, month, day);
