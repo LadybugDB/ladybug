@@ -1,3 +1,6 @@
+#include <atomic>
+#include <thread>
+
 #include "catalog/catalog.h"
 #include "catalog/catalog_entry/node_table_catalog_entry.h"
 #include "common/serializer/buffer_reader.h"
@@ -567,6 +570,8 @@ TEST_F(MVCCRetentionTest, CheckpointedRowDeletedAfterReaderStaysVisible) {
     EXPECT_EQ(ids(*reader), std::vector<int64_t>{9});
     EXPECT_EQ(ids(*conn), std::vector<int64_t>{});
     ASSERT_TRUE(reader->query("COMMIT;")->isSuccess());
+}
+
 TEST_F(MVCCRetentionTest, UpdatesStayOnTheirRowsAtPinnedCheckpoint) {
     if (inMemMode) {
         GTEST_SKIP();
@@ -748,6 +753,55 @@ TEST_F(MVCCRetentionTest, VacuumOfEveryChainLeavesNoUpdates) {
         [](idx_t, sel_t, const VectorUpdateInfo*, idx_t) {});
     EXPECT_FALSE(updateInfo.isSet());
 }
+
+#ifndef __SINGLE_THREADED__
+// Writers reserve fresh trailing slots while the vacuum thread empties and pops trailing
+// slots. Taking a slot under mtx but locking its chain only after releasing mtx lets the
+// vacuum destroy the slot in between, dangling the writer's reference. Holding mtx until the
+// chain lock is taken closes that window; this test hammers the interleaving (it crashes
+// without the fix under sanitizers, though the race is too narrow to trigger reliably
+// without them) and checks the end state once every update is committed and vacuumed.
+TEST_F(MVCCRetentionTest, ConcurrentUpdateAndVacuumLeavesNoDanglingSlots) {
+    auto* mm = getMemoryManager(*database);
+    UpdateInfo updateInfo;
+    std::atomic<idx_t> nextVector{0};
+    std::atomic<transaction_t> commitTS{100};
+    std::atomic<bool> stop{false};
+    constexpr auto iterations = 2000u;
+    auto writer = [&](uint64_t writerID) {
+        ValueVector values{LogicalType::INT64()};
+        values.setState(std::make_shared<DataChunkState>(DEFAULT_VECTOR_CAPACITY));
+        setIntValue(values, 100);
+        for (auto i = 0u; i < iterations; i++) {
+            // A fresh trailing slot every update: the vacuum keeps popping these once their
+            // single chain is committed and dropped.
+            const auto vectorIdx = nextVector.fetch_add(1);
+            Transaction write{TransactionType::WRITE,
+                Transaction::START_TRANSACTION_ID + writerID * iterations + i, 0};
+            auto& node = updateInfo.update(*mm, &write, vectorIdx, 3, values);
+            updateInfo.commit(vectorIdx, &node, commitTS.fetch_add(1));
+        }
+    };
+    std::thread vacuumThread{[&] {
+        while (!stop.load()) {
+            updateInfo.vacuumCommitted(INVALID_TRANSACTION,
+                [](idx_t, sel_t, const VectorUpdateInfo*, idx_t) {});
+        }
+    }};
+    std::thread firstWriter{[&] { writer(0); }};
+    std::thread secondWriter{[&] { writer(1); }};
+    firstWriter.join();
+    secondWriter.join();
+    stop.store(true);
+    vacuumThread.join();
+    updateInfo.vacuumCommitted(INVALID_TRANSACTION,
+        [](idx_t, sel_t, const VectorUpdateInfo*, idx_t) {});
+    // Every update was committed, so the vacuum dropped every chain.
+    const Transaction reader{TransactionType::READ_ONLY, 50, commitTS.load()};
+    EXPECT_EQ(updateInfo.getNumUpdatedRows(&reader), 0u);
+    EXPECT_FALSE(updateInfo.hasUpdates(&reader, 0, nextVector.load() * DEFAULT_VECTOR_CAPACITY));
+}
+#endif
 
 } // namespace testing
 } // namespace lbug
