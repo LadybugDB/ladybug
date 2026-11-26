@@ -106,8 +106,12 @@ public:
     // (bit_ceil doubling in DictionaryChunk::appendString) peaks at new rather
     // than old+new (gh-1678). Falls back to allocate+copy when switching
     // between malloc and pool pages (TEMP_PAGE_SIZE) or when exclusive.
-    std::unique_ptr<MemoryBuffer> reallocateBuffer(std::unique_ptr<MemoryBuffer> oldBuffer,
-        bool initializeToZero, uint64_t newSize);
+    // Strongly exception-safe: if reallocation fails with a BufferManagerException,
+    // `buffer` still holds the old allocation. Chunks are shared with other COPY workers,
+    // which keep appending until they observe the failure (see handleAppendException),
+    // so freeing the old allocation on failure segfaults them on a null buffer.
+    void reallocateBuffer(std::unique_ptr<MemoryBuffer>& buffer, bool initializeToZero,
+        uint64_t newSize);
     common::page_offset_t getPageSize() const { return pageSize; }
 
     BufferManager* getBufferManager() const { return bm; }

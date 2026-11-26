@@ -138,14 +138,14 @@ std::unique_ptr<MemoryBuffer> MemoryManager::allocateBuffer(bool initializeToZer
     return memoryBuffer;
 }
 
-std::unique_ptr<MemoryBuffer> MemoryManager::reallocateBuffer(
-    std::unique_ptr<MemoryBuffer> oldBuffer, bool initializeToZero, uint64_t newSize) {
+void MemoryManager::reallocateBuffer(std::unique_ptr<MemoryBuffer>& buffer, bool initializeToZero,
+    uint64_t newSize) {
     // Only the malloc path (INVALID_PAGE_IDX, non-TEMP_PAGE_SIZE, non-reusable)
     // can use realloc. Pool pages (TEMP_PAGE_SIZE) and reusable 1MiB buffers
     // use different allocators; fall back to allocate+copy for those (small).
-    auto oldSpan = oldBuffer->getBuffer();
+    auto oldSpan = buffer->getBuffer();
     const auto oldSize = oldSpan.size_bytes();
-    const auto oldPageIdx = oldBuffer->pageIdx;
+    const auto oldPageIdx = buffer->pageIdx;
     if (oldPageIdx != INVALID_PAGE_IDX || newSize == common::TEMP_PAGE_SIZE ||
         oldSize == common::TEMP_PAGE_SIZE || newSize == REUSABLE_BUFFER_SIZE ||
         oldSize == REUSABLE_BUFFER_SIZE) {
@@ -162,14 +162,16 @@ std::unique_ptr<MemoryBuffer> MemoryManager::reallocateBuffer(
             // Preserve ColumnChunkData::resize semantics (zero new tail).
             memset(newBuffer->getBuffer().data() + oldSize, 0, newSize - oldSize);
         }
-        return newBuffer;
+        buffer = std::move(newBuffer);
+        return;
     }
     if (newSize <= oldSize) {
-        return oldBuffer;
+        return;
     }
     const auto delta = newSize - oldSize;
     // Retry only if cached memory was actually released, so fail-once injection
     // (fail the first reserve during commit) still fails deterministically.
+    // `buffer` is untouched here, so a throw leaves the old allocation valid.
     if (!bm->reserve(delta)) {
         bool released = releaseReusableBuffers();
         if (!released || !bm->reserve(delta)) {
@@ -180,27 +182,26 @@ std::unique_ptr<MemoryBuffer> MemoryManager::reallocateBuffer(
     // Release ownership without freeing: realloc takes over oldPtr (frees it
     // if it moves, keeps it if it extends in place). Prevent double-free.
     uint8_t* oldPtr = oldSpan.data();
-    oldBuffer->preventDestruction();
-    // oldBuffer wrapper destroyed here (no free due to preventDestruction).
-    oldBuffer.reset();
+    buffer->preventDestruction();
+    // Wrapper destroyed here (no free due to preventDestruction).
+    buffer.reset();
     void* newPtr = std::realloc(oldPtr, newSize);
     if (newPtr == nullptr) {
+        // Hand the old allocation back instead of freeing it. The owning chunk is shared
+        // with other COPY workers, which keep appending until they observe the failure
+        // (see handleAppendException); a freed allocation segfaults them on a null buffer.
+        // Only `usedMemory` was reserved above, so only it is released here.
         bm->freeUsedMemory(delta);
-        bm->nonEvictableMemory -= delta;
-        if (oldPtr != nullptr) {
-            auto rollback = std::make_unique<MemoryBuffer>(this, INVALID_PAGE_IDX, oldPtr, oldSize);
-            (void)rollback;
-        }
+        buffer = std::make_unique<MemoryBuffer>(this, INVALID_PAGE_IDX, oldPtr, oldSize);
         throw BufferManagerException(
             "Unable to allocate memory! The buffer pool is full and no memory could be freed!");
     }
     bm->nonEvictableMemory += delta;
-    auto newBuffer = std::make_unique<MemoryBuffer>(this, INVALID_PAGE_IDX,
-        static_cast<uint8_t*>(newPtr), newSize);
+    buffer = std::make_unique<MemoryBuffer>(this, INVALID_PAGE_IDX, static_cast<uint8_t*>(newPtr),
+        newSize);
     if (initializeToZero || newSize > oldSize) {
         memset(static_cast<uint8_t*>(newPtr) + oldSize, 0, delta);
     }
-    return newBuffer;
 }
 
 void MemoryManager::freeBlock(page_idx_t pageIdx, std::span<uint8_t> buffer) {
