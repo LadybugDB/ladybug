@@ -75,6 +75,15 @@ DictionaryChunk::string_index_t DictionaryChunk::appendString(std::string_view v
             return *found;
         }
     }
+    const auto index = offsetChunk->getNumValues();
+    if (index >= offsetChunk->getCapacity()) {
+        // Grow the offset table before appending any string bytes, so a BM exception leaves
+        // the dictionary unchanged instead of stranding unindexed bytes in the string data
+        // that concurrent appenders could then observe.
+        offsetChunk->resize(offsetChunk->getCapacity() == 0 ?
+                                2 :
+                                (offsetChunk->getCapacity() * CHUNK_RESIZE_RATIO));
+    }
     const auto leftSpace = stringDataChunk->getCapacity() - stringDataChunk->getNumValues();
     if (leftSpace < val.size()) {
         stringDataChunk->resize(std::bit_ceil(stringDataChunk->getCapacity() + val.size()));
@@ -82,12 +91,6 @@ DictionaryChunk::string_index_t DictionaryChunk::appendString(std::string_view v
     const auto startOffset = stringDataChunk->getNumValues();
     memcpy(stringDataChunk->getData() + startOffset, val.data(), val.size());
     stringDataChunk->setNumValues(startOffset + val.size());
-    const auto index = offsetChunk->getNumValues();
-    if (index >= offsetChunk->getCapacity()) {
-        offsetChunk->resize(offsetChunk->getCapacity() == 0 ?
-                                2 :
-                                (offsetChunk->getCapacity() * CHUNK_RESIZE_RATIO));
-    }
     offsetChunk->setValue<string_offset_t>(startOffset, index);
     offsetChunk->setNumValues(index + 1);
     if (enableCompression) {
