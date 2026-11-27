@@ -67,6 +67,16 @@ private:
     // Collect predicates in FILTER
     std::shared_ptr<planner::LogicalOperator> visitFilterReplace(
         const std::shared_ptr<planner::LogicalOperator>& op);
+    // Push evaluable non-throwing predicates through unary pass-through operators
+    // (PROJECTION, NODE_LABEL_FILTER, REGULAR ACCUMULATE, unbounded ORDER_BY, ...).
+    std::shared_ptr<planner::LogicalOperator> visitUnaryPassThroughReplace(
+        const std::shared_ptr<planner::LogicalOperator>& op);
+    // Split predicates composed solely of grouping/distinct keys below AGGREGATE or DISTINCT.
+    std::shared_ptr<planner::LogicalOperator> visitGroupKeySplitReplace(
+        const std::shared_ptr<planner::LogicalOperator>& op);
+    // Route predicates through HASH_JOIN according to JoinType.
+    std::shared_ptr<planner::LogicalOperator> visitHashJoinReplace(
+        const std::shared_ptr<planner::LogicalOperator>& op);
     // Push primary key lookup into CROSS_PRODUCT
     // E.g.
     //      Filter(a.ID=b.ID)

@@ -2814,5 +2814,83 @@ TEST_F(OptimizerTest, LimitPushDownRespectsWriteBarrier) {
     EXPECT_EQ(afterCount, beforeCount + personCount);
 }
 
+TEST_F(OptimizerTest, FilterPushDownThroughOptionalMatchProbeToPrimaryKeyScan) {
+    const std::string query = "MATCH (a:person) OPTIONAL MATCH (a)-[:knows]->(b:person) "
+                              "WITH a, b WHERE a.ID = 0 RETURN a.ID, b.ID ORDER BY b.ID";
+    const std::string expectedQuery = "MATCH (a:person) WHERE a.ID = 0 "
+                                      "OPTIONAL MATCH (a)-[:knows]->(b:person) "
+                                      "RETURN a.ID, b.ID ORDER BY b.ID";
+    auto plan = getRoot(query);
+    std::vector<planner::LogicalOperator*> scans;
+    collectOperators(plan->getLastOperator().get(), planner::LogicalOperatorType::SCAN_NODE_TABLE,
+        scans);
+    bool foundPKScan = false;
+    for (auto* op : scans) {
+        if (op->constCast<planner::LogicalScanNodeTable>().getScanType() ==
+            planner::LogicalScanNodeTableType::PRIMARY_KEY_SCAN) {
+            foundPKScan = true;
+            break;
+        }
+    }
+    EXPECT_TRUE(foundPKScan) << "Expected a.ID = 0 to push through LEFT join + ACCUMULATE:\n"
+                             << plan->getLastOperator()->toString();
+    auto res = conn->query(query);
+    auto exp = conn->query(expectedQuery);
+    ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+    ASSERT_TRUE(exp->isSuccess()) << exp->getErrorMessage();
+    EXPECT_EQ(TestHelper::convertResultToString(*res), TestHelper::convertResultToString(*exp));
+}
+
+TEST_F(OptimizerTest, FilterPushDownDoesNotPushBuildPredicateIntoOptionalMatch) {
+    // Build-only filter above OPTIONAL MATCH (LEFT join) must stay above the join:
+    // filtering the build side would synthesize NULL-padded rows instead of returning 0 rows.
+    const std::string leftQuery = "MATCH (a:person) OPTIONAL MATCH (a)-[:knows]->(b:person) "
+                                  "WITH a, b WHERE b.ID = 9999 RETURN a.ID, b.ID";
+    auto leftRes = conn->query(leftQuery);
+    ASSERT_TRUE(leftRes->isSuccess()) << leftRes->getErrorMessage();
+    EXPECT_EQ(leftRes->getNumTuples(), 0u);
+
+    // Build-only filter above uncorrelated OPTIONAL MATCH (OPTIONAL CROSS_PRODUCT) must also
+    // stay above the cross product and return 0 rows (not 8 NULL-padded rows).
+    const std::string cpQuery = "MATCH (a:person) OPTIONAL MATCH (b:organisation) "
+                                "WITH a, b WHERE b.ID = 9999 RETURN a.ID, b.ID";
+    auto cpRes = conn->query(cpQuery);
+    ASSERT_TRUE(cpRes->isSuccess()) << cpRes->getErrorMessage();
+    EXPECT_EQ(cpRes->getNumTuples(), 0u);
+}
+
+TEST_F(OptimizerTest, FilterPushDownThroughExtendAndDistinctToPrimaryKeyScan) {
+    for (const auto* query :
+        {"MATCH (a:person)-[:knows]->(b:person) WITH a, b WHERE a.ID = 0 RETURN a.ID, b.ID",
+            "MATCH (a:person) WITH DISTINCT a.ID AS id WHERE id = 0 RETURN id"}) {
+        auto plan = getRoot(query);
+        std::vector<planner::LogicalOperator*> scans;
+        collectOperators(plan->getLastOperator().get(),
+            planner::LogicalOperatorType::SCAN_NODE_TABLE, scans);
+        bool foundPKScan = false;
+        for (auto* op : scans) {
+            if (op->constCast<planner::LogicalScanNodeTable>().getScanType() ==
+                planner::LogicalScanNodeTableType::PRIMARY_KEY_SCAN) {
+                foundPKScan = true;
+                break;
+            }
+        }
+        EXPECT_TRUE(foundPKScan) << query << "\n" << plan->getLastOperator()->toString();
+        auto res = conn->query(query);
+        ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+        EXPECT_GT(res->getNumTuples(), 0u) << query;
+    }
+}
+
+TEST_F(OptimizerTest, FilterPushDownPreservesWithGuardBeforeFalliblePredicate) {
+    // tinysnb has a person with age = 35; dividing by (a.age - 35) throws if evaluated before
+    // the inner WHERE a.age > 35 guard.
+    const std::string query =
+        "MATCH (a:person) WHERE a.age > 35 WITH a WHERE 100 / (a.age - 35) > 0 RETURN a.ID";
+    auto res = conn->query(query);
+    ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+    EXPECT_GT(res->getNumTuples(), 0u);
+}
+
 } // namespace testing
 } // namespace lbug
