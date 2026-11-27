@@ -1,0 +1,326 @@
+-DATASET CSV empty
+
+--
+
+-CASE NaNComparisonsDoNotDependOnOperandOrder
+-STATEMENT CREATE NODE TABLE T (id INT64, x DOUBLE, f FLOAT, PRIMARY KEY(id));
+---- ok
+-STATEMENT UNWIND [[1, 0.5], [2, 1.5], [3, cast('nan' AS DOUBLE)]] AS r CREATE (:T {id: r[1], x: r[2], f: cast(r[2] AS FLOAT)});
+---- ok
+-STATEMENT MATCH (t:T) WHERE t.x < 5.0 RETURN count(*);
+---- 1
+2
+-STATEMENT MATCH (t:T) WHERE 5.0 > t.x RETURN count(*);
+---- 1
+2
+-STATEMENT MATCH (t:T) WHERE t.x > -1.0 RETURN count(*);
+---- 1
+3
+-STATEMENT MATCH (t:T) WHERE -1.0 < t.x RETURN count(*);
+---- 1
+3
+-STATEMENT MATCH (t:T) WHERE t.x <= 1.0 RETURN count(*);
+---- 1
+1
+-STATEMENT MATCH (t:T) WHERE 1.0 >= t.x RETURN count(*);
+---- 1
+1
+-STATEMENT MATCH (t:T) WHERE t.f > cast(-1.0 AS FLOAT) RETURN count(*);
+---- 1
+3
+-STATEMENT MATCH (t:T) WHERE cast(5.0 AS FLOAT) > t.f RETURN count(*);
+---- 1
+2
+-LOG NaNEqualsNaNAndIsLargest
+-STATEMENT RETURN cast('nan' AS DOUBLE) = cast('-nan' AS DOUBLE), cast('nan' AS DOUBLE) <> cast('nan' AS DOUBLE), cast('nan' AS DOUBLE) > cast('inf' AS DOUBLE), cast('-nan' AS DOUBLE) < 0.0;
+---- 1
+True|False|True|False
+-STATEMENT MATCH (t:T) WHERE t.x = cast('-nan' AS DOUBLE) RETURN t.id;
+---- 1
+3
+-STATEMENT MATCH (t:T) WHERE t.x >= cast('nan' AS DOUBLE) RETURN t.id;
+---- 1
+3
+-STATEMENT MATCH (t:T) WHERE t.x < cast('nan' AS DOUBLE) RETURN t.id ORDER BY t.id;
+---- 2
+1
+2
+-STATEMENT MATCH (a:T), (b:T) WHERE a.x = b.x RETURN count(*);
+---- 1
+3
+-LOG ListsCompareElementsInTheSameOrder
+-STATEMENT RETURN [cast('nan' AS DOUBLE)] > [1.0], [cast('nan' AS DOUBLE)] < [1.0], [cast('nan' AS DOUBLE)] = [cast('-nan' AS DOUBLE)];
+---- 1
+True|False|True
+-STATEMENT RETURN cast('-nan' AS DOUBLE) IN [1.0, cast('nan' AS DOUBLE)], list_contains([cast('nan' AS DOUBLE)], cast('nan' AS DOUBLE));
+---- 1
+True|True
+-STATEMENT RETURN list_sort([1.0, cast('nan' AS DOUBLE), -1.0, cast('inf' AS DOUBLE)]), list_sort([1.0, cast('nan' AS DOUBLE), -1.0], 'DESC');
+---- 1
+[-1.000000,1.000000,inf,nan]|[nan,1.000000,-1.000000]
+-STATEMENT RETURN list_max([1.0, cast('nan' AS DOUBLE)]), list_max([cast('nan' AS DOUBLE), 1.0]), list_min([cast('nan' AS DOUBLE), 1.0]), list_min([1.0, cast('nan' AS DOUBLE)]);
+---- 1
+nan|nan|1.000000|1.000000
+-STATEMENT RETURN size(list_distinct([cast('nan' AS DOUBLE), 1.0, cast('-nan' AS DOUBLE)])), size(list_unique([cast('nan' AS DOUBLE), cast('-nan' AS DOUBLE)]));
+---- 1
+2|1
+
+-CASE NaNSortsAndGroupsAsOneValue
+-STATEMENT CREATE NODE TABLE T (id INT64, x DOUBLE, f FLOAT, PRIMARY KEY(id));
+---- ok
+-STATEMENT UNWIND [[1, 0.5], [2, cast('nan' AS DOUBLE)], [3, cast('-nan' AS DOUBLE)], [4, cast('inf' AS DOUBLE)], [5, -1.5], [6, cast('nan' AS DOUBLE)]] AS r CREATE (:T {id: r[1], x: r[2], f: cast(r[2] AS FLOAT)});
+---- ok
+-STATEMENT MATCH (t:T) RETURN t.id ORDER BY t.x, t.id;
+---- 6
+5
+1
+4
+2
+3
+6
+-STATEMENT MATCH (t:T) RETURN t.id ORDER BY t.f DESC, t.id;
+---- 6
+2
+3
+6
+4
+1
+5
+-STATEMENT UNWIND [[1, -1.0], [2, 0.0], [3, -1.0 * 0.0], [4, -1.0 / 0.0]] AS r WITH cast(r[1] AS INT64) AS id, r[2] AS x RETURN id ORDER BY x, id;
+---- 4
+4
+1
+2
+3
+-STATEMENT MATCH (t:T) RETURN t.id ORDER BY t.x DESC, t.id LIMIT 2;
+---- 2
+2
+3
+-STATEMENT MATCH (t:T) WITH t.x AS x, count(*) AS c RETURN c ORDER BY c;
+---- 4
+1
+1
+1
+3
+-STATEMENT MATCH (a:T), (b:T) WHERE a.x = b.x AND a.id < b.id RETURN count(*);
+---- 1
+3
+-STATEMENT MATCH (t:T) WITH DISTINCT t.f AS f RETURN count(*);
+---- 1
+4
+-STATEMENT MATCH (t:T) RETURN count(DISTINCT t.x);
+---- 1
+4
+-STATEMENT MATCH (t:T) WHERE t.id <> 2 AND t.id <> 6 RETURN min(t.x), max(t.f) > cast('inf' AS FLOAT), min(t.f);
+---- 1
+-1.500000|True|-1.500000
+-STATEMENT MATCH (t:T) RETURN percentileDisc(t.x, 0.0), percentileDisc(t.x, 0.5), percentileDisc(t.x, 1.0), percentileCont(t.x, 0.0);
+---- 1
+-1.500000|inf|nan|-1.500000
+-STATEMENT CREATE REL TABLE E (FROM T TO T);
+---- ok
+-STATEMENT MATCH (a:T)-[:E*0..1]->(b:T) WITH b.x AS x, count(b) AS c RETURN c ORDER BY c;
+---- 4
+1
+1
+1
+3
+-STATEMENT CREATE NODE TABLE G (id INT64, x DOUBLE, PRIMARY KEY(id));
+---- ok
+-STATEMENT CREATE REL TABLE GE (FROM G TO G);
+---- ok
+-STATEMENT UNWIND [[1, 0.0], [2, -1.0 * 0.0]] AS r CREATE (:G {id: r[1], x: r[2]});
+---- ok
+-STATEMENT MATCH (a:G)-[:GE*0..1]->(b:G) WITH b.x AS x, count(b) AS c RETURN c;
+---- 1
+2
+
+-CASE NaNPrimaryKeysAreOneKey
+-STATEMENT CREATE NODE TABLE H (ID DOUBLE, PRIMARY KEY(ID));
+---- ok
+-STATEMENT CREATE (:H {ID: cast('nan' AS DOUBLE)});
+---- ok
+-STATEMENT CREATE (:H {ID: cast('-nan' AS DOUBLE)});
+---- error(regex)
+^Runtime exception: Found duplicated primary key value .*
+-STATEMENT MATCH (h:H) WHERE h.ID = cast('-nan' AS DOUBLE) RETURN count(*);
+---- 1
+1
+-STATEMENT MATCH (h:H {ID: cast('nan' AS DOUBLE)}) RETURN count(*);
+---- 1
+1
+-STATEMENT CREATE NODE TABLE HC (ID DOUBLE, PRIMARY KEY(ID));
+---- ok
+-STATEMENT COPY HC FROM (UNWIND [0.5, cast('nan' AS DOUBLE), cast('-nan' AS DOUBLE)] AS x RETURN x);
+---- error(regex)
+^Copy exception: Found duplicated primary key value .*
+-STATEMENT CALL enable_default_hash_index=false;
+---- ok
+-STATEMENT CREATE NODE TABLE A (ID DOUBLE, v DOUBLE, PRIMARY KEY(ID));
+---- ok
+-STATEMENT CREATE ART INDEX a_pk FOR (a:A) ON (a.ID);
+---- ok
+-STATEMENT CREATE ART INDEX a_v FOR (a:A) ON (a.v);
+---- ok
+-STATEMENT UNWIND [0.5, 1.5, cast('inf' AS DOUBLE), cast('-nan' AS DOUBLE)] AS x CREATE (:A {ID: x, v: x});
+---- ok
+-STATEMENT CREATE (:A {ID: cast('nan' AS DOUBLE)});
+---- error(regex)
+^Runtime exception: Found duplicated primary key value .*
+-STATEMENT MATCH (a:A) WHERE a.ID = cast('nan' AS DOUBLE) RETURN count(*);
+---- 1
+1
+-STATEMENT MATCH (a:A) WHERE a.v = cast('nan' AS DOUBLE) RETURN count(*);
+---- 1
+1
+-STATEMENT MATCH (a:A) WHERE a.ID > 1.0 RETURN count(*);
+---- 1
+3
+-STATEMENT MATCH (a:A) WHERE a.v < 2.0 RETURN count(*);
+---- 1
+2
+-STATEMENT MATCH (a:A) WHERE a.v >= cast('inf' AS DOUBLE) RETURN count(*);
+---- 1
+2
+-STATEMENT CREATE NODE TABLE U (id INT64, x DOUBLE, PRIMARY KEY(id));
+---- ok
+-STATEMENT CREATE CONSTRAINT u_x FOR (u:U) REQUIRE u.x IS UNIQUE;
+---- ok
+-STATEMENT CREATE (:U {id: 1, x: cast('nan' AS DOUBLE)});
+---- ok
+-STATEMENT CREATE (:U {id: 2, x: cast('-nan' AS DOUBLE)});
+---- error
+Runtime exception: Unique constraint u_x violated: duplicate key.
+-STATEMENT CREATE NODE TABLE AF (ID FLOAT, PRIMARY KEY(ID));
+---- ok
+-STATEMENT CREATE ART INDEX af_pk FOR (a:AF) ON (a.ID);
+---- ok
+-STATEMENT CREATE (:AF {ID: cast('-nan' AS FLOAT)});
+---- ok
+-STATEMENT CREATE (:AF {ID: cast('nan' AS FLOAT)});
+---- error(regex)
+^Runtime exception: Found duplicated primary key value .*
+-STATEMENT MATCH (a:AF) WHERE a.ID > cast(1.0 AS FLOAT) RETURN count(*);
+---- 1
+1
+-STATEMENT CREATE NODE TABLE N (ID DOUBLE, PRIMARY KEY(ID));
+---- ok
+-STATEMENT COPY N FROM (UNWIND [0.5, cast('nan' AS DOUBLE), 1.5, cast('-nan' AS DOUBLE)] AS x RETURN x);
+---- error(regex)
+^Runtime exception: Found duplicated primary key value .*
+-STATEMENT CALL pk_validator_spill_threshold=64;
+---- ok
+-STATEMENT CREATE NODE TABLE NS (ID DOUBLE, PRIMARY KEY(ID));
+---- ok
+-STATEMENT COPY NS FROM (UNWIND range(0, 131073) AS i RETURN CASE WHEN i = 0 THEN cast('nan' AS DOUBLE) WHEN i = 131073 THEN cast('-nan' AS DOUBLE) ELSE cast(i AS DOUBLE) END);
+---- error(regex)
+^Runtime exception: Found duplicated primary key value .*
+
+-CASE NaNZoneMapsKeepChunksANaNMatches
+-STATEMENT CREATE NODE TABLE Z (id INT64, x DOUBLE, PRIMARY KEY(id));
+---- ok
+-STATEMENT UNWIND [[1, 0.5], [2, cast('nan' AS DOUBLE)]] AS r CREATE (:Z {id: r[1], x: r[2]});
+---- ok
+-STATEMENT CHECKPOINT;
+---- ok
+-STATEMENT MATCH (z:Z) WHERE z.x <> 0.5 RETURN z.id;
+---- 1
+2
+-STATEMENT MATCH (z:Z) WHERE z.x > 2.0 RETURN z.id;
+---- 1
+2
+-STATEMENT MATCH (z:Z) WHERE z.x >= 2.0 RETURN z.id;
+---- 1
+2
+-STATEMENT MATCH (z:Z) WHERE z.x = cast('nan' AS DOUBLE) RETURN z.id;
+---- 1
+2
+-STATEMENT MATCH (z:Z) WHERE z.x < 0.5 RETURN z.id;
+---- 0
+-STATEMENT MATCH (z:Z) WHERE z.x <= cast('nan' AS DOUBLE) RETURN count(*);
+---- 1
+2
+-STATEMENT MATCH (z:Z) WHERE z.x > cast('nan' AS DOUBLE) RETURN count(*);
+---- 1
+0
+-STATEMENT MATCH (z:Z) WHERE z.x < cast('nan' AS DOUBLE) RETURN z.id;
+---- 1
+1
+
+-CASE NaNZoneMapsAfterAnAllNaNInsert
+-STATEMENT CREATE NODE TABLE Z (id INT64, x DOUBLE, PRIMARY KEY(id));
+---- ok
+-STATEMENT CREATE (:Z {id: 1, x: cast('nan' AS DOUBLE)});
+---- ok
+-STATEMENT CREATE (:Z {id: 2, x: 0.5});
+---- ok
+-STATEMENT MATCH (z:Z) WHERE z.x <> cast('nan' AS DOUBLE) RETURN z.id;
+---- 1
+2
+-STATEMENT MATCH (z:Z) WHERE z.x < 1.0 RETURN z.id;
+---- 1
+2
+-STATEMENT MATCH (z:Z) WHERE z.x = 0.5 RETURN z.id;
+---- 1
+2
+-STATEMENT CHECKPOINT;
+---- ok
+-STATEMENT MATCH (z:Z) WHERE z.x <> cast('nan' AS DOUBLE) RETURN z.id;
+---- 1
+2
+-STATEMENT MATCH (z:Z) WHERE z.x < 1.0 RETURN z.id;
+---- 1
+2
+
+-CASE NaNInVectorizedFilters
+-STATEMENT CREATE NODE TABLE V (id INT64, x DOUBLE, y DOUBLE, f FLOAT, PRIMARY KEY(id));
+---- ok
+-STATEMENT UNWIND range(1, 100) AS i CREATE (:V {id: i, x: CASE WHEN i % 10 = 0 THEN cast('nan' AS DOUBLE) ELSE cast(i AS DOUBLE) END, y: CASE WHEN i % 25 = 0 THEN cast('-nan' AS DOUBLE) ELSE 50.0 END, f: CASE WHEN i % 10 = 0 THEN cast('nan' AS FLOAT) ELSE cast(i AS FLOAT) END});
+---- ok
+-STATEMENT MATCH (v:V) WHERE v.x > 50.0 RETURN count(*);
+---- 1
+55
+-STATEMENT MATCH (v:V) WHERE 50.0 < v.x RETURN count(*);
+---- 1
+55
+-STATEMENT MATCH (v:V) WHERE v.x <= 50.0 RETURN count(*);
+---- 1
+45
+-STATEMENT MATCH (v:V) WHERE v.x = cast('-nan' AS DOUBLE) RETURN count(*);
+---- 1
+10
+-STATEMENT MATCH (v:V) WHERE v.f >= cast(95.0 AS FLOAT) RETURN count(*);
+---- 1
+15
+-STATEMENT MATCH (v:V) WHERE v.x > v.y RETURN count(*);
+---- 1
+52
+-STATEMENT MATCH (v:V) WHERE v.x = v.y RETURN count(*);
+---- 1
+2
+-STATEMENT MATCH (v:V) WHERE v.y < v.x RETURN count(*);
+---- 1
+52
+
+-CASE NaNZoneMapsAfterAnInPlaceUpdate
+-STATEMENT CREATE NODE TABLE Z (id INT64, x DOUBLE, PRIMARY KEY(id));
+---- ok
+-STATEMENT CREATE (:Z {id: 1, x: cast('nan' AS DOUBLE)});
+---- ok
+-STATEMENT CREATE (:Z {id: 2, x: cast('-nan' AS DOUBLE)});
+---- ok
+-STATEMENT CHECKPOINT;
+---- ok
+-STATEMENT MATCH (z:Z {id: 1}) SET z.x = 0.5;
+---- ok
+-STATEMENT CHECKPOINT;
+---- ok
+-STATEMENT MATCH (z:Z) WHERE z.x <> cast('nan' AS DOUBLE) RETURN z.id;
+---- 1
+1
+-STATEMENT MATCH (z:Z) WHERE z.x = 0.5 RETURN z.id;
+---- 1
+1
+-STATEMENT MATCH (z:Z) WHERE z.x < 1.0 RETURN z.id;
+---- 1
+1

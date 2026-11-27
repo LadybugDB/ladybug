@@ -1,5 +1,6 @@
 #include "common/exception/binder.h"
 #include "common/type_utils.h"
+#include "function/comparison/comparison_functions.h"
 #include "function/list/vector_list_functions.h"
 #include "function/scalar_function.h"
 #include <format>
@@ -111,6 +112,15 @@ function_set ListProductFunction::getFunctionSet() {
 template<bool IS_MIN>
 struct ListMinMax {
     template<typename T>
+    static bool isLess(const T& left, const T& right) {
+        if constexpr (std::is_floating_point_v<T>) {
+            return LessThan::operation(left, right);
+        } else {
+            return left < right;
+        }
+    }
+
+    template<typename T>
     static void operation(common::list_entry_t& input, T& result, common::ValueVector& inputVector,
         common::ValueVector& resultVector) {
         auto inputDataVector = common::ListVector::getDataVector(&inputVector);
@@ -122,7 +132,7 @@ struct ListMinMax {
         for (auto i = 0u; i < input.size; i++) {
             if (!inputDataVector->isNull(input.offset + i)) {
                 auto val = inputDataVector->getValue<T>(input.offset + i);
-                if (!found || (IS_MIN ? val < best : val > best)) {
+                if (!found || (IS_MIN ? isLess(val, best) : isLess(best, val))) {
                     best = val;
                     found = true;
                     foundPtr = inputValues;

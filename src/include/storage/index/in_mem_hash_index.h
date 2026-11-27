@@ -262,7 +262,7 @@ private:
     void reserveOverflowSlots(uint64_t totalSlotsRequired);
 
     bool equals(KeyType keyToLookup, const OwnedType& keyInEntry) const {
-        return keyToLookup == keyInEntry;
+        return HashIndexUtils::keysEqual(keyToLookup, keyInEntry);
     }
 
     void insert(OwnedType&& key, InMemSlotType* slot, uint8_t entryPos, common::offset_t value,

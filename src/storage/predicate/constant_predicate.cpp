@@ -21,6 +21,25 @@ bool inRange(T min, T max, T val) {
     return a && b;
 }
 
+// Whether a NaN value satisfies `NaN <op> constant` in the order of comparison_functions.h.
+template<typename T>
+bool nanMatches(ExpressionType expressionType, T constant) {
+    switch (expressionType) {
+    case ExpressionType::EQUALS:
+    case ExpressionType::LESS_THAN_EQUALS:
+        return isNaN(constant);
+    case ExpressionType::NOT_EQUALS:
+    case ExpressionType::GREATER_THAN:
+        return !isNaN(constant);
+    case ExpressionType::GREATER_THAN_EQUALS:
+        return true;
+    case ExpressionType::LESS_THAN:
+        return false;
+    default:
+        UNREACHABLE_CODE;
+    }
+}
+
 template<typename T>
 ZoneMapCheckResult checkZoneMapSwitch(const MergedColumnChunkStats& mergedStats,
     ExpressionType expressionType, const Value& value) {
@@ -30,6 +49,12 @@ ZoneMapCheckResult checkZoneMapSwitch(const MergedColumnChunkStats& mergedStats,
         auto max = mergedStats.stats.max->get<T>();
         auto min = mergedStats.stats.min->get<T>();
         auto constant = value.getValue<T>();
+        // Float min/max leave NaN out unless every value is NaN, so they cannot rule out a NaN.
+        if constexpr (std::is_floating_point_v<T>) {
+            if (nanMatches(expressionType, constant)) {
+                return ZoneMapCheckResult::ALWAYS_SCAN;
+            }
+        }
         switch (expressionType) {
         case ExpressionType::EQUALS: {
             if (!inRange<T>(min, max, constant)) {

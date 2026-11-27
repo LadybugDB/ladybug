@@ -19,6 +19,7 @@
 #include "common/types/types.h"
 #include "common/types/value/value.h"
 #include "common/vector/value_vector.h"
+#include "function/comparison/comparison_functions.h"
 #include "main/client_context.h"
 #include "storage/buffer_manager/memory_manager.h"
 #include "storage/local_storage/local_node_table.h"
@@ -43,8 +44,7 @@ namespace {
 // collide, then a null flag, then the payload. Fixed-size payloads are raw bytes;
 // variable-size payloads are length-prefixed so concatenations stay unambiguous
 // (e.g. ['a,b'] vs ['a','b'], or {a:'x', b:'y, b: z'} vs {a:'x, b: y', b:'z'}).
-// FLOAT/DOUBLE normalize -0.0 to +0.0 to match Value::operator==; NaN payloads are kept
-// bit-exact (same-bits NaNs conflict, mirroring exact physical comparison).
+// FLOAT/DOUBLE are canonicalized (both zeros, every NaN) to match Value::operator==.
 void appendUint16(std::string& out, uint16_t v) {
     out.append(reinterpret_cast<const char*>(&v), sizeof(v));
 }
@@ -117,18 +117,12 @@ void appendExactValue(std::string& out, const Value& value) {
     } break;
     case PhysicalTypeID::FLOAT:
     case PhysicalTypeID::ALP_EXCEPTION_FLOAT: {
-        auto v = value.val.floatVal;
-        if (v == 0) {
-            v = 0.0f;
-        }
+        const auto v = function::canonicalFloat(value.val.floatVal);
         appendRawBytes(out, &v, sizeof(v));
     } break;
     case PhysicalTypeID::DOUBLE:
     case PhysicalTypeID::ALP_EXCEPTION_DOUBLE: {
-        auto v = value.val.doubleVal;
-        if (v == 0) {
-            v = 0.0;
-        }
+        const auto v = function::canonicalFloat(value.val.doubleVal);
         appendRawBytes(out, &v, sizeof(v));
     } break;
     case PhysicalTypeID::INTERVAL: {

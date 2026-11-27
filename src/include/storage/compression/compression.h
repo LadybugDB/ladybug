@@ -86,6 +86,11 @@ union StorageValue {
     }
 
     bool gt(const StorageValue& other, common::PhysicalTypeID type) const;
+    // Whether candidate replaces this min (isMin) or max bound in column statistics. Float bounds
+    // leave NaN out unless every value is NaN, as getMinMaxStorageValue does, so a NaN bound yields
+    // to any other value and never replaces one; zone-map checks rely on this.
+    bool replacedAsBoundBy(const StorageValue& candidate, bool isMin,
+        common::PhysicalTypeID type) const;
 
     // If the type cannot be stored in the statistics, readFromVector will return nullopt
     static std::optional<StorageValue> readFromVector(const common::ValueVector& vector,
