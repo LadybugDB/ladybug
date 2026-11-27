@@ -159,6 +159,10 @@ public:
         return boundParameters;
     }
 
+    // current_date() and current_timestamp() fold to the binding transaction's time, so a plan
+    // that uses them is only valid for the execution it was bound for.
+    bool usesTransactionTime() const { return transactionTimeUsed; }
+
     std::string getUniqueName(const std::string& name) const;
 
     const ExpressionBinderConfig& getConfig() { return config; }
@@ -183,6 +187,7 @@ private:
     std::unordered_map<std::string, std::shared_ptr<common::Value>> knownParameters;
     std::vector<std::shared_ptr<ParameterExpression>> boundParameters;
     ExpressionBinderConfig config;
+    bool transactionTimeUsed = false;
 };
 
 } // namespace binder
