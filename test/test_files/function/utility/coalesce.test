@@ -275,3 +275,47 @@ INT64[]|INT64[]|1
 -STATEMENT UNWIND [1, 2, 3] AS x RETURN coalesce(0, COUNT { MATCH (n:N) WHERE count(*) > 0 }) AS v
 ---- 1
 0
+
+-CASE FilterAfterWithRematch
+
+-LOG CoalesceInFilterAfterVariableLengthWithRematch
+-STATEMENT CREATE NODE TABLE CFR(id STRING, PRIMARY KEY(id));
+---- ok
+-STATEMENT CREATE REL TABLE CFRL(FROM CFR TO CFR);
+---- ok
+-STATEMENT CREATE (:CFR {id: 'A'});
+---- ok
+-STATEMENT CREATE (:CFR {id: 'B'});
+---- ok
+-STATEMENT CREATE (:CFR {id: 'C'});
+---- ok
+-STATEMENT MATCH (a:CFR)-[:CFRL*0..1]->(b:CFR) WITH b AS b MATCH (b:CFR) WHERE coalesce(b.id = 'B', false) RETURN b.id;
+---- 1
+B
+-STATEMENT MATCH (a:CFR)-[:CFRL*0..1]->(b:CFR) WITH b AS b MATCH (b:CFR) WHERE coalesce(b.id = 'A', false) RETURN b.id;
+---- 1
+A
+-STATEMENT MATCH (a:CFR)-[:CFRL*0..1]->(b:CFR) WITH b AS b MATCH (b:CFR)-[:CFRL*0..1]->(c:CFR) WHERE coalesce(b.id = 'B', false) RETURN b.id;
+---- 1
+B
+-STATEMENT MATCH (a:CFR)-[:CFRL*0..1]->(b:CFR) WITH b AS b MATCH (b:CFR) WHERE coalesce(b.id = 'B', true) RETURN b.id;
+---- 1
+B
+-STATEMENT MATCH (a:CFR)-[:CFRL*0..1]->(b:CFR) WITH b AS b MATCH (b:CFR) WHERE coalesce(b.id, 'X') = 'B' RETURN b.id;
+---- 1
+B
+
+-LOG CoalesceFilterPreservesPathBindings
+-STATEMENT CREATE NODE TABLE CFP(node_id STRING, PRIMARY KEY(node_id));
+---- ok
+-STATEMENT CREATE REL TABLE CFPR(FROM CFP TO CFP, edge_id STRING);
+---- ok
+-STATEMENT CREATE (:CFP {node_id: 'A'}), (:CFP {node_id: 'B'}), (:CFP {node_id: 'C'});
+---- ok
+-STATEMENT MATCH (a:CFP {node_id: 'A'}), (b:CFP {node_id: 'B'}) CREATE (a)-[:CFPR {edge_id: 'AB'}]->(b);
+---- ok
+-STATEMENT MATCH (a:CFP {node_id: 'B'}), (b:CFP {node_id: 'C'}) CREATE (a)-[:CFPR {edge_id: 'BC'}]->(b);
+---- ok
+-STATEMENT MATCH p0 = (a:CFP)-[:CFPR*0..2]->(b:CFP) WITH a AS a, b AS frontier, p0 AS p0 MATCH p1 = (frontier:CFP)-[:CFPR*1..3]->(c:CFP) WHERE coalesce(frontier.node_id <> 'x', false) RETURN count(*);
+---- 1
+4

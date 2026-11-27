@@ -49,17 +49,16 @@ static void execFunc(const std::vector<std::shared_ptr<common::ValueVector>>& pa
 static bool selectFunc(const std::vector<std::shared_ptr<ValueVector>>& params,
     SelectionVector& selVector, void* /* dataPtr */) {
     DASSERT(!params.empty());
-    auto unFlatVectorIdx = 0u;
-    for (auto i = 0u; i < params.size(); ++i) {
-        if (!params[i]->state->isFlat()) {
-            unFlatVectorIdx = i;
-            break;
-        }
-    }
+    // Iterate over the filter's incoming selection, not over a parameter's selection.
+    // Parameters may be flat (e.g. an uncorrelated comparison result evaluated per hash-join
+    // build probe) while the filter chunk selects a different position; driving the loop from
+    // a flat parameter's size-1 selection vector would overwrite the incoming position with 0
+    // and keep the wrong row (issue #1701).
     auto numSelectedValues = 0u;
     auto selectedPositionsBuffer = selVector.getMutableBuffer();
-    for (auto i = 0u; i < params[unFlatVectorIdx]->state->getSelVector().getSelSize(); ++i) {
-        auto resultPos = params[unFlatVectorIdx]->state->getSelVector()[i];
+    const auto selSize = selVector.getSelSize();
+    for (auto i = 0u; i < selSize; ++i) {
+        auto resultPos = selVector[i];
         auto resultValue = false;
         for (auto& param : params) {
             auto paramPos = param->state->isFlat() ? param->state->getSelVector()[0] : resultPos;

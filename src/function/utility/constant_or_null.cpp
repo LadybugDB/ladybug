@@ -41,17 +41,12 @@ static void execFunc(const std::vector<std::shared_ptr<common::ValueVector>>& pa
 static bool selectFunc(const std::vector<std::shared_ptr<ValueVector>>& params,
     SelectionVector& selVector, void* /* dataPtr */) {
     DASSERT(params.size() == 2);
-    auto unFlatVectorIdx = 0u;
-    for (auto i = 0u; i < params.size(); ++i) {
-        if (!params[i]->state->isFlat()) {
-            unFlatVectorIdx = i;
-            break;
-        }
-    }
+    // Iterate over the filter's incoming selection (see CoalesceFunction::selectFunc).
     auto numSelectedValues = 0u;
     auto selectedPositionsBuffer = selVector.getMutableBuffer();
-    for (auto i = 0u; i < params[unFlatVectorIdx]->state->getSelVector().getSelSize(); ++i) {
-        auto resultPos = params[unFlatVectorIdx]->state->getSelVector()[i];
+    const auto selSize = selVector.getSelSize();
+    for (auto i = 0u; i < selSize; ++i) {
+        auto resultPos = selVector[i];
         auto resultValue = false;
         auto firstParamPos =
             params[0]->state->isFlat() ? params[0]->state->getSelVector()[0] : resultPos;
