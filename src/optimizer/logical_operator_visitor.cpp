@@ -6,6 +6,7 @@ namespace lbug {
 namespace optimizer {
 
 void LogicalOperatorVisitor::visitOperatorSwitch(LogicalOperator* op) {
+    // Exhaustive over LogicalOperatorType (no default: label, -Wswitch enforced).
     switch (op->getOperatorType()) {
     case LogicalOperatorType::ACCUMULATE: {
         visitAccumulate(op);
@@ -21,6 +22,9 @@ void LogicalOperatorVisitor::visitOperatorSwitch(LogicalOperator* op) {
     } break;
     case LogicalOperatorType::COUNT_REL_TABLE: {
         visitCountRelTable(op);
+    } break;
+    case LogicalOperatorType::CROSS_PRODUCT: {
+        visitCrossProduct(op);
     } break;
     case LogicalOperatorType::DELETE: {
         visitDelete(op);
@@ -43,17 +47,20 @@ void LogicalOperatorVisitor::visitOperatorSwitch(LogicalOperator* op) {
     case LogicalOperatorType::FLATTEN: {
         visitFlatten(op);
     } break;
+    case LogicalOperatorType::GROUPED_REACHABLE_COUNT: {
+        visitGroupedReachableCount(op);
+    } break;
     case LogicalOperatorType::HASH_JOIN: {
         visitHashJoin(op);
     } break;
     case LogicalOperatorType::INDEX_LOOK_UP: {
         visitIndexLookUp(op);
     } break;
-    case LogicalOperatorType::INTERSECT: {
-        visitIntersect(op);
-    } break;
     case LogicalOperatorType::INSERT: {
         visitInsert(op);
+    } break;
+    case LogicalOperatorType::INTERSECT: {
+        visitIntersect(op);
     } break;
     case LogicalOperatorType::LIMIT: {
         visitLimit(op);
@@ -76,14 +83,11 @@ void LogicalOperatorVisitor::visitOperatorSwitch(LogicalOperator* op) {
     case LogicalOperatorType::QUERY_PRIMARY_KEY_LOOKUP: {
         visitQueryPrimaryKeyLookup(op);
     } break;
-    case LogicalOperatorType::RECURSIVE_EXTEND: {
-        visitRecursiveExtend(op);
-    } break;
     case LogicalOperatorType::REACHABLE_COUNT: {
         visitReachableCount(op);
     } break;
-    case LogicalOperatorType::GROUPED_REACHABLE_COUNT: {
-        visitGroupedReachableCount(op);
+    case LogicalOperatorType::RECURSIVE_EXTEND: {
+        visitRecursiveExtend(op);
     } break;
     case LogicalOperatorType::REL_DEGREE_TABLE: {
         visitRelDegreeTable(op);
@@ -106,16 +110,45 @@ void LogicalOperatorVisitor::visitOperatorSwitch(LogicalOperator* op) {
     case LogicalOperatorType::UNWIND_DEDUPLICATE: {
         visitUnwindDeduplicate(op);
     } break;
-    case LogicalOperatorType::CROSS_PRODUCT: {
-        visitCrossProduct(op);
-    }
-    default:
+    // Operators without a dedicated virtual visit hook:
+    case LogicalOperatorType::ALTER:
+    case LogicalOperatorType::ANALYZE:
+    case LogicalOperatorType::ATTACH_DATABASE:
+    case LogicalOperatorType::COUNT_ANTI_EDGE_CHAIN:
+    case LogicalOperatorType::COUNT_EXTEND_CHAIN:
+    case LogicalOperatorType::CREATE_CONSTRAINT:
+    case LogicalOperatorType::CREATE_GRAPH:
+    case LogicalOperatorType::CREATE_INDEX:
+    case LogicalOperatorType::CREATE_MACRO:
+    case LogicalOperatorType::CREATE_SEQUENCE:
+    case LogicalOperatorType::CREATE_TABLE:
+    case LogicalOperatorType::CREATE_TYPE:
+    case LogicalOperatorType::DETACH_DATABASE:
+    case LogicalOperatorType::DROP:
+    case LogicalOperatorType::DROP_CONSTRAINT:
+    case LogicalOperatorType::DUMMY_SCAN:
+    case LogicalOperatorType::DUMMY_SINK:
+    case LogicalOperatorType::EXPLAIN:
+    case LogicalOperatorType::EXPORT_DATABASE:
+    case LogicalOperatorType::EXTENSION:
+    case LogicalOperatorType::EXTENSION_CLAUSE:
+    case LogicalOperatorType::IMPORT_DATABASE:
+    case LogicalOperatorType::MULTIPLICITY_REDUCER:
+    case LogicalOperatorType::NOOP:
+    case LogicalOperatorType::PACKED_EXTEND:
+    case LogicalOperatorType::PARTITIONER:
+    case LogicalOperatorType::SEMI_MASKER:
+    case LogicalOperatorType::STANDALONE_CALL:
+    case LogicalOperatorType::TRANSACTION:
+    case LogicalOperatorType::USE_DATABASE:
+    case LogicalOperatorType::USE_GRAPH:
         return;
     }
 }
 
 std::shared_ptr<LogicalOperator> LogicalOperatorVisitor::visitOperatorReplaceSwitch(
     std::shared_ptr<LogicalOperator> op) {
+    // Exhaustive over LogicalOperatorType (no default: label, -Wswitch enforced).
     switch (op->getOperatorType()) {
     case LogicalOperatorType::ACCUMULATE: {
         return visitAccumulateReplace(op);
@@ -131,6 +164,9 @@ std::shared_ptr<LogicalOperator> LogicalOperatorVisitor::visitOperatorReplaceSwi
     }
     case LogicalOperatorType::COUNT_REL_TABLE: {
         return visitCountRelTableReplace(op);
+    }
+    case LogicalOperatorType::CROSS_PRODUCT: {
+        return visitCrossProductReplace(op);
     }
     case LogicalOperatorType::DELETE: {
         return visitDeleteReplace(op);
@@ -153,14 +189,20 @@ std::shared_ptr<LogicalOperator> LogicalOperatorVisitor::visitOperatorReplaceSwi
     case LogicalOperatorType::FLATTEN: {
         return visitFlattenReplace(op);
     }
+    case LogicalOperatorType::GROUPED_REACHABLE_COUNT: {
+        return visitGroupedReachableCountReplace(op);
+    }
     case LogicalOperatorType::HASH_JOIN: {
         return visitHashJoinReplace(op);
     }
-    case LogicalOperatorType::INTERSECT: {
-        return visitIntersectReplace(op);
+    case LogicalOperatorType::INDEX_LOOK_UP: {
+        return visitIndexLookUpReplace(op);
     }
     case LogicalOperatorType::INSERT: {
         return visitInsertReplace(op);
+    }
+    case LogicalOperatorType::INTERSECT: {
+        return visitIntersectReplace(op);
     }
     case LogicalOperatorType::LIMIT: {
         return visitLimitReplace(op);
@@ -183,14 +225,11 @@ std::shared_ptr<LogicalOperator> LogicalOperatorVisitor::visitOperatorReplaceSwi
     case LogicalOperatorType::QUERY_PRIMARY_KEY_LOOKUP: {
         return visitQueryPrimaryKeyLookupReplace(op);
     }
-    case LogicalOperatorType::RECURSIVE_EXTEND: {
-        return visitRecursiveExtendReplace(op);
-    }
     case LogicalOperatorType::REACHABLE_COUNT: {
         return visitReachableCountReplace(op);
     }
-    case LogicalOperatorType::GROUPED_REACHABLE_COUNT: {
-        return visitGroupedReachableCountReplace(op);
+    case LogicalOperatorType::RECURSIVE_EXTEND: {
+        return visitRecursiveExtendReplace(op);
     }
     case LogicalOperatorType::REL_DEGREE_TABLE: {
         return visitRelDegreeTableReplace(op);
@@ -210,12 +249,44 @@ std::shared_ptr<LogicalOperator> LogicalOperatorVisitor::visitOperatorReplaceSwi
     case LogicalOperatorType::UNWIND: {
         return visitUnwindReplace(op);
     }
-    case LogicalOperatorType::CROSS_PRODUCT: {
-        return visitCrossProductReplace(op);
+    case LogicalOperatorType::UNWIND_DEDUPLICATE: {
+        return visitUnwindDeduplicateReplace(op);
     }
-    default:
+    // Operators without a dedicated virtual replace hook:
+    case LogicalOperatorType::ALTER:
+    case LogicalOperatorType::ANALYZE:
+    case LogicalOperatorType::ATTACH_DATABASE:
+    case LogicalOperatorType::COUNT_ANTI_EDGE_CHAIN:
+    case LogicalOperatorType::COUNT_EXTEND_CHAIN:
+    case LogicalOperatorType::CREATE_CONSTRAINT:
+    case LogicalOperatorType::CREATE_GRAPH:
+    case LogicalOperatorType::CREATE_INDEX:
+    case LogicalOperatorType::CREATE_MACRO:
+    case LogicalOperatorType::CREATE_SEQUENCE:
+    case LogicalOperatorType::CREATE_TABLE:
+    case LogicalOperatorType::CREATE_TYPE:
+    case LogicalOperatorType::DETACH_DATABASE:
+    case LogicalOperatorType::DROP:
+    case LogicalOperatorType::DROP_CONSTRAINT:
+    case LogicalOperatorType::DUMMY_SCAN:
+    case LogicalOperatorType::DUMMY_SINK:
+    case LogicalOperatorType::EXPLAIN:
+    case LogicalOperatorType::EXPORT_DATABASE:
+    case LogicalOperatorType::EXTENSION:
+    case LogicalOperatorType::EXTENSION_CLAUSE:
+    case LogicalOperatorType::IMPORT_DATABASE:
+    case LogicalOperatorType::MULTIPLICITY_REDUCER:
+    case LogicalOperatorType::NOOP:
+    case LogicalOperatorType::PACKED_EXTEND:
+    case LogicalOperatorType::PARTITIONER:
+    case LogicalOperatorType::SEMI_MASKER:
+    case LogicalOperatorType::STANDALONE_CALL:
+    case LogicalOperatorType::TRANSACTION:
+    case LogicalOperatorType::USE_DATABASE:
+    case LogicalOperatorType::USE_GRAPH:
         return op;
     }
+    return op;
 }
 
 } // namespace optimizer

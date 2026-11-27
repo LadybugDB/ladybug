@@ -2,6 +2,7 @@
 
 #include "planner/operator/factorization/flatten_resolver.h"
 #include "planner/operator/factorization/sink_util.h"
+#include "planner/operator/operator_properties.h"
 #include "planner/operator/scan/logical_scan_node_table.h"
 
 using namespace lbug::common;
@@ -168,24 +169,6 @@ binder::expression_vector LogicalHashJoin::getJoinNodeIDs(
     return result;
 }
 
-class JoinNodeIDUniquenessAnalyzer {
-public:
-    static bool isUnique(const LogicalOperator* op, const binder::Expression& joinNodeID) {
-        switch (op->getOperatorType()) {
-        case LogicalOperatorType::FILTER:
-        case LogicalOperatorType::FLATTEN:
-        case LogicalOperatorType::LIMIT:
-        case LogicalOperatorType::PROJECTION:
-        case LogicalOperatorType::SEMI_MASKER:
-            return isUnique(op->getChild(0).get(), joinNodeID);
-        case LogicalOperatorType::SCAN_NODE_TABLE:
-            return *op->constCast<LogicalScanNodeTable>().getNodeID() == joinNodeID;
-        default:
-            return false;
-        }
-    }
-};
-
 bool LogicalHashJoin::requireFlatProbeKeys() const {
     // Flatten for multiple join keys.
     if (joinConditions.size() > 1) {
@@ -200,7 +183,7 @@ bool LogicalHashJoin::requireFlatProbeKeys() const {
     if (probeKey->dataType.getLogicalTypeID() != LogicalTypeID::INTERNAL_ID) {
         return true;
     }
-    return !JoinNodeIDUniquenessAnalyzer::isUnique(children[1].get(), *buildKey);
+    return !isUniqueKeyPreservingSubtree(*children[1], buildKey.get());
 }
 
 } // namespace planner

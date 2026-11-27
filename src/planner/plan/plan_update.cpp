@@ -3,6 +3,7 @@
 #include "binder/query/updating_clause/bound_insert_clause.h"
 #include "binder/query/updating_clause/bound_merge_clause.h"
 #include "binder/query/updating_clause/bound_set_clause.h"
+#include "planner/operator/operator_properties.h"
 #include "planner/operator/persistent/logical_merge.h"
 #include "planner/operator/scan/logical_query_primary_key_lookup.h"
 #include "planner/planner.h"
@@ -51,23 +52,16 @@ void Planner::planInsertClause(const BoundUpdatingClause& updatingClause, Logica
     }
 }
 
-// Follows the pipeline that ends at `op` through probe sides, up to an accumulate, aggregation,
-// distinct or sort.
+// Follows the pipeline that ends at `op` through probe sides, up to any pipeline breaker
+// (accumulate, aggregation, distinct, sort, union, etc.).
 static bool pipelineLooksUpTable(const LogicalOperator* op, const table_id_set_t& tableIDs) {
     while (true) {
-        switch (op->getOperatorType()) {
-        case LogicalOperatorType::ACCUMULATE:
-        case LogicalOperatorType::AGGREGATE:
-        case LogicalOperatorType::DISTINCT:
-        case LogicalOperatorType::ORDER_BY:
+        if (analyzeOperator(*op).pipelineBehavior == PipelineBehavior::PIPELINE_BREAKER) {
             return false;
-        case LogicalOperatorType::QUERY_PRIMARY_KEY_LOOKUP:
-            if (tableIDs.contains(op->constCast<LogicalQueryPrimaryKeyLookup>().getTableID())) {
-                return true;
-            }
-            break;
-        default:
-            break;
+        }
+        if (op->getOperatorType() == LogicalOperatorType::QUERY_PRIMARY_KEY_LOOKUP &&
+            tableIDs.contains(op->constCast<LogicalQueryPrimaryKeyLookup>().getTableID())) {
+            return true;
         }
         if (op->getNumChildren() == 0) {
             return false;

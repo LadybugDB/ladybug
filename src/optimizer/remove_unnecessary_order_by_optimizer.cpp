@@ -7,6 +7,7 @@
 #include "planner/operator/logical_multiplcity_reducer.h"
 #include "planner/operator/logical_order_by.h"
 #include "planner/operator/logical_projection.h"
+#include "planner/operator/operator_properties.h"
 
 using namespace lbug::binder;
 using namespace lbug::common;
@@ -76,8 +77,7 @@ RemoveUnnecessaryOrderByOptimizer::tryRemoveOrderByFromAggregate(
 
 std::shared_ptr<planner::LogicalOperator> RemoveUnnecessaryOrderByOptimizer::stripOrderByBelow(
     std::shared_ptr<planner::LogicalOperator> op, bool& changed) {
-    switch (op->getOperatorType()) {
-    case LogicalOperatorType::ORDER_BY: {
+    if (op->getOperatorType() == LogicalOperatorType::ORDER_BY) {
         // `op` is the ORDER BY to remove. Replace it with its child, preserving
         // any absorbed LIMIT (TOP_K) as a standalone LIMIT so the row count
         // is unaffected.
@@ -103,31 +103,25 @@ std::shared_ptr<planner::LogicalOperator> RemoveUnnecessaryOrderByOptimizer::str
         changed = true;
         return replacement;
     }
-    case LogicalOperatorType::PROJECTION:
-    case LogicalOperatorType::MULTIPLICITY_REDUCER:
-    case LogicalOperatorType::LIMIT: {
-        // Passthrough operator: recurse into its single child. If a removal
-        // happened deeper, rewire the child and recompute this operator's schema.
-        if (op->getNumChildren() != 1) {
-            return op;
-        }
-        bool childChanged = false;
-        auto newChild = stripOrderByBelow(op->getChild(0), childChanged);
-        if (childChanged) {
-            op->setChild(0, std::move(newChild));
-            op->computeFactorizedSchema();
-            changed = true;
-        }
+    // Only pure single-child operators that never inspect row values to drop rows (i.e.
+    // non-filtering pass-throughs and LIMIT) allow COUNT(*) to reach an ORDER BY below them.
+    // FILTER (and joins, extends, etc.) depends on which rows ORDER BY selected, so stop there.
+    const auto sem = analyzeOperator(*op);
+    const bool isRowCountOnlyPassthrough =
+        sem.isPure() && op->getNumChildren() == 1 &&
+        (sem.limitAction == LimitPushDownAction::PASS_THROUGH_CHILD_0 ||
+            sem.limitAction == LimitPushDownAction::COMBINE_LIMIT);
+    if (!isRowCountOnlyPassthrough) {
         return op;
     }
-    // COUNT(*) above a FILTER counts the kept rows that pass it, which
-    // depends on which rows the ORDER BY kept.
-    case LogicalOperatorType::FILTER:
-    default:
-        // Don't traverse into other operators (joins, scans, extends, ...);
-        // an ORDER BY buried below them is not safe to reach through here.
-        return op;
+    bool childChanged = false;
+    auto newChild = stripOrderByBelow(op->getChild(0), childChanged);
+    if (childChanged) {
+        op->setChild(0, std::move(newChild));
+        op->computeFactorizedSchema();
+        changed = true;
     }
+    return op;
 }
 
 } // namespace optimizer

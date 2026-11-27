@@ -140,46 +140,6 @@ static void applyIntersectBuildToProbeSIP(LogicalOperator* op,
     std::unordered_set<const LogicalOperator*>& maskedScans);
 
 void HashJoinSIPOptimizer::rewrite(const LogicalPlan* plan) {
-    probeLimit = nullptr;
-    probeLimitTarget = nullptr;
-    // A literal LIMIT at the end of a projection-only tail can be pushed into the probe
-    // side of the join directly below that tail once probe-to-build SIP fires: the join
-    // then emits at most `limit` rows while the capped probe seeds a much smaller build
-    // scan. The push is result-preserving only for row-wise, order-preserving tails, so
-    // stop the walk at any other operator (ORDER_BY/AGGREGATE/FLATTEN/...) and push into
-    // at most one join per plan.
-    auto op = plan->getLastOperator();
-    while (op != nullptr) {
-        const auto type = op->getOperatorType();
-        // Both operators are row-wise and keep the output probe-major with >= 1 row per
-        // probe row: PROJECTION is 1:1, and MULTIPLICITY_REDUCER only expands each input
-        // row to its multiplicity (it never collapses distinct rows). The first `limit`
-        // rows above them are therefore produced by the first few probe rows either way.
-        // EXPLAIN is a transparent wrapper (PROFILE plans carry it at the root).
-        if (type == LogicalOperatorType::PROJECTION ||
-            type == LogicalOperatorType::MULTIPLICITY_REDUCER ||
-            type == LogicalOperatorType::EXPLAIN) {
-            if (op->getNumChildren() != 1) {
-                break;
-            }
-            op = op->getChild(0);
-            continue;
-        }
-        if (type == LogicalOperatorType::LIMIT && probeLimit == nullptr) {
-            auto& limit = op->cast<LogicalLimit>();
-            if (op->getNumChildren() != 1 || limit.hasSkipNum() || !limit.hasLimitNum() ||
-                !ExpressionUtil::canEvaluateAsLiteral(*limit.getLimitNum())) {
-                break;
-            }
-            probeLimit = limit.getLimitNum();
-            op = op->getChild(0);
-            continue;
-        }
-        if (type == LogicalOperatorType::HASH_JOIN) {
-            probeLimitTarget = op.get();
-        }
-        break;
-    }
     visitOperator(plan->getLastOperator().get());
     std::unordered_set<const LogicalOperator*> maskedScans;
     collectSemiMaskTargets(plan->getLastOperator().get(), maskedScans);
@@ -400,31 +360,7 @@ static std::shared_ptr<LogicalOperator> tryApplySemiMask(std::shared_ptr<Express
     return result;
 }
 
-// The pushed limit is result-preserving only if every probe row matches exactly one build
-// row. A plain node-table scan (optionally under projections) emits each join key exactly
-// once, and every probe-produced key is guaranteed to be in the build side's semi-mask, so
-// the match count is exactly one. Filters could drop a probed key (match count zero), and
-// extends can emit multiple rows per key, so both disqualify the push.
-static bool isBuildSideUniquePerKey(LogicalOperator* root) {
-    while (true) {
-        switch (root->getOperatorType()) {
-        case LogicalOperatorType::SCAN_NODE_TABLE:
-            return root->constCast<LogicalScanNodeTable>().getScanType() ==
-                   LogicalScanNodeTableType::SCAN;
-        case LogicalOperatorType::PROJECTION:
-            if (root->getNumChildren() != 1) {
-                return false;
-            }
-            root = root->getChild(0).get();
-            break;
-        default:
-            return false;
-        }
-    }
-}
-
-static bool tryProbeToBuildHJSIP(LogicalOperator* op,
-    const std::shared_ptr<Expression>& probeLimit) {
+static bool tryProbeToBuildHJSIP(LogicalOperator* op) {
     auto& hashJoin = op->cast<LogicalHashJoin>();
     if (!isProbeSideQualified(op->getChild(0).get())) {
         return false;
@@ -433,11 +369,11 @@ static bool tryProbeToBuildHJSIP(LogicalOperator* op,
     // READ_FTABLE, one morsel per factorized-table row) to seed the build-side semi mask.
     // When the probe side is at least as large as the build side, the mask can prune at most
     // buildCard rows while materialization pays collect + rescan over probeCard rows, so the
-    // optimization cannot pay off: keep the plain pipelined hash join. Exempt the LIMIT
-    // pushdown path (probeLimit), whose capped probe still benefits from the mask.
+    // optimization cannot pay off: keep the plain pipelined hash join. Note that
+    // LimitPushDownOptimizer has already pushed eligible LIMITs onto the probe side and lowered
+    // its cardinality accordingly, so capped probes pass this comparison naturally.
     // Planner::tryPlanLookupJoin relies on this condition for correlated node rescans.
-    if (probeLimit == nullptr &&
-        hashJoin.getChild(0)->getCardinality() >= hashJoin.getChild(1)->getCardinality()) {
+    if (hashJoin.getChild(0)->getCardinality() >= hashJoin.getChild(1)->getCardinality()) {
         return false;
     }
     auto probeRoot = hashJoin.getChild(0);
@@ -458,17 +394,6 @@ static bool tryProbeToBuildHJSIP(LogicalOperator* op,
     sipInfo.position = SemiMaskPosition::ON_PROBE;
     sipInfo.dependency = SIPDependency::PROBE_DEPENDS_ON_BUILD;
     sipInfo.direction = SIPDirection::PROBE_TO_BUILD;
-    if (probeLimit != nullptr && hashJoin.getJoinType() == JoinType::INNER &&
-        isBuildSideUniquePerKey(buildRoot.get())) {
-        // Every LogicalLimit in a plan must sit on a MULTIPLICITY_REDUCER (planner
-        // invariant; TopKOptimizer::visitLimitReplace relies on it). For the flattened
-        // probe rows here the reducer is an identity pass-through.
-        auto reducer = std::make_shared<LogicalMultiplicityReducer>(std::move(probeRoot));
-        reducer->computeFlatSchema();
-        auto limit = std::make_shared<LogicalLimit>(nullptr, probeLimit, std::move(reducer));
-        limit->computeFlatSchema();
-        probeRoot = std::move(limit);
-    }
     hashJoin.setChild(0, appendAccumulate(probeRoot));
     return true;
 }
@@ -548,9 +473,7 @@ void HashJoinSIPOptimizer::visitHashJoin(LogicalOperator* op) {
     if (hashJoin.getSIPInfo().position == SemiMaskPosition::PROHIBIT_PROBE_TO_BUILD) {
         return;
     }
-    // Only the join directly below the projection-only tail may consume the pushed limit,
-    // and at most one join per plan does.
-    tryProbeToBuildHJSIP(op, op == probeLimitTarget ? probeLimit : nullptr);
+    tryProbeToBuildHJSIP(op);
 }
 
 // A probe row whose key is missing from any build side produces no output, so each build side's

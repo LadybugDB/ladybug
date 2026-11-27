@@ -7,6 +7,7 @@
 #include "planner/operator/logical_aggregate.h"
 #include "planner/operator/logical_filter.h"
 #include "planner/operator/logical_hash_join.h"
+#include "planner/operator/operator_properties.h"
 
 using namespace lbug::binder;
 using namespace lbug::common;
@@ -132,42 +133,59 @@ bool GroupKeyPredicatePushDownOptimizer::isComposedFromGroupKeys(const Expressio
 
 std::shared_ptr<LogicalOperator> GroupKeyPredicatePushDownOptimizer::pushPredicate(
     std::shared_ptr<LogicalOperator> op, const std::shared_ptr<Expression>& predicate) {
-    switch (op->getOperatorType()) {
-    case LogicalOperatorType::PROJECTION:
-    case LogicalOperatorType::FILTER:
-    case LogicalOperatorType::NODE_LABEL_FILTER: {
-        if (op->getNumChildren() == 1 && op->getChild(0)->getSchema()->evaluable(*predicate)) {
-            op->setChild(0, pushPredicate(op->getChild(0), predicate));
-            op->computeFlatSchema();
-            return op;
-        }
-    } break;
-    case LogicalOperatorType::ACCUMULATE: {
-        auto& accumulate = op->cast<LogicalAccumulate>();
-        if (accumulate.getAccumulateType() == AccumulateType::REGULAR && !accumulate.hasMark() &&
+    const auto sem = analyzeOperator(*op);
+    // Exhaustive over FilterPushDownAction (no default: label).
+    switch (sem.filterAction) {
+    case FilterPushDownAction::PASS_THROUGH_IF_EVALUABLE: {
+        // Only push through unary operators that preserve the predicate's evaluation scope
+        // (PROJECTION, FILTER, NODE_LABEL_FILTER, REGULAR unmarked ACCUMULATE, ...).
+        // Stop at DISTINCT / ORDER_BY here to preserve existing pass scope.
+        if (op->getOperatorType() != LogicalOperatorType::DISTINCT &&
+            op->getOperatorType() != LogicalOperatorType::ORDER_BY && op->getNumChildren() == 1 &&
             op->getChild(0)->getSchema()->evaluable(*predicate)) {
             op->setChild(0, pushPredicate(op->getChild(0), predicate));
             op->computeFlatSchema();
             return op;
         }
-    } break;
-    case LogicalOperatorType::HASH_JOIN: {
-        auto& join = op->cast<LogicalHashJoin>();
-        auto inProbe = op->getChild(0)->getSchema()->evaluable(*predicate);
-        auto inBuild = op->getChild(1)->getSchema()->evaluable(*predicate);
-        if (inProbe && !inBuild &&
-            (join.getJoinType() == JoinType::INNER || join.getJoinType() == JoinType::LEFT)) {
-            op->setChild(0, pushPredicate(op->getChild(0), predicate));
-            op->computeFlatSchema();
-            return op;
+        break;
+    }
+    case FilterPushDownAction::SPLIT_BY_JOIN_TYPE: {
+        if (op->getOperatorType() == LogicalOperatorType::HASH_JOIN) {
+            auto& join = op->cast<LogicalHashJoin>();
+            auto inProbe = op->getChild(0)->getSchema()->evaluable(*predicate);
+            auto inBuild = op->getChild(1)->getSchema()->evaluable(*predicate);
+            switch (join.getJoinType()) {
+            case JoinType::INNER:
+                if (inProbe && !inBuild) {
+                    op->setChild(0, pushPredicate(op->getChild(0), predicate));
+                    op->computeFlatSchema();
+                    return op;
+                }
+                if (!inProbe && inBuild) {
+                    op->setChild(1, pushPredicate(op->getChild(1), predicate));
+                    op->computeFlatSchema();
+                    return op;
+                }
+                break;
+            case JoinType::LEFT:
+                if (inProbe && !inBuild) {
+                    op->setChild(0, pushPredicate(op->getChild(0), predicate));
+                    op->computeFlatSchema();
+                    return op;
+                }
+                break;
+            case JoinType::MARK:
+            case JoinType::COUNT:
+                break;
+            }
         }
-        if (!inProbe && inBuild && join.getJoinType() == JoinType::INNER) {
-            op->setChild(1, pushPredicate(op->getChild(1), predicate));
-            op->computeFlatSchema();
-            return op;
-        }
-    } break;
-    default:
+        break;
+    }
+    case FilterPushDownAction::STOP:
+    case FilterPushDownAction::PUSH_TO_ALL_CHILDREN:
+    case FilterPushDownAction::SPLIT_ON_GROUP_KEYS:
+    case FilterPushDownAction::ABSORB_ZONE_MAP_AND_PASS:
+    case FilterPushDownAction::ABSORB_LEAF:
         break;
     }
     return appendFilter(std::move(op), predicate);

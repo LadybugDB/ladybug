@@ -5,6 +5,7 @@
 #include "optimizer/logical_operator_collector.h"
 #include "planner/operator/logical_distinct.h"
 #include "planner/operator/logical_operator.h"
+#include "planner/operator/operator_properties.h"
 
 using namespace lbug::binder;
 using namespace lbug::common;
@@ -83,32 +84,7 @@ bool RemoveUnnecessaryDistinctOptimizer::isRedundantDistinct(
 
 bool RemoveUnnecessaryDistinctOptimizer::isChildMultiplicityOne(
     std::shared_ptr<planner::LogicalOperator> op) {
-    auto cur = op;
-    while (cur != nullptr) {
-        switch (cur->getOperatorType()) {
-        // Safe leaves: a plain node scan produces each node exactly once.
-        case LogicalOperatorType::SCAN_NODE_TABLE:
-        case LogicalOperatorType::INDEX_LOOK_UP:
-            return true;
-        // Non-multiplying passthrough operators (single child only).
-        case LogicalOperatorType::PROJECTION:
-        case LogicalOperatorType::FILTER:
-        case LogicalOperatorType::MULTIPLICITY_REDUCER:
-        case LogicalOperatorType::LIMIT:
-        case LogicalOperatorType::NODE_LABEL_FILTER:
-        case LogicalOperatorType::NOOP:
-            if (cur->getNumChildren() != 1) {
-                return false;
-            }
-            cur = cur->getChild(0);
-            break;
-        // Anything else (joins, extends, recursive/path scans, set operations,
-        // UNWIND, materialized-subplan reads, ...) can duplicate rows.
-        default:
-            return false;
-        }
-    }
-    return false;
+    return op != nullptr && isUniqueKeyPreservingSubtree(*op);
 }
 
 } // namespace optimizer

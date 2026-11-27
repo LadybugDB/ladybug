@@ -19,6 +19,7 @@
 #include "planner/operator/logical_filter.h"
 #include "planner/operator/logical_hash_join.h"
 #include "planner/operator/logical_intersect.h"
+#include "planner/operator/logical_order_by.h"
 #include "planner/operator/logical_path_property_probe.h"
 #include "planner/operator/logical_plan_util.h"
 #include "planner/operator/scan/logical_count_rel_table.h"
@@ -2676,6 +2677,141 @@ TEST_F(OptimizerTest, PrimaryKeyLookupBeforeMergeAccumulatesOnce) {
     EXPECT_EQ(accumulates("UNWIND [0] AS i MATCH (a:person {ID: i}) MERGE (:person {ID: i + 100}) "
                           "RETURN count(*)"),
         1u);
+}
+
+// Issue #1699: chained correlated OPTIONAL MATCHes under LIMIT must push the cap through
+// LEFT joins into each correlated ACCUMULATE so intermediate ResultCollectors stop at LIMIT rows
+// instead of materializing ~1.3B rows and exhausting a 12 GiB buffer pool.
+TEST_F(OptimizerTest, Issue1699ChainedOptionalMatchLimitPushDown) {
+    // 512 MiB is 24x smaller than the 12 GiB buffer pool that OOM'd in issue #1699.
+    main::SystemConfig cfg(512 * 1024 * 1024 /* 512 MiB buffer pool */);
+    auto memDb = std::make_unique<main::Database>("", cfg);
+    auto memConn = std::make_unique<main::Connection>(memDb.get());
+    ASSERT_TRUE(memConn
+                    ->query("CREATE NODE TABLE Person(id INT64, age INT64, name STRING, "
+                            "score DOUBLE, PRIMARY KEY(id));")
+                    ->isSuccess());
+    ASSERT_TRUE(
+        memConn->query("CREATE REL TABLE KNOWS(FROM Person TO Person, since INT64);")->isSuccess());
+    ASSERT_TRUE(memConn
+                    ->query("UNWIND range(1, 23) AS i CREATE (:Person {id: i, age: 42, "
+                            "name: '\\\\*', score: -999.99});")
+                    ->isSuccess());
+    ASSERT_TRUE(memConn
+                    ->query("UNWIND range(1, 48) AS k MATCH (a:Person), (b:Person) "
+                            "CREATE (a)-[:KNOWS {since: 42}]->(b);")
+                    ->isSuccess());
+
+    const std::string query =
+        "MATCH p1 = (n1:Person)-[r1:KNOWS]->(n2:Person)-[r2:KNOWS]->(n3:Person) "
+        "WHERE size(relationships(p1)) <= 4 AND n1.id = 2 "
+        "OPTIONAL MATCH (n3)-[:KNOWS]->(a:Person) "
+        "OPTIONAL MATCH (n3)-[:KNOWS]->(b:Person) "
+        "RETURN p1, relationships(p1) AS v1 LIMIT 46";
+
+    // Plan check: every LEFT join's probe-side ACCUMULATE must be capped by a pushed LIMIT.
+    auto plan = TestRunner::getLogicalPlan(query, *memConn);
+    std::vector<planner::LogicalOperator*> joins;
+    collectOperators(plan->getLastOperator().get(), planner::LogicalOperatorType::HASH_JOIN, joins);
+    size_t leftAccJoinsChecked = 0;
+    for (auto* op : joins) {
+        const auto& join = op->constCast<planner::LogicalHashJoin>();
+        if (join.getJoinType() != common::JoinType::LEFT) {
+            continue;
+        }
+        auto* probe = join.getChild(0).get();
+        while (probe->getOperatorType() == planner::LogicalOperatorType::FLATTEN) {
+            probe = probe->getChild(0).get();
+        }
+        ASSERT_EQ(probe->getOperatorType(), planner::LogicalOperatorType::ACCUMULATE);
+        auto* accChild = probe->getChild(0).get();
+        while (accChild->getOperatorType() == planner::LogicalOperatorType::FLATTEN) {
+            accChild = accChild->getChild(0).get();
+        }
+        EXPECT_EQ(accChild->getOperatorType(), planner::LogicalOperatorType::LIMIT)
+            << "Expected pushed LIMIT under LEFT-join ACCUMULATE:\n"
+            << plan->getLastOperator()->toString();
+        ++leftAccJoinsChecked;
+    }
+    ASSERT_EQ(leftAccJoinsChecked, 2u);
+
+    // Execution check: must finish inside the 512 MiB pool and return all 46 rows.
+    auto result = memConn->query(query);
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    EXPECT_EQ(result->getNumTuples(), 46u);
+}
+
+TEST_F(OptimizerTest, LimitPushDownAcrossOptionalMatchWithSkipAndLimit) {
+    // SKIP 2 LIMIT 3 over OPTIONAL MATCH must push cap (2 + 3 = 5) into the probe ACCUMULATE
+    // while keeping SKIP 2 LIMIT 3 on top so the result matches the unoptimized query.
+    const std::string query = "MATCH (a:person) OPTIONAL MATCH (a)-[:knows]->(b:person) "
+                              "RETURN a.ID, b.ID SKIP 2 LIMIT 3";
+    auto plan = getRoot(query);
+    std::vector<planner::LogicalOperator*> accumulates;
+    collectOperators(plan->getLastOperator().get(), planner::LogicalOperatorType::ACCUMULATE,
+        accumulates);
+    ASSERT_FALSE(accumulates.empty());
+    for (auto* acc : accumulates) {
+        auto* child = acc->getChild(0).get();
+        while (child->getOperatorType() == planner::LogicalOperatorType::FLATTEN) {
+            child = child->getChild(0).get();
+        }
+        EXPECT_EQ(child->getOperatorType(), planner::LogicalOperatorType::LIMIT);
+    }
+    auto result = conn->query(query);
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    EXPECT_EQ(result->getNumTuples(), 3u);
+}
+
+TEST_F(OptimizerTest, LimitPushDownThroughOptionalMatchPreservesOrderByTopK) {
+    // ORDER BY before OPTIONAL MATCH + outer LIMIT must preserve exact sorted order while
+    // capping the intermediate ACCUMULATE at LIMIT rows.
+    const std::string query = "MATCH (a:person) WITH a ORDER BY a.ID ASC LIMIT 4 "
+                              "OPTIONAL MATCH (a)-[:knows]->(b:person) "
+                              "RETURN a.ID, b.ID LIMIT 3";
+    auto result = conn->query(query);
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    EXPECT_EQ(result->getNumTuples(), 3u);
+    auto plan = getRoot(query);
+    auto* orderBy =
+        findOperator(plan->getLastOperator().get(), planner::LogicalOperatorType::ORDER_BY);
+    ASSERT_NE(orderBy, nullptr);
+    EXPECT_TRUE(orderBy->constCast<planner::LogicalOrderBy>().hasLimitNum());
+}
+
+TEST_F(OptimizerTest, LimitPushDownIntoCrossProductAndOptionalLimitZero) {
+    // Regular cross product: build side capped at LIMIT 4.
+    const std::string cpQuery = "MATCH (a:person), (b:person) RETURN a.ID, b.ID LIMIT 4";
+    auto cpPlan = getRoot(cpQuery);
+    auto* cpOp =
+        findOperator(cpPlan->getLastOperator().get(), planner::LogicalOperatorType::CROSS_PRODUCT);
+    ASSERT_NE(cpOp, nullptr);
+    EXPECT_TRUE(hasOperatorType(cpOp->getChild(1).get(), planner::LogicalOperatorType::LIMIT));
+    auto cpRes = conn->query(cpQuery);
+    ASSERT_TRUE(cpRes->isSuccess()) << cpRes->getErrorMessage();
+    EXPECT_EQ(cpRes->getNumTuples(), 4u);
+
+    // LIMIT 0 on OPTIONAL MATCH must return 0 rows (must NOT push cap 0 into OPTIONAL_
+    // accumulate/cross-product and synthesize a NULL row).
+    const std::string optZero =
+        "MATCH (a:person) OPTIONAL MATCH (b:organisation) RETURN a.ID, b.ID LIMIT 0";
+    auto optZeroRes = conn->query(optZero);
+    ASSERT_TRUE(optZeroRes->isSuccess()) << optZeroRes->getErrorMessage();
+    EXPECT_EQ(optZeroRes->getNumTuples(), 0u);
+}
+
+TEST_F(OptimizerTest, LimitPushDownRespectsWriteBarrier) {
+    // Every matched person must execute CREATE even when followed by OPTIONAL MATCH + LIMIT 2.
+    auto beforeCount = getCount(*conn->query("MATCH (o:organisation) RETURN count(o)"));
+    auto personCount = getCount(*conn->query("MATCH (p:person) RETURN count(p)"));
+    const std::string writeQuery =
+        "MATCH (p:person) CREATE (:organisation {ID: 10000 + p.ID}) "
+        "WITH p OPTIONAL MATCH (p)-[:knows]->(f:person) RETURN p.ID, f.ID LIMIT 2";
+    auto res = conn->query(writeQuery);
+    ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+    EXPECT_EQ(res->getNumTuples(), 2u);
+    auto afterCount = getCount(*conn->query("MATCH (o:organisation) RETURN count(o)"));
+    EXPECT_EQ(afterCount, beforeCount + personCount);
 }
 
 } // namespace testing

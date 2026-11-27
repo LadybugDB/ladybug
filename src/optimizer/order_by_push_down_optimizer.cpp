@@ -1,12 +1,11 @@
 #include "optimizer/order_by_push_down_optimizer.h"
 
 #include "binder/expression/expression.h"
-#include "binder/expression/expression_util.h"
 #include "binder/expression/property_expression.h"
 #include "binder/expression/variable_expression.h"
-#include "common/exception/runtime.h"
 #include "planner/operator/logical_order_by.h"
 #include "planner/operator/logical_table_function_call.h"
+#include "planner/operator/operator_properties.h"
 
 using namespace lbug::binder;
 using namespace lbug::common;
@@ -15,40 +14,50 @@ using namespace lbug::planner;
 namespace lbug {
 namespace optimizer {
 
-// This ensures that ORDER BY can be pushed down only through operators that support it.
-// It should not be pushed down for things like RECURSIVE_EXTEND etc.
-bool isPushDownSupported(LogicalOperator* op) {
-    switch (op->getOperatorType()) {
-    case LogicalOperatorType::TABLE_FUNCTION_CALL: {
-        return op->cast<LogicalTableFunctionCall>().getTableFunc().supportsPushDownFunc();
-    }
-    case LogicalOperatorType::MULTIPLICITY_REDUCER:
-    case LogicalOperatorType::EXPLAIN:
-    case LogicalOperatorType::ACCUMULATE:
-    case LogicalOperatorType::FILTER:
-    case LogicalOperatorType::PROJECTION:
-    case LogicalOperatorType::LIMIT: {
-        if (op->getNumChildren() == 0) {
-            return false;
+namespace {
+
+// Find the single pushdown scan an ORDER BY would flow into through strictly order-preserving,
+// non-limiting operators (driven by OrderByPushDownAction). Returns nullptr when no such scan
+// exists (e.g. a LIMIT, ACCUMULATE, join, or non-pushdown scan sits in between).
+const function::TableFuncBindData* findPushdownScanTarget(const LogicalOperator* op) {
+    const LogicalOperator* current = op;
+    while (current != nullptr) {
+        const auto sem = analyzeOperator(*current);
+        // Exhaustive over OrderByPushDownAction (no default: label).
+        switch (sem.orderByAction) {
+        case OrderByPushDownAction::ABSORB_NATIVE: {
+            if (current->getOperatorType() == LogicalOperatorType::TABLE_FUNCTION_CALL) {
+                return current->constCast<LogicalTableFunctionCall>().getBindData();
+            }
+            return nullptr;
         }
-        return isPushDownSupported(op->getChild(0).get());
+        case OrderByPushDownAction::PASS_THROUGH_CHILD_0:
+        case OrderByPushDownAction::COMBINE_ORDER_BY: {
+            if (current->getNumChildren() != 1) {
+                return nullptr;
+            }
+            current = current->getChild(0).get();
+            break;
+        }
+        case OrderByPushDownAction::STOP:
+            return nullptr;
+        }
     }
-    default:
-        return false;
-    }
+    return nullptr;
 }
+
+} // namespace
 
 void OrderByPushDownOptimizer::rewrite(LogicalPlan* plan) {
     plan->setLastOperator(visitOperator(plan->getLastOperator()));
 }
 
-static const lbug::function::TableFuncBindData* findPushdownScanTarget(
-    planner::LogicalOperator* op);
-
 std::shared_ptr<LogicalOperator> OrderByPushDownOptimizer::visitOperator(
     std::shared_ptr<LogicalOperator> op, std::string currentOrderBy) {
-    switch (op->getOperatorType()) {
-    case LogicalOperatorType::ORDER_BY: {
+    const auto sem = analyzeOperator(*op);
+    // Exhaustive over OrderByPushDownAction (no default: label).
+    switch (sem.orderByAction) {
+    case OrderByPushDownAction::COMBINE_ORDER_BY: {
         auto& orderBy = op->constCast<LogicalOrderBy>();
         std::string newOrderBy = currentOrderBy;
         if (!currentOrderBy.empty()) {
@@ -56,33 +65,33 @@ std::shared_ptr<LogicalOperator> OrderByPushDownOptimizer::visitOperator(
         }
         // Resolve sort keys against the pushdown scan they flow into so
         // multi-table (joined) scans sort by "table.column" references.
-        auto* scanTarget = findPushdownScanTarget(orderBy.getChild(0).get());
-        newOrderBy += buildOrderByString(orderBy.getExpressionsToOrderBy(),
-            orderBy.getIsAscOrders(), scanTarget);
+        const auto* scanTarget = findPushdownScanTarget(orderBy.getChild(0).get());
+        if (scanTarget != nullptr) {
+            newOrderBy += buildOrderByString(orderBy.getExpressionsToOrderBy(),
+                orderBy.getIsAscOrders(), scanTarget);
+        } else {
+            newOrderBy.clear();
+        }
         auto newChild = visitOperator(orderBy.getChild(0), newOrderBy);
-        // Only drop the ORDER BY when sort keys were actually pushed: an
-        // untranslatable key (e.g. an aggregate call over a pushed scan)
-        // leaves newOrderBy empty and must stay local, otherwise the sort is
-        // silently lost.
-        if (!newOrderBy.empty() && isPushDownSupported(newChild.get())) {
+        // Only drop the ORDER BY when sort keys were actually pushed into a target scan.
+        if (!newOrderBy.empty() && scanTarget != nullptr) {
             return newChild;
         }
         return std::make_shared<LogicalOrderBy>(orderBy.getExpressionsToOrderBy(),
-            orderBy.getIsAscOrders(), newChild);
+            orderBy.getIsAscOrders(), std::move(newChild));
     }
-    case LogicalOperatorType::MULTIPLICITY_REDUCER:
-    case LogicalOperatorType::EXPLAIN:
-    case LogicalOperatorType::ACCUMULATE:
-    case LogicalOperatorType::FILTER:
-    case LogicalOperatorType::PROJECTION:
-    case LogicalOperatorType::LIMIT: {
-        for (auto i = 0u; i < op->getNumChildren(); ++i) {
-            op->setChild(i, visitOperator(op->getChild(i), currentOrderBy));
+    case OrderByPushDownAction::PASS_THROUGH_CHILD_0: {
+        if (op->getNumChildren() > 0) {
+            op->setChild(0, visitOperator(op->getChild(0), currentOrderBy));
+        }
+        for (auto i = 1u; i < op->getNumChildren(); ++i) {
+            op->setChild(i, visitOperator(op->getChild(i), ""));
         }
         return op;
     }
-    case LogicalOperatorType::TABLE_FUNCTION_CALL: {
-        if (!currentOrderBy.empty()) {
+    case OrderByPushDownAction::ABSORB_NATIVE: {
+        if (!currentOrderBy.empty() &&
+            op->getOperatorType() == LogicalOperatorType::TABLE_FUNCTION_CALL) {
             auto& tableFunc = op->cast<LogicalTableFunctionCall>();
             if (tableFunc.getTableFunc().supportsPushDownFunc()) {
                 tableFunc.setOrderBy(currentOrderBy);
@@ -90,42 +99,16 @@ std::shared_ptr<LogicalOperator> OrderByPushDownOptimizer::visitOperator(
         }
         return op;
     }
-    default:
+    case OrderByPushDownAction::STOP: {
+        // Hard barrier for incoming sort pushdown (e.g. LIMIT, ACCUMULATE, joins, writes),
+        // but still visit children independently so an ORDER BY below this barrier can push down.
+        for (auto i = 0u; i < op->getNumChildren(); ++i) {
+            op->setChild(i, visitOperator(op->getChild(i), ""));
+        }
         return op;
     }
-}
-
-// Find the single pushdown scan an ORDER BY would flow into through
-// pass-through operators (mirrors isPushDownSupported). Returns nullptr when
-// there is no such scan.
-static const function::TableFuncBindData* findPushdownScanTarget(planner::LogicalOperator* op) {
-    auto current = op;
-    while (current != nullptr) {
-        switch (current->getOperatorType()) {
-        case planner::LogicalOperatorType::TABLE_FUNCTION_CALL: {
-            auto& tableFunc = current->constCast<planner::LogicalTableFunctionCall>();
-            if (!tableFunc.getTableFunc().supportsPushDownFunc()) {
-                return nullptr;
-            }
-            return tableFunc.getBindData();
-        }
-        case planner::LogicalOperatorType::MULTIPLICITY_REDUCER:
-        case planner::LogicalOperatorType::EXPLAIN:
-        case planner::LogicalOperatorType::ACCUMULATE:
-        case planner::LogicalOperatorType::FILTER:
-        case planner::LogicalOperatorType::PROJECTION:
-        case planner::LogicalOperatorType::LIMIT: {
-            if (current->getNumChildren() != 1) {
-                return nullptr;
-            }
-            current = current->getChild(0).get();
-            break;
-        }
-        default:
-            return nullptr;
-        }
     }
-    return nullptr;
+    return op;
 }
 
 std::string OrderByPushDownOptimizer::buildOrderByString(
