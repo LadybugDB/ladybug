@@ -51,29 +51,30 @@ void Planner::planInsertClause(const BoundUpdatingClause& updatingClause, Logica
     }
 }
 
-// Follows the pipeline that ends at `op` through probe sides, up to an accumulate, aggregation,
-// distinct or sort.
-static bool pipelineLooksUpTable(const LogicalOperator* op, const table_id_set_t& tableIDs) {
-    while (true) {
-        switch (op->getOperatorType()) {
-        case LogicalOperatorType::ACCUMULATE:
-        case LogicalOperatorType::AGGREGATE:
-        case LogicalOperatorType::DISTINCT:
-        case LogicalOperatorType::ORDER_BY:
-            return false;
-        case LogicalOperatorType::QUERY_PRIMARY_KEY_LOOKUP:
-            if (tableIDs.contains(op->constCast<LogicalQueryPrimaryKeyLookup>().getTableID())) {
-                return true;
-            }
-            break;
-        default:
-            break;
+// Searches below `op` down to an accumulate, aggregation, distinct or sort. Build sides are
+// searched too: RemoveUnnecessaryJoinOptimizer can drop a join whose probe side is a bare scan,
+// which moves the build side into the MERGE's pipeline.
+static bool pipelineLooksUpTable(const LogicalOperator& op, const table_id_set_t& tableIDs) {
+    switch (op.getOperatorType()) {
+    case LogicalOperatorType::ACCUMULATE:
+    case LogicalOperatorType::AGGREGATE:
+    case LogicalOperatorType::DISTINCT:
+    case LogicalOperatorType::ORDER_BY:
+        return false;
+    case LogicalOperatorType::QUERY_PRIMARY_KEY_LOOKUP:
+        if (tableIDs.contains(op.constCast<LogicalQueryPrimaryKeyLookup>().getTableID())) {
+            return true;
         }
-        if (op->getNumChildren() == 0) {
-            return false;
-        }
-        op = op->getChild(0).get();
+        break;
+    default:
+        break;
     }
+    for (auto& child : op.getChildren()) {
+        if (pipelineLooksUpTable(*child, tableIDs)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 static table_id_set_t getWrittenNodeTables(const BoundMergeClause& mergeClause) {
@@ -121,7 +122,7 @@ void Planner::planMergeClause(const BoundUpdatingClause& updatingClause, Logical
         nullptr /* hint */);
     // A per-row primary-key lookup in the MERGE's pipeline would see what the MERGE of an earlier
     // row wrote.
-    if (pipelineLooksUpTable(plan.getLastOperator().get(), getWrittenNodeTables(mergeClause))) {
+    if (pipelineLooksUpTable(*plan.getLastOperator(), getWrittenNodeTables(mergeClause))) {
         appendAccumulate(plan);
     }
     auto merge = std::make_shared<LogicalMerge>(existenceMark, keys, plan.getLastOperator());
