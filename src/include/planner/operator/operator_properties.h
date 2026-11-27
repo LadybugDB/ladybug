@@ -112,18 +112,20 @@ enum class OrderByPushDownAction : uint8_t {
 enum class FilterPushDownAction : uint8_t {
     // Hard barrier (LIMIT, limited ORDER_BY, OPTIONAL ACCUMULATE, writes, DDL, ...).
     STOP = 0,
+    // LogicalFilter: absorb non-volatile predicates (folding literal TRUE/FALSE/NULL).
+    ABSORB_FILTER = 1,
     // Unary operator through which evaluable predicates can pass unchanged.
-    PASS_THROUGH_IF_EVALUABLE = 1,
+    PASS_THROUGH_IF_EVALUABLE = 2,
     // Binary join / cross product: route predicates according to JoinType / AccumulateType.
-    SPLIT_BY_JOIN_TYPE = 2,
-    // UNION_ALL: push mapped predicates into every branch.
-    PUSH_TO_ALL_CHILDREN = 3,
-    // AGGREGATE with grouping keys: split predicates composed solely of grouping keys.
-    SPLIT_ON_GROUP_KEYS = 4,
-    // EXTEND / PACKED_EXTEND: attach zone-map predicates and continue.
-    ABSORB_ZONE_MAP_AND_PASS = 5,
+    SPLIT_BY_JOIN_TYPE = 3,
+    // UNION_ALL: multi-branch union boundary.
+    PUSH_TO_ALL_CHILDREN = 4,
+    // AGGREGATE with grouping keys / DISTINCT: push predicates composed solely of keys.
+    SPLIT_ON_GROUP_KEYS = 5,
+    // EXTEND / PACKED_EXTEND: attach zone-map predicates and push child-only predicates.
+    ABSORB_ZONE_MAP_AND_PASS = 6,
     // Leaf scan / table function that consumes column or index predicates.
-    ABSORB_LEAF = 6,
+    ABSORB_LEAF = 7,
 };
 
 // Identifies which operators require instance inspection beyond their LogicalOperatorType.
@@ -347,6 +349,10 @@ constexpr StaticOperatorTraits getStaticOperatorTraits(LogicalOperatorType type)
 
     // ---- Row-filtering / row-limiting operators ----
     case LogicalOperatorType::FILTER:
+        return {SideEffectClass::PURE, DynamicSemanticsKind::NONE,
+            RowCardinalityEffect::AT_MOST_ONE, OrderPreservation::PRESERVES_ORDER,
+            NullSupplyBehavior::NEVER_NULLS, PipelineBehavior::STREAMING, LimitPushDownAction::STOP,
+            OrderByPushDownAction::PASS_THROUGH_CHILD_0, FilterPushDownAction::ABSORB_FILTER};
     case LogicalOperatorType::NODE_LABEL_FILTER:
         return {SideEffectClass::PURE, DynamicSemanticsKind::NONE,
             RowCardinalityEffect::AT_MOST_ONE, OrderPreservation::PRESERVES_ORDER,
@@ -372,7 +378,7 @@ constexpr StaticOperatorTraits getStaticOperatorTraits(LogicalOperatorType type)
             RowCardinalityEffect::AT_MOST_ONE, OrderPreservation::BREAKS_ORDER,
             NullSupplyBehavior::NEVER_NULLS, PipelineBehavior::PIPELINE_BREAKER,
             LimitPushDownAction::ABSORB_NATIVE, OrderByPushDownAction::STOP,
-            FilterPushDownAction::PASS_THROUGH_IF_EVALUABLE};
+            FilterPushDownAction::SPLIT_ON_GROUP_KEYS};
     case LogicalOperatorType::UNWIND_DEDUPLICATE:
         return {SideEffectClass::PURE, DynamicSemanticsKind::NONE,
             RowCardinalityEffect::AT_MOST_ONE, OrderPreservation::BREAKS_ORDER,

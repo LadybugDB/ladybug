@@ -10,7 +10,6 @@ add_library(lbug_optimizer
         filter_push_down_optimizer.cpp
         partition_pruning.cpp
         foreign_join_push_down_optimizer.cpp
-        group_key_predicate_push_down_optimizer.cpp
         logical_operator_collector.cpp
         logical_operator_visitor.cpp
         optimizer.cpp

@@ -19,11 +19,16 @@
 #include "main/database_manager.h"
 #include "planner/join_order/cardinality_estimator.h"
 #include "planner/operator/extend/logical_extend.h"
+#include "planner/operator/logical_accumulate.h"
+#include "planner/operator/logical_aggregate.h"
+#include "planner/operator/logical_cross_product.h"
+#include "planner/operator/logical_distinct.h"
 #include "planner/operator/logical_empty_result.h"
 #include "planner/operator/logical_filter.h"
 #include "planner/operator/logical_hash_join.h"
 #include "planner/operator/logical_projection.h"
 #include "planner/operator/logical_table_function_call.h"
+#include "planner/operator/operator_properties.h"
 #include "planner/operator/scan/logical_scan_node_table.h"
 #include "storage/index/art_index.h"
 #include "storage/storage_manager.h"
@@ -39,32 +44,163 @@ using namespace lbug::catalog;
 namespace lbug {
 namespace optimizer {
 
+namespace {
+
+// Like Schema::evaluable, but also treats PARAMETER as evaluable (so predicates like
+// `a.age > $x` can push through projections/joins/aggregates) while rejecting LAMBDA/SUBQUERY/
+// AGGREGATE_FUNCTION unless already materialized in scope.
+bool isPredicateEvaluableInSchema(const Schema& schema, const Expression& expression) {
+    if (schema.isExpressionInScope(expression)) {
+        return true;
+    }
+    switch (expression.expressionType) {
+    case ExpressionType::LITERAL:
+    case ExpressionType::PARAMETER:
+        return true;
+    case ExpressionType::AGGREGATE_FUNCTION:
+    case ExpressionType::SUBQUERY:
+    case ExpressionType::LAMBDA:
+        return false;
+    default:
+        break;
+    }
+    auto children = ExpressionChildrenCollector::collectChildren(expression);
+    if (children.empty()) {
+        return false;
+    }
+    for (auto& child : children) {
+        if (!isPredicateEvaluableInSchema(schema, *child)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// True when evaluating `expr` against `childSchema` cannot throw a runtime error (unlike casts,
+// division, list indexing, or arbitrary scalar functions). Guards pushing predicates across
+// WITH/PROJECTION/JOIN/AGGREGATE/EXTEND boundaries where inner filters may guard fallible ops.
+bool isNonThrowingInSchema(const Expression& expr, const Schema& childSchema) {
+    if (childSchema.isExpressionInScope(expr)) {
+        return true;
+    }
+    switch (expr.expressionType) {
+    case ExpressionType::LITERAL:
+    case ExpressionType::PARAMETER:
+    case ExpressionType::PROPERTY:
+    case ExpressionType::VARIABLE:
+    case ExpressionType::PATTERN:
+        return true;
+    case ExpressionType::AND:
+    case ExpressionType::OR:
+    case ExpressionType::XOR:
+    case ExpressionType::NOT:
+    case ExpressionType::IS_NULL:
+    case ExpressionType::IS_NOT_NULL:
+    case ExpressionType::EQUALS:
+    case ExpressionType::NOT_EQUALS:
+    case ExpressionType::GREATER_THAN:
+    case ExpressionType::GREATER_THAN_EQUALS:
+    case ExpressionType::LESS_THAN:
+    case ExpressionType::LESS_THAN_EQUALS: {
+        for (auto& child : expr.getChildren()) {
+            if (!isNonThrowingInSchema(*child, childSchema)) {
+                return false;
+            }
+        }
+        return true;
+    }
+    default:
+        return false;
+    }
+}
+
+bool isComposedFromGroupKeys(const Expression& expression,
+    const std::unordered_set<std::string>& groupKeyNames) {
+    // Check key identity first: an expression projected by an earlier query part may itself be an
+    // aggregate expression yet act as an ordinary grouping key in the current aggregate.
+    if (groupKeyNames.contains(expression.getUniqueName())) {
+        return true;
+    }
+    switch (expression.expressionType) {
+    case ExpressionType::LITERAL:
+    case ExpressionType::PARAMETER:
+        return true;
+    case ExpressionType::AGGREGATE_FUNCTION:
+    case ExpressionType::SUBQUERY:
+    case ExpressionType::LAMBDA:
+        return false;
+    default:
+        break;
+    }
+    auto children = ExpressionChildrenCollector::collectChildren(expression);
+    if (children.empty()) {
+        return false;
+    }
+    for (auto& child : children) {
+        if (!isComposedFromGroupKeys(*child, groupKeyNames)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// When a join's probe child is an ACCUMULATE (isAccHashJoin), only push predicates that will pass
+// *through* the ACCUMULATE (never landing between HASH_JOIN and ACCUMULATE, which would break
+// LogicalOperatorUtils::isAccHashJoin).
+bool canPushIntoJoinProbeChild(const LogicalOperator& probeChild, const Expression& predicate) {
+    if (probeChild.getOperatorType() != LogicalOperatorType::ACCUMULATE) {
+        return true;
+    }
+    if (analyzeOperator(probeChild).filterAction !=
+        FilterPushDownAction::PASS_THROUGH_IF_EVALUABLE) {
+        return false;
+    }
+    return probeChild.getNumChildren() == 1 &&
+           isPredicateEvaluableInSchema(*probeChild.getChild(0)->getSchema(), predicate) &&
+           isNonThrowingInSchema(predicate, *probeChild.getChild(0)->getSchema());
+}
+
+} // namespace
+
 void FilterPushDownOptimizer::rewrite(LogicalPlan* plan) {
-    visitOperator(plan->getLastOperator());
+    plan->setLastOperator(visitOperator(plan->getLastOperator()));
 }
 
 std::shared_ptr<LogicalOperator> FilterPushDownOptimizer::visitOperator(
     const std::shared_ptr<LogicalOperator>& op) {
-    switch (op->getOperatorType()) {
-    case LogicalOperatorType::FILTER: {
+    const auto sem = analyzeOperator(*op);
+    // Exhaustive over FilterPushDownAction (no default: label).
+    switch (sem.filterAction) {
+    case FilterPushDownAction::ABSORB_FILTER: {
         return visitFilterReplace(op);
     }
-    case LogicalOperatorType::CROSS_PRODUCT: {
-        return visitCrossProductReplace(op);
+    case FilterPushDownAction::PASS_THROUGH_IF_EVALUABLE: {
+        return visitUnaryPassThroughReplace(op);
     }
-    case LogicalOperatorType::EXTEND: {
+    case FilterPushDownAction::SPLIT_ON_GROUP_KEYS: {
+        return visitGroupKeySplitReplace(op);
+    }
+    case FilterPushDownAction::SPLIT_BY_JOIN_TYPE: {
+        if (op->getOperatorType() == LogicalOperatorType::CROSS_PRODUCT) {
+            return visitCrossProductReplace(op);
+        }
+        return visitHashJoinReplace(op);
+    }
+    case FilterPushDownAction::ABSORB_ZONE_MAP_AND_PASS: {
         return visitExtendReplace(op);
     }
-    case LogicalOperatorType::SCAN_NODE_TABLE: {
-        return visitScanNodeTableReplace(op);
-    }
-    case LogicalOperatorType::TABLE_FUNCTION_CALL: {
+    case FilterPushDownAction::ABSORB_LEAF: {
+        if (op->getOperatorType() == LogicalOperatorType::SCAN_NODE_TABLE) {
+            return visitScanNodeTableReplace(op);
+        }
         return visitTableFunctionCallReplace(op);
     }
-    default: { // Stop current push down for unhandled operator.
+    case FilterPushDownAction::PUSH_TO_ALL_CHILDREN:
+    case FilterPushDownAction::STOP: {
         return visitChildren(op);
     }
     }
+    return visitChildren(op);
 }
 
 std::shared_ptr<LogicalOperator> FilterPushDownOptimizer::visitChildren(
@@ -82,21 +218,147 @@ std::shared_ptr<LogicalOperator> FilterPushDownOptimizer::visitFilterReplace(
     const std::shared_ptr<LogicalOperator>& op) {
     auto& filter = op->constCast<LogicalFilter>();
     auto predicate = filter.getPredicate();
-    if (predicate->expressionType == ExpressionType::LITERAL) {
-        // Avoid executing child plan if literal is Null or False.
-        auto& literalExpr = predicate->constCast<LiteralExpression>();
-        if (literalExpr.isNull() || !literalExpr.getValue().getValue<bool>()) {
-            // Keep the filter over writes: an empty result would skip them.
-            if (filter.getChild(0)->hasUpdateRecursive()) {
-                return visitChildren(op);
+    // A volatile predicate (e.g. nextval/setval/currval/random) cannot be split, reordered, or
+    // pushed past row-count-changing operators, nor can outer predicates move ahead of it.
+    if (ExpressionVisitor::isVolatile(*predicate)) {
+        return visitChildren(op);
+    }
+    for (auto& conjunct : predicate->splitOnAND()) {
+        if (conjunct->expressionType == ExpressionType::LITERAL) {
+            // Avoid executing child plan if literal is Null or False.
+            auto& literalExpr = conjunct->constCast<LiteralExpression>();
+            if (literalExpr.isNull() || !literalExpr.getValue().getValue<bool>()) {
+                // Keep the filter over writes: an empty result would skip them.
+                if (subtreeHasSideEffects(*filter.getChild(0))) {
+                    return visitChildren(op);
+                }
+                return std::make_shared<LogicalEmptyResult>(*op->getSchema());
             }
-            return std::make_shared<LogicalEmptyResult>(*op->getSchema());
+            // Ignore if literal is True.
+        } else {
+            predicateSet.addPredicate(conjunct);
         }
-        // Ignore if literal is True.
-    } else {
-        predicateSet.addPredicate(predicate);
     }
     return visitOperator(filter.getChild(0));
+}
+
+std::shared_ptr<LogicalOperator> FilterPushDownOptimizer::visitUnaryPassThroughReplace(
+    const std::shared_ptr<LogicalOperator>& op) {
+    if (predicateSet.isEmpty() || op->getNumChildren() != 1) {
+        return visitChildren(op);
+    }
+    auto childSchema = op->getChild(0)->getSchema();
+    PredicateSet childPSet;
+    PredicateSet remainingPSet;
+    for (auto& p : predicateSet.getAllPredicates()) {
+        if (isPredicateEvaluableInSchema(*childSchema, *p) &&
+            isNonThrowingInSchema(*p, *childSchema)) {
+            childPSet.addPredicate(p);
+        } else {
+            remainingPSet.addPredicate(p);
+        }
+    }
+    auto childOptimizer =
+        FilterPushDownOptimizer(context, cardinalityEstimator, std::move(childPSet));
+    op->setChild(0, childOptimizer.visitOperator(op->getChild(0)));
+    op->computeFlatSchema();
+    predicateSet = std::move(remainingPSet);
+    return finishPushDown(op);
+}
+
+std::shared_ptr<LogicalOperator> FilterPushDownOptimizer::visitGroupKeySplitReplace(
+    const std::shared_ptr<LogicalOperator>& op) {
+    if (predicateSet.isEmpty() || op->getNumChildren() != 1) {
+        return visitChildren(op);
+    }
+    std::unordered_set<std::string> groupKeyNames;
+    if (op->getOperatorType() == LogicalOperatorType::AGGREGATE) {
+        const auto& agg = op->constCast<LogicalAggregate>();
+        for (auto& key : agg.getAllKeys()) {
+            groupKeyNames.insert(key->getUniqueName());
+        }
+    } else if (op->getOperatorType() == LogicalOperatorType::DISTINCT) {
+        const auto& distinct = op->constCast<LogicalDistinct>();
+        for (auto& key : distinct.getKeys()) {
+            groupKeyNames.insert(key->getUniqueName());
+        }
+    } else {
+        return visitChildren(op);
+    }
+    if (groupKeyNames.empty()) {
+        return visitChildren(op);
+    }
+    auto childSchema = op->getChild(0)->getSchema();
+    PredicateSet childPSet;
+    PredicateSet remainingPSet;
+    for (auto& p : predicateSet.getAllPredicates()) {
+        if (isComposedFromGroupKeys(*p, groupKeyNames) &&
+            isPredicateEvaluableInSchema(*childSchema, *p) &&
+            isNonThrowingInSchema(*p, *childSchema)) {
+            childPSet.addPredicate(p);
+        } else {
+            remainingPSet.addPredicate(p);
+        }
+    }
+    auto childOptimizer =
+        FilterPushDownOptimizer(context, cardinalityEstimator, std::move(childPSet));
+    op->setChild(0, childOptimizer.visitOperator(op->getChild(0)));
+    op->computeFlatSchema();
+    predicateSet = std::move(remainingPSet);
+    return finishPushDown(op);
+}
+
+std::shared_ptr<LogicalOperator> FilterPushDownOptimizer::visitHashJoinReplace(
+    const std::shared_ptr<LogicalOperator>& op) {
+    if (predicateSet.isEmpty()) {
+        return visitChildren(op);
+    }
+    const auto& join = op->constCast<LogicalHashJoin>();
+    const auto probeSchema = op->getChild(0)->getSchema();
+    const auto buildSchema = op->getChild(1)->getSchema();
+    PredicateSet probePSet;
+    PredicateSet buildPSet;
+    PredicateSet remainingPSet;
+    for (auto& p : predicateSet.getAllPredicates()) {
+        const bool inProbe = isPredicateEvaluableInSchema(*probeSchema, *p);
+        const bool inBuild = isPredicateEvaluableInSchema(*buildSchema, *p);
+        // Exhaustive over JoinType (no default: label).
+        switch (join.getJoinType()) {
+        case JoinType::INNER: {
+            if (inProbe && !inBuild && isNonThrowingInSchema(*p, *probeSchema) &&
+                canPushIntoJoinProbeChild(*op->getChild(0), *p)) {
+                probePSet.addPredicate(p);
+            } else if (!inProbe && inBuild && isNonThrowingInSchema(*p, *buildSchema)) {
+                buildPSet.addPredicate(p);
+            } else {
+                remainingPSet.addPredicate(p);
+            }
+            break;
+        }
+        case JoinType::LEFT:
+        case JoinType::MARK:
+        case JoinType::COUNT: {
+            // Only probe-only predicates are sound to push; filtering the build side would alter
+            // NULL-padded rows (LEFT), boolean marks (MARK), or match counts (COUNT).
+            if (inProbe && !inBuild && isNonThrowingInSchema(*p, *probeSchema) &&
+                canPushIntoJoinProbeChild(*op->getChild(0), *p)) {
+                probePSet.addPredicate(p);
+            } else {
+                remainingPSet.addPredicate(p);
+            }
+            break;
+        }
+        }
+    }
+    auto probeOptimizer =
+        FilterPushDownOptimizer(context, cardinalityEstimator, std::move(probePSet));
+    op->setChild(0, probeOptimizer.visitOperator(op->getChild(0)));
+    auto buildOptimizer =
+        FilterPushDownOptimizer(context, cardinalityEstimator, std::move(buildPSet));
+    op->setChild(1, buildOptimizer.visitOperator(op->getChild(1)));
+    op->computeFlatSchema();
+    predicateSet = std::move(remainingPSet);
+    return finishPushDown(op);
 }
 
 // A join key is a column of its own input, or an expression that only its own input can evaluate
@@ -136,15 +398,19 @@ static std::shared_ptr<LogicalOperator> projectMissingKeys(
 
 std::shared_ptr<LogicalOperator> FilterPushDownOptimizer::visitCrossProductReplace(
     const std::shared_ptr<LogicalOperator>& op) {
+    const auto& cp = op->constCast<LogicalCrossProduct>();
+    const bool isOptional = isOptionalAccumulate(cp.getAccumulateType());
     auto remainingPSet = PredicateSet();
     auto probePSet = PredicateSet();
     auto buildPSet = PredicateSet();
+    const auto probeInSchema = op->getChild(0)->getSchema();
+    const auto buildInSchema = op->getChild(1)->getSchema();
     for (auto& p : predicateSet.getAllPredicates()) {
-        auto inProbe = op->getChild(0)->getSchema()->evaluable(*p);
-        auto inBuild = op->getChild(1)->getSchema()->evaluable(*p);
-        if (inProbe && !inBuild) {
+        auto inProbe = isPredicateEvaluableInSchema(*probeInSchema, *p);
+        auto inBuild = isPredicateEvaluableInSchema(*buildInSchema, *p);
+        if (inProbe && !inBuild && canPushIntoJoinProbeChild(*op->getChild(0), *p)) {
             probePSet.addPredicate(p);
-        } else if (!inProbe && inBuild) {
+        } else if (!isOptional && !inProbe && inBuild) {
             buildPSet.addPredicate(p);
         } else {
             remainingPSet.addPredicate(p);
@@ -159,6 +425,14 @@ std::shared_ptr<LogicalOperator> FilterPushDownOptimizer::visitCrossProductRepla
     auto buildOptimizer =
         FilterPushDownOptimizer(context, cardinalityEstimator, std::move(buildPSet));
     op->setChild(1, buildOptimizer.visitOperator(op->getChild(1)));
+    op->computeFlatSchema();
+
+    // Do not convert an OPTIONAL cross product into an INNER hash join: unmatched rows must keep
+    // their NULL-padded / mark semantics.
+    if (isOptional) {
+        predicateSet = std::move(remainingPSet);
+        return finishPushDown(op);
+    }
 
     auto probeSchema = op->getChild(0)->getSchema();
     auto buildSchema = op->getChild(1)->getSchema();
@@ -197,6 +471,7 @@ std::shared_ptr<LogicalOperator> FilterPushDownOptimizer::visitCrossProductRepla
             computedJoinPredicates.end());
     }
     if (joinConditions.empty()) { // Nothing to push down. Terminate.
+        predicateSet = std::move(remainingPSet);
         return finishPushDown(op);
     }
     auto probeChild = op->getChild(0);
@@ -448,16 +723,38 @@ std::shared_ptr<LogicalOperator> FilterPushDownOptimizer::visitTableFunctionCall
 
 std::shared_ptr<LogicalOperator> FilterPushDownOptimizer::visitExtendReplace(
     const std::shared_ptr<LogicalOperator>& op) {
-    if (op->ptrCast<BaseLogicalExtend>()->isRecursive() ||
-        !context->getClientConfig()->enableZoneMap) {
+    if (op->ptrCast<BaseLogicalExtend>()->isRecursive()) {
         return visitChildren(op);
     }
     auto& extend = op->cast<LogicalExtend>();
-    // Apply column predicates.
-    auto columnPredicates =
-        getColumnPredicateSets(extend.getProperties(), predicateSet.getAllPredicates());
-    extend.setPropertyPredicates(std::move(columnPredicates));
-    return visitChildren(op);
+    // Apply column predicates (zone maps) for edge properties.
+    if (context->getClientConfig()->enableZoneMap) {
+        auto columnPredicates =
+            getColumnPredicateSets(extend.getProperties(), predicateSet.getAllPredicates());
+        extend.setPropertyPredicates(std::move(columnPredicates));
+    }
+    if (predicateSet.isEmpty()) {
+        return visitChildren(op);
+    }
+    // Push non-throwing predicates that depend solely on the bound side (child 0) below EXTEND so
+    // they can prune the bound node scan (e.g. turning SCAN_NODE_TABLE into PRIMARY_KEY_SCAN).
+    const auto childSchema = extend.getChild(0)->getSchema();
+    PredicateSet childPSet;
+    PredicateSet remainingPSet;
+    for (auto& p : predicateSet.getAllPredicates()) {
+        if (isPredicateEvaluableInSchema(*childSchema, *p) &&
+            isNonThrowingInSchema(*p, *childSchema)) {
+            childPSet.addPredicate(p);
+        } else {
+            remainingPSet.addPredicate(p);
+        }
+    }
+    auto childOptimizer =
+        FilterPushDownOptimizer(context, cardinalityEstimator, std::move(childPSet));
+    op->setChild(0, childOptimizer.visitOperator(op->getChild(0)));
+    op->computeFlatSchema();
+    predicateSet = std::move(remainingPSet);
+    return finishPushDown(op);
 }
 
 std::shared_ptr<LogicalOperator> FilterPushDownOptimizer::finishPushDown(

@@ -72,6 +72,14 @@ TEST(OperatorPropertiesTest, AllLogicalOperatorsAreUniqueAndAlgebraicallyConsist
             EXPECT_EQ(traits.orderByAction, OrderByPushDownAction::STOP);
             EXPECT_EQ(traits.pipelineBehavior, PipelineBehavior::PIPELINE_BREAKER);
         }
+
+        // Invariant 6: FILTER absorbs predicates; DISTINCT only splits on keys.
+        if (type == LogicalOperatorType::FILTER) {
+            EXPECT_EQ(traits.filterAction, FilterPushDownAction::ABSORB_FILTER);
+        }
+        if (type == LogicalOperatorType::DISTINCT) {
+            EXPECT_EQ(traits.filterAction, FilterPushDownAction::SPLIT_ON_GROUP_KEYS);
+        }
     }
 }
 
