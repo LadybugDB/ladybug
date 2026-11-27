@@ -1,6 +1,7 @@
 #include "planner/operator/logical_operator.h"
 
 #include "common/exception/runtime.h"
+#include "planner/operator/operator_properties.h"
 
 using namespace lbug::common;
 
@@ -149,6 +150,8 @@ std::string LogicalOperatorUtils::logicalOperatorTypeToString(LogicalOperatorTyp
 // LCOV_EXCL_STOP
 
 bool LogicalOperatorUtils::isUpdate(LogicalOperatorType type) {
+    // Exhaustively backed by getStaticOperatorTraits(type); COPY_FROM is handled separately as a
+    // load statement rather than a Cypher updating clause, so keep isUpdate scoped to Cypher DML.
     switch (type) {
     case LogicalOperatorType::INSERT:
     case LogicalOperatorType::DELETE:
@@ -156,7 +159,8 @@ bool LogicalOperatorUtils::isUpdate(LogicalOperatorType type) {
     case LogicalOperatorType::MERGE:
         return true;
     default:
-        return false;
+        return getStaticOperatorTraits(type).sideEffect == SideEffectClass::DATA_WRITE &&
+               type != LogicalOperatorType::COPY_FROM;
     }
 }
 

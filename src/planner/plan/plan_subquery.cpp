@@ -25,6 +25,7 @@
 #include "planner/operator/logical_limit.h"
 #include "planner/operator/logical_projection.h"
 #include "planner/operator/logical_unwind.h"
+#include "planner/operator/operator_properties.h"
 #include "planner/operator/persistent/logical_delete.h"
 #include "planner/operator/persistent/logical_insert.h"
 #include "planner/operator/persistent/logical_merge.h"
@@ -540,119 +541,14 @@ static planner::LogicalOperator* findCollectAggregate(planner::LogicalOperator* 
     return nullptr;
 }
 
-// See the declaration in planner.h: every enumerator is classified explicitly with no
-// default label, so -Wswitch fails the build on unclassified new operators (#935).
-// The true arm holds operators that only pass through, filter, or combine already-bound
-// rows and therefore cannot introduce null bindings for the collect element. Everything
-// else (UNION_ALL, UNWIND, table functions, write/DDL ops, ...) conservatively counts
-// as potentially null-supplying: the rewrite is skipped (missed optimization, never
-// wrong results).
+// Delegates to the centralized exhaustive trait table in operator_properties.h
+// (no default label, -Wswitch enforced per #935).
 bool isNullFreeOperator(LogicalOperatorType type) {
-    switch (type) {
-    case LogicalOperatorType::AGGREGATE:
-    case LogicalOperatorType::COUNT_ANTI_EDGE_CHAIN:
-    case LogicalOperatorType::COUNT_EXTEND_CHAIN:
-    case LogicalOperatorType::COUNT_REL_TABLE:
-    case LogicalOperatorType::CROSS_PRODUCT:
-    case LogicalOperatorType::DISTINCT:
-    case LogicalOperatorType::DUMMY_SCAN:
-    case LogicalOperatorType::EMPTY_RESULT:
-    case LogicalOperatorType::EXTEND:
-    case LogicalOperatorType::FILTER:
-    case LogicalOperatorType::FLATTEN:
-    case LogicalOperatorType::INDEX_LOOK_UP:
-    case LogicalOperatorType::INTERSECT:
-    case LogicalOperatorType::LIMIT:
-    case LogicalOperatorType::MULTIPLICITY_REDUCER:
-    case LogicalOperatorType::NODE_LABEL_FILTER:
-    case LogicalOperatorType::ORDER_BY:
-    case LogicalOperatorType::PACKED_EXTEND:
-    case LogicalOperatorType::PATH_PROPERTY_PROBE:
-    case LogicalOperatorType::PROJECTION:
-    case LogicalOperatorType::QUERY_PRIMARY_KEY_LOOKUP:
-    case LogicalOperatorType::REACHABLE_COUNT:
-    case LogicalOperatorType::GROUPED_REACHABLE_COUNT:
-    case LogicalOperatorType::RECURSIVE_EXTEND:
-    case LogicalOperatorType::REL_DEGREE_TABLE:
-    case LogicalOperatorType::SCAN_NODE_TABLE:
-    case LogicalOperatorType::SEMI_MASKER:
-        return true;
-    case LogicalOperatorType::ACCUMULATE:
-    case LogicalOperatorType::ALTER:
-    case LogicalOperatorType::ANALYZE:
-    case LogicalOperatorType::ATTACH_DATABASE:
-    case LogicalOperatorType::COPY_FROM:
-    case LogicalOperatorType::COPY_TO:
-    case LogicalOperatorType::CREATE_CONSTRAINT:
-    case LogicalOperatorType::DROP_CONSTRAINT:
-    case LogicalOperatorType::CREATE_GRAPH:
-    case LogicalOperatorType::CREATE_INDEX:
-    case LogicalOperatorType::CREATE_MACRO:
-    case LogicalOperatorType::CREATE_SEQUENCE:
-    case LogicalOperatorType::CREATE_TABLE:
-    case LogicalOperatorType::CREATE_TYPE:
-    case LogicalOperatorType::DELETE:
-    case LogicalOperatorType::DETACH_DATABASE:
-    case LogicalOperatorType::DROP:
-    case LogicalOperatorType::DUMMY_SINK:
-    case LogicalOperatorType::EXPLAIN:
-    case LogicalOperatorType::EXPRESSIONS_SCAN:
-    case LogicalOperatorType::EXTENSION:
-    case LogicalOperatorType::EXTENSION_CLAUSE:
-    case LogicalOperatorType::EXPORT_DATABASE:
-    case LogicalOperatorType::HASH_JOIN:
-    case LogicalOperatorType::IMPORT_DATABASE:
-    case LogicalOperatorType::INSERT:
-    case LogicalOperatorType::MERGE:
-    case LogicalOperatorType::NOOP:
-    case LogicalOperatorType::PARTITIONER:
-    case LogicalOperatorType::SET_PROPERTY:
-    case LogicalOperatorType::STANDALONE_CALL:
-    case LogicalOperatorType::TABLE_FUNCTION_CALL:
-    case LogicalOperatorType::TRANSACTION:
-    case LogicalOperatorType::UNION_ALL:
-    case LogicalOperatorType::UNWIND:
-    case LogicalOperatorType::UNWIND_DEDUPLICATE:
-    case LogicalOperatorType::USE_DATABASE:
-    case LogicalOperatorType::USE_GRAPH:
-        return false;
-    }
-    // No default label: -Wswitch enforces that every enumerator is handled above.
-    // LCOV_EXCL_START
-    throw common::RuntimeException("Unknown logical operator type.");
-    // LCOV_EXCL_STOP
+    return getStaticOperatorTraits(type).nullSupply == NullSupplyBehavior::NEVER_NULLS;
 }
 
-// True when the subtree can supply nulls (which would break the non-empty-group /
-// non-null-element reasoning): LEFT/MARK joins, non-regular accumulates, and anything
-// not explicitly classified null-free above. Errs toward skipping the rewrite.
 static bool subtreeHasNullSupply(planner::LogicalOperator* op) {
-    switch (op->getOperatorType()) {
-    case LogicalOperatorType::HASH_JOIN: {
-        auto joinType = op->constCast<LogicalHashJoin>().getJoinType();
-        if (joinType == JoinType::LEFT || joinType == JoinType::MARK) {
-            return true;
-        }
-        break;
-    }
-    case LogicalOperatorType::ACCUMULATE: {
-        if (op->constCast<LogicalAccumulate>().getAccumulateType() != AccumulateType::REGULAR) {
-            return true;
-        }
-        break;
-    }
-    default:
-        if (!isNullFreeOperator(op->getOperatorType())) {
-            return true;
-        }
-        break;
-    }
-    for (auto i = 0u; i < op->getNumChildren(); ++i) {
-        if (subtreeHasNullSupply(op->getChild(i).get())) {
-            return true;
-        }
-    }
-    return false;
+    return op != nullptr && subtreeCanSupplyNulls(*op);
 }
 
 // Collects the operator path from root down to (excluding) target. Returns false when
@@ -676,26 +572,14 @@ static bool findPath(planner::LogicalOperator* op, planner::LogicalOperator* tar
 // modulo reduction.
 static bool pathHasFanOut(const std::vector<planner::LogicalOperator*>& path) {
     for (auto* op : path) {
-        switch (op->getOperatorType()) {
-        case LogicalOperatorType::PROJECTION:
-        case LogicalOperatorType::FILTER:
-        case LogicalOperatorType::FLATTEN:
-        case LogicalOperatorType::DISTINCT:
-        case LogicalOperatorType::ORDER_BY:
-        case LogicalOperatorType::LIMIT:
-        case LogicalOperatorType::INTERSECT:
-        case LogicalOperatorType::SEMI_MASKER:
-        case LogicalOperatorType::NODE_LABEL_FILTER:
-        case LogicalOperatorType::MULTIPLICITY_REDUCER:
-            break;
-        case LogicalOperatorType::ACCUMULATE:
-            if (op->constCast<LogicalAccumulate>().getAccumulateType() != AccumulateType::REGULAR) {
-                return true;
-            }
-            break;
-        default:
-            return true;
+        const auto sem = analyzeOperator(*op);
+        if (sem.neverDuplicatesChild0Rows() ||
+            op->getOperatorType() == LogicalOperatorType::ORDER_BY ||
+            op->getOperatorType() == LogicalOperatorType::MULTIPLICITY_REDUCER ||
+            op->getOperatorType() == LogicalOperatorType::INTERSECT) {
+            continue;
         }
+        return true;
     }
     return false;
 }
@@ -2258,33 +2142,19 @@ static bool boundExpandOuterHasLimitWithinCap(const planner::LogicalOperator* op
 
 // Whether an outer ORDER BY reaches the new extend along an order-preserving path.
 // An ORDER BY parked under an aggregate or a hash-join build is already unordered,
-// so the extend cannot make it worse; only a preserving path (filter/project/flatten/
-// limit/label-filter/scans/lookups) forces the fallback that keeps late-fetch
-// ordered-node tests stable.
+// so the extend cannot make it worse; only an order-preserving path forces the
+// fallback that keeps late-fetch ordered-node tests stable.
 static bool boundExpandBreaksOuterOrder(const planner::LogicalOperator* op) {
-    using T = planner::LogicalOperatorType;
-    switch (op->getOperatorType()) {
-    case T::AGGREGATE:
-    case T::DISTINCT:
-    case T::HASH_JOIN:
-    case T::CROSS_PRODUCT:
-    case T::UNION_ALL:
-    case T::ACCUMULATE:
-    case T::UNWIND:
-    case T::UNWIND_DEDUPLICATE:
-    case T::INTERSECT:
-    case T::EXTEND:
-    case T::PACKED_EXTEND:
-    case T::RECURSIVE_EXTEND:
-    case T::PATH_PROPERTY_PROBE:
-    case T::COUNT_REL_TABLE:
-    case T::COUNT_EXTEND_CHAIN:
-    case T::COUNT_ANTI_EDGE_CHAIN:
+    const auto order = analyzeOperator(*op).orderPreservation;
+    switch (order) {
+    case OrderPreservation::PRESERVES_ORDER:
+    case OrderPreservation::PRODUCES_ORDER:
+        return true;
+    case OrderPreservation::BREAKS_ORDER:
+    case OrderPreservation::NONE:
         return false;
-    default:
-        break;
     }
-    return true;
+    return false;
 }
 
 static bool boundExpandOuterOrderReaches(const planner::LogicalOperator* op) {
