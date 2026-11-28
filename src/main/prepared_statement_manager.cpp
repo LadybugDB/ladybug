@@ -19,9 +19,15 @@ std::string CachedPreparedStatementManager::addStatement(
     return idx;
 }
 
+bool CachedPreparedStatementManager::containsStatement(const std::string& name) const {
+    std::unique_lock lck{mtx};
+    return statementMap.contains(name);
+}
+
 CachedPreparedStatement* CachedPreparedStatementManager::getCachedStatement(
     const std::string& name) const {
-    DASSERT(containsStatement(name));
+    std::unique_lock lck{mtx};
+    DASSERT(statementMap.contains(name));
     return statementMap.at(name).get();
 }
 

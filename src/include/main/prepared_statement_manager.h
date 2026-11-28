@@ -22,12 +22,16 @@ public:
     // physical plan are freed instead of living until the connection is closed.
     void removeStatement(const std::string& name);
 
-    bool containsStatement(const std::string& name) const { return statementMap.contains(name); }
+    bool containsStatement(const std::string& name) const;
 
+    // The returned statement stays valid after the call: removing another name does not move it.
+    // The caller keeps the owning PreparedStatement and its connection alive while using it.
     CachedPreparedStatement* getCachedStatement(const std::string& name) const;
 
 private:
-    std::mutex mtx;
+    // Guards statementMap. A PreparedStatement can be destroyed, and so removed, while another
+    // thread prepares or executes on the same connection.
+    mutable std::mutex mtx;
     uint32_t currentIdx = 0;
     std::unordered_map<std::string, std::unique_ptr<CachedPreparedStatement>> statementMap;
 };
