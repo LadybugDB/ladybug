@@ -3,6 +3,7 @@
 #include "function/table/bind_input.h"
 #include "function/table/simple_table_function.h"
 #include "main/client_context.h"
+#include "processor/execution_context.h"
 
 using namespace lbug::common;
 using namespace lbug::main;
@@ -11,14 +12,14 @@ namespace lbug {
 namespace function {
 
 struct CurrentSettingBindData final : TableFuncBindData {
-    std::string result;
+    std::string optionName;
 
-    CurrentSettingBindData(std::string result, binder::expression_vector columns,
+    CurrentSettingBindData(std::string optionName, binder::expression_vector columns,
         offset_t maxOffset)
-        : TableFuncBindData{std::move(columns), maxOffset}, result{std::move(result)} {}
+        : TableFuncBindData{std::move(columns), maxOffset}, optionName{std::move(optionName)} {}
 
     std::unique_ptr<TableFuncBindData> copy() const override {
-        return std::make_unique<CurrentSettingBindData>(result, columns, numRows);
+        return std::make_unique<CurrentSettingBindData>(optionName, columns, numRows);
     }
 };
 
@@ -26,7 +27,10 @@ static offset_t internalTableFunc(const TableFuncMorsel& /*morsel*/, const Table
     common::DataChunk& output) {
     auto currentSettingBindData = input.bindData->constPtrCast<CurrentSettingBindData>();
     const auto pos = output.state->getSelVector()[0];
-    output.getValueVectorMutable(0).setValue(pos, currentSettingBindData->result);
+    // Read when the function runs: a reused plan must see a setting changed since it was bound.
+    output.getValueVectorMutable(0).setValue(pos,
+        input.context->clientContext->getCurrentSetting(currentSettingBindData->optionName)
+            .toString());
     return 1;
 }
 
@@ -39,8 +43,9 @@ static std::unique_ptr<TableFuncBindData> bindFunc(const ClientContext* context,
     columnTypes.push_back(LogicalType::STRING());
     columnNames = TableFunction::extractYieldVariables(columnNames, input->yieldVariables);
     auto columns = input->binder->createVariables(columnNames, columnTypes);
-    return std::make_unique<CurrentSettingBindData>(
-        context->getCurrentSetting(optionName).toString(), columns, 1 /* one row result */);
+    // Fails here for an unknown option.
+    context->getCurrentSetting(optionName);
+    return std::make_unique<CurrentSettingBindData>(optionName, columns, 1 /* one row result */);
 }
 
 function_set CurrentSettingFunction::getFunctionSet() {

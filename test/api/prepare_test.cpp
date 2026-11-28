@@ -1581,3 +1581,40 @@ TEST_F(ApiTest, PreparedRelScanAfterCheckpointRenumbersColumns) {
         ASSERT_TRUE(conn->query("CHECKPOINT")->isSuccess());
     }
 }
+
+TEST_F(ApiTest, PreparedCurrentTimestampFollowsExecution1713) {
+    auto noParams = conn->prepare("RETURN current_timestamp()");
+    auto withParams = conn->prepareWithParams("RETURN current_timestamp(), $p", paramMap("p", 1));
+    // Prepared without a value, the expression is first bound by the first execution.
+    auto unbound = conn->prepare("RETURN concat(CAST(current_timestamp() AS STRING), $s)");
+    ASSERT_TRUE(unbound->isSuccess()) << unbound->getErrorMessage();
+    ASSERT_TRUE(noParams->isSuccess()) << noParams->getErrorMessage();
+    ASSERT_TRUE(withParams->isSuccess()) << withParams->getErrorMessage();
+    std::vector<std::string> first;
+    for (auto i = 0; i < 3; i++) {
+        auto a = TestHelper::convertResultToString(*conn->execute(noParams.get()));
+        auto b = TestHelper::convertResultToString(
+            *conn->executeWithParams(withParams.get(), paramMap("p", 1)));
+        auto c = TestHelper::convertResultToString(
+            *conn->execute(unbound.get(), std::make_pair(std::string("s"), "x")));
+        if (i == 0) {
+            first = {a[0], b[0], c[0]};
+        } else {
+            EXPECT_NE(first[0], a[0]);
+            EXPECT_NE(first[1], b[0]);
+            EXPECT_NE(first[2], c[0]);
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    }
+}
+
+TEST_F(ApiTest, PreparedCurrentSettingSeesLaterChange1713) {
+    ASSERT_TRUE(conn->query("CALL threads=3")->isSuccess());
+    auto setting = conn->prepare("CALL current_setting('threads') RETURN *");
+    ASSERT_TRUE(setting->isSuccess()) << setting->getErrorMessage();
+    ASSERT_EQ(std::vector<std::string>{"3"},
+        TestHelper::convertResultToString(*conn->execute(setting.get())));
+    ASSERT_TRUE(conn->query("CALL threads=2")->isSuccess());
+    ASSERT_EQ(std::vector<std::string>{"2"},
+        TestHelper::convertResultToString(*conn->execute(setting.get())));
+}

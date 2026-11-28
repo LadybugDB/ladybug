@@ -14,6 +14,7 @@
 #include "function/arithmetic/vector_arithmetic_functions.h"
 #include "function/built_in_function_utils.h"
 #include "function/cast/vector_cast_functions.h"
+#include "function/date/vector_date_functions.h"
 #include "function/rewrite_function.h"
 #include "function/scalar_macro_function.h"
 #include "function/uuid/vector_uuid_functions.h"
@@ -97,6 +98,10 @@ std::shared_ptr<Expression> ExpressionBinder::bindScalarFunctionExpression(
         entry->ptrCast<FunctionCatalogEntry>())
                         ->ptrCast<ScalarFunction>()
                         ->copy();
+    if (function->name == CurrentDateFunction::name ||
+        function->name == CurrentTimestampFunction::name) {
+        transactionTimeUsed = true;
+    }
     if (children.size() == 2 && children[1]->expressionType == ExpressionType::LAMBDA) {
         if (!function->isListLambda) {
             throw BinderException(std::format("{} does not support lambda input.", functionName));

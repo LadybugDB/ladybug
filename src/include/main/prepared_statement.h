@@ -99,6 +99,10 @@ struct CachedPreparedStatement {
     std::mutex physicalPlanPoolMutex;
     std::unordered_map<std::thread::id, std::vector<std::unique_ptr<processor::PhysicalPlan>>>
         physicalPlanPool;
+    // True when the plan holds the binding transaction's time (current_date(),
+    // current_timestamp()). Like hasBakedParameters, such statements rebind on every execution
+    // and stay out of the physical-plan cache.
+    bool usesTransactionTime = false;
 
     CachedPreparedStatement();
     ~CachedPreparedStatement();

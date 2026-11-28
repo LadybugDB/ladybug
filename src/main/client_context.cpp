@@ -426,7 +426,8 @@ std::unique_ptr<QueryResult> ClientContext::executeWithParams(PreparedStatement*
     // cached plan (https://github.com/LadybugDB/ladybug/issues/985).
     // Likewise, a catalog change (e.g. ALTER TABLE ADD) or a checkpoint that renumbered column
     // IDs invalidates the bound logical plan (https://github.com/LadybugDB/ladybug/issues/1158).
-    if (useCachedPlan && !cachedStatement->hasBakedParameters && !planStale) {
+    if (useCachedPlan && !cachedStatement->hasBakedParameters &&
+        !cachedStatement->usesTransactionTime && !planStale) {
         return executeNoLock(preparedStatement, cachedStatement, queryID, {}, true);
     }
     // rebind
@@ -448,6 +449,7 @@ std::unique_ptr<QueryResult> ClientContext::executeWithParams(PreparedStatement*
         cachedStatement->columnNames = std::move(newCachedStatement->columnNames);
         cachedStatement->boundParameters = std::move(newCachedStatement->boundParameters);
         cachedStatement->hasBakedParameters = newCachedStatement->hasBakedParameters;
+        cachedStatement->usesTransactionTime = newCachedStatement->usesTransactionTime;
         cachedStatement->planVersion = newCachedStatement->planVersion;
         cachedStatement->hasUncommittedCatalogChanges =
             newCachedStatement->hasUncommittedCatalogChanges;
@@ -622,6 +624,7 @@ ClientContext::PrepareResult ClientContext::prepareNoLock(
                 cachedStatement->boundParameters = expressionBinder->getBoundParameters();
                 cachedStatement->hasBakedParameters =
                     hasBakedParameters(cachedStatement->boundParameters);
+                cachedStatement->usesTransactionTime = expressionBinder->usesTransactionTime();
                 auto* activeTransaction = transactionContext->getActiveTransaction();
                 // A concurrent DDL commit can advance the global version while this snapshot
                 // still binds to its old schema (including its old set of partitions).
@@ -822,10 +825,10 @@ std::unique_ptr<QueryResult> ClientContext::executeNoLock(PreparedStatement* pre
                 // SKIP/LIMIT frozen to uint64_t) are additionally kept off the fast path: a
                 // cached plan would serve the first execution's frozen values
                 // (https://github.com/LadybugDB/ladybug/issues/985).
-                const bool cachedPlanAllowed = cachePhysicalPlan &&
-                                               isCachedPlanAllowedFor(*preparedStatement) &&
-                                               !cachedStatement->hasBakedParameters &&
-                                               !cachedStatement->hasUncommittedCatalogChanges;
+                const bool cachedPlanAllowed =
+                    cachePhysicalPlan && isCachedPlanAllowedFor(*preparedStatement) &&
+                    !cachedStatement->hasBakedParameters && !cachedStatement->usesTransactionTime &&
+                    !cachedStatement->hasUncommittedCatalogChanges;
                 if (cachedPlanAllowed && cachedStatement->physicalPlanCache) {
                     // Fast path: reuse a pooled plan when available, else clone the cached
                     // operator tree template. Avoids the PlanMapper::mapOperator recursion
