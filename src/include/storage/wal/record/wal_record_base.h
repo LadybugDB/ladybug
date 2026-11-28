@@ -47,9 +47,14 @@ enum class WALRecordType : uint8_t {
 };
 
 struct WALHeader {
+    // The database ID and the checksum flag, written as one byte; a checksum follows when
+    // checksums are on.
+    static constexpr uint64_t SERIALIZED_SIZE = sizeof(common::uuid) + sizeof(uint8_t);
+
     common::uuid databaseID;
     bool enableChecksums;
 };
+static_assert(sizeof(bool) == sizeof(uint8_t), "the checksum flag is serialized as one byte");
 
 struct WALRecord {
     WALRecordType type = WALRecordType::INVALID_RECORD;

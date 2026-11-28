@@ -1,11 +1,14 @@
 #include "storage/wal/wal_replayer.h"
 
 #include <algorithm>
+#include <cstring>
 #include <optional>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 #include "catalog/catalog.h"
+#include "common/checksum.h"
 #include "common/constants.h"
 #include "common/exception/checkpoint.h"
 #include "common/exception/internal.h"
@@ -1040,6 +1043,269 @@ void WALReplayer::replayCommittedCheckpoint(Checkpointer& checkpointer,
     removeGraphCheckpointShadows(clientContext);
 }
 
+namespace {
+// Reads the WAL after a frame that failed to replay, to tell a torn tail from damage with intact
+// records after it. Each record frame is its length, that many bytes and, with checksums on, a
+// checksum of both; reads go through one window, so walking a long tail costs few syscalls.
+class WALTailReader {
+public:
+    struct FramesAfter {
+        bool intactRecord = false;
+        bool checkpointRecord = false;
+    };
+
+    WALTailReader(FileInfo& fileInfo, main::ClientContext& clientContext, bool enableChecksums)
+        : fileInfo{fileInfo}, clientContext{clientContext}, fileSize{fileInfo.getFileSize()},
+          checksumSize{enableChecksums ? sizeof(uint64_t) : 0}, enableChecksums{enableChecksums} {}
+
+    uint64_t getFileSize() const { return fileSize; }
+    uint64_t getChecksumSize() const { return checksumSize; }
+
+    // The size of the record frame at `offset`, or nullopt when it runs past the end of the file.
+    std::optional<uint64_t> recordFrameSize(uint64_t offset) {
+        const auto overhead = sizeof(uint64_t) + checksumSize;
+        if (offset > fileSize || fileSize - offset < overhead) {
+            return std::nullopt;
+        }
+        uint64_t length = 0;
+        read(&length, sizeof(length), offset);
+        if (length > fileSize - offset - overhead) {
+            return std::nullopt;
+        }
+        return overhead + length;
+    }
+
+    bool checksumMatches(uint64_t offset, uint64_t payloadSize) {
+        // checksum() XORs a hash of each 8-byte word into that of an empty buffer, so chunks whose
+        // sizes are multiples of 8 combine into the checksum of the whole payload.
+        const auto emptyChecksum = checksum(nullptr, 0);
+        auto result = emptyChecksum;
+        std::vector<uint8_t> chunk(std::min(payloadSize, WINDOW_SIZE));
+        for (uint64_t done = 0; done < payloadSize;) {
+            const auto size = std::min(WINDOW_SIZE, payloadSize - done);
+            read(chunk.data(), size, offset + done);
+            result ^= checksum(chunk.data(), size) ^ emptyChecksum;
+            done += size;
+        }
+        uint64_t storedChecksum = 0;
+        read(&storedChecksum, sizeof(storedChecksum), offset + payloadSize);
+        return result == storedChecksum;
+    }
+
+    // Whether the record frames after `offset` hold an intact record, and a CHECKPOINT record.
+    // Frames are chained by their lengths; a run of zeros, as a zero-filled tail leaves, is a run
+    // of empty frames and is skipped at once.
+    FramesAfter scanFramesAfter(uint64_t offset) {
+        FramesAfter result;
+        const auto emptyFrameSize = sizeof(uint64_t) + checksumSize;
+        while (offset < fileSize && !result.checkpointRecord) {
+            const auto frameSize = recordFrameSize(offset);
+            if (!frameSize.has_value()) {
+                break;
+            }
+            if (*frameSize == emptyFrameSize) {
+                const auto nonZero = firstNonZeroByte(offset);
+                if (!nonZero.has_value()) {
+                    break;
+                }
+                offset +=
+                    std::max<uint64_t>(1, (*nonZero - offset) / emptyFrameSize) * emptyFrameSize;
+                continue;
+            }
+            const auto type = intactRecordType(offset, *frameSize);
+            if (type.has_value()) {
+                result.intactRecord = true;
+                result.checkpointRecord = *type == WALRecordType::CHECKPOINT_RECORD;
+            }
+            offset += *frameSize;
+        }
+        return result;
+    }
+
+    // Whether [offset, offset + size) overlaps a file-system-block-aligned run of zeros: a hole
+    // that a power loss left in data written after the last sync, not damage to synced data.
+    bool overlapsZeroBlock(uint64_t offset, uint64_t size) {
+        std::vector<uint8_t> block(ZERO_BLOCK_SIZE);
+        for (auto blockStart = offset / ZERO_BLOCK_SIZE * ZERO_BLOCK_SIZE;
+             blockStart < offset + size && blockStart + ZERO_BLOCK_SIZE <= fileSize;
+             blockStart += ZERO_BLOCK_SIZE) {
+            read(block.data(), ZERO_BLOCK_SIZE, blockStart);
+            if (std::ranges::all_of(block, [](uint8_t byte) { return byte == 0; })) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+private:
+    static constexpr uint64_t WINDOW_SIZE = 1 << 20;
+    static_assert(WINDOW_SIZE % sizeof(uint64_t) == 0,
+        "checksumMatches combines chunks of whole 8-byte words");
+    // The block size of common file systems such as ext4 and XFS, the unit in which a power loss
+    // leaves data written after the last sync unwritten.
+    static constexpr uint64_t ZERO_BLOCK_SIZE = 4096;
+
+    // The type of the intact record frame at `offset`, or nullopt when the frame is damaged. A
+    // frame is intact when its checksum matches or, without checksums, when it decodes; an intact
+    // frame that does not decode, such as one of a type a newer version wrote, gives
+    // INVALID_RECORD. No record is empty, so a frame of length 0 is never intact.
+    std::optional<WALRecordType> intactRecordType(uint64_t offset, uint64_t frameSize) {
+        if (frameSize == sizeof(uint64_t) + checksumSize) {
+            return std::nullopt;
+        }
+        if (enableChecksums && !checksumMatches(offset, frameSize - checksumSize)) {
+            return std::nullopt;
+        }
+        const auto type = decodeRecordType(offset);
+        if (enableChecksums) {
+            return type.value_or(WALRecordType::INVALID_RECORD);
+        }
+        return type;
+    }
+
+    // The type of the record frame at `offset`, or nullopt when it does not decode.
+    std::optional<WALRecordType> decodeRecordType(uint64_t offset) {
+        auto reader = std::make_unique<BufferedFileReader>(fileInfo);
+        reader->resetReadOffset(offset);
+        Deserializer deserializer{std::move(reader)};
+        try {
+            return WALRecord::deserialize(deserializer, clientContext)->type;
+        } catch (const std::exception&) {
+            return std::nullopt;
+        }
+    }
+
+    // Makes the window cover [offset, offset + size), reading it from `offset` when it does not.
+    void loadWindow(uint64_t offset, uint64_t size) {
+        if (offset >= windowStart && offset + size <= windowStart + window.size()) {
+            return;
+        }
+        window.resize(std::min(WINDOW_SIZE, fileSize - offset));
+        fileInfo.readFromFile(window.data(), window.size(), offset);
+        windowStart = offset;
+    }
+
+    void read(void* data, uint64_t size, uint64_t offset) {
+        if (offset > fileSize || size > fileSize - offset) {
+            throw InternalException(
+                std::format("Read of {} bytes at byte {} runs past the end of WAL {}.", size,
+                    offset, fileInfo.path));
+        }
+        if (size > WINDOW_SIZE) {
+            fileInfo.readFromFile(data, size, offset);
+            return;
+        }
+        loadWindow(offset, size);
+        std::memcpy(data, window.data() + (offset - windowStart), size);
+    }
+
+    std::optional<uint64_t> firstNonZeroByte(uint64_t offset) {
+        while (offset < fileSize) {
+            const auto size = std::min(WINDOW_SIZE, fileSize - offset);
+            loadWindow(offset, size);
+            const auto* begin = window.data() + (offset - windowStart);
+            const auto* found =
+                std::find_if(begin, begin + size, [](uint8_t byte) { return byte != 0; });
+            if (found != begin + size) {
+                return offset + (found - begin);
+            }
+            offset += size;
+        }
+        return std::nullopt;
+    }
+
+    FileInfo& fileInfo;
+    main::ClientContext& clientContext;
+    uint64_t fileSize;
+    uint64_t checksumSize;
+    bool enableChecksums;
+    std::vector<uint8_t> window;
+    uint64_t windowStart = 0;
+};
+
+enum class WALFailureKind : uint8_t { TORN_TAIL, UNREPLAYABLE_RECORD, DAMAGED_RECORD };
+
+struct WALFailure {
+    WALFailureKind kind = WALFailureKind::TORN_TAIL;
+    uint64_t frameStart = 0;
+    bool checkpointFollows = false;
+};
+
+// Lenient replay drops only a torn tail, what a crash or a power loss can leave of data written
+// after the last sync: a frame that runs past the end of the file, or a complete one that is
+// damaged with no intact record after it or with a hole in it. A checkpoint starts only after
+// every earlier commit was synced, so damage before an intact CHECKPOINT record that the frame
+// chain reaches is never a torn tail. `recordStart` is unset when the header failed.
+WALFailure classifyWALFailure(FileInfo& fileInfo, main::ClientContext& clientContext,
+    std::optional<uint64_t> recordStart, bool enableChecksums) {
+    WALTailReader tail{fileInfo, clientContext, enableChecksums};
+    WALFailure failure;
+    uint64_t frameSize = 0;
+    if (recordStart.has_value()) {
+        const auto recordFrameSize = tail.recordFrameSize(*recordStart);
+        if (!recordFrameSize.has_value()) {
+            return failure;
+        }
+        failure.frameStart = *recordStart;
+        frameSize = *recordFrameSize;
+    } else {
+        frameSize = WALHeader::SERIALIZED_SIZE + tail.getChecksumSize();
+        if (tail.getFileSize() < frameSize) {
+            return failure;
+        }
+    }
+    const auto after = tail.scanFramesAfter(failure.frameStart + frameSize);
+    failure.checkpointFollows = after.checkpointRecord;
+    if (enableChecksums &&
+        tail.checksumMatches(failure.frameStart, frameSize - tail.getChecksumSize())) {
+        failure.kind = WALFailureKind::UNREPLAYABLE_RECORD;
+    } else if (after.checkpointRecord ||
+               (after.intactRecord && !tail.overlapsZeroBlock(failure.frameStart, frameSize))) {
+        failure.kind = WALFailureKind::DAMAGED_RECORD;
+    }
+    return failure;
+}
+} // namespace
+
+// Dropping anything but a torn tail could lose committed transactions, so the open refuses
+// instead and the WAL is kept.
+static void throwUnlessTornWALTail(FileInfo& fileInfo, main::ClientContext& clientContext,
+    std::optional<uint64_t> recordStart, bool enableChecksums, const std::string& error) {
+    WALFailure failure;
+    try {
+        failure = classifyWALFailure(fileInfo, clientContext, recordStart, enableChecksums);
+    } catch (const std::exception& e) {
+        throw RuntimeException(std::format(
+            "Cannot replay WAL {}: reading it to tell a torn tail from damage failed, so the WAL "
+            "is kept. Error: {} Replay error: {}",
+            fileInfo.path, e.what(), error));
+    }
+    if (failure.kind == WALFailureKind::TORN_TAIL) {
+        return;
+    }
+    const auto what = recordStart.has_value() ?
+                          std::format("the record at byte {}", failure.frameStart) :
+                          std::string{"the WAL header"};
+    const auto remedy =
+        failure.checkpointFollows ?
+            std::string{"The WAL is kept. Do not truncate it: a CHECKPOINT record follows, and "
+                        "recovering without that record could apply transactions twice."} :
+            std::format("The WAL is kept. To open the database without the transactions from that "
+                        "point on, truncate the WAL to {} bytes.",
+                failure.frameStart);
+    if (failure.kind == WALFailureKind::UNREPLAYABLE_RECORD) {
+        throw RuntimeException(std::format(
+            "Cannot replay WAL {}: {} matches its checksum but cannot be replayed, so it is not a "
+            "torn tail. A newer version may have written it, or a read failed, in which case "
+            "opening again can succeed. {} Error: {}",
+            fileInfo.path, what, remedy, error));
+    }
+    throw RuntimeException(std::format(
+        "Cannot replay WAL {}: {} is damaged and intact records follow it, so it is not a torn "
+        "tail, and dropping the rest of the WAL could lose committed transactions. {} Error: {}",
+        fileInfo.path, what, remedy, error));
+}
+
 WALReplayer::WALReplayInfo WALReplayer::dryReplay(FileInfo& fileInfo, bool throwOnWalReplayFailure,
     bool enableChecksums) const {
     // A header with the other checksum setting is a configuration error, not a torn tail: the
@@ -1052,6 +1318,7 @@ WALReplayer::WALReplayInfo WALReplayer::dryReplay(FileInfo& fileInfo, bool throw
     WALReplayInfo replayInfo;
     std::optional<uint64_t> openBlockStart;
     std::unordered_map<uint64_t, uint64_t> committedBlockEnds;
+    std::optional<uint64_t> recordStart;
     try {
         Deserializer deserializer = initDeserializer(fileInfo, clientContext, enableChecksums);
 
@@ -1063,7 +1330,7 @@ WALReplayer::WALReplayInfo WALReplayer::dryReplay(FileInfo& fileInfo, bool throw
         bool beganAfterLastCheckpoint = false;
         bool finishedDeserializing = deserializer.finished();
         while (!finishedDeserializing) {
-            const auto recordStart = getReadOffset(deserializer, enableChecksums);
+            recordStart = getReadOffset(deserializer, enableChecksums);
             auto walRecord = WALRecord::deserialize(deserializer, clientContext);
             finishedDeserializing = deserializer.finished();
             switch (walRecord->type) {
@@ -1123,12 +1390,17 @@ WALReplayer::WALReplayInfo WALReplayer::dryReplay(FileInfo& fileInfo, bool throw
             }
             }
         }
-    } catch (...) {
-        // If we hit an exception while deserializing, we assume that the WAL file is (partially)
-        // corrupted. This should only happen for records of the last transaction recorded.
+    } catch (const std::exception& e) {
         if (throwOnWalReplayFailure) {
             throw;
         }
+        throwUnlessTornWALTail(fileInfo, clientContext, recordStart, enableChecksums, e.what());
+    } catch (...) {
+        if (throwOnWalReplayFailure) {
+            throw;
+        }
+        throwUnlessTornWALTail(fileInfo, clientContext, recordStart, enableChecksums,
+            "unknown exception");
     }
     std::sort(replayInfo.abortedBlocks.begin(), replayInfo.abortedBlocks.end(),
         [](const AbortedBlock& a, const AbortedBlock& b) { return a.start < b.start; });
@@ -1262,18 +1534,15 @@ void WALReplayer::replayWALRecord(WALRecord& walRecord) const {
         // CHECKPOINT records are handled by the frozen/active WAL recovery path
         // that replays shadow pages as a batch. If we reach here, the WAL file has
         // been corrupted (or checksums are disabled and a torn write happened to
-        // produce type byte 254). Throw a descriptive error instead of asserting
-        // so that the database can still be opened with throwOnWalReplayFailure=false.
-        throw common::RuntimeException(std::format(
-            "WAL replay encountered a CHECKPOINT record outside the expected recovery "
-            "path. This is caused by a corrupted WAL tail. "
-            "Set throwOnWalReplayFailure=false to discard the tail and open the database."));
+        // produce type byte 254). Throw instead of asserting, so the open fails with a message.
+        throw common::RuntimeException(
+            "WAL replay encountered a CHECKPOINT record outside the expected recovery path, so the "
+            "WAL is damaged or a newer version wrote it. The WAL is kept.");
     }
     default:
         throw common::RuntimeException(std::format(
-            "WAL replay encountered an unknown record type ({}). "
-            "The WAL file is corrupted. "
-            "Set throwOnWalReplayFailure=false to discard the tail and open the database.",
+            "WAL replay encountered a record of an unknown type ({}), so the WAL is damaged or a "
+            "newer version wrote it. The WAL is kept.",
             static_cast<int>(walRecord.type)));
     }
 }

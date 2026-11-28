@@ -8,6 +8,7 @@
 
 #include "api_test/api_test.h"
 #include "binder/ddl/bound_alter_info.h"
+#include "common/checksum.h"
 #include "common/exception/io.h"
 #include "common/exception/runtime.h"
 #include "common/exception/storage.h"
@@ -22,6 +23,7 @@
 #include "storage/wal/local_wal.h"
 #include "storage/wal/record/alter_table_entry_record.h"
 #include "storage/wal/wal.h"
+#include "storage/wal/wal_record.h"
 #include <format>
 
 using namespace lbug::common;
@@ -1181,26 +1183,34 @@ TEST_F(WalTest, CorruptedWALChecksumMismatchInHeader) {
     createDBAndConn();
     setupChecksumMismatchTest([](std::ofstream& walFileToCorrupt) {
         walFileToCorrupt.seekp(10);
-        // 10 bytes in will be the database ID's checksum
+        // Byte 10 is inside the database ID.
         walFileToCorrupt << "abc";
     });
     EXPECT_THROW(createDBAndConn();, lbug::common::StorageException);
 }
 
+// A damaged header with intact records after it is not a torn tail, so lenient replay refuses too.
 TEST_F(WalTest, CorruptedWALChecksumMismatchInHeaderNoThrow) {
     if (inMemMode || systemConfig->checkpointThreshold == 0 || !systemConfig->enableChecksums) {
         GTEST_SKIP();
     }
     setupChecksumMismatchTest([](std::ofstream& walFileToCorrupt) {
         walFileToCorrupt.seekp(10);
-        // 10 bytes in will be the database ID's checksum
+        // Byte 10 is inside the database ID.
         walFileToCorrupt << "abc";
     });
-
-    // The replay shouldn't complete but shouldn't throw either
-    createDBAndConn();
-    auto result = conn->query("match (t:test) return count(*)");
-    EXPECT_FALSE(result->isSuccess());
+    EXPECT_THROW(
+        {
+            try {
+                createDBAndConn();
+            } catch (std::exception& e) {
+                EXPECT_THAT(e.what(),
+                    testing::HasSubstr("the WAL header is damaged and intact records follow"));
+                EXPECT_THAT(e.what(), testing::HasSubstr("truncate the WAL to 0 bytes"));
+                throw;
+            }
+        },
+        lbug::common::Exception);
 }
 
 TEST_F(WalTest, CorruptedWALChecksumMismatchInBody) {
@@ -1214,22 +1224,6 @@ TEST_F(WalTest, CorruptedWALChecksumMismatchInBody) {
         walFileToCorrupt << "abc";
     });
     EXPECT_THROW(createDBAndConn();, lbug::common::StorageException);
-}
-
-TEST_F(WalTest, CorruptedWALChecksumMismatchInBodyNoThrow) {
-    if (inMemMode || systemConfig->checkpointThreshold == 0 || !systemConfig->enableChecksums) {
-        GTEST_SKIP();
-    }
-    setupChecksumMismatchTest([](std::ofstream& walFileToCorrupt) {
-        walFileToCorrupt.seekp(10);
-        // 10 bytes in will be the database ID's checksum
-        walFileToCorrupt << "abc";
-    });
-    // The replay shouldn't complete but shouldn't throw either
-    createDBAndConn();
-    auto result = conn->query("match (t:test) return count(*)");
-    EXPECT_FALSE(result->isSuccess());
-    EXPECT_STREQ("Binder exception: Table test does not exist.", result->getErrorMessage().c_str());
 }
 
 TEST_F(WalTest, WALChecksumConfigMismatch) {
@@ -1515,6 +1509,348 @@ TEST_F(WalTest, TornWALTailInsideLargeStringRecord) {
     ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
     ASSERT_TRUE(res->hasNext());
     EXPECT_EQ(res->getNext()->getValue(0)->getValue<int64_t>(), 0);
+}
+
+// The offsets of the record frames in a WAL: after the header, each frame is its length, that many
+// bytes and, with checksums on, their checksum.
+static std::vector<uint64_t> walRecordOffsets(const std::string& walPath, bool enableChecksums) {
+    std::ifstream wal{walPath, std::ios::binary};
+    const std::vector<char> bytes{std::istreambuf_iterator<char>{wal}, {}};
+    const uint64_t checksumSize = enableChecksums ? sizeof(uint64_t) : 0;
+    std::vector<uint64_t> offsets;
+    uint64_t offset = lbug::storage::WALHeader::SERIALIZED_SIZE + checksumSize;
+    while (offset + sizeof(uint64_t) <= bytes.size()) {
+        uint64_t length = 0;
+        std::memcpy(&length, bytes.data() + offset, sizeof(length));
+        offsets.push_back(offset);
+        offset += sizeof(uint64_t) + length + checksumSize;
+    }
+    return offsets;
+}
+
+static std::vector<char> readWALBytes(const std::string& walPath) {
+    std::ifstream wal{walPath, std::ios::binary};
+    return {std::istreambuf_iterator<char>{wal}, {}};
+}
+
+static void flipWALByte(const std::string& walPath, uint64_t offset) {
+    std::fstream wal{walPath, std::ios::binary | std::ios::in | std::ios::out};
+    wal.seekg(static_cast<std::streamoff>(offset));
+    char byte = 0;
+    wal.read(&byte, 1);
+    byte = static_cast<char>(byte ^ 0x5a);
+    wal.seekp(static_cast<std::streamoff>(offset));
+    wal.write(&byte, 1);
+}
+
+static void appendWALRecord(const std::string& walPath, const lbug::storage::WALRecord& record,
+    bool enableChecksums) {
+    auto writer = std::make_shared<BufferWriter>();
+    Serializer serializer{writer};
+    lbug::storage::WALRecord::serializeWithLength(serializer, record);
+    auto data = writer->getData();
+    std::ofstream wal{walPath, std::ios::binary | std::ios::app};
+    wal.write(reinterpret_cast<const char*>(data.data.get()),
+        static_cast<std::streamsize>(data.size));
+    if (enableChecksums) {
+        const auto recordChecksum = lbug::common::checksum(data.data.get(), data.size);
+        wal.write(reinterpret_cast<const char*>(&recordChecksum), sizeof(recordChecksum));
+    }
+}
+
+// A record of a type no build writes.
+struct UnknownTypeWALRecord final : lbug::storage::WALRecord {
+    UnknownTypeWALRecord() : WALRecord{static_cast<lbug::storage::WALRecordType>(200)} {}
+};
+
+// Three auto-commit transactions, then a crash.
+static void commitTornTailTables(lbug::main::Connection& connection) {
+    ASSERT_TRUE(connection.query("CALL force_checkpoint_on_close=false")->isSuccess());
+    ASSERT_TRUE(connection.query("CALL auto_checkpoint=false")->isSuccess());
+    for (auto i = 1; i <= 3; i++) {
+        ASSERT_TRUE(
+            connection.query(std::format("CREATE NODE TABLE torn{}(id INT64 PRIMARY KEY)", i))
+                ->isSuccess());
+    }
+}
+
+static uint64_t tornTailTableCount(lbug::main::Connection& connection) {
+    auto res = connection.query("CALL show_tables() WHERE name STARTS WITH 'torn' RETURN *;");
+    EXPECT_TRUE(res->isSuccess()) << res->getErrorMessage();
+    return res->getNumTuples();
+}
+
+// Zeroes an aligned 4 KiB block inside the largest record frame, which must not be the last, as a
+// power loss can leave a hole in data written after the last sync.
+static void zeroBlockInLargestRecord(const std::string& walPath) {
+    const auto offsets = walRecordOffsets(walPath, true);
+    const auto walSize = std::filesystem::file_size(walPath);
+    uint64_t largestStart = 0;
+    uint64_t largestEnd = 0;
+    for (auto i = 0u; i < offsets.size(); i++) {
+        const auto end = i + 1 < offsets.size() ? offsets[i + 1] : walSize;
+        if (end - offsets[i] > largestEnd - largestStart) {
+            largestStart = offsets[i];
+            largestEnd = end;
+        }
+    }
+    const uint64_t blockSize = 4096;
+    const auto blockStart =
+        (largestStart + 2 * sizeof(uint64_t) + blockSize - 1) / blockSize * blockSize;
+    ASSERT_LT(blockStart + blockSize, largestEnd);
+    ASSERT_LT(largestEnd, walSize);
+    const std::vector<char> zeros(blockSize, 0);
+    std::fstream wal{walPath, std::ios::binary | std::ios::in | std::ios::out};
+    wal.seekp(static_cast<std::streamoff>(blockStart));
+    wal.write(zeros.data(), static_cast<std::streamsize>(zeros.size()));
+}
+
+static void commitLargeTornTailRecord(lbug::main::Connection& connection) {
+    ASSERT_TRUE(
+        connection.query("CREATE NODE TABLE tornbig(id INT64 PRIMARY KEY, s STRING)")->isSuccess());
+    ASSERT_TRUE(
+        connection
+            .query(std::format("CREATE (:tornbig {{id: 1, s: '{}'}})", std::string(32768, 'x')))
+            ->isSuccess());
+}
+
+// A damaged record with intact records after it is not a torn tail: lenient replay refuses to open
+// instead of dropping those records, and the WAL is kept.
+TEST_F(WalTest, DamagedRecordBeforeIntactRecordsRefusesToOpen) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0 || !systemConfig->enableChecksums) {
+        GTEST_SKIP();
+    }
+    commitTornTailTables(*conn);
+    conn.reset();
+    database.reset();
+    const auto walPath = lbug::storage::StorageUtils::getWALFilePath(databasePath);
+    const auto offsets = walRecordOffsets(walPath, true);
+    ASSERT_GT(offsets.size(), 3u);
+    const auto damagedByte = offsets[1] + sizeof(uint64_t) + 1;
+    flipWALByte(walPath, damagedByte);
+    const auto damagedWAL = readWALBytes(walPath);
+    EXPECT_THROW(
+        {
+            try {
+                createDBAndConn();
+            } catch (std::exception& e) {
+                EXPECT_THAT(e.what(), testing::HasSubstr("intact records follow"));
+                throw;
+            }
+        },
+        lbug::common::Exception);
+    EXPECT_EQ(readWALBytes(walPath), damagedWAL);
+    flipWALByte(walPath, damagedByte);
+    createDBAndConn();
+    EXPECT_EQ(tornTailTableCount(*conn), 3u);
+}
+
+// Truncating the WAL to the size the refusal gives opens the database with the commits before the
+// damaged record.
+TEST_F(WalTest, TruncatingToTheGivenSizeOpensWithEarlierCommits) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0 || !systemConfig->enableChecksums) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CALL force_checkpoint_on_close=false")->isSuccess());
+    ASSERT_TRUE(conn->query("CALL auto_checkpoint=false")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE torn1(id INT64 PRIMARY KEY)")->isSuccess());
+    const auto walPath = lbug::storage::StorageUtils::getWALFilePath(databasePath);
+    const auto firstCommitEnd = std::filesystem::file_size(walPath);
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE torn2(id INT64 PRIMARY KEY)")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE torn3(id INT64 PRIMARY KEY)")->isSuccess());
+    conn.reset();
+    database.reset();
+    flipWALByte(walPath, firstCommitEnd + sizeof(uint64_t) + 1);
+    EXPECT_THROW(
+        {
+            try {
+                createDBAndConn();
+            } catch (std::exception& e) {
+                EXPECT_THAT(e.what(), testing::HasSubstr(std::format("truncate the WAL to {} bytes",
+                                          firstCommitEnd)));
+                throw;
+            }
+        },
+        lbug::common::Exception);
+    std::filesystem::resize_file(walPath, firstCommitEnd);
+    createDBAndConn();
+    EXPECT_EQ(tornTailTableCount(*conn), 1u);
+}
+
+// Damage in the last record, with nothing intact after it, is what a power loss can leave: lenient
+// replay drops that transaction and keeps the others.
+TEST_F(WalTest, DamagedLastRecordIsATornTail) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0 || !systemConfig->enableChecksums) {
+        GTEST_SKIP();
+    }
+    commitTornTailTables(*conn);
+    conn.reset();
+    database.reset();
+    const auto walPath = lbug::storage::StorageUtils::getWALFilePath(databasePath);
+    const auto offsets = walRecordOffsets(walPath, true);
+    ASSERT_FALSE(offsets.empty());
+    flipWALByte(walPath, offsets.back() + sizeof(uint64_t));
+    createDBAndConn();
+    EXPECT_EQ(tornTailTableCount(*conn), 2u);
+}
+
+// A zero-filled end after the last record, which a power loss can also leave, is a torn tail.
+TEST_F(WalTest, ZeroFilledEndIsATornTail) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    commitTornTailTables(*conn);
+    conn.reset();
+    database.reset();
+    const auto walPath = lbug::storage::StorageUtils::getWALFilePath(databasePath);
+    {
+        const std::vector<char> zeros(1 << 20, 0);
+        std::ofstream wal{walPath, std::ios::binary | std::ios::app};
+        wal.write(zeros.data(), static_cast<std::streamsize>(zeros.size()));
+    }
+    createDBAndConn();
+    EXPECT_EQ(tornTailTableCount(*conn), 3u);
+}
+
+// A power loss can leave a hole of zeros in data written after the last sync while later frames of
+// that unsynced commit survive. A damaged record that overlaps an aligned block of zeros is such a
+// hole, so lenient replay drops the commit as a torn tail rather than refusing to open.
+TEST_F(WalTest, ZeroBlockInsideLastCommitIsATornTail) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0 || !systemConfig->enableChecksums) {
+        GTEST_SKIP();
+    }
+    commitTornTailTables(*conn);
+    commitLargeTornTailRecord(*conn);
+    conn.reset();
+    database.reset();
+    const auto walPath = lbug::storage::StorageUtils::getWALFilePath(databasePath);
+    ASSERT_NO_FATAL_FAILURE(zeroBlockInLargestRecord(walPath));
+    createDBAndConn();
+    EXPECT_EQ(tornTailTableCount(*conn), 4u);
+    auto res = conn->query("MATCH (b:tornbig) RETURN count(*)");
+    ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+    EXPECT_EQ(res->getNext()->getValue(0)->getValue<int64_t>(), 0);
+}
+
+// A damaged record whose own data holds an aligned block of zeros is taken for a hole, so lenient
+// replay drops it and the commits after it: group commit can leave later commits of the same sync
+// intact after a real hole, so the rule cannot tell the two apart.
+TEST_F(WalTest, ZeroBlockInsideEarlierCommitDropsLaterCommits) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0 || !systemConfig->enableChecksums) {
+        GTEST_SKIP();
+    }
+    commitTornTailTables(*conn);
+    commitLargeTornTailRecord(*conn);
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE torn4(id INT64 PRIMARY KEY)")->isSuccess());
+    conn.reset();
+    database.reset();
+    const auto walPath = lbug::storage::StorageUtils::getWALFilePath(databasePath);
+    ASSERT_NO_FATAL_FAILURE(zeroBlockInLargestRecord(walPath));
+    createDBAndConn();
+    EXPECT_EQ(tornTailTableCount(*conn), 4u);
+}
+
+// A checkpoint starts only after every earlier commit was synced, so damage before a CHECKPOINT
+// record is not a torn tail, even a block of zeros. Truncating the WAL there would apply
+// transactions twice, so the refusal says not to.
+TEST_F(WalTest, DamageBeforeCheckpointRecordRefusesToOpen) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0 || !systemConfig->enableChecksums) {
+        GTEST_SKIP();
+    }
+    commitTornTailTables(*conn);
+    commitLargeTornTailRecord(*conn);
+    // A reader open during CHECKPOINT keeps the CHECKPOINT record in the active WAL.
+    auto reader = std::make_unique<lbug::main::Connection>(database.get());
+    ASSERT_TRUE(reader->query("BEGIN TRANSACTION READ ONLY;")->isSuccess());
+    ASSERT_TRUE(conn->query("CHECKPOINT;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE torn4(id INT64 PRIMARY KEY)")->isSuccess());
+    reader.reset();
+    conn.reset();
+    database.reset();
+    const auto walPath = lbug::storage::StorageUtils::getWALFilePath(databasePath);
+    ASSERT_NO_FATAL_FAILURE(zeroBlockInLargestRecord(walPath));
+    const auto damagedWAL = readWALBytes(walPath);
+    EXPECT_THROW(
+        {
+            try {
+                createDBAndConn();
+            } catch (std::exception& e) {
+                EXPECT_THAT(e.what(),
+                    testing::HasSubstr("Do not truncate it: a CHECKPOINT record follows"));
+                throw;
+            }
+        },
+        lbug::common::Exception);
+    EXPECT_EQ(readWALBytes(walPath), damagedWAL);
+}
+
+// An intact record that cannot be read, such as one of a type this build does not know, is not a
+// torn tail either, even as the last record.
+TEST_F(WalTest, IntactRecordOfUnknownTypeRefusesToOpen) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0 || !systemConfig->enableChecksums) {
+        GTEST_SKIP();
+    }
+    commitTornTailTables(*conn);
+    conn.reset();
+    database.reset();
+    const auto walPath = lbug::storage::StorageUtils::getWALFilePath(databasePath);
+    // Larger than the 1 MiB read window, so its checksum is verified in chunks.
+    UnknownTypeWALRecord record;
+    record.ownerCatalogName = std::string((2 << 20) + 1, 'x');
+    appendWALRecord(walPath, record, true);
+    EXPECT_THROW(
+        {
+            try {
+                createDBAndConn();
+            } catch (std::exception& e) {
+                EXPECT_THAT(e.what(),
+                    testing::HasSubstr("matches its checksum but cannot be replayed"));
+                throw;
+            }
+        },
+        lbug::common::Exception);
+}
+
+// Without checksums a record that does not decode cannot be told from damage, so as the last
+// record it is dropped as a torn tail.
+TEST_F(WalTest, UndecodableLastRecordWithoutChecksumsIsATornTail) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    systemConfig->enableChecksums = false;
+    createDBAndConn();
+    commitTornTailTables(*conn);
+    conn.reset();
+    database.reset();
+    const auto walPath = lbug::storage::StorageUtils::getWALFilePath(databasePath);
+    appendWALRecord(walPath, UnknownTypeWALRecord{}, false);
+    createDBAndConn();
+    EXPECT_EQ(tornTailTableCount(*conn), 3u);
+}
+
+// Followed by a record that decodes, it is not a torn tail.
+TEST_F(WalTest, UndecodableRecordBeforeDecodableRecordWithoutChecksumsRefusesToOpen) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    systemConfig->enableChecksums = false;
+    createDBAndConn();
+    commitTornTailTables(*conn);
+    conn.reset();
+    database.reset();
+    const auto walPath = lbug::storage::StorageUtils::getWALFilePath(databasePath);
+    appendWALRecord(walPath, UnknownTypeWALRecord{}, false);
+    appendWALRecord(walPath, lbug::storage::CommitRecord{}, false);
+    EXPECT_THROW(
+        {
+            try {
+                createDBAndConn();
+            } catch (std::exception& e) {
+                EXPECT_THAT(e.what(), testing::HasSubstr("intact records follow"));
+                throw;
+            }
+        },
+        lbug::common::Exception);
 }
 
 TEST_F(WalTest, WALFileLeftoverFromPreviousDBNewReadOnlyDB) {

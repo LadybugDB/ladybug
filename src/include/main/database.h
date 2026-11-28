@@ -62,11 +62,10 @@ struct LBUG_API SystemConfig {
      * @param checkpointThreshold The threshold of the WAL file size in bytes. When the size of the
      * WAL file exceeds this threshold, the database will checkpoint if autoCheckpoint is true.
      * @param forceCheckpointOnClose If true, the database will force checkpoint when closing.
-     * @param throwOnWalReplayFailure If true, any WAL replaying failure when loading the database
-     * will throw an error. Otherwise, Lbug will silently ignore the failure and replay up to where
-     * the error occured.
-     * Default is false: on a torn tail (e.g. after a crash), the database opens with all data
-     * up to the last checkpoint, discarding only the unreplayable tail.
+     * @param throwOnWalReplayFailure If true, any failure to replay the WAL fails the open.
+     * Otherwise recovery drops what looks like a torn tail of the WAL, the last writes a crash or a
+     * power loss cut short, and replays the commits before it; other damage fails the open and
+     * leaves the WAL untouched. docs/checkpoint_recovery.md gives the rule. Default is false.
      * @param enableChecksums If true, the database will use checksums to detect corruption in the
      * WAL file. It must match the setting the database's WAL was written with: a mismatch fails
      * the open whatever throwOnWalReplayFailure says.
