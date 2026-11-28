@@ -11,6 +11,16 @@ using namespace lbug::common;
 namespace lbug {
 namespace planner {
 
+static bool hasLimitFrom(const NormalizedSingleQuery& singleQuery, idx_t partIdx) {
+    for (auto i = partIdx; i < singleQuery.getNumQueryParts(); ++i) {
+        auto queryPart = singleQuery.getQueryPart(i);
+        if (queryPart->hasProjectionBody() && queryPart->getProjectionBody()->hasLimit()) {
+            return true;
+        }
+    }
+    return false;
+}
+
 // Note: we cannot append ResultCollector for plans enumerated for single query before there could
 // be a UNION on top which requires further flatten. So we delay ResultCollector appending to
 // enumerate regular query level.
@@ -33,12 +43,13 @@ LogicalPlan Planner::planSingleQuery(const NormalizedSingleQuery& singleQuery) {
     context.resetState();
     auto plan = LogicalPlan();
     for (auto i = 0u; i < singleQuery.getNumQueryParts(); ++i) {
-        planQueryPart(*singleQuery.getQueryPart(i), plan);
+        planQueryPart(*singleQuery.getQueryPart(i), hasLimitFrom(singleQuery, i), plan);
     }
     return plan;
 }
 
-void Planner::planQueryPart(const NormalizedQueryPart& queryPart, LogicalPlan& plan) {
+void Planner::planQueryPart(const NormalizedQueryPart& queryPart, bool limitFollows,
+    LogicalPlan& plan) {
     for (auto& fetch : queryPart.getLatePropertyFetches()) {
         planLatePropertyFetch(fetch, plan);
     }
@@ -49,6 +60,11 @@ void Planner::planQueryPart(const NormalizedQueryPart& queryPart, LogicalPlan& p
     // plan update
     for (auto i = 0u; i < queryPart.getNumUpdatingClause(); ++i) {
         planUpdatingClause(*queryPart.getUpdatingClause(i), plan);
+    }
+    // A LIMIT stops pulling rows once it has enough, so updates in its pipeline would skip the
+    // remaining rows. The accumulate runs them on every row first.
+    if (queryPart.hasUpdatingClause() && limitFollows) {
+        appendAccumulate(plan);
     }
     // plan projection
     if (queryPart.hasProjectionBody()) {

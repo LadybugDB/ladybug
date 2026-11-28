@@ -157,7 +157,8 @@ public:
     // Plan query.
     LogicalPlan planQuery(const binder::BoundStatement& boundStatement);
     LogicalPlan planSingleQuery(const binder::NormalizedSingleQuery& singleQuery);
-    void planQueryPart(const binder::NormalizedQueryPart& queryPart, LogicalPlan& prevPlan);
+    void planQueryPart(const binder::NormalizedQueryPart& queryPart, bool limitFollows,
+        LogicalPlan& prevPlan);
     void planLatePropertyFetch(const binder::LatePropertyFetch& fetch, LogicalPlan& plan);
 
     // Plan read.
