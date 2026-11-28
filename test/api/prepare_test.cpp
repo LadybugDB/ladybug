@@ -1581,3 +1581,33 @@ TEST_F(ApiTest, PreparedRelScanAfterCheckpointRenumbersColumns) {
         ASSERT_TRUE(conn->query("CHECKPOINT")->isSuccess());
     }
 }
+
+TEST_F(ApiTest, DestroyPreparedStatementWhileAnotherExecutes) {
+    auto kept = conn->prepare("RETURN $x + 1");
+    ASSERT_TRUE(kept->isSuccess()) << kept->getErrorMessage();
+    std::atomic<bool> stop{false};
+    std::thread destroyer([&] {
+        while (!stop.load()) {
+            std::vector<std::unique_ptr<PreparedStatement>> statements;
+            for (auto i = 0; i < 64; i++) {
+                statements.push_back(conn->prepare("RETURN $y"));
+            }
+        }
+    });
+    std::string firstWrong;
+    try {
+        for (auto i = 0; i < 2000 && firstWrong.empty(); i++) {
+            auto result = conn->execute(kept.get(), std::make_pair(std::string("x"), i));
+            auto actual =
+                result->isSuccess() ? result->getNext()->toString() : result->getErrorMessage();
+            if (actual != std::to_string(i + 1) + "\n") {
+                firstWrong = actual;
+            }
+        }
+    } catch (std::exception& e) {
+        firstWrong = e.what();
+    }
+    stop.store(true);
+    destroyer.join();
+    ASSERT_EQ(firstWrong, "");
+}
