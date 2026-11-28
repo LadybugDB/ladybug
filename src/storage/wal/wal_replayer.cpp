@@ -1534,18 +1534,15 @@ void WALReplayer::replayWALRecord(WALRecord& walRecord) const {
         // CHECKPOINT records are handled by the frozen/active WAL recovery path
         // that replays shadow pages as a batch. If we reach here, the WAL file has
         // been corrupted (or checksums are disabled and a torn write happened to
-        // produce type byte 254). Throw a descriptive error instead of asserting
-        // so that the database can still be opened with throwOnWalReplayFailure=false.
-        throw common::RuntimeException(std::format(
-            "WAL replay encountered a CHECKPOINT record outside the expected recovery "
-            "path. This is caused by a corrupted WAL tail. "
-            "Set throwOnWalReplayFailure=false to discard the tail and open the database."));
+        // produce type byte 254). Throw instead of asserting, so the open fails with a message.
+        throw common::RuntimeException(
+            "WAL replay encountered a CHECKPOINT record outside the expected recovery path, so the "
+            "WAL is damaged or a newer version wrote it. The WAL is kept.");
     }
     default:
         throw common::RuntimeException(std::format(
-            "WAL replay encountered an unknown record type ({}). "
-            "The WAL file is corrupted. "
-            "Set throwOnWalReplayFailure=false to discard the tail and open the database.",
+            "WAL replay encountered a record of an unknown type ({}), so the WAL is damaged or a "
+            "newer version wrote it. The WAL is kept.",
             static_cast<int>(walRecord.type)));
     }
 }

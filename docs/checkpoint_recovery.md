@@ -128,7 +128,8 @@ untouched: a damaged record or header with an intact record after it, or a recor
 checksum but cannot be replayed, such as one of a type a newer version wrote. The error gives the
 size to truncate the WAL to, which opens the database without the transactions from that point on.
 When a `CHECKPOINT` record follows, truncating would replay transactions the checkpoint already
-applied, so the error says not to truncate.
+applied, so the error says not to truncate. Truncating also drops any `ABORT` record from that
+point on, so a transaction it cancelled before that point is applied.
 
 The rule is a heuristic. Without checksums a record that does not decode counts as damaged. The
 next record is found through the length fields, so a damaged length field hides the records after
