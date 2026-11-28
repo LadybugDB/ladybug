@@ -1,0 +1,156 @@
+-DATASET CSV empty
+
+--
+
+-DEFINE_STATEMENT_BLOCK CREATE_N [
+-STATEMENT CREATE NODE TABLE N(id INT64, layer INT64, PRIMARY KEY(id));
+---- ok
+-STATEMENT CREATE NODE TABLE M(id INT64, PRIMARY KEY(id));
+---- ok
+-STATEMENT CREATE REL TABLE R(FROM N TO N, w INT64);
+---- ok
+-STATEMENT UNWIND range(1, 4) AS i CREATE (:N {id: i, layer: 0});
+---- ok
+]
+
+# A LIMIT after an update limits the returned rows, not the updated ones.
+-CASE Issue1709SetNodeThenLimit
+-INSERT_STATEMENT_BLOCK CREATE_N
+-STATEMENT MATCH (n:N) SET n.layer = 1 RETURN n.layer LIMIT 1;
+---- 1
+1
+-STATEMENT MATCH (n:N) RETURN n.id, n.layer ORDER BY n.id;
+---- 4
+1|1
+2|1
+3|1
+4|1
+-STATEMENT MATCH (n:N) SET n.layer = 2 WITH n RETURN n.layer LIMIT 1;
+---- 1
+2
+-STATEMENT MATCH (n:N) WHERE n.layer = 2 RETURN count(*);
+---- 1
+4
+-STATEMENT MATCH (n:N) SET n.layer = 3 WITH n LIMIT 1 RETURN n.layer;
+---- 1
+3
+-STATEMENT MATCH (n:N) WHERE n.layer = 3 RETURN count(*);
+---- 1
+4
+-STATEMENT MATCH (n:N) SET n.layer = 4 RETURN n.layer SKIP 1 LIMIT 1;
+---- 1
+4
+-STATEMENT MATCH (n:N) WHERE n.layer = 4 RETURN count(*);
+---- 1
+4
+-STATEMENT MATCH (n:N) SET n.layer = 5 RETURN n.layer LIMIT 0;
+---- 0
+-STATEMENT MATCH (n:N) WHERE n.layer = 5 RETURN count(*);
+---- 1
+4
+
+-CASE Issue1709CreateMergeDeleteNodeThenLimit
+-INSERT_STATEMENT_BLOCK CREATE_N
+-STATEMENT UNWIND range(5, 8) AS i CREATE (n:N {id: i, layer: 1}) RETURN n.layer LIMIT 1;
+---- 1
+1
+-STATEMENT MATCH (n:N) WHERE n.layer = 1 RETURN count(*);
+---- 1
+4
+-STATEMENT UNWIND range(1, 4) AS i MERGE (m:M {id: i}) RETURN m.id > 0 LIMIT 1;
+---- 1
+True
+-STATEMENT MATCH (m:M) RETURN count(*);
+---- 1
+4
+-STATEMENT MATCH (n:N) SET n.layer = 2 WITH n MERGE (m:M {id: n.id}) RETURN n.layer LIMIT 1;
+---- 1
+2
+-STATEMENT MATCH (n:N) WHERE n.layer = 2 RETURN count(*);
+---- 1
+8
+-STATEMENT MATCH (m:M) RETURN count(*);
+---- 1
+8
+-STATEMENT MATCH (n:N) DELETE n RETURN n.layer LIMIT 1;
+---- 1
+2
+-STATEMENT MATCH (n:N) RETURN count(*);
+---- 1
+0
+
+-CASE Issue1709RelUpdateThenLimit
+-INSERT_STATEMENT_BLOCK CREATE_N
+-STATEMENT MATCH (a:N) CREATE (a)-[e:R {w: 0}]->(a) RETURN e.w LIMIT 1;
+---- 1
+0
+-STATEMENT MATCH ()-[e:R]->() RETURN count(*);
+---- 1
+4
+-STATEMENT MATCH ()-[e:R]->() SET e.w = 1 RETURN e.w LIMIT 1;
+---- 1
+1
+-STATEMENT MATCH ()-[e:R]->() WHERE e.w = 1 RETURN count(*);
+---- 1
+4
+-STATEMENT MATCH ()-[e:R]->() DELETE e RETURN e.w LIMIT 1;
+---- 1
+1
+-STATEMENT MATCH ()-[e:R]->() RETURN count(*);
+---- 1
+0
+
+-CASE Issue1709LimitBeforeUpdate
+-INSERT_STATEMENT_BLOCK CREATE_N
+-STATEMENT MATCH (n:N) WITH n ORDER BY n.id LIMIT 1 SET n.layer = 1 RETURN n.id;
+---- 1
+1
+-STATEMENT MATCH (n:N) RETURN n.id, n.layer ORDER BY n.id;
+---- 4
+1|1
+2|0
+3|0
+4|0
+
+-CASE Issue1709LimitAfterOtherClauses
+-INSERT_STATEMENT_BLOCK CREATE_N
+-STATEMENT MATCH (n:N) SET n.layer = 1 RETURN n.id ORDER BY n.id LIMIT 2;
+---- 2
+1
+2
+-STATEMENT MATCH (n:N) WHERE n.layer = 1 RETURN count(*);
+---- 1
+4
+-STATEMENT MATCH (n:N) SET n.layer = 2 RETURN DISTINCT n.layer LIMIT 1;
+---- 1
+2
+-STATEMENT MATCH (n:N) WHERE n.layer = 2 RETURN count(*);
+---- 1
+4
+-STATEMENT MATCH (n:N) SET n.layer = 3 WITH n SET n.layer = n.layer + 1 RETURN n.layer LIMIT 1;
+---- 1
+4
+-STATEMENT MATCH (n:N) WHERE n.layer = 4 RETURN count(*);
+---- 1
+4
+-STATEMENT MATCH (n:N) SET n.layer = 5 RETURN n.layer LIMIT 1 UNION ALL MATCH (n:N) WHERE n.id = 1 RETURN n.id AS layer;
+---- 2
+1
+5
+-STATEMENT MATCH (n:N) WHERE n.layer = 5 RETURN count(*);
+---- 1
+4
+-STATEMENT MATCH (a:N), (b:N) WHERE b.id = a.id + 1 CREATE (a)-[:R {w: 0}]->(b);
+---- ok
+-STATEMENT MATCH (a:N)-[e:R]->(b:N) SET a.layer = 6 RETURN a.layer LIMIT 1;
+---- 1
+6
+-STATEMENT MATCH (n:N) WHERE n.layer = 6 RETURN count(*);
+---- 1
+3
+-STATEMENT MATCH (n:N) DETACH DELETE n RETURN n.id > 0 LIMIT 1;
+---- 1
+True
+-STATEMENT MATCH (n:N) RETURN count(*);
+---- 1
+0
